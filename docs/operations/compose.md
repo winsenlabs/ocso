@@ -114,7 +114,7 @@ The Tech Admin worker settings (min/max workers, target utilization) are advisor
 workers) below PostgreSQL's `max_connections` (100 by default).
 
 **Health endpoints.**
-- api: `/health/live`, `/health/ready` (database) and `/health/dependencies`, on the internal
+- api: `/health/live`, `/health/ready` (database) and `/health/dependencies` (Tech Admin token required), on the internal
   network.
 - worker: `/health/ready` on port 4100.
 - web: `/login`.
