@@ -1,5 +1,5 @@
 import type { deploymentSettings, modelProfiles } from '@ocso/db';
-import type { ProviderKind, ProviderRegistry } from '@ocso/model-providers';
+import type { ModelCapabilities, ProviderKind, ProviderRegistry } from '@ocso/model-providers';
 import type { ProviderRow } from './provider-config.js';
 import type { ProfileAgentRef, ProviderProfileRef } from './references.js';
 import type { ModelUsageStats } from './usage-stats.js';
@@ -51,6 +51,21 @@ export interface ProfileFallbackView {
   model: string;
 }
 
+/**
+ * One target of a profile (primary first, then fallbacks in order) with the
+ * capabilities its adapter declares for that model, including how it caches
+ * prompts (ADR-006). Lets read-only callers see per-target caching support.
+ */
+export interface ProfileTargetView {
+  role: 'PRIMARY' | 'FALLBACK';
+  providerId: string;
+  providerName: string | null;
+  providerKind: ProviderKind | null;
+  model: string;
+  /** Null when the provider kind is not available in this deployment or its stored settings are invalid. */
+  capabilities: ModelCapabilities | null;
+}
+
 export interface ProfileView {
   id: string;
   name: string;
@@ -71,6 +86,7 @@ export interface ProfileView {
   cacheTtl: ProfileRow['cacheTtl'];
   fallbacks: ProfileFallbackView[];
   requiredCapabilities: Record<string, boolean>;
+  targets: ProfileTargetView[];
   configVersion: number;
   agents: ProfileAgentRef[];
   /** Technical telemetry; null for callers without provider read access (build rule §15). */
@@ -120,7 +136,12 @@ export function toProviderView(
 
 export function toProfileView(
   row: ProfileRow,
-  extra: { providers: ReadonlyMap<string, ProviderRow>; agents: ProfileAgentRef[]; stats: ModelUsageStats | null },
+  extra: {
+    providers: ReadonlyMap<string, ProviderRow>;
+    agents: ProfileAgentRef[];
+    stats: ModelUsageStats | null;
+    capabilities: (provider: ProviderRow, model: string) => ModelCapabilities | null;
+  },
 ): ProfileView {
   const primary = extra.providers.get(row.providerId);
   return {
@@ -145,6 +166,17 @@ export function toProfileView(
       return { providerId: f.providerId, providerName: p?.name ?? null, providerKind: p?.kind ?? null, model: f.model };
     }),
     requiredCapabilities: row.requiredCapabilities,
+    targets: [{ providerId: row.providerId, model: row.model }, ...row.fallbacks].map((t, i) => {
+      const p = extra.providers.get(t.providerId);
+      return {
+        role: i === 0 ? ('PRIMARY' as const) : ('FALLBACK' as const),
+        providerId: t.providerId,
+        providerName: p?.name ?? null,
+        providerKind: p?.kind ?? null,
+        model: t.model,
+        capabilities: p ? extra.capabilities(p, t.model) : null,
+      };
+    }),
     configVersion: row.configVersion,
     agents: extra.agents,
     stats24h: extra.stats,

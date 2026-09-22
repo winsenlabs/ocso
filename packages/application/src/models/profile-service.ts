@@ -9,7 +9,7 @@ import { emitEvent } from '../events/outbox.js';
 import { nowOf, type ActorContext } from '../shared/context.js';
 import { authorize, authorizeAny, isForeignKeyViolation, isUniqueViolation } from './access.js';
 import type { ProfileInput, ProfilePatch } from './inputs.js';
-import { checkProfileTargets, type ProfilePolicyCheck } from './model-policy.js';
+import { capabilitiesOf, checkProfileTargets, type ProfilePolicyCheck } from './model-policy.js';
 import { agentsByProfile } from './references.js';
 import { EMPTY_USAGE_STATS, modelUsageStats } from './usage-stats.js';
 import { toProfileView, type ProfileRow, type ProfileView } from './views.js';
@@ -209,7 +209,12 @@ export class ProfileService {
     ]);
     const byId = new Map(providers.map((p) => [p.id, p]));
     return rows.map((row) =>
-      toProfileView(row, { providers: byId, agents: agents.get(row.id) ?? [], stats: stats ? (stats.get(row.id) ?? EMPTY_USAGE_STATS) : null }),
+      toProfileView(row, {
+        providers: byId,
+        agents: agents.get(row.id) ?? [],
+        stats: stats ? (stats.get(row.id) ?? EMPTY_USAGE_STATS) : null,
+        capabilities: (provider, model) => capabilitiesOf(this.deps.registry, provider, model),
+      }),
     );
   }
 }

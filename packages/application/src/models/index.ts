@@ -6,7 +6,7 @@ export { TEST_CALL_MAX_OUTPUT_TOKENS, type ProviderTestCall, type ProviderTestRe
 export { checkProfileTargets, type ProfilePolicyCheck, type ProfileTargets, type TargetCheck } from './model-policy.js';
 export { modelUsageStats, type ModelUsageStats } from './usage-stats.js';
 export type { ProfileAgentRef, ProviderProfileRef } from './references.js';
-export type { ProfileFallbackView, ProfileRow, ProfileView, ProviderPolicyView, ProviderView } from './views.js';
+export type { ProfileFallbackView, ProfileRow, ProfileTargetView, ProfileView, ProviderPolicyView, ProviderView } from './views.js';
 export { ProviderService, type ModelAdminDeps, type ProviderKindView } from './provider-service.js';
 export { ProfileService, type ProfileSaveResult, type ProfileServiceDeps } from './profile-service.js';
 export { PricingService, findPrice, loadPricing, type PricingRow } from './pricing-service.js';

@@ -67,7 +67,8 @@ const NO_CAPABILITIES: ModelCapabilities = {
   reportsCacheWrites: false,
 };
 
-function capabilitiesOf(registry: ProviderRegistry, provider: ProviderRow, model: string): ModelCapabilities | null {
+/** Adapter-declared capabilities of one target; null when the kind is not registered or the stored settings are invalid. */
+export function capabilitiesOf(registry: ProviderRegistry, provider: ProviderRow, model: string): ModelCapabilities | null {
   const definition = registry.get(provider.kind);
   if (!definition) return null;
   try {
