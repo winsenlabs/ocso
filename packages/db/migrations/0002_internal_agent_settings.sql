@@ -1,0 +1,2 @@
+ALTER TABLE "deployment_settings" ADD COLUMN "internal_agent_profile_id" uuid;--> statement-breakpoint
+ALTER TABLE "deployment_settings" ADD COLUMN "internal_agent_confirm_low_writes" boolean DEFAULT false NOT NULL;

@@ -17,6 +17,10 @@ export const deploymentSettings = pgTable('deployment_settings', {
   execsCanViewAiActive: boolean().notNull().default(true),
   retention: jsonb().$type<Record<string, number>>().notNull().default({}),
   egressAllowedInternalHosts: text().array().notNull().default(sql`'{}'::text[]`),
+  /** Logical model profile used by the internal OCSO agent (docs/12). */
+  internalAgentProfileId: uuid(),
+  /** Require explicit confirmation for LOW_WRITE internal-agent actions too. */
+  internalAgentConfirmLowWrites: boolean().notNull().default(false),
   setupCompletedAt: ts('setup_completed_at'),
   updatedAt: updatedAt(),
   updatedBy: uuid(),

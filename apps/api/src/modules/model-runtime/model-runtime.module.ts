@@ -1,0 +1,43 @@
+import { Global, Module } from '@nestjs/common';
+import { SettingsService } from '@ocso/application';
+import { ModelGateway, UsageRecorder } from '@ocso/agent-runtime';
+import type { BlobStore } from '@ocso/blob';
+import { CachedProviderAdapterSource, createProviderRegistry } from '@ocso/bootstrap';
+import type { ApiEnv } from '@ocso/config';
+import type { Db } from '@ocso/db';
+import type { SecretStore } from '@ocso/secrets';
+import { BLOB_STORE, DB, ENV, SECRET_STORE } from '../../infrastructure/tokens.js';
+
+/**
+ * Model execution inside the API process, for interactive features that must
+ * stream to a browser (internal agent, copilot rewrite). Same gateway, same
+ * policy-bound fallback and usage accounting as the worker.
+ */
+@Global()
+@Module({
+  providers: [
+    {
+      provide: CachedProviderAdapterSource,
+      inject: [ENV, DB, SECRET_STORE, BLOB_STORE],
+      useFactory: (env: ApiEnv, db: Db, secrets: SecretStore, blobs: BlobStore) =>
+        new CachedProviderAdapterSource({
+          db,
+          secrets,
+          registry: createProviderRegistry(env),
+          media: {
+            resolve: async (blobKey: string) => {
+              const obj = await blobs.get(blobKey);
+              return { data: obj.data, mimeType: obj.contentType };
+            },
+          },
+        }),
+    },
+    {
+      provide: ModelGateway,
+      inject: [DB, CachedProviderAdapterSource, SettingsService],
+      useFactory: (db: Db, source: CachedProviderAdapterSource, settings: SettingsService) => new ModelGateway(db, source, new UsageRecorder(db), settings),
+    },
+  ],
+  exports: [ModelGateway, CachedProviderAdapterSource],
+})
+export class ModelRuntimeModule {}

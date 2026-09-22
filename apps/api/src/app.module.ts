@@ -22,6 +22,8 @@ import { CustomersModule } from './modules/customers/customers.module.js';
 import { RealtimeModule } from './modules/realtime/realtime.module.js';
 import { RoutingModule } from './modules/routing/routing.module.js';
 import { WebChatModule } from './modules/webchat/webchat.module.js';
+import { ModelRuntimeModule } from './modules/model-runtime/model-runtime.module.js';
+import { InternalAgentModule } from './modules/internal-agent/internal-agent.module.js';
 
 /** Feature modules are registered here; each owns one domain area (build rule §2). */
 export const FEATURE_MODULES = [
@@ -30,6 +32,7 @@ export const FEATURE_MODULES = [
   UsersModule,
   SettingsModule,
   RealtimeModule,
+  ModelRuntimeModule,
   ChannelsModule,
   ConversationsModule,
   AgentsModule,
@@ -41,6 +44,7 @@ export const FEATURE_MODULES = [
   ModelsModule,
   McpModule,
   AlertsModule,
+  InternalAgentModule,
 ];
 
 @Module({

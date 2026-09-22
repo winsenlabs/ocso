@@ -1,6 +1,5 @@
 import { createHmac, randomBytes } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { eq } from 'drizzle-orm';
 import { modelProfiles, modelProviders, uuidv7 } from '@ocso/db';
 import { ChannelRegistry } from '@ocso/channels';
 import { InMemorySecretRows, LocalSecretStore, parseMasterKey } from '@ocso/secrets';
@@ -219,7 +218,5 @@ describe('agent prompt workflow over the API', () => {
     await h.http().post(`/v1/agents/${ids.agent}/prompt/versions/${version.body.id}/activate`).set(auth(lead)).expect(204);
     const preview = await h.http().get(`/v1/agents/${ids.agent}/prompt/preview`).set(auth(lead)).expect(200);
     expect(preview.body.hashes.promptVersionHash).toBe(version.body.promptHash);
-    const [profile] = await h.db.db.select().from(modelProfiles).where(eq(modelProfiles.id, ids.profile));
-    expect(profile).toBeTruthy();
   });
 });

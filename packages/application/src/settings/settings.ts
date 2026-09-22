@@ -23,6 +23,8 @@ export const DeploymentSettingsInput = z.object({
   execsCanViewAiActive: z.boolean().optional(),
   retention: z.record(z.string(), z.number().int().min(1).max(3650)).optional(),
   egressAllowedInternalHosts: z.array(z.string().max(253)).max(200).optional(),
+  internalAgentProfileId: z.uuid().nullable().optional(),
+  internalAgentConfirmLowWrites: z.boolean().optional(),
 });
 export type DeploymentSettingsInput = z.infer<typeof DeploymentSettingsInput>;
 

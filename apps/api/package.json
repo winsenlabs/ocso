@@ -52,7 +52,9 @@
     "@ocso/agent-runtime": "workspace:*",
     "@ocso/tools": "workspace:*",
     "@ocso/prompt-compiler": "workspace:*",
-    "@ocso/alerts": "workspace:*"
+    "@ocso/alerts": "workspace:*",
+    "@ocso/internal-agent": "workspace:*",
+    "ai": "^7.0.109"
   },
   "devDependencies": {
     "@nestjs/testing": "catalog:",

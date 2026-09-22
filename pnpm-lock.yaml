@@ -176,6 +176,9 @@ importers:
       '@ocso/events':
         specifier: workspace:*
         version: link:../../packages/events
+      '@ocso/internal-agent':
+        specifier: workspace:*
+        version: link:../../packages/internal-agent
       '@ocso/mcp':
         specifier: workspace:*
         version: link:../../packages/mcp
@@ -227,6 +230,9 @@ importers:
       '@opentelemetry/semantic-conventions':
         specifier: 'catalog:'
         version: 1.43.0
+      ai:
+        specifier: ^7.0.109
+        version: 7.0.109(zod@4.6.5)
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.3(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(pg@8.23.0)
@@ -687,6 +693,33 @@ importers:
       '@ocso/domain':
         specifier: workspace:*
         version: link:../domain
+
+  packages/internal-agent:
+    dependencies:
+      '@ocso/agent-runtime':
+        specifier: workspace:*
+        version: link:../agent-runtime
+      '@ocso/application':
+        specifier: workspace:*
+        version: link:../application
+      '@ocso/auth':
+        specifier: workspace:*
+        version: link:../auth
+      '@ocso/db':
+        specifier: workspace:*
+        version: link:../db
+      '@ocso/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@ocso/model-providers':
+        specifier: workspace:*
+        version: link:../model-providers
+      drizzle-orm:
+        specifier: 'catalog:'
+        version: 0.45.3(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(pg@8.23.0)
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.5
 
   packages/mcp:
     dependencies:
