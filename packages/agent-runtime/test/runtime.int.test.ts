@@ -54,6 +54,27 @@ describe('turn execution', () => {
     expect(rows.map((r) => r.cacheLayer)).toEqual(['COLD', 'HOT']);
   });
 
+  it("shows the model its own previous reply, on the warm and the cold path", async () => {
+    // Regression: history ended at lastProcessedSeq (the last customer message handled), which cut off the agent's
+    // reply to it — every reply answered the previous question again.
+    const texts = (i: number) =>
+      h.adapter.requests[i]!.messages.map((m) => `${m.role}:${(Array.isArray(m.content) ? m.content : [{ type: 'text', text: m.content }]).map((c) => ('text' in c ? c.text : '')).join('')}`);
+    for (const worker of ['w-hist-warm', 'w-hist-cold']) {
+      h.adapter.requests = [];
+      h.adapter.script = [{ text: 'Hi! How can I help?' }, { text: 'I am Maya.' }];
+      const conversationId = await h.say('Heyy');
+      await h.processor(worker).processor.handle(turnMessage(conversationId));
+      await h.say('Who are you?');
+      // Cold: a different worker with an empty cache takes the second turn.
+      const second = worker === 'w-hist-cold' ? h.processor(`${worker}-2`).processor : h.processor(worker).processor;
+      await second.handle(turnMessage(conversationId));
+      const convo = texts(1).filter((t) => t.startsWith('user:') || t.startsWith('assistant:'));
+      expect(convo.slice(-3)).toEqual([expect.stringContaining('Heyy'), 'assistant:Hi! How can I help?', expect.stringContaining('Who are you?')]);
+      await h.t.pool.query(`UPDATE conversations SET control_state = 'RESOLVED', resolved_at = now() - interval '10 days' WHERE id = $1`, [conversationId]);
+      await h.t.pool.query('DELETE FROM conversation_leases');
+    }
+  });
+
   it('invalidates the turn cache when a new prompt version is activated', async () => {
     h.adapter.script = [{ text: 'a' }, { text: 'b' }];
     const conversationId = await h.say('hi');

@@ -67,6 +67,10 @@ export class ContextBuilder {
     const summary = await this.summary(conv, entry);
     const history = await this.history(conv, entry, summary?.context?.coversThroughSeq ?? 0);
     const pending = await loadPending(this.db, conv.id, conv.lastProcessedSeq);
+    // Unanswered customer messages go in `current`; everything else visible so far (including the agent's own
+    // replies, which land after lastProcessedSeq) is history.
+    const pendingSeqs = new Set(pending.map((p) => p.seq));
+    const recent = history.filter((h) => !pendingSeqs.has(h.seq));
     const handover = resumingFromHuman ? await this.handover(conv.id) : null;
 
     const compileInput: CompileInput = {
@@ -77,7 +81,7 @@ export class ContextBuilder {
       customer,
       summary: summary?.context ?? null,
       handover,
-      recent: history,
+      recent,
       current: pending,
       capabilities: {
         imageInput: capabilities.imageInput && agent.multimodal.imageInput,
@@ -87,7 +91,7 @@ export class ContextBuilder {
       mediaWindow: this.options.mediaWindow,
       today: new Intl.DateTimeFormat('en-CA', { timeZone: this.options.timezone }).format(new Date()),
     };
-    this.hot.set(conv.id, { ...entry, generations, agent: prefix, customer: { contextVersion: 0, context: customer }, summary, history, historyThroughSeq: conv.lastProcessedSeq, lastUsed: Date.now() });
+    this.hot.set(conv.id, { ...entry, generations, agent: prefix, customer: { contextVersion: 0, context: customer }, summary, history, historyThroughSeq: conv.lastSeq, lastUsed: Date.now() });
     return {
       compileInput,
       compiled: compilePrompt(compileInput),
@@ -126,14 +130,18 @@ export class ContextBuilder {
     return { version: conv.summaryVersion, context: row ? { version: row.version, coversThroughSeq: row.coversThroughSeq, text: row.text } : null };
   }
 
-  /** Warm path fetches only the delta since the cached bundle; cold path loads the window. */
+  /**
+   * Every customer-visible message through `lastSeq` — not `lastProcessedSeq`, which is the last customer message
+   * a turn handled: the agent's reply to it comes after, and cutting there hid the agent's own previous answer.
+   * Warm path fetches only the delta since the cached bundle; cold path loads the window.
+   */
   private async history(conv: ConversationRow, entry: ConversationCacheEntry, summaryCovers: number) {
     const window = this.options.historyWindow;
-    if (entry.historyThroughSeq > 0 && entry.historyThroughSeq <= conv.lastProcessedSeq) {
-      const delta = await loadHistory(this.db, conv.id, entry.historyThroughSeq, conv.lastProcessedSeq, window);
+    if (entry.historyThroughSeq > 0 && entry.historyThroughSeq <= conv.lastSeq) {
+      const delta = await loadHistory(this.db, conv.id, entry.historyThroughSeq, conv.lastSeq, window);
       return [...entry.history, ...delta].filter((h) => h.seq > summaryCovers).slice(-window);
     }
-    return loadHistory(this.db, conv.id, summaryCovers, conv.lastProcessedSeq, window);
+    return loadHistory(this.db, conv.id, summaryCovers, conv.lastSeq, window);
   }
 
   private async handover(conversationId: string): Promise<HandoverContext | null> {
