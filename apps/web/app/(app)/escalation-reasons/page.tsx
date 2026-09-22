@@ -1,19 +1,21 @@
 import type { Metadata } from 'next';
-import { Permission } from '@ocso/auth';
-import { PlaceholderPage } from '@/components/shell/placeholder-page';
+import { EscalationReasonsBody } from '@/components/analytics/escalation-reasons-body';
+import type { SearchParams } from '@/components/analytics/params';
+import { AppTopbar } from '@/components/shell/app-topbar';
+import { PageBody } from '@/components/shell/page-body';
+import { PageHead } from '@/components/ui/page-head';
+import '@/app/styles/ops.css';
 
 export const metadata: Metadata = { title: 'Escalation reasons' };
 
-export default function Page() {
+export default function Page({ searchParams }: { searchParams: SearchParams }) {
   return (
-    <PlaceholderPage
-      title="Escalation reasons"
-      sub="Why virtual agents hand conversations to humans, ranked and trended."
-      requires={[Permission.ANALYTICS_BUSINESS_READ]}
-      emptyTitle="No escalation data yet"
-      searchLabel="Search escalation reasons"
-    >
-      Handoff reasons — above authority, hardship language, disputes, tool failures, customer asked for a human — with volume, trend and the queue they route to will appear here once conversations are escalating.
-    </PlaceholderPage>
+    <>
+      <AppTopbar searchLabel="Search escalation reasons" />
+      <PageHead title="Escalation reasons" sub="Why virtual agents hand conversations to humans — ranked, compared with the previous window, and trended per day." />
+      <PageBody>
+        <EscalationReasonsBody searchParams={searchParams} />
+      </PageBody>
+    </>
   );
 }

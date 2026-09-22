@@ -5,6 +5,7 @@ import type { Db } from '@ocso/db';
 import { z } from 'zod';
 import { CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
 import { DB } from '../../infrastructure/tokens.js';
+import { escalationReasonsReport } from './escalation-reasons.report.js';
 
 const Id = z.uuid();
 
@@ -44,5 +45,12 @@ export class AnalyticsController {
   @RequirePermission(Permission.ANALYTICS_BUSINESS_READ)
   queueAnalytics(@CurrentPrincipal() principal: Principal, @Query({ schema: AnalyticsQuery }) q: AnalyticsQuery) {
     return this.queues.list(principal, q.days);
+  }
+
+  /** Escalation reasons ranked, vs the previous window, by agent/queue and per day (Escalation reasons page). */
+  @Get('escalation-reasons')
+  @RequirePermission(Permission.ANALYTICS_BUSINESS_READ)
+  escalationReasons(@CurrentPrincipal() principal: Principal, @Query({ schema: AnalyticsQuery }) q: AnalyticsQuery) {
+    return escalationReasonsReport(this.db, principal, q.days);
   }
 }

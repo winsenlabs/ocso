@@ -1,19 +1,21 @@
 import type { Metadata } from 'next';
-import { Permission } from '@ocso/auth';
-import { PlaceholderPage } from '@/components/shell/placeholder-page';
+import type { SearchParams } from '@/components/analytics/params';
+import { CustomersBody } from '@/components/customers/customers-body';
+import { AppTopbar } from '@/components/shell/app-topbar';
+import { PageBody } from '@/components/shell/page-body';
+import { PageHead } from '@/components/ui/page-head';
+import '@/app/styles/ops.css';
 
 export const metadata: Metadata = { title: 'Customers' };
 
-export default function Page() {
+export default function Page({ searchParams }: { searchParams: SearchParams }) {
   return (
-    <PlaceholderPage
-      title="Customers"
-      sub="Customer profiles and their identities across channels."
-      requires={[Permission.CUSTOMERS_READ]}
-      emptyTitle="No customers yet"
-      searchLabel="Search customers"
-    >
-      Customer profiles — verified identities across WhatsApp, web, app, email and voice, with their conversation history and CSAT — will appear here once customers start contacting this deployment.
-    </PlaceholderPage>
+    <>
+      <AppTopbar searchLabel="Search customers" />
+      <PageHead title="Customers" sub="Customer profiles, their identities across channels, conversations and the context agents see." />
+      <PageBody>
+        <CustomersBody searchParams={searchParams} />
+      </PageBody>
+    </>
   );
 }

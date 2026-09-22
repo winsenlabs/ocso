@@ -1,19 +1,21 @@
 import type { Metadata } from 'next';
-import { Permission } from '@ocso/auth';
-import { PlaceholderPage } from '@/components/shell/placeholder-page';
+import type { SearchParams } from '@/components/analytics/params';
+import { ReviewsBody } from '@/components/quality/reviews-body';
+import { AppTopbar } from '@/components/shell/app-topbar';
+import { PageBody } from '@/components/shell/page-body';
+import { PageHead } from '@/components/ui/page-head';
+import '@/app/styles/ops.css';
 
 export const metadata: Metadata = { title: 'Reviews' };
 
-export default function Page() {
+export default function Page({ searchParams }: { searchParams: SearchParams }) {
   return (
-    <PlaceholderPage
-      title="Reviews"
-      sub="Quality review of AI and human handling, conversation by conversation."
-      requires={[Permission.REVIEWS_MANAGE]}
-      emptyTitle="No reviews yet"
-      searchLabel="Search reviews"
-    >
-      The review queue — sampled and flagged conversations with reviewer, outcome and score — will appear here once conversations are recorded.
-    </PlaceholderPage>
+    <>
+      <AppTopbar searchLabel="Search reviews" />
+      <PageHead title="Reviews" sub="Quality review of AI and human handling, conversation by conversation, against an explicit rubric." />
+      <PageBody>
+        <ReviewsBody searchParams={searchParams} />
+      </PageBody>
+    </>
   );
 }
