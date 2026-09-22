@@ -41,8 +41,6 @@ const common = {
   OCSO_ENABLE_DEV_PROVIDERS: bool.default(false),
   /** Public origin customers and providers reach (webhooks, widget, signed URLs). */
   OCSO_PUBLIC_URL: z.string().url().default('http://localhost:3000'),
-  /** HMAC key for customer identity claims / visitor tokens bootstrap (rotated via SecretStore). */
-  OCSO_INTERNAL_SIGNING_KEY: z.string().min(32).optional(),
 } as const;
 
 export const ApiEnv = z.object({

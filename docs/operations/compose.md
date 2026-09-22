@@ -48,7 +48,6 @@ one-shot writes each missing secret to the `secrets` named volume:
 | `app/database_url` | `postgres://ocso:<password>@postgres:5432/ocso` |
 | `app/master_key` | SecretStore key-encryption key (ADR-012). Losing it loses every stored credential |
 | `app/blob_signing_key` | HMAC for signed blob URLs |
-| `app/internal_signing_key` | Identity-claims and visitor-token bootstrap key |
 | `app/setup_token` | One-time `/setup` token |
 | `app/demo_mcp_token`, `demo/*` | Demo MCP bearer token (`demo` profile) |
 | `app/aws_credentials`, `seaweedfs/s3.json` | SeaweedFS S3 identity (`s3` profile; readable by SeaweedFS uid 1000 only) |

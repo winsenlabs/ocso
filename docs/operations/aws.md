@@ -169,7 +169,6 @@ terraform apply -var image_tag=$TAG
 | Key | Used by | Notes |
 |---|---|---|
 | `DATABASE_URL` | api, worker, migrate | `postgres://ocso:<pw>@<rds-endpoint>:5432/ocso`, used with `DATABASE_SSL=true` |
-| `OCSO_INTERNAL_SIGNING_KEY` | api, worker | 64 chars |
 | `OCSO_SETUP_TOKEN` | api | Must be identical across API tasks |
 
 - **Injection.** ECS injects these keys at task start (`valueFrom: <arn>:<key>::`) through the **app
@@ -187,14 +186,14 @@ terraform apply -var image_tag=$TAG
   connections survive, but every *new* connection would fail until a redeploy. Rotation here is a
   deliberate, coordinated step instead.
 
-**Rotation** (DB password, signing key and setup token rotate together):
+**Rotation** (DB password and setup token rotate together; customer-claims signing keys are managed and
+rotated inside OCSO — Settings API `POST /v1/security/signing-keys/rotate`):
 
 1. Set `bootstrap_secret_version` to the next number, then `terraform apply`. RDS gets the new password
    and the secret gets the new JSON in the same run.
 2. Immediately `aws ecs update-service --force-new-deployment` for **api** and **worker**.
    - Until they roll, existing pooled connections keep working but new connections from old tasks fail.
    - Do this in a quiet window.
-   - Rotating `OCSO_INTERNAL_SIGNING_KEY` invalidates anything signed with the old key.
 3. **Bump the version whenever the DB instance is replaced.** This applies to a new identifier and to a
    restore managed by Terraform. Otherwise the new instance gets a fresh ephemeral password that the
    secret does not contain.

@@ -66,15 +66,13 @@ locals {
 
   # Secrets Manager JSON keys injected at task start (<arn>:<key>::).
   api_secrets = {
-    DATABASE_URL              = "${local.bootstrap_arn}:DATABASE_URL::"
-    OCSO_INTERNAL_SIGNING_KEY = "${local.bootstrap_arn}:OCSO_INTERNAL_SIGNING_KEY::"
+    DATABASE_URL = "${local.bootstrap_arn}:DATABASE_URL::"
     # Must be stable across API tasks: a per-task generated token would make
     # first-run setup fail on every other request.
     OCSO_SETUP_TOKEN = "${local.bootstrap_arn}:OCSO_SETUP_TOKEN::"
   }
   worker_secrets = {
-    DATABASE_URL              = "${local.bootstrap_arn}:DATABASE_URL::"
-    OCSO_INTERNAL_SIGNING_KEY = "${local.bootstrap_arn}:OCSO_INTERNAL_SIGNING_KEY::"
+    DATABASE_URL = "${local.bootstrap_arn}:DATABASE_URL::"
   }
 
   worker_capacity = var.worker.use_spot ? [

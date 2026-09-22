@@ -80,8 +80,6 @@ x-server-env: &server-env
   # Secrets (ADR-012): local envelope store; the KEK is read from the file.
   SECRETS_DRIVER: local
   OCSO_SECRETS_MASTER_KEY_FILE: /run/secrets/ocso/master_key
-  OCSO_INTERNAL_SIGNING_KEY: ${OCSO_INTERNAL_SIGNING_KEY:-}
-  OCSO_INTERNAL_SIGNING_KEY_FILE: /run/secrets/ocso/internal_signing_key
   # Blobs (ADR-011): `local` = the `blobs` volume; `s3` = SeaweedFS (s3 profile) or
   # any S3 endpoint you set here.
   BLOB_DRIVER: ${BLOB_DRIVER:-local}

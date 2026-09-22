@@ -1,7 +1,6 @@
 # Secrets (ADR-012, research/05 §4).
 #
-# * `<prefix>/bootstrap` — JSON with DATABASE_URL, OCSO_INTERNAL_SIGNING_KEY and
-#   OCSO_SETUP_TOKEN, injected into tasks by the ECS execution role. Written
+# * `<prefix>/bootstrap` — JSON with DATABASE_URL and OCSO_SETUP_TOKEN, injected into tasks by the ECS execution role. Written
 #   with a write-only attribute so the values never enter Terraform state.
 # * `<prefix>/app/*` — runtime secrets the application creates itself
 #   (provider keys, channel tokens, MCP credentials) through the aws SecretStore

@@ -79,7 +79,7 @@ output "media_bucket" {
 }
 
 output "bootstrap_secret_arn" {
-  description = "Bootstrap secret (DATABASE_URL, OCSO_INTERNAL_SIGNING_KEY, OCSO_SETUP_TOKEN)."
+  description = "Bootstrap secret (DATABASE_URL, OCSO_SETUP_TOKEN)."
   value       = module.secrets.bootstrap_secret_arn
 }
 

@@ -32,11 +32,6 @@ ephemeral "random_password" "db" {
   special = false
 }
 
-ephemeral "random_password" "signing_key" {
-  length  = 64
-  special = false
-}
-
 ephemeral "random_password" "setup_token" {
   length  = 40
   special = false
@@ -82,8 +77,7 @@ module "secrets" {
 
   bootstrap_version = var.bootstrap_secret_version
   bootstrap_values = jsonencode({
-    DATABASE_URL              = "postgres://${module.rds.username}:${ephemeral.random_password.db.result}@${module.rds.address}:${module.rds.port}/${module.rds.db_name}"
-    OCSO_INTERNAL_SIGNING_KEY = ephemeral.random_password.signing_key.result
-    OCSO_SETUP_TOKEN          = ephemeral.random_password.setup_token.result
+    DATABASE_URL     = "postgres://${module.rds.username}:${ephemeral.random_password.db.result}@${module.rds.address}:${module.rds.port}/${module.rds.db_name}"
+    OCSO_SETUP_TOKEN = ephemeral.random_password.setup_token.result
   })
 }

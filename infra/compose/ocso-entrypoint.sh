@@ -15,7 +15,7 @@
 # that file itself, so the master key never enters the process environment.
 set -eu
 
-for var in DATABASE_URL BLOB_SIGNING_KEY OCSO_SETUP_TOKEN OCSO_INTERNAL_SIGNING_KEY OCSO_DEMO_PASSWORD DEMO_MCP_TOKEN; do
+for var in DATABASE_URL BLOB_SIGNING_KEY OCSO_SETUP_TOKEN OCSO_DEMO_PASSWORD DEMO_MCP_TOKEN; do
   file_var="${var}_FILE"
   eval "file=\${${file_var}:-}"
   eval "current=\${${var}:-}"
