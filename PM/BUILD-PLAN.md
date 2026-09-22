@@ -42,11 +42,11 @@ A task is only COMPLETE when its acceptance criteria are demonstrated by an auto
 | P4 | Provider fleet & caching | Six provider adapters, logical profiles, policy-bound fallback, provider prompt caching + OCSO turn cache with metrics | COMPLETE — six adapters with per-provider caching, profiles UI, fallback, turn cache; live checks need credentials |
 | P5 | MCP & tools | Admin connects an MCP server (OAuth 2.1), approves tools; agent calls tools safely with authorization + confirmation | COMPLETE — MCP manager + UI, OAuth 2.1, authorization, confirmation, customer claims |
 | P6 | WhatsApp & channel behavior | Production-style WhatsApp channel: verification, identity, media, delivery status, idempotency | COMPLETE — WhatsApp adapter, webhooks, channel setup UI; live check needs a Meta number |
-| P7 | Human operations | Full AI → human → AI lifecycle with pickup, auto-assign, notes, SLA, copilot | IN PROGRESS — lifecycle, workspace, copilot complete; SLA/queues pages being built |
-| P8 | Observability & alerts | Role-specific telemetry; alert engine with dedupe, lifecycle and pluggable delivery | IN PROGRESS — telemetry/analytics/quality backends, alerts engine, webhooks complete; control center, alerts and analytics pages being built |
+| P7 | Human operations | Full AI → human → AI lifecycle with pickup, auto-assign, notes, SLA, copilot | COMPLETE — lifecycle, workspace, copilot, SLA (pickup + resolution) |
+| P8 | Observability & alerts | Role-specific telemetry; alert engine with dedupe, lifecycle and pluggable delivery | COMPLETE — telemetry, analytics, quality, alerts, webhooks with screens and e2e |
 | P9 | Internal OCSO agent | Permissioned conversational operation of OCSO with confirmation + audit | COMPLETE — internal agent backend + drawer |
 | P10 | Scaling & AWS production | Leases/recovery hardened; SQS/S3/Secrets Manager adapters; ECS Fargate Terraform; autoscaling adapter; load + chaos tests | COMPLETE — SQS/S3/Secrets Manager, Terraform, deployment adapter, chaos + load tests; AWS apply pending an account |
-| P11 | Hardening & release | Full e2e suite, security review, docs, operator runbooks | IN PROGRESS — security review items fixed, retention, operator guides and docs sync done; full-story e2e pending |
+| P11 | Hardening & release | Full e2e suite, security review, docs, operator runbooks | IN PROGRESS — security fixes, retention, operator guides, docs sync, full e2e (63 tests) done; remaining items listed in DEFINITION-OF-COMPLETE.md caveats |
 
 Phases are vertical slices: each includes persistence, authorization, API, UI where relevant, tests and observability (build rule §22).
 
@@ -153,7 +153,7 @@ Tables: virtual_agents, customers, customer_identities, channels, conversations,
 ### E2.3 Virtual agents (basic) — COMPLETE — API + /agents screens (list, overview, settings) with e2e
 CRUD + status (DRAFT/LIVE/PAUSED), purpose/type, channel assignment, default queue, multimodal settings, business hours; CS Lead permissions; audit.
 
-### E2.4 Customers & identity resolution — IN PROGRESS — resolution/relink + API complete; customers page being built
+### E2.4 Customers & identity resolution — COMPLETE — resolution/relink, API, /customers page (visibility-scoped conversation list)
 Deterministic resolution `(channel_type, provider_identifier) → CustomerIdentity → Customer`; create-on-first-contact; merge/link identities (audited); customer context attributes; customers list/detail UI.
 - Tests: resolution determinism; concurrent first-contact race (unique constraint + retry).
 
@@ -321,7 +321,7 @@ Delivery jobs with retry/backoff, recorded provider message IDs, failure surfaci
 
 ## P7 — Human operations
 
-### E7.1 Queues, teams, routing — IN PROGRESS — API complete; queues/SLA pages being built
+### E7.1 Queues, teams, routing — COMPLETE — API + /queues page
 Queues (mode AUTO_ASSIGN | OPEN_PICKUP, pickup-then-auto-assign delay, strategy, skills, languages), teams, membership, exec availability + capacity; UI for CS Lead (Routing tab, Queues, Team).
 
 ### E7.2 Escalation rules — COMPLETE — API + escalation rules on the agent screen
@@ -344,7 +344,7 @@ AI_RESUMING with editable handover summary + selected notes passed to agent; res
 
 ### E7.7 Resolve / reopen / dispositions / tags — COMPLETE — resolve with disposition, reopen (tags UI not built; API stores tags)
 
-### E7.8 SLA engine — IN PROGRESS — SLA policies, offer expiry, auto-assign, breach alerts; SLA page being built
+### E7.8 SLA engine — COMPLETE — pickup and resolution SLA deadlines, timers, /sla page, breach alert conditions
 SLA policies (first human response, pickup by priority, resolution by type); due timestamps; ok/risk/breach state; breach events; business alerts.
 
 ### E7.9 AI copilot — COMPLETE — on-demand + proactive drafts, insert/rewrite in the workspace (e2e)
@@ -365,22 +365,22 @@ Traces for HTTP, turn, model request, tool call, queue job, alert evaluation; me
 ### E8.2 Telemetry read models — COMPLETE — telemetry, analytics, home, quality services and APIs with tests
 Postgres-backed aggregates for in-product dashboards (usage_events, turns, tool_calls, health samples, worker stats, queue stats) with time-bucket queries/rollups; uptime from health samples.
 
-### E8.3 Tech Admin system control center — IN PROGRESS — control center screens being built
+### E8.3 Tech Admin system control center — COMPLETE — /system, workers (scaling status), queues, telemetry (e2e)
 `design/03`: status bar, service health, uptime, tiles, latency chart, token + cache usage by profile, worker instances + config editor, provider health cards, MCP health table; Queues & leases page; Telemetry page (tokens/cache/cost by agent/profile/provider, provider failure/retry/timeout, traces links, logs links).
 
-### E8.4 CS Lead analytics — IN PROGRESS — agent analytics on /agents done; analytics pages being built
+### E8.4 CS Lead analytics — COMPLETE — /analytics, agent analytics, escalation reasons (e2e)
 Agent overview (`design/02` Overview + Analytics tabs): conversations, containment, escalation rate, resolution, first response, SLA breaches, tool failure rate, CSAT; escalation reasons; failure topics; knowledge gaps; prompt-correction opportunities; channel breakdown; handling time; sales/service outcomes. Conversation insights job (explicit, auditable classifier output per conversation: topic, outcome, escalation reason, knowledge gap question). No opaque "quality score".
 
-### E8.5 QA reviews & prompt corrections — IN PROGRESS — backend + agent Quality tab done; reviews/corrections pages being built
+### E8.5 QA reviews & prompt corrections — COMPLETE — reviews and corrections pages + agent Quality tab (e2e)
 Conversation reviews (reviewer, outcome tag, score with explicit rubric, notes); prompt correction workflow (source turn → observed → desired → component → staged into draft → new version → optional replay evaluation → activation).
 
 ### E8.6 Replay evaluation — COMPLETE — replay evaluation job + prompt-tab replay
 Run a draft prompt version against selected historical customer turns (no side effects: tools stubbed/read-only), side-by-side results, summary counts; used before activation.
 
-### E8.7 CS Exec operational indicators — IN PROGRESS
+### E8.7 CS Exec operational indicators — COMPLETE — exec home from /v1/home
 Home + workspace: assigned, pickup queue, waiting time, SLA state, handoff status, workload.
 
-### E8.8 Alert engine — IN PROGRESS — engine complete; alerts pages being built
+### E8.8 Alert engine — COMPLETE — engine, 17 conditions, alerts pages (e2e)
 Rules (technical/business, platform-wide or agent-specific, condition + window, severity, audience roles, destinations, dedupe window, auto-resolve); evaluator registry (workers below min, queue age, provider failure spike, MCP down, latency SLO, token/cost spike, auth failures, DB degraded, escalation spike, SLA breaches, repeated failure intent, agent quality signal, tool/business failures, conversion anomaly); leader-elected scheduler; lifecycle OPEN → ACKNOWLEDGED → RESOLVED; audit.
 - Tests (required): each evaluator; dedupe/window; auto-resolve; audience filtering.
 
@@ -442,7 +442,7 @@ Load script (web-chat channel, mock model with latency) measuring turn latency a
 
 | ID | Task | Status |
 |---|---|---|
-| T11.1 | Playwright e2e for every "definition of complete" capability | NOT STARTED |
+| T11.1 | Playwright e2e for every "definition of complete" capability | COMPLETE — 10 Playwright specs, 63 tests, all passing on the production build (see PM/DEFINITION-OF-COMPLETE.md) |
 | T11.2 | Security review: SSRF, authz coverage, secret redaction, webhook replay, CSRF, session security | IN PROGRESS — done: CSRF same-origin guard, per-address sign-in throttle, staff attachment scoping, health endpoint exposure, SSRF guards reviewed, log redaction; see docs/15 notes |
 | T11.3 | Data retention jobs (conversations, media, logs, tool payloads; audit separate) | COMPLETE — retention per class, hourly worker job, audit floor in the database |
 | T11.4 | Operator docs: Compose runbook, AWS runbook, backup/restore, upgrades, provider/channel/MCP setup guides | COMPLETE — compose.md, aws.md, worker-scaling.md, resilience-testing.md, setup-guide.md |
@@ -492,11 +492,11 @@ Load script (web-chat channel, mock model with latency) measuring turn latency a
 | CS Exec replies | E7.5 | COMPLETE |
 | Return conversation to AI | E7.6 | COMPLETE |
 | Recover after worker failure | E10.1 | COMPLETE — chaos test |
-| Technical observability | E8.1–E8.3 | IN PROGRESS — APIs done; control center screens being built |
-| Business observability | E8.4–E8.7 | IN PROGRESS — APIs + agent analytics done; analytics pages being built |
-| Receive alerts | E8.8, E8.9 | IN PROGRESS — engine/delivery done; alerts pages being built |
+| Technical observability | E8.1–E8.3 | COMPLETE |
+| Business observability | E8.4–E8.7 | COMPLETE |
+| Receive alerts | E8.8, E8.9 | COMPLETE |
 | Use the internal OCSO agent | P9 | COMPLETE |
-| Prompt/cache/token telemetry | E3.7, E4.2, E4.5, E8.3 | IN PROGRESS — recorded per request; telemetry screens being built |
+| Prompt/cache/token telemetry | E3.7, E4.2, E4.5, E8.3 | COMPLETE (real hit rates need real providers) |
 | Deploy the same architecture to ECS Fargate | E10.2–E10.5 | IN PROGRESS — Terraform + adapter done; needs an AWS account to apply |
 
 ## Change log
@@ -506,3 +506,4 @@ Load script (web-chat channel, mock model with latency) measuring turn latency a
 | 2026-09-22 | Plan created from full read of README, docs/00–99 and design/*. Provider caching split into one task per provider (E4.2). |
 | 2026-09-22 | Status sync: foundation, runtime, providers, MCP manager, alerts, internal agent backend, human tools/confirmation, copilot backend, customer claims landed with tests; UI screens, telemetry/analytics, Compose, Terraform and scaling adapter in progress. |
 | 2026-09-22 | Status sync after UI screens, scaling adapter, retention, claims, webhooks, resilience tests and operator docs landed. |
+| 2026-09-22 | All screens landed; full e2e (63 tests), integration (270+) and unit (890) suites green; chaos test passes on the final build. |
