@@ -1,0 +1,114 @@
+/* Rho — supervision additions on top of base.css + one.css.
+   Loads last. Never edit base.css or one.css. */
+
+/* ─────────── Provenance mark ───────────
+   A fact, not a status. Square so it never competes with the status chip. */
+.prov{width:16px;height:16px;border-radius:var(--radius-sm);font-family:var(--font-mono);font-size:9px;font-weight:700;display:inline-grid;place-items:center;flex:none;letter-spacing:-0.02em}
+.prov.a{background:var(--bg-3);color:var(--ink)}
+.prov.b{background:var(--bg-3);color:var(--ink-2)}
+.prov.c1{background:var(--accent-soft);color:var(--accent)}
+.prov.c2{background:var(--accent-soft);color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);background-image:repeating-linear-gradient(45deg,transparent,transparent 2px,color-mix(in oklab,var(--accent) 12%,transparent) 2px,color-mix(in oklab,var(--accent) 12%,transparent) 4px)}
+
+/* ─────────── Verification strength ───────────
+   Four dots. Every measured number carries how well it is known. */
+.vstrength{display:inline-flex;gap:2px;align-items:center;vertical-align:middle}
+.vstrength i{width:5px;height:5px;border-radius:50%;background:var(--border-2);display:block}
+.vstrength i.on{background:var(--ink-3)}
+.vstrength.full i.on{background:var(--good)}
+.vstrength.inferred i.on{background:var(--warn)}
+.vstrength+.vs-label{font-family:var(--font-mono);font-size:10px;color:var(--ink-4);margin-left:5px;text-transform:uppercase;letter-spacing:0.05em}
+
+/* ─────────── As-of stamp ───────────
+   Bitemporality has to be visible or the product lies. */
+.asof{display:inline-flex;align-items:center;gap:14px;font-family:var(--font-mono);font-size:10.5px;color:var(--ink-3);letter-spacing:0.03em}
+.asof .k{color:var(--ink-4);text-transform:uppercase;font-size:9.5px;letter-spacing:0.07em;margin-right:5px}
+.asof .sep{width:1px;height:11px;background:var(--border-2)}
+.asof.restated .v.changed{color:var(--warn);border-bottom:1px dashed var(--warn);cursor:help}
+.was{color:var(--ink-4);text-decoration:line-through;font-family:var(--font-mono);font-size:10.5px;margin-left:6px}
+
+/* ─────────── Claim divergence ───────────
+   The gap is the metric, so the gap gets the ink. */
+.divergence{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;font-family:var(--font-mono);font-size:11px}
+.divergence .claimed{color:var(--ink-3)}
+.divergence .measured{color:var(--ink);font-weight:600}
+.divergence .dbar{height:6px;background:var(--bg-3);border-radius:999px;position:relative;overflow:hidden;min-width:80px}
+.divergence .dbar .fill{position:absolute;top:0;bottom:0;left:0;background:var(--ink-3);border-radius:999px}
+.divergence .dbar .gap{position:absolute;top:0;bottom:0;background:var(--warn);opacity:0.75}
+.divergence.severe .dbar .gap{background:var(--danger)}
+
+/* ─────────── Applicability veil ───────────
+   D-125: never hide a capability. Mark it. */
+.na-veil{position:relative}
+.na-veil>.veiled{opacity:0.55;pointer-events:none;filter:saturate(0.6)}
+.na-banner{background:var(--bg-2);border:1px dashed var(--border-2);border-radius:var(--radius);padding:14px 18px;margin-bottom:18px;display:flex;align-items:center;gap:16px}
+.na-banner .na-t{font-size:13px;font-weight:600;color:var(--ink-2)}
+.na-banner .na-s{font-family:var(--font-mono);font-size:10.5px;color:var(--ink-3);margin-top:2px}
+.na-banner .spacer{flex:1}
+
+/* ─────────── Environment banner ───────────
+   Test shouts. Production says nothing, because absence is the signal. */
+.envbar{position:sticky;top:0;z-index:60;height:3px;background:repeating-linear-gradient(45deg,var(--warn),var(--warn) 6px,color-mix(in oklab,var(--warn) 55%,var(--bg)) 6px,color-mix(in oklab,var(--warn) 55%,var(--bg)) 12px)}
+.envtag{font-family:var(--font-mono);font-size:9.5px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--warn);background:var(--warn-soft);padding:2px 8px;border-radius:999px}
+
+/* ─────────── Coverage inline ───────────
+   A quality number never appears without its population. */
+.cov{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:10.5px;color:var(--ink-3)}
+.cov .cbar{width:34px;height:4px;background:var(--bg-3);border-radius:999px;overflow:hidden}
+.cov .cbar>i{display:block;height:100%;background:var(--ink-3);border-radius:999px}
+.cov.thin .cbar>i{background:var(--warn)}
+.cov.thin{color:var(--warn)}
+
+/* ─────────── Declared vs observed ───────────
+   Two columns, never merged into one resolved value. */
+.dvo{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--surface)}
+.dvo>div{padding:14px 16px}
+.dvo>div+div{border-left:1px solid var(--border);background:var(--surface-2)}
+.dvo .dvo-k{font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.07em;color:var(--ink-4);margin-bottom:8px}
+.dvo .delta{background:var(--warn-soft);color:var(--warn);border-radius:var(--radius-sm);padding:1px 6px;font-family:var(--font-mono);font-size:10px;font-weight:600}
+
+/* ─────────── Finding row ───────────
+   No finding without an owner and an age. */
+.finding{display:grid;grid-template-columns:4px minmax(0,1fr) 130px 72px 88px;gap:12px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--surface)}
+.finding:hover{background:var(--surface-2)}
+.finding .sev{width:4px;height:100%;min-height:34px;border-radius:999px;background:var(--ink-4)}
+.finding.high .sev{background:var(--danger)}
+.finding.med .sev{background:var(--warn)}
+.finding.low .sev{background:var(--ink-4)}
+.finding .f-t{font-size:13px;color:var(--ink);font-weight:500}
+.finding .f-s{font-size:12px;color:var(--ink-3);margin-top:1px}
+.finding .f-owner{font-size:12px;color:var(--ink-2)}
+.finding .f-age{font-family:var(--font-mono);font-size:11px;color:var(--ink-3)}
+.finding .f-age.stale{color:var(--warn)}
+
+/* ─────────── Ladder ───────────
+   Levels 0–4. Which rungs this agent supports. */
+.ladder{display:inline-flex;gap:3px;align-items:flex-end;height:16px}
+.ladder i{width:5px;background:var(--border-2);border-radius:1px;display:block}
+.ladder i:nth-child(1){height:6px}.ladder i:nth-child(2){height:8px}.ladder i:nth-child(3){height:10px}
+.ladder i:nth-child(4){height:13px}.ladder i:nth-child(5){height:16px}
+.ladder i.on{background:var(--accent)}
+
+/* ─────────── Episode timeline ───────────
+   Horizontal, opened_at → closed_at → outcome, with the wait made visible. */
+.etl{display:flex;align-items:center;gap:0;font-family:var(--font-mono);font-size:10px}
+.etl .node{width:9px;height:9px;border-radius:50%;background:var(--accent);flex:none;z-index:1}
+.etl .node.outcome{background:var(--good)}
+.etl .node.pending{background:var(--bg-3);box-shadow:inset 0 0 0 1.5px var(--border-2)}
+.etl .seg-line{height:1.5px;background:var(--border-2);flex:1;min-width:18px}
+.etl .seg-line.wait{background:repeating-linear-gradient(90deg,var(--border-2),var(--border-2) 3px,transparent 3px,transparent 6px)}
+.etl .lab{color:var(--ink-4);padding:0 7px;white-space:nowrap}
+
+/* ─────────── Tier routing chip ───────────
+   Which evaluation tier resolved this score. */
+.tier{font-family:var(--font-mono);font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:var(--radius-sm);letter-spacing:0.04em}
+.tier.a{background:var(--bg-3);color:var(--ink-2)}
+.tier.b{background:var(--accent-soft);color:var(--accent)}
+.tier.c{background:var(--accent-soft-2);color:var(--accent)}
+.tier.d{background:var(--good-soft);color:var(--good)}
+.tier.unscoreable{background:var(--warn-soft);color:var(--warn)}
+.tier.unscoreable::after{content:"";}
+
+/* ─────────── Regional chip ───────────
+   Residency is always visible. One product, one region per tenant. */
+.region{font-family:var(--font-mono);font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-3);display:inline-flex;align-items:center;gap:5px}
+.region::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--good)}
