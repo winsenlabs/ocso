@@ -1,0 +1,10 @@
+packages:
+  - apps/*
+  - packages/*
+  - examples/*
+
+catalog:
+  zod: ^4.6.5
+  typescript: ^7.0.2
+  vitest: ^5.0.1
+  "@types/node": ^26.0.0
