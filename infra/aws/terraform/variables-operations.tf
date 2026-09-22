@@ -156,3 +156,9 @@ variable "alarm_email_addresses" {
   type        = list(string)
   default     = []
 }
+
+variable "bedrock_model_arns" {
+  description = "Bedrock model / inference-profile ARNs OCSO may invoke with its task role (provider authMode IAM_ROLE), e.g. arn:aws:bedrock:ap-south-1::foundation-model/anthropic.claude-sonnet-4-5-v1:0 and the matching inference-profile ARN. Leave empty when Bedrock uses access keys or an API key."
+  type        = list(string)
+  default     = []
+}

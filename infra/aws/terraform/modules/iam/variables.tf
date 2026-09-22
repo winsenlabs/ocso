@@ -76,3 +76,9 @@ variable "enable_execute_command" {
   type        = bool
   default     = false
 }
+
+variable "bedrock_model_arns" {
+  description = "Bedrock foundation-model / inference-profile ARNs the api and worker task roles may invoke (Bedrock provider with authMode IAM_ROLE). Empty = no Bedrock permissions."
+  type        = list(string)
+  default     = []
+}

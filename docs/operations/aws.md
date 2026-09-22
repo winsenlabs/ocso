@@ -208,6 +208,15 @@ stores only the ARN.
 - These secrets use the account's `aws/secretsmanager` key, because the app does not pass a CMK.
 - Deleted secrets are recoverable for the app's recovery window (`aws secretsmanager restore-secret`).
 
+### Model providers on AWS
+
+Bedrock can authenticate with access keys or an API key (entered in Connections & models, stored in
+Secrets Manager) or with the **task role** (provider auth mode `IAM_ROLE`). For the task role, list the
+model and inference-profile ARNs in `bedrock_model_arns`; Terraform then grants the api and worker roles
+`bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream` on exactly those ARNs. Other providers
+(Vertex, Foundry, OpenAI, Anthropic, Sarvam) use credentials stored through the UI; they need outbound
+HTTPS from the private subnets (NAT).
+
 ## 7. Worker autoscaling
 
 Terraform declares the **shape**:

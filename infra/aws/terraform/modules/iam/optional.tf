@@ -41,3 +41,20 @@ resource "aws_iam_role_policy" "exec" {
   role     = aws_iam_role.task[each.key].name
   policy   = data.aws_iam_policy_document.exec.json
 }
+
+# Bedrock with the task role (provider authMode IAM_ROLE): model invocation for the api (tests, internal
+# agent, copilot) and worker (turns). Only the listed model / inference-profile ARNs.
+data "aws_iam_policy_document" "bedrock" {
+  count = length(var.bedrock_model_arns) > 0 ? 1 : 0
+  statement {
+    actions   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
+    resources = var.bedrock_model_arns
+  }
+}
+
+resource "aws_iam_role_policy" "bedrock" {
+  for_each = length(var.bedrock_model_arns) > 0 ? toset(["api", "worker"]) : toset([])
+  name     = "bedrock-invoke"
+  role     = aws_iam_role.task[each.key].name
+  policy   = data.aws_iam_policy_document.bedrock[0].json
+}

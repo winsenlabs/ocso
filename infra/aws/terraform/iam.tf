@@ -18,4 +18,5 @@ module "iam" {
   otel_enabled               = var.otel_collector.enabled
   otel_metrics_log_group_arn = module.observability.otel_metrics_log_group_arn
   enable_execute_command     = var.enable_execute_command
+  bedrock_model_arns         = var.bedrock_model_arns
 }
