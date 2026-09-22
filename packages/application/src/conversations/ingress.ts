@@ -1,6 +1,6 @@
 import { and, desc, eq, gt, ne, sql } from 'drizzle-orm';
 import { inboundStartsAiTurn, nextDeliveryStatus, type ControlState, type DeliveryStatus, type InteractionPart } from '@ocso/domain';
-import { channels, conversations, interactions, virtualAgents, uuidv7, type Db, type DbOrTx } from '@ocso/db';
+import { agentChannels, channels, conversations, interactions, virtualAgents, uuidv7, type Db, type DbOrTx } from '@ocso/db';
 import type { QueueAdapter } from '@ocso/queue';
 import { emitEvent } from '../events/outbox.js';
 import { relinkIdentity, resolveCustomer, type IdentityClaim } from '../customers/identity-resolver.js';
@@ -62,8 +62,11 @@ export class IngressService {
 
       const [channel] = await tx.select().from(channels).where(eq(channels.id, channelId));
       if (!channel || channel.status !== 'ACTIVE') return { status: 'rejected', reason: 'channel_inactive' } as const;
-      if (!channel.defaultAgentId) return { status: 'rejected', reason: 'no_agent' } as const;
-      const [agent] = await tx.select().from(virtualAgents).where(eq(virtualAgents.id, channel.defaultAgentId));
+      // No default agent: a channel attached to exactly one agent still routes to it.
+      const attached = channel.defaultAgentId ? [] : await tx.select({ agentId: agentChannels.agentId }).from(agentChannels).where(eq(agentChannels.channelId, channelId)).limit(2);
+      const agentId = channel.defaultAgentId ?? (attached.length === 1 ? attached[0]!.agentId : null);
+      if (!agentId) return { status: 'rejected', reason: 'no_agent' } as const;
+      const [agent] = await tx.select().from(virtualAgents).where(eq(virtualAgents.id, agentId));
       if (!agent) return { status: 'rejected', reason: 'no_agent' } as const;
 
       const actor = systemActor(`channel:${channelId}`, correlationId, channel.name);

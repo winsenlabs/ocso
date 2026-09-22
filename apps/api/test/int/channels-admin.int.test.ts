@@ -32,4 +32,12 @@ describe('channel administration (design/04 Channels)', () => {
     const session = await h.http().post(`/public/webchat/${created.body.publicKey}/session`).send({}).expect(200);
     expect(session.body.token).toEqual(expect.any(String));
   });
+
+  it('a partial update changes only the fields it sends', async () => {
+    const settings = { allowedOrigins: ['https://shop.meridian.example'] };
+    const created = await h.http().post('/v1/channels').set(auth(admin)).send({ kind: 'WEBCHAT', name: 'Shop chat', status: 'ACTIVE', settings }).expect(201);
+    const renamed = await h.http().patch(`/v1/channels/${created.body.id}`).set(auth(admin)).send({ name: 'Shop chat (EU)' }).expect(200);
+    expect(renamed.body).toMatchObject({ name: 'Shop chat (EU)', status: 'ACTIVE', settings: expect.objectContaining(settings) });
+    expect(Object.keys(renamed.body.secretRefs)).toEqual(Object.keys(created.body.secretRefs));
+  });
 });

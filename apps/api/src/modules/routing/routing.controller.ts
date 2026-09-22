@@ -1,12 +1,10 @@
 import { Body, Controller, Get, HttpCode, Inject, Param, Patch, Post, Put } from '@nestjs/common';
 import { Permission } from '@ocso/auth';
-import { QueueInput, QueueService, SlaPolicyInput, type ActorContext } from '@ocso/application';
+import { QueueInput, QueuePatch, QueueService, SlaPolicyInput, type ActorContext } from '@ocso/application';
 import { z } from 'zod';
 import { Actor, RequirePermission } from '../../common/decorators.js';
 
 const Id = z.uuid();
-const QueuePatch = QueueInput.partial();
-type QueuePatch = z.infer<typeof QueuePatch>;
 
 /** Queues, team eligibility and SLA policies (CS Lead). */
 @Controller('v1')

@@ -5,6 +5,7 @@ import { conversations, queueTeams, queues, slaPolicies, teamMembers, users, uui
 import { z } from 'zod';
 import { recordAudit } from '../audit/audit.js';
 import type { ActorContext } from '../shared/context.js';
+import { patchOf } from '../shared/patch.js';
 
 export const QueueInput = z.object({
   name: z.string().trim().min(1).max(120),
@@ -19,7 +20,7 @@ export const QueueInput = z.object({
   teamIds: z.array(z.uuid()).default([]),
 });
 export type QueueInput = z.infer<typeof QueueInput>;
-export const QueuePatch = QueueInput.partial();
+export const QueuePatch = patchOf(QueueInput);
 export type QueuePatch = z.infer<typeof QueuePatch>;
 
 export const SlaPolicyInput = z.object({

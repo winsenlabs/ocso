@@ -7,6 +7,7 @@ import { recordAudit } from '../audit/audit.js';
 import { bumpGeneration } from '../cache/generations.js';
 import type { ActorContext } from '../shared/context.js';
 import { assertAgentManageable, assertAgentReadable } from './access.js';
+import { patchOf } from '../shared/patch.js';
 
 /** Deterministic trigger conditions evaluated in code (docs/01 §6); the prompt covers judgement calls. */
 export const EscalationCondition = z.object({
@@ -26,7 +27,7 @@ export const EscalationRuleInput = z.object({
   enabled: z.boolean().default(true),
 });
 export type EscalationRuleInput = z.infer<typeof EscalationRuleInput>;
-export const EscalationRulePatch = EscalationRuleInput.partial();
+export const EscalationRulePatch = patchOf(EscalationRuleInput);
 export type EscalationRulePatch = z.infer<typeof EscalationRulePatch>;
 export type EscalationRuleRow = typeof escalationRules.$inferSelect;
 

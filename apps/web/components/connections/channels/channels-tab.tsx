@@ -131,7 +131,15 @@ export async function ChannelsTab({ session, params }: { session: Session; param
                       ...(id ? [id] : []),
                       { k: 'inbound', v: <span className="mono-sm">{c.webhookPath ?? '—'}</span> },
                       { k: 'credentials', v: secrets.length ? `${secrets.join(', ')} set` : 'none set' },
-                      { k: 'agent', v: agentName(c.defaultAgentId) },
+                      {
+                        k: 'agent',
+                        v: c.defaultAgentId ? (
+                          agentName(c.defaultAgentId)
+                        ) : (
+                          // Ingress routes new conversations to the default agent (or the only attached one).
+                          <span className="warn-text">none: new customer messages are rejected unless exactly one agent uses this channel</span>
+                        ),
+                      },
                     ]}
                   />
                 </ProviderCard>

@@ -113,3 +113,6 @@ button.sb-walle .sb-walle-name,button.sb-walle .sb-walle-sub{display:block}
 .auth-field select{width:100%;box-sizing:border-box;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 11px;font:inherit;font-size:13.5px;color:var(--ink);outline:none}
 .auth-field select:focus{border-color:var(--accent-2);box-shadow:0 0 0 3px var(--accent-ring)}
 @media (max-width:700px){.fld-row{grid-template-columns:minmax(0,1fr)}}
+
+/* Inline warning text (e.g. a channel with no agent). */
+.warn-text{color:var(--warn)}

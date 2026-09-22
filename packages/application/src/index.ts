@@ -1,4 +1,5 @@
 export * from './shared/context.js';
+export * from './shared/patch.js';
 export * from './audit/audit.js';
 export * from './events/outbox.js';
 export * from './identity/password.js';

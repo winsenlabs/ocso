@@ -59,10 +59,11 @@ export class ChannelWebhookController {
     }
     const envelope = adapter.parseInbound(raw, config);
     const summary = await this.channels.process(config.id, envelope, req.correlationId ?? segment);
-    this.logger.info(
-      { channelId: config.id, kind: config.kind, accepted: summary.accepted, duplicates: summary.duplicates, statuses: summary.statuses, ignored: envelope.ignored },
-      'channel webhook',
-    );
+    const counts = { channelId: config.id, kind: config.kind, accepted: summary.accepted, duplicates: summary.duplicates, rejected: summary.rejected, statuses: summary.statuses, ignored: envelope.ignored };
+    const rejections = summary.results.flatMap((r) => (r.status === 'rejected' ? [r.reason] : []));
+    // A rejected customer message is lost to the customer: say why, loudly.
+    if (rejections.length) this.logger.warn({ ...counts, reasons: [...new Set(rejections)] }, 'channel webhook: customer messages rejected');
+    else this.logger.info(counts, 'channel webhook');
     const ack = adapter.webhookAcknowledgement?.();
     if (ack) {
       res.status(ack.status).type(ack.contentType).send(ack.body);

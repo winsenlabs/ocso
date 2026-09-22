@@ -1,7 +1,7 @@
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { Permission, assertCan, type Principal } from '@ocso/auth';
 import { BusinessHoursSchema, WEEKDAYS, conflict, isAlwaysOpen, notFound, validation, type BusinessHoursInput } from '@ocso/domain';
-import { agentChannels, agentTeams, conversations, handoffs, modelProfiles, promptVersions, virtualAgents, uuidv7, type Db } from '@ocso/db';
+import { agentChannels, agentTeams, channels, conversations, handoffs, modelProfiles, promptVersions, virtualAgents, uuidv7, type Db, type DbOrTx } from '@ocso/db';
 import { z } from 'zod';
 import { recordAudit } from '../audit/audit.js';
 import { bumpGeneration } from '../cache/generations.js';
@@ -117,6 +117,7 @@ export class AgentService {
         .returning();
       await tx.insert(agentTeams).values(owners.map((teamId) => ({ agentId: id, teamId })));
       if (input.channelIds?.length) await tx.insert(agentChannels).values(input.channelIds.map((channelId) => ({ agentId: id, channelId })));
+      if (input.channelIds?.length) await claimUnroutedChannels(tx, actor, id, input.channelIds);
       const version = await createPromptVersion(tx, actor, {
         agentId: id,
         components: initialComponents(input.name, input.purpose, input.conversationType),
@@ -149,6 +150,7 @@ export class AgentService {
       if (channelIds) {
         await tx.delete(agentChannels).where(eq(agentChannels.agentId, id));
         if (channelIds.length) await tx.insert(agentChannels).values(channelIds.map((channelId) => ({ agentId: id, channelId })));
+        if (channelIds.length) await claimUnroutedChannels(tx, actor, id, channelIds);
       }
       const hours = patch.businessHours ? ` · business hours ${describeHours(patch.businessHours)}` : '';
       await recordAudit(tx, actor, { action: 'agent.update', targetType: 'agent', targetId: id, summary: `Updated ${before.name}${hours}`, before, after: patch });
@@ -224,4 +226,20 @@ function slugify(name: string, id: string): string {
     .replace(/^-|-$/g, '')
     .slice(0, 40);
   return `${base || 'agent'}-${id.slice(-4)}`;
+}
+
+/**
+ * A channel with no default agent rejects every new customer message
+ * (`no_agent`), so attaching an agent to such a channel also makes it the
+ * channel's default. Channels that already route to another agent keep it.
+ */
+async function claimUnroutedChannels(tx: DbOrTx, actor: ActorContext, agentId: string, channelIds: readonly string[]): Promise<void> {
+  const claimed = await tx
+    .update(channels)
+    .set({ defaultAgentId: agentId, updatedAt: new Date() })
+    .where(and(inArray(channels.id, [...channelIds]), isNull(channels.defaultAgentId)))
+    .returning({ id: channels.id, name: channels.name });
+  for (const channel of claimed) {
+    await recordAudit(tx, actor, { action: 'channel.update', targetType: 'channel', targetId: channel.id, summary: `${channel.name} now routes new conversations to this agent (it had no default agent)`, after: { defaultAgentId: agentId } });
+  }
 }

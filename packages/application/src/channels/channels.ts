@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { recordAudit } from '../audit/audit.js';
 import { bumpGeneration } from '../cache/generations.js';
 import type { ActorContext } from '../shared/context.js';
+import { patchOf } from '../shared/patch.js';
 
 export const ChannelInput = z.object({
   /** A registered channel adapter kind (checked against the registry by the API; plugins add kinds). */
@@ -20,7 +21,7 @@ export const ChannelInput = z.object({
   status: z.enum(['ACTIVE', 'DISABLED', 'DRAFT']).default('DRAFT'),
 });
 export type ChannelInput = z.infer<typeof ChannelInput>;
-export const ChannelPatch = ChannelInput.omit({ kind: true }).partial();
+export const ChannelPatch = patchOf(ChannelInput.omit({ kind: true }));
 export type ChannelPatch = z.infer<typeof ChannelPatch>;
 
 export interface ChannelView {

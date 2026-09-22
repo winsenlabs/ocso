@@ -5,6 +5,7 @@ import {
   ComponentsInput,
   CreateVersionInput,
   EscalationRuleInput,
+  EscalationRulePatch,
   EscalationRuleService,
   PromptService,
   type ActorContext,
@@ -21,7 +22,7 @@ const Id = z.uuid();
 const DiffQuery = z.object({ from: z.uuid(), to: z.uuid() });
 type DiffQuery = z.infer<typeof DiffQuery>;
 type Components = z.infer<typeof ComponentsInput>;
-const RulePatch = EscalationRuleInput.partial();
+const RulePatch = EscalationRulePatch;
 type RulePatch = z.infer<typeof RulePatch>;
 
 /**
