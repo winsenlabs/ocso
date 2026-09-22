@@ -1,0 +1,22 @@
+{
+  "name": "@ocso-examples/mcp-bank-demo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Example EXTERNAL business system exposed over MCP (not part of OCSO core).",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.0.0",
+    "@modelcontextprotocol/express": "^2.0.0",
+    "@modelcontextprotocol/node": "^2.0.0",
+    "express": "^5.2.1",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6"
+  }
+}

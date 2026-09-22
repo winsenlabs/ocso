@@ -1,5 +1,5 @@
 {
-  "name": "@ocso/tools",
+  "name": "@ocso/mcp",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -19,8 +19,15 @@
   },
   "dependencies": {
     "@ocso/domain": "workspace:*",
-    "@ocso/auth": "workspace:*",
-    "ajv": "^8.20.0",
-    "ajv-formats": "^3.0.1"
+    "@ocso/tools": "workspace:*",
+    "@modelcontextprotocol/client": "^2.0.0",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/server": "^2.0.0",
+    "@modelcontextprotocol/express": "^2.0.0",
+    "@modelcontextprotocol/node": "^2.0.0",
+    "express": "^5.2.1"
   }
 }

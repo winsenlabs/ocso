@@ -54,13 +54,13 @@ Phases are vertical slices: each includes persistence, authorization, API, UI wh
 
 ## P0 — Research & planning
 
-### E0.1 Upstream research — IN PROGRESS
+### E0.1 Upstream research — COMPLETE
 | ID | Task | Status |
 |---|---|---|
 | T0.1.1 | AI SDK v7 + all six provider packages, per-provider prompt-cache matrix, usage normalization → `research/01-ai-sdk-and-providers.md` | COMPLETE |
 | T0.1.2 | Vercel Chat SDK + WhatsApp Cloud API → `research/02-chat-sdk-and-whatsapp.md` | COMPLETE |
 | T0.1.3 | MCP client/server + OAuth 2.1 authorization → `research/03-mcp-and-oauth.md` | COMPLETE |
-| T0.1.4 | NestJS 12, Next.js 16, TypeScript 7, ORM/migrations, validation, testing, OpenTelemetry, pnpm/turbo → `research/04-backend-frontend-stack.md` | IN PROGRESS |
+| T0.1.4 | NestJS 12, Next.js 16, TypeScript 7, ORM/migrations, validation, testing, OpenTelemetry, pnpm/turbo → `research/04-backend-frontend-stack.md` | COMPLETE |
 | T0.1.5 | SQS, ECS Fargate autoscaling, S3, Secrets Manager, Terraform, Compose, OTel→CloudWatch → `research/05-aws-deploy-and-queues.md` | COMPLETE |
 
 ### E0.2 Planning artifacts — IN PROGRESS

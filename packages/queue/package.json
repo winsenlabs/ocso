@@ -1,5 +1,5 @@
 {
-  "name": "@ocso/tools",
+  "name": "@ocso/queue",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -18,9 +18,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@ocso/domain": "workspace:*",
-    "@ocso/auth": "workspace:*",
-    "ajv": "^8.20.0",
-    "ajv-formats": "^3.0.1"
+    "@aws-sdk/client-sqs": "catalog:"
+  },
+  "devDependencies": {
+    "@ocso/db": "workspace:*"
   }
 }

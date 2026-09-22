@@ -18,6 +18,7 @@
     "typescript": "catalog:",
     "vitest": "catalog:",
     "@types/node": "catalog:",
-    "turbo": "^2.11.2"
+    "turbo": "^2.11.2",
+    "vite": "catalog:"
   }
 }

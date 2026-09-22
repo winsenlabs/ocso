@@ -1,0 +1,164 @@
+import type { DeliveryStatus, InteractionPart, InteractionPartType, MediaRef } from '@ocso/domain';
+
+/**
+ * ChannelAdapter contract (docs/07 §2). Adapters own transport concerns only:
+ * verification, identity extraction, normalization, media, rendering, sending,
+ * delivery status, idempotency keys and capability declaration.
+ * They never run the agent loop and never touch the database.
+ */
+
+export const CHANNEL_KINDS = ['WHATSAPP', 'WEBCHAT', 'SMS', 'RCS', 'VOICE', 'CUSTOM_APP'] as const;
+export type ChannelKind = (typeof CHANNEL_KINDS)[number];
+
+export type MediaKind = 'IMAGE' | 'AUDIO' | 'VIDEO' | 'DOCUMENT';
+
+export interface ChannelCapabilities {
+  /** Part types the channel can deliver inbound. */
+  inboundParts: readonly InteractionPartType[];
+  /** Part types OCSO may render outbound on this channel. */
+  outboundParts: readonly InteractionPartType[];
+  maxTextLength: number;
+  markdown: 'none' | 'whatsapp' | 'commonmark';
+  streaming: boolean;
+  deliveryReceipts: boolean;
+  interactive: boolean;
+  maxMediaBytes: Readonly<Record<MediaKind, number>>;
+  allowedMimeTypes: Readonly<Record<MediaKind, readonly string[]>>;
+  /** Hours after the last customer message during which free-form replies are allowed (WhatsApp: 24). */
+  sessionWindowHours: number | null;
+}
+
+/** Transport-neutral HTTP request as received by the API (raw body kept for signatures). */
+export interface RawHttpRequest {
+  method: 'GET' | 'POST';
+  /** Header names lower-cased. */
+  headers: Readonly<Record<string, string | undefined>>;
+  query: Readonly<Record<string, string | undefined>>;
+  rawBody: Buffer | null;
+}
+
+/** Channel configuration with secrets already resolved by trusted code. */
+export interface ChannelRuntimeConfig {
+  id: string;
+  kind: ChannelKind;
+  name: string;
+  settings: Readonly<Record<string, unknown>>;
+  secrets: Readonly<Record<string, string>>;
+}
+
+export type VerificationResult =
+  | { kind: 'challenge'; status: 200; body: string }
+  | { kind: 'verified' }
+  | { kind: 'rejected'; status: 400 | 401 | 403; reason: string };
+
+export interface InboundMessage {
+  /** Provider message id — the idempotency key (e.g. WhatsApp wamid). */
+  externalMessageId: string;
+  /** Identity namespace, e.g. `whatsapp_phone`, `whatsapp_bsuid`, `webchat_visitor`. */
+  identityKind: string;
+  /** Provider identifier within that namespace (E.164 phone, BSUID, visitor id). */
+  identityValue: string;
+  /** Additional identities observed on the same message (e.g. phone alongside BSUID). */
+  alternateIdentities: ReadonlyArray<{ kind: string; value: string }>;
+  profileName?: string | undefined;
+  /** Business-side account that received the message (WhatsApp phone_number_id). */
+  channelAccountId?: string | undefined;
+  receivedAt: Date;
+  /** Media parts carry `media.status = 'PENDING'` and `media.source.externalId`. */
+  parts: InteractionPart[];
+  replyToExternalId?: string | undefined;
+}
+
+export interface DeliveryStatusUpdate {
+  externalMessageId: string;
+  status: DeliveryStatus;
+  occurredAt: Date;
+  recipientId?: string | undefined;
+  errorCode?: string | undefined;
+  errorTitle?: string | undefined;
+}
+
+/**
+ * A provider-announced change of a customer identifier (e.g. WhatsApp BSUID
+ * rotation after a phone-number change). Identity resolution re-links the
+ * existing CustomerIdentity instead of creating a new customer.
+ */
+export interface IdentityUpdate {
+  identityKind: string;
+  previousValue: string;
+  currentValue: string;
+  /** Other identities known for the same person at the time of the update. */
+  alternateIdentities: ReadonlyArray<{ kind: string; value: string }>;
+  channelAccountId?: string | undefined;
+  occurredAt: Date;
+}
+
+export interface InboundEnvelope {
+  messages: InboundMessage[];
+  statuses: DeliveryStatusUpdate[];
+  /** Identifier changes announced by the provider (absent when the channel has none). */
+  identityUpdates?: IdentityUpdate[] | undefined;
+  /** Count of payload entries intentionally ignored (unsupported events). */
+  ignored: number;
+}
+
+export interface FetchedMedia {
+  data: Uint8Array;
+  mimeType: string;
+  sizeBytes: number;
+  sha256: string;
+  filename?: string | undefined;
+}
+
+/** Channel-specific payload ready to send; opaque outside the adapter. */
+export interface RenderedOutbound {
+  kind: ChannelKind;
+  payload: Readonly<Record<string, unknown>>;
+  /** Part indices from the source interaction that this payload carries. */
+  partIndexes: readonly number[];
+}
+
+export interface OutboundTarget {
+  identityKind: string;
+  identityValue: string;
+  channelAccountId?: string | undefined;
+  /** Time of the customer's last inbound message (session-window checks). */
+  lastInboundAt: Date | null;
+}
+
+export type SendResult =
+  | { ok: true; externalMessageId: string }
+  | {
+      ok: false;
+      errorCode: string;
+      message: string;
+      retriable: boolean;
+      /** Outside the session window — a template message is required. */
+      requiresTemplate?: boolean | undefined;
+    };
+
+export interface ChannelAdapterDeps {
+  fetch: typeof fetch;
+  now: () => Date;
+}
+
+export interface ChannelAdapter {
+  readonly kind: ChannelKind;
+  capabilities(config: ChannelRuntimeConfig): ChannelCapabilities;
+  /** Validate admin-entered settings/secrets; returns human-readable problems. */
+  validateConfig(settings: unknown, secrets: Readonly<Record<string, string>>): string[];
+  verifyRequest(req: RawHttpRequest, config: ChannelRuntimeConfig): VerificationResult;
+  parseInbound(req: RawHttpRequest, config: ChannelRuntimeConfig): InboundEnvelope;
+  /** Download media referenced by an inbound part (size/MIME/host checks applied). */
+  fetchMedia(ref: MediaRef, config: ChannelRuntimeConfig): Promise<FetchedMedia>;
+  /** Render customer-safe parts into one or more channel payloads (chunking, formatting). */
+  render(parts: readonly InteractionPart[], config: ChannelRuntimeConfig): RenderedOutbound[];
+  send(target: OutboundTarget, message: RenderedOutbound, config: ChannelRuntimeConfig, media: OutboundMediaResolver): Promise<SendResult>;
+}
+
+/** Resolves an outbound media part to something the provider can fetch or upload. */
+export interface OutboundMediaResolver {
+  /** Short-lived HTTPS URL the provider can download from. */
+  signedUrl(blobKey: string, ttlSeconds: number): Promise<string>;
+  read(blobKey: string): Promise<{ data: Uint8Array; mimeType: string; filename?: string | undefined }>;
+}

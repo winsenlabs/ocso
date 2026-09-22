@@ -32,15 +32,27 @@ Status values: **PROPOSED** (awaiting verification), **ACCEPTED**, **SUPERSEDED*
 
 ---
 
-## ADR-003 — TypeScript toolchain and module system
+## ADR-003 — TypeScript 7 everywhere, ESM, plain `tsc` builds
 
-**Status:** PROPOSED — pending `research/04` (TypeScript 7 native compiler vs decorator metadata required by NestJS DI).
+**Status:** ACCEPTED (2026-09-22) — evidence in `research/04-backend-frontend-stack.md`.
+
+**Decision.** `typescript@7.0.2` (native compiler) for every package and app, ESM (`"type": "module"`, `module: nodenext`, `.js` import suffixes), strict base config with `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`. NestJS apps add `experimentalDecorators` + `emitDecoratorMetadata` in their own tsconfig (NestJS 12 still uses legacy decorators + `reflect-metadata`; TS 7 emits the metadata correctly). Apps and packages build with plain `tsc -p tsconfig.build.json`; the Nest CLI is not used (it needs the TS JS API, absent until TS 7.1). Workspace packages export source through a custom `@ocso/source` condition for tests/typecheck and `dist` for production. Lint uses `oxlint` + `oxlint-tsgolint` (typescript-eslint requires the TS 6 API). Injectables are imported as values (never `import type`) so decorator metadata is not erased.
+
+**Why.** Latest stable stack (build rule §1); ~10× faster type-checking in a large monorepo.
+
+**Consequences.** No `nest generate`; modules are hand-written (they are small by rule anyway). If a Nest compile-time plugin is ever needed, only that app adds a TS 6 alias.
 
 ---
 
-## ADR-004 — ORM and migrations
+## ADR-004 — Drizzle ORM with committed SQL migrations and an OCSO migration runner
 
-**Status:** PROPOSED — pending `research/04`. Requirements: SQL migrations committed to the repo, strong types, transactions with `SELECT … FOR UPDATE SKIP LOCKED`, raw SQL escape hatch, no runtime codegen; migrations run only by the explicit `migrate` deploy step (docs/13 §5).
+**Status:** ACCEPTED (2026-09-22) — evidence in `research/04`.
+
+**Decision.** `drizzle-orm@0.45.3` (core query builder only; no relational-query v1 API) with the schema in `packages/db/src/schema/*.ts`; `drizzle-kit@0.31.11 generate` produces SQL files committed under `packages/db/migrations/` (hand-written SQL via `--custom` for triggers/partial indexes). Migrations are applied by OCSO's own runner (`packages/db/src/migrate.ts`): files sorted by name, `schema_migrations(name, checksum)`, one transaction per file, `pg_advisory_lock`, refuses to run when an applied file was edited. The runner is the `migrate` deploy step (Compose one-shot service, ECS one-off task) and is never invoked from api/worker boot.
+
+**Why.** Drizzle 0.45's own migrator silently skips files older than the last applied one and has no lock or checksum. Drizzle gives typed queries, `.for('update', { skipLocked: true })` and a `sql` escape hatch with no runtime codegen.
+
+**Consequences.** Revisit Drizzle 1.0 when it leaves RC; staying on the core builder keeps that migration cheap.
 
 ---
 
@@ -239,9 +251,13 @@ Autonomous customer-facing AI output is permitted **only** in `AI_ACTIVE`. `AI_R
 
 ---
 
-## ADR-020 — Browser → API through same-origin proxy
+## ADR-020 — Next.js as backend-for-frontend; public ingress routed to the API
 
-**Status:** PROPOSED — pending verification that Next.js 16 proxies SSE without buffering; fallback is a path-routing reverse proxy (ALB rules on AWS).
+**Status:** ACCEPTED (2026-09-22) — evidence in `research/04` §3.
+
+**Decision.** Staff browsers talk only to the Next.js app. The session token lives in an `httpOnly; Secure; SameSite=Lax` cookie set by a Next route handler after login; Server Components and server actions call the NestJS API with `Authorization: Bearer <session token>` over the internal network; realtime SSE is proxied through a Next route handler. `proxy.ts` does an optimistic cookie-presence redirect only — the API authorizes every call. Public ingress (channel webhooks `/channels/*`, the customer web-chat API `/public/*`, OAuth callbacks `/oauth/*`, JWKS `/.well-known/*`, signed blob downloads `/blobs/*`) is served by the API: on AWS through ALB path rules, on Compose through Next rewrites to the API service.
+
+**Why.** No CORS, no API token in the browser, one public origin, and the API remains the only authorization point.
 
 ---
 
