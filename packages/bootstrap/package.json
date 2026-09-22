@@ -1,6 +1,7 @@
 {
   "name": "@ocso/bootstrap",
   "version": "0.1.0",
+  "license": "Apache-2.0",
   "private": true,
   "type": "module",
   "description": "Infrastructure composition shared by api and worker: adapter selection by configuration.",
