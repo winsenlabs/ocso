@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared/base.css" />
+<link rel="stylesheet" href="shared/one.css" />
+<link rel="stylesheet" href="shared/charts.css" />
+<link rel="stylesheet" href="shared/mock.css" />
+<link rel="stylesheet" href="shared/ocso.css" />
+</helmet>
+<aside class="sidebar" aria-label="OCSO">
+  <div class="sb-brand" style="justify-content:space-between;gap:8px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div class="a-mark"><svg viewBox="0 0 56 56" style="width:28px;height:28px;display:block"><rect width="56" height="56" rx="16" fill="var(--ink)"></rect><circle cx="28" cy="28" r="12" fill="none" stroke="var(--bg)" stroke-width="5"></circle><circle cx="28" cy="16" r="4.5" fill="var(--accent)" stroke="var(--ink)" stroke-width="2.5"></circle></svg></div>
+      <div class="a-word">OCSO</div>
+    </div>
+    <span class="region">ap-south-1</span>
+  </div>
+
+  <div class="scope-sw" title="Deployment · single tenant">
+    <div class="sw-org">MERIDIAN BANK · PROD</div>
+    <div class="sw-path"><span class="sw-proj">{{ scopeLabel }}</span><svg style="width:12px;height:12px;margin-left:auto;color:var(--ink-4)" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8l3-3 3 3M7 12l3 3 3-3"></path></svg></div>
+  </div>
+
+  <a class="sb-walle {{ c_ask }}" href="05 Internal agent.dc.html" style="text-decoration:none">
+    <div class="a-portrait md" style="background:oklch(100% 0 0/0.2)"><svg viewBox="0 0 56 56" style="width:100%;height:100%;display:block"><circle cx="28" cy="28" r="12" fill="none" stroke="#fff" stroke-width="5"></circle><circle cx="28" cy="16" r="4" fill="#fff"></circle></svg></div>
+    <div class="grow"><div class="sb-walle-name">Ask OCSO</div><div class="sb-walle-sub">{{ askSub }}</div></div>
+    <span class="sb-walle-badge">⌘J</span>
+  </a>
+
+  <div class="sb-group">
+    <a class="sb-item {{ c_home }}" href="06 Home.dc.html"><span class="sb-name">Home</span></a>
+    <a class="sb-item" href="#"><span class="sb-name">Search</span><span class="kbd">⌘K</span></a>
+  </div>
+
+  <sc-if value="{{ isExec }}" hint-placeholder-val="{{ true }}">
+    <div class="sb-group">
+      <div class="sb-group-label">My work</div>
+      <a class="sb-item {{ c_conv }}" href="01 Conversation workspace.dc.html"><span class="sb-name">Conversations</span><span class="sb-badge">7</span></a>
+      <a class="sb-item" href="#"><span class="sb-name">Pickup queue</span><span class="sb-badge" style="background:var(--warn-soft);color:var(--warn)">4 !</span></a>
+      <a class="sb-item" href="#"><span class="sb-name">Customers</span></a>
+      <a class="sb-item" href="#"><span class="sb-name">Alerts</span><span class="sb-badge muted">2</span></a>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isLead }}" hint-placeholder-val="{{ false }}">
+    <div class="sb-group">
+      <div class="sb-group-label">Operations</div>
+      <a class="sb-item {{ c_conv }}" href="01 Conversation workspace.dc.html"><span class="sb-name">Conversations</span><span class="sb-badge">312</span></a>
+      <a class="sb-item {{ c_agents }}" href="02 Agent overview.dc.html"><span class="sb-name">Virtual agents</span><span class="sb-badge">3</span></a>
+      <a class="sb-item" href="#"><span class="sb-name">Queues</span></a>
+      <a class="sb-item" href="#"><span class="sb-name">Customers</span></a>
+    </div>
+    <div class="sb-group">
+      <div class="sb-group-label">Quality</div>
+      <a class="sb-item" href="#"><span class="sb-name">Analytics</span></a>
+      <a class="sb-item" href="#"><span class="sb-name">Reviews</span><span class="sb-badge muted">18</span></a>
+      <a class="sb-item" href="#"><span class="sb-name">Prompt corrections</span><span class="sb-badge" style="background:var(--warn-soft);color:var(--warn)">6 !</span></a>
+      <a class="sb-item" href="#"><span class="sb-name">Escalation reasons</span></a>
+    </div>
+    <div class="sb-group">
+      <div class="sb-group-label">Governance</div>
+      <a class="sb-item" href="#"><span class="sb-name">Alerts</span><span class="sb-badge" style="background:var(--warn-soft);color:var(--warn)">3 !</span></a>
+      <a class="sb-item" href="#"><span class="sb-name">SLA policies</span></a>
+      <a class="sb-item" href="#"><span class="sb-name">Team</span><span class="mono-sm">24</span></a>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isAdmin }}" hint-placeholder-val="{{ false }}">
+    <div class="sb-group">
+      <div class="sb-group-label">Platform</div>
+      <a class="sb-item {{ c_system }}" href="03 System control center.dc.html"><span class="sb-name">System</span><span class="okdot"></span></a>
+      <a class="sb-item" href="03 System control center.dc.html#workers"><span class="sb-name">Workers</span><span class="mono-sm">6/10</span></a>
+      <a class="sb-item" href="#"><span class="sb-name">Queues &amp; leases</span></a>
+      <a class="sb-item" href="#"><span class="sb-name">Telemetry</span></a>
+    </div>
+    <div class="sb-group">
+      <div class="sb-group-label">Integrations</div>
+      <a class="sb-item {{ c_models }}" href="04 Connections and models.dc.html"><span class="sb-name">Models</span><span class="sb-badge">6</span></a>
+      <a class="sb-item {{ c_conn }}" href="04 Connections and models.dc.html#mcp"><span class="sb-name">Connections</span><span class="sb-badge" style="background:var(--warn-soft);color:var(--warn)">1 !</span></a>
+      <a class="sb-item" href="04 Connections and models.dc.html#channels"><span class="sb-name">Channels</span><span class="sb-badge muted">7</span></a>
+      <a class="sb-item" href="04 Connections and models.dc.html#secrets"><span class="sb-name">Secrets</span></a>
+      <a class="sb-item" href="04 Connections and models.dc.html#webhooks"><span class="sb-name">Webhooks</span></a>
+    </div>
+    <div class="sb-group">
+      <div class="sb-group-label">Oversight</div>
+      <a class="sb-item" href="#"><span class="sb-name">Alerts</span><span class="sb-badge" style="background:var(--danger-soft);color:var(--danger)">2 !</span></a>
+      <a class="sb-item {{ c_agents }}" href="02 Agent overview.dc.html"><span class="sb-name">Virtual agents</span><span class="sb-badge">3</span></a>
+      <a class="sb-item" href="#"><span class="sb-name">Audit log</span></a>
+      <a class="sb-item" href="#"><span class="sb-name">Team &amp; roles</span></a>
+    </div>
+  </sc-if>
+
+  <div class="sb-group">
+    <a class="sb-item" href="#"><span class="sb-name">Settings</span></a>
+  </div>
+
+  <div class="sb-foot">
+    <div class="sb-foot-avatar">{{ initials }}</div>
+    <div class="grow">
+      <div class="sb-foot-name">{{ userName }}</div>
+      <div class="sb-foot-status">{{ roleLabel }}</div>
+    </div>
+    <button class="icon-btn" title="Toggle dark / light theme" onClick="{{ toggleTheme }}"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 11.5A6 6 0 0 1 8.5 4.5 6 6 0 1 0 15.5 11.5z"></path></svg></button>
+  </div>
+</aside>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;240px&quot;,&quot;height&quot;:&quot;900px&quot;},&quot;role&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;exec&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;exec&quot;,&quot;lead&quot;,&quot;admin&quot;]},&quot;active&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;home&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;home&quot;,&quot;conv&quot;,&quot;agents&quot;,&quot;system&quot;,&quot;models&quot;,&quot;conn&quot;,&quot;ask&quot;]},&quot;userName&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;initials&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;roleLabel&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;scopeLabel&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  componentDidMount() {
+    const t = localStorage.getItem('ocso-theme');
+    if (t) document.documentElement.setAttribute('data-theme', t);
+  }
+  renderVals() {
+    const role = this.props.role || 'exec';
+    const a = this.props.active || 'home';
+    const on = (k) => (a === k ? 'active' : '');
+    const scope = { exec: 'Cards & EMI · Tier 2', lead: 'Maya — Customer Support', admin: 'All agents · 3 active' }[role];
+    const who = {
+      exec: { n: 'Nikhil Menon', i: 'NM', r: 'CS Exec · available' },
+      lead: { n: 'Anjali Rao', i: 'AR', r: 'CS Lead' },
+      admin: { n: 'Tejas Shetty', i: 'TS', r: 'Platform Tech Admin' }
+    }[role];
+    return {
+      isExec: role === 'exec', isLead: role === 'lead', isAdmin: role === 'admin',
+      scopeLabel: this.props.scopeLabel ?? scope,
+      askSub: { exec: 'context: this conversation', lead: 'watching 3 agents', admin: 'latency spike · 09:40' }[role],
+      c_home: on('home'), c_conv: on('conv'), c_agents: on('agents'), c_system: on('system'),
+      c_models: on('models'), c_conn: on('conn'), c_ask: on('ask'),
+      userName: this.props.userName ?? who.n,
+      initials: this.props.initials ?? who.i,
+      roleLabel: this.props.roleLabel ?? who.r,
+      toggleTheme: () => {
+        const cur = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', cur);
+        localStorage.setItem('ocso-theme', cur);
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>
