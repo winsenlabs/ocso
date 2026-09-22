@@ -3,11 +3,12 @@ import { createDefaultDeliveryRegistry } from '@ocso/alerts';
 import { AlertDeliveryService, AlertEngine, WebhookDeliveryService } from '@ocso/application';
 import type { WorkerEnv } from '@ocso/config';
 import type { Db } from '@ocso/db';
+import type { EmailSender } from '@ocso/email';
 import { createGuardedFetch, type GuardedFetch } from '@ocso/mcp';
 import { ocsoMetrics } from '@ocso/observability';
 import type { QueueAdapter } from '@ocso/queue';
 import type { SecretStore } from '@ocso/secrets';
-import { DB, ENV, QUEUE, SECRET_STORE } from '../infrastructure/tokens.js';
+import { DB, EMAIL_SENDER, ENV, QUEUE, SECRET_STORE } from '../infrastructure/tokens.js';
 
 /** Attempts before a transient delivery failure is final; ≤ the consumer's maxAttempts. */
 export const ALERT_DELIVERY_ATTEMPTS = 6;
@@ -41,12 +42,12 @@ export class AlertEgress implements OnModuleDestroy {
     },
     {
       provide: AlertDeliveryService,
-      inject: [DB, SECRET_STORE, ENV, AlertEgress],
-      useFactory: (db: Db, secrets: SecretStore, env: WorkerEnv, egress: AlertEgress) =>
+      inject: [DB, SECRET_STORE, ENV, AlertEgress, EMAIL_SENDER],
+      useFactory: (db: Db, secrets: SecretStore, env: WorkerEnv, egress: AlertEgress, emailSender: EmailSender) =>
         new AlertDeliveryService({
           db,
           secrets,
-          registry: createDefaultDeliveryRegistry({ fetch: egress.guarded.fetch }),
+          registry: createDefaultDeliveryRegistry({ fetch: egress.guarded.fetch, emailSender }),
           baseUrl: env.OCSO_PUBLIC_URL,
           maxAttempts: ALERT_DELIVERY_ATTEMPTS,
         }),

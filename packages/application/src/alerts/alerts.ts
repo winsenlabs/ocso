@@ -5,8 +5,9 @@ import { alertDeliveries, alertRules, alerts, notificationDestinations, type Db,
 import { conflict, forbidden, notFound, validation } from '@ocso/domain';
 import type { QueueAdapter } from '@ocso/queue';
 import { z } from 'zod';
+import { assertAgentReadable } from '../agents/access.js';
 import { nowOf, type ActorContext } from '../shared/context.js';
-import { canSeeAlert, readableKinds, requirePrincipal, visibleAlertsWhere } from './audience.js';
+import { readableKinds, requirePrincipal, visibleAlertsWhere } from './audience.js';
 import { publishDeliveries, type PendingDelivery } from './dispatch.js';
 import { markAcknowledged, markResolved } from './lifecycle.js';
 import { toAlertView, type AlertDetailView, type AlertRow, type AlertView } from './views.js';
@@ -45,7 +46,8 @@ export interface AlertCounts {
 
 /**
  * Alert inbox (docs/11 §6). A user sees an alert only when their role is in
- * its audience AND they hold the read permission for its kind. Alerts the
+ * its audience AND they hold the read permission for its kind AND, for an
+ * alert about a virtual agent, they can read that agent (ADR-026). Alerts the
  * user cannot see are reported as not found.
  */
 export class AlertService {
@@ -61,6 +63,7 @@ export class AlertService {
     const kinds = readableKinds(principal);
     if (!kinds.length) throw forbidden('alerts.read', `role ${principal.role} cannot read alerts`);
     if (q.kind && !kinds.includes(q.kind)) throw forbidden('alerts.read', `cannot read ${q.kind.toLowerCase()} alerts`);
+    if (q.agentId) await assertAgentReadable(this.db, principal, q.agentId);
     const where: SQL[] = [visibleAlertsWhere(principal, q.kind ? [q.kind] : kinds)];
     if (q.status === 'UNRESOLVED') where.push(ne(alerts.status, 'RESOLVED'));
     else if (q.status) where.push(eq(alerts.status, q.status));
@@ -110,6 +113,7 @@ export class AlertService {
 
   async counts(actor: ActorContext, filter: { agentId?: string | undefined } = {}): Promise<AlertCounts> {
     const principal = requirePrincipal(actor, 'alerts.read');
+    if (filter.agentId) await assertAgentReadable(this.db, principal, filter.agentId);
     const where: SQL[] = [visibleAlertsWhere(principal), ne(alerts.status, 'RESOLVED')];
     if (filter.agentId) where.push(sql`${alerts.context}->>'agentId' = ${filter.agentId}`);
     const rows = await this.db
@@ -166,9 +170,9 @@ export class AlertService {
 
   private async loadVisible(db: DbOrTx, actor: ActorContext, id: string, forUpdate = false): Promise<AlertRow> {
     const principal = requirePrincipal(actor, 'alerts.read');
-    const query = db.select().from(alerts).where(eq(alerts.id, id));
+    const query = db.select().from(alerts).where(and(eq(alerts.id, id), visibleAlertsWhere(principal)));
     const [row] = forUpdate ? await query.for('update') : await query;
-    if (!row || !canSeeAlert(principal, row)) throw notFound('alert', id);
+    if (!row) throw notFound('alert', id);
     return row;
   }
 }

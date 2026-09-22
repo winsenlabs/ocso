@@ -41,11 +41,12 @@ export interface DefaultRegistryOptions extends Partial<DeliveryAdapterDeps> {
   fetch: DeliveryAdapterDeps['fetch'];
 }
 
-/** All built-in adapters. Production passes an SSRF-guarded fetch; tests pass fakes. */
+/** All built-in adapters. Production passes an SSRF-guarded fetch and the deployment email sender; tests pass fakes. */
 export function createDefaultDeliveryRegistry(options: DefaultRegistryOptions): AlertDeliveryRegistry {
   const deps: DeliveryAdapterDeps = {
     fetch: options.fetch,
     mailTransport: options.mailTransport ?? nodemailerTransportFactory,
+    emailSender: options.emailSender ?? null,
     timeoutMs: options.timeoutMs,
     now: options.now,
   };

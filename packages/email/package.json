@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "description": "Transactional email: Resend / SMTP / log senders, typed templates, env-selected deployment sender.",
   "exports": {
     ".": {
       "@ocso/source": "./src/index.ts",
@@ -16,5 +17,11 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "nodemailer": "10.0.10"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "8.0.2"
   }
 }

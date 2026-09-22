@@ -31,11 +31,20 @@ export interface EmailSender {
   send(message: EmailMessage): Promise<EmailSendResult>;
 }
 
+/**
+ * Coarse failure class for operators and the Settings test button:
+ * auth = key/credentials/domain rejected (fix the deployment config),
+ * validation = the message itself was refused, rate_limited = 429 / quota,
+ * unavailable = provider 5xx or busy, network = timeout / connection failure.
+ */
+export type EmailErrorCategory = 'auth' | 'validation' | 'rate_limited' | 'unavailable' | 'network' | 'unknown';
+
 export class EmailSendError extends Error {
   constructor(
     message: string,
     readonly retriable: boolean,
     readonly status: number | null = null,
+    readonly category: EmailErrorCategory = 'unknown',
   ) {
     super(message);
     this.name = 'EmailSendError';

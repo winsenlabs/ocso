@@ -16,7 +16,7 @@ export {
   type OutgoingMail,
   type SmtpTransportOptions,
 } from './adapters/email-transport.js';
-export { buildMail, createEmailAdapter, type EmailConfig } from './adapters/email.js';
+export { buildMail, createEmailAdapter, renderAlertEmail, type EmailConfig, type SmtpEmailConfig } from './adapters/email.js';
 export { createInAppAdapter, type InAppConfig } from './adapters/in-app.js';
 export { buildSlackPayload, createSlackAdapter, escapeMrkdwn, type SlackConfig, type SlackPayload } from './adapters/slack.js';
 export { buildTeamsPayload, createTeamsAdapter, type TeamsConfig } from './adapters/teams.js';

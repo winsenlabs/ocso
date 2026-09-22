@@ -3,10 +3,11 @@ import { AlertDeliveryRegistry, createDefaultDeliveryRegistry } from '@ocso/aler
 import { AlertRuleService, AlertService, NotificationDestinationService } from '@ocso/application';
 import type { ApiEnv } from '@ocso/config';
 import type { Db } from '@ocso/db';
+import type { EmailSender } from '@ocso/email';
 import { createGuardedFetch, type GuardedFetch } from '@ocso/mcp';
 import type { QueueAdapter } from '@ocso/queue';
 import type { SecretStore } from '@ocso/secrets';
-import { DB, ENV, QUEUE, SECRET_STORE } from '../../infrastructure/tokens.js';
+import { DB, EMAIL_SENDER, ENV, QUEUE, SECRET_STORE } from '../../infrastructure/tokens.js';
 import { AlertRulesController } from './alert-rules.controller.js';
 import { AlertsController } from './alerts.controller.js';
 import { NotificationDestinationsController } from './notification-destinations.controller.js';
@@ -30,8 +31,9 @@ export class AlertEgress implements OnModuleDestroy {
     AlertEgress,
     {
       provide: AlertDeliveryRegistry,
-      inject: [AlertEgress],
-      useFactory: (egress: AlertEgress) => createDefaultDeliveryRegistry({ fetch: egress.guarded.fetch }),
+      inject: [AlertEgress, EMAIL_SENDER],
+      // EMAIL destinations default to the deployment sender (EMAIL_DRIVER); SMTP relays stay per destination.
+      useFactory: (egress: AlertEgress, emailSender: EmailSender) => createDefaultDeliveryRegistry({ fetch: egress.guarded.fetch, emailSender }),
     },
     { provide: AlertService, inject: [DB, QUEUE], useFactory: (db: Db, queue: QueueAdapter) => new AlertService(db, queue) },
     { provide: AlertRuleService, inject: [DB, QUEUE], useFactory: (db: Db, queue: QueueAdapter) => new AlertRuleService(db, queue) },

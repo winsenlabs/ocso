@@ -3,6 +3,7 @@ import { Permission, can, roleHasPermission, type Principal, type Role } from '@
 import type { AlertKind } from '@ocso/alerts';
 import { alerts } from '@ocso/db';
 import { forbidden } from '@ocso/domain';
+import { readableAgentsSql } from '../agents/access.js';
 import type { ActorContext } from '../shared/context.js';
 
 /** Reading alerts of a kind (docs/99 §15: role-specific observability). */
@@ -45,14 +46,23 @@ export function assertCanManageKind(actor: ActorContext, kind: AlertKind): Princ
 }
 
 /**
+ * Alerts about a virtual agent (context.agentId) are visible only to people who
+ * can read that agent (ADR-026): a CS Lead sees alerts of their teams' agents
+ * and alerts that concern no agent. A platform-wide rule's alert that names an
+ * agent follows the agent.
+ */
+export function alertAgentWhere(principal: Principal): SQL | undefined {
+  const scope = readableAgentsSql(principal);
+  if (!scope) return undefined;
+  return sql`((${alerts.context} ->> 'agentId') IS NULL OR (${alerts.context} ->> 'agentId') IN (SELECT s.id::text FROM (${scope}) AS s(id)))`;
+}
+
+/**
  * Visibility of an alert row: the principal's role is in the alert's audience
- * AND the principal may read that kind. Both conditions, always.
+ * AND the principal may read that kind AND (when it concerns an agent) may
+ * read that agent. All conditions, always.
  */
 export function visibleAlertsWhere(principal: Principal, kinds: readonly AlertKind[] = readableKinds(principal)): SQL {
   if (!kinds.length) return sql`false`;
-  return and(sql`${alerts.audienceRoles} @> ARRAY[${principal.role}]::text[]`, inArray(alerts.kind, [...kinds]))!;
-}
-
-export function canSeeAlert(principal: Principal, alert: { kind: AlertKind; audienceRoles: readonly string[] }): boolean {
-  return alert.audienceRoles.includes(principal.role) && can(principal, ALERT_READ_PERMISSION[alert.kind]);
+  return and(sql`${alerts.audienceRoles} @> ARRAY[${principal.role}]::text[]`, inArray(alerts.kind, [...kinds]), alertAgentWhere(principal))!;
 }

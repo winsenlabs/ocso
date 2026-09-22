@@ -1,5 +1,5 @@
 import { asc, eq, sql } from 'drizzle-orm';
-import { DESTINATION_KINDS, type AlertDeliveryAdapter, type AlertDeliveryRegistry, type AlertMessage, type DeliveryResult } from '@ocso/alerts';
+import { DESTINATION_KINDS, secretRequirement, type AlertDeliveryAdapter, type AlertDeliveryRegistry, type AlertMessage, type DeliveryResult } from '@ocso/alerts';
 import { Permission, can } from '@ocso/auth';
 import { alertRules, notificationDestinations, uuidv7, type Db, type DbOrTx } from '@ocso/db';
 import { forbidden, notFound, validation } from '@ocso/domain';
@@ -63,7 +63,7 @@ export class NotificationDestinationService {
     this.assertManage(actor);
     const adapter = this.adapter(input.kind);
     const config = checkConfig(adapter, input.config);
-    const secret = checkSecret(adapter, input.secret ?? null);
+    const secret = checkSecret(adapter, config, input.secret ?? null);
     const id = uuidv7();
     const secretRef = secret ? await this.storeSecret(adapter, input.name, secret) : null;
     try {
@@ -95,7 +95,9 @@ export class NotificationDestinationService {
     const before = await this.load(this.db, id);
     const adapter = this.adapter(before.kind);
     const config = patch.config !== undefined ? checkConfig(adapter, patch.config) : before.config;
-    const secret = patch.secret !== undefined ? checkSecret(adapter, patch.secret) : null;
+    const secret = patch.secret !== undefined ? checkSecret(adapter, config, patch.secret) : null;
+    // A config that no longer takes a secret (e.g. email switched to the deployment sender) drops the stored one.
+    const dropRef = before.secretRef && !requirementFor(adapter, config) ? before.secretRef : null;
     const newRef = secret && !before.secretRef ? await this.storeSecret(adapter, patch.name ?? before.name, secret) : null;
     if (secret && before.secretRef) await this.secrets.rotate(before.secretRef, secret);
     const [row] = await this.db.transaction(async (tx) => {
@@ -105,6 +107,7 @@ export class NotificationDestinationService {
           ...(patch.name !== undefined ? { name: patch.name } : {}),
           ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
           ...(newRef ? { secretRef: newRef } : {}),
+          ...(dropRef ? { secretRef: null } : {}),
           config,
           updatedAt: new Date(),
         })
@@ -114,13 +117,14 @@ export class NotificationDestinationService {
         action: 'notification_destination.update',
         targetType: 'notification_destination',
         targetId: id,
-        summary: `Updated destination "${before.name}"${secret ? ' (secret replaced)' : ''}`,
+        summary: `Updated destination "${before.name}"${secret ? ' (secret replaced)' : ''}${dropRef ? ' (stored secret removed)' : ''}`,
         before: { name: before.name, config: before.config, enabled: before.enabled },
         after: { name: patch.name, config: patch.config, enabled: patch.enabled, secretReplaced: Boolean(secret) },
       });
       await emitEvent(tx, actor, 'config.changed', { area: 'notification_destinations', entityId: id });
       return updated;
     });
+    if (dropRef) await this.secrets.delete(dropRef).catch(() => undefined);
     return toDestinationView(row!, true);
   }
 
@@ -153,7 +157,7 @@ export class NotificationDestinationService {
     const adapter = this.adapter(row.kind);
     const check = adapter.validateConfig(row.config);
     if (!check.ok) return { ok: false, retriable: false, error: `invalid configuration: ${check.problems.join('; ')}` };
-    const secret = row.secretRef ? await this.secrets.resolve(row.secretRef) : null;
+    const secret = row.secretRef && requirementFor(adapter, check.config) ? await this.secrets.resolve(row.secretRef) : null;
     const result = await adapter.deliver(await this.testMessage(row), check.config, secret).catch(() => ({ ok: false, retriable: true, error: 'adapter error' }));
     await recordAudit(this.db, actor, {
       action: 'notification_destination.test',
@@ -227,13 +231,20 @@ function checkConfig(adapter: AlertDeliveryAdapter, config: unknown): Record<str
   return check.config as Record<string, unknown>;
 }
 
-function checkSecret(adapter: AlertDeliveryAdapter, secret: string | null): string | null {
-  if (!adapter.secret) {
-    if (secret) throw validation('secret_not_supported', `${adapter.label} destinations do not take a secret`);
+/** Secret requirement for a stored or submitted config (validated first: legacy rows lack defaults). */
+function requirementFor(adapter: AlertDeliveryAdapter, config: unknown) {
+  const check = adapter.validateConfig(config);
+  return check.ok ? secretRequirement(adapter, check.config) : adapter.secret;
+}
+
+function checkSecret(adapter: AlertDeliveryAdapter, config: unknown, secret: string | null): string | null {
+  const requirement = requirementFor(adapter, config);
+  if (!requirement) {
+    if (secret) throw validation('secret_not_supported', `${adapter.label} destinations${adapter.secretFor ? ' with this configuration' : ''} do not take a secret`);
     return null;
   }
   if (!secret) {
-    if (adapter.secret.required) throw validation('secret_required', `${adapter.label} requires: ${adapter.secret.description}`);
+    if (requirement.required) throw validation('secret_required', `${adapter.label} requires: ${requirement.description}`);
     return null;
   }
   // Problems describe the value's shape only; the value itself is never echoed.

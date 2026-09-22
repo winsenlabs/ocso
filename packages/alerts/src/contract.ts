@@ -99,9 +99,20 @@ export interface AlertDeliveryAdapter<C = unknown> {
   readonly secret: SecretRequirement | null;
   /** Validate and normalize admin-entered (non-secret) configuration. */
   validateConfig(config: unknown): ConfigCheck<C>;
+  /**
+   * Secret requirement for one validated config, when it depends on the
+   * config (email: SMTP transport takes a password, the deployment sender
+   * none). Absent = `secret` applies to every config.
+   */
+  secretFor?(config: C): SecretRequirement | null;
   /** Problems with the secret value itself (e.g. webhook URL not https); empty = fine. */
   validateSecret(secret: string): string[];
   deliver(message: AlertMessage, config: C, secret: string | null): Promise<DeliveryResult>;
+}
+
+/** The secret requirement that applies to a validated config (see `secretFor`). */
+export function secretRequirement<C>(adapter: AlertDeliveryAdapter<C>, config: C): SecretRequirement | null {
+  return adapter.secretFor ? adapter.secretFor(config) : adapter.secret;
 }
 
 export const delivered = (externalId?: string): DeliveryResult =>

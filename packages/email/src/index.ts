@@ -1,2 +1,11 @@
 export * from './contract.js';
 export * from './log-sender.js';
+export * from './address.js';
+export * from './resend-sender.js';
+export * from './smtp-transport.js';
+export * from './smtp-sender.js';
+export * from './config.js';
+export { escapeHtml, safeUrl, coarseIp, formatDateTime, formatExpiry } from './templates/escape.js';
+export { renderLayout, type EmailBlock, type LayoutInput } from './templates/layout.js';
+export * from './templates/auth.js';
+export * from './templates/alert.js';

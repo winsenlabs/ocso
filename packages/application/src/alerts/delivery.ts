@@ -1,5 +1,5 @@
 import { and, asc, eq, lt } from 'drizzle-orm';
-import type { AlertDeliveryRegistry, DeliveryResult } from '@ocso/alerts';
+import { secretRequirement, type AlertDeliveryRegistry, type DeliveryResult } from '@ocso/alerts';
 import { alertDeliveries, alerts, notificationDestinations, type Db } from '@ocso/db';
 import type { QueueAdapter } from '@ocso/queue';
 import type { SecretStore } from '@ocso/secrets';
@@ -56,8 +56,9 @@ export class AlertDeliveryService {
 
     let result: DeliveryResult;
     try {
-      const secret = destination.secretRef ? await this.options.secrets.resolve(destination.secretRef) : null;
-      if (adapter.secret?.required && !secret) return this.fail(deliveryId, attempts, 'secret not configured', destination.kind);
+      const requirement = secretRequirement(adapter, config.config);
+      const secret = destination.secretRef && requirement ? await this.options.secrets.resolve(destination.secretRef) : null;
+      if (requirement?.required && !secret) return this.fail(deliveryId, attempts, 'secret not configured', destination.kind);
       const message = await buildAlertMessage(db, alert, { id: delivery.id, event: delivery.event }, { baseUrl: this.options.baseUrl });
       result = await adapter.deliver(message, config.config, secret);
     } catch {

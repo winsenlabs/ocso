@@ -1,9 +1,10 @@
-import { and, asc, eq, inArray, ne, type SQL } from 'drizzle-orm';
+import { and, asc, eq, inArray, ne, or, isNull, sql, type SQL } from 'drizzle-orm';
 import type { AlertKind } from '@ocso/alerts';
-import type { Role } from '@ocso/auth';
+import type { Principal, Role } from '@ocso/auth';
 import { alertRules, alerts, notificationDestinations, uuidv7, virtualAgents, type Db, type DbOrTx } from '@ocso/db';
 import { forbidden, notFound, validation } from '@ocso/domain';
 import type { QueueAdapter } from '@ocso/queue';
+import { readableAgentFilter } from '../agents/access.js';
 import { recordAudit } from '../audit/audit.js';
 import { emitEvent } from '../events/outbox.js';
 import type { ActorContext } from '../shared/context.js';
@@ -28,6 +29,9 @@ type RuleFields = Omit<AlertRuleRow, 'id' | 'createdBy' | 'createdAt' | 'updated
 /**
  * Alert rule CRUD (PM/BUILD-PLAN E8.8). TECHNICAL rules need
  * alert_rules.technical.manage, BUSINESS rules alert_rules.business.manage.
+ * A rule that targets a virtual agent is visible and editable only by people
+ * who can read that agent (a CS Lead: their teams' agents, ADR-026); rules
+ * with agentId null (platform-wide) stay visible to every reader of the kind.
  */
 export class AlertRuleService {
   private readonly evaluators: EvaluatorRegistry;
@@ -54,14 +58,14 @@ export class AlertRuleService {
     if (query.kind && !visible.includes(query.kind)) throw forbidden('alert_rules.read', `cannot read ${query.kind.toLowerCase()} alert rules`);
     const kinds = query.kind ? [query.kind] : visible;
     if (!kinds.length) return [];
-    const where: SQL[] = [inArray(alertRules.kind, kinds)];
+    const where: SQL[] = [inArray(alertRules.kind, kinds), this.agentWhere(requirePrincipal(actor, 'alert_rules.read'))];
     if (query.agentId) where.push(eq(alertRules.agentId, query.agentId));
     const rows = await this.db.select().from(alertRules).where(and(...where)).orderBy(asc(alertRules.kind), asc(alertRules.name));
     return rows.map((r) => this.view(r));
   }
 
   async get(actor: ActorContext, id: string): Promise<AlertRuleView> {
-    const row = await this.load(this.db, id);
+    const row = await this.load(this.db, id, requirePrincipal(actor, 'alert_rules.read'));
     if (!this.visibleKinds(actor).includes(row.kind)) throw notFound('alert_rule', id);
     return this.view(row);
   }
@@ -70,7 +74,7 @@ export class AlertRuleService {
     const principal = assertCanManageKind(actor, input.kind);
     const id = uuidv7();
     const row = await this.db.transaction(async (tx) => {
-      const fields = await this.validate(tx, input);
+      const fields = await this.validate(tx, principal, input);
       const [inserted] = await tx
         .insert(alertRules)
         .values({ id, ...fields, createdBy: principal.userId })
@@ -90,13 +94,13 @@ export class AlertRuleService {
 
   async update(actor: ActorContext, id: string, patch: AlertRulePatch): Promise<AlertRuleView> {
     const row = await this.db.transaction(async (tx) => {
-      const before = await this.load(tx, id);
-      assertCanManageKind(actor, before.kind);
+      const before = await this.load(tx, id, requirePrincipal(actor, 'alert_rules.manage'));
+      const principal = assertCanManageKind(actor, before.kind);
       if (patch.kind && patch.kind !== before.kind) assertCanManageKind(actor, patch.kind);
       const merged: RuleFields = { ...before, ...(stripUndefined(patch) as Partial<RuleFields>) };
       // A condition change resets params unless new ones are supplied.
       if (patch.condition && patch.condition !== before.condition && patch.params === undefined) merged.params = {};
-      const fields = await this.validate(tx, merged);
+      const fields = await this.validate(tx, principal, merged);
       const [updated] = await tx
         .update(alertRules)
         .set({ ...fields, updatedAt: new Date() })
@@ -120,7 +124,7 @@ export class AlertRuleService {
   async delete(actor: ActorContext, id: string): Promise<void> {
     const pending: PendingDelivery[] = [];
     await this.db.transaction(async (tx) => {
-      const rule = await this.load(tx, id);
+      const rule = await this.load(tx, id, requirePrincipal(actor, 'alert_rules.manage'));
       const principal = assertCanManageKind(actor, rule.kind);
       const open = await tx.select().from(alerts).where(and(eq(alerts.ruleId, id), ne(alerts.status, 'RESOLVED')));
       for (const alert of open) {
@@ -153,8 +157,14 @@ export class AlertRuleService {
     return [...new Set([...readableKinds(principal), ...manageableKinds(principal)])];
   }
 
-  private async load(db: DbOrTx, id: string): Promise<AlertRuleRow> {
-    const [row] = await db.select().from(alertRules).where(eq(alertRules.id, id));
+  /** Platform-wide rules, or rules of an agent the principal can read. */
+  private agentWhere(principal: Principal): SQL {
+    const scoped = readableAgentFilter(principal, alertRules.agentId);
+    return scoped ? or(isNull(alertRules.agentId), scoped)! : sql`true`;
+  }
+
+  private async load(db: DbOrTx, id: string, principal: Principal): Promise<AlertRuleRow> {
+    const [row] = await db.select().from(alertRules).where(and(eq(alertRules.id, id), this.agentWhere(principal)));
     if (!row) throw notFound('alert_rule', id);
     return row;
   }
@@ -164,7 +174,7 @@ export class AlertRuleService {
   }
 
   /** Validate a complete rule and return normalized, storable fields. */
-  private async validate(db: DbOrTx, input: RuleFields): Promise<RuleFields> {
+  private async validate(db: DbOrTx, principal: Principal, input: RuleFields): Promise<RuleFields> {
     const evaluator = this.evaluators.find(input.condition);
     if (!evaluator) throw validation('unknown_condition', `Unknown alert condition "${input.condition}"`);
     if (!evaluator.kinds.includes(input.kind)) {
@@ -178,7 +188,11 @@ export class AlertRuleService {
       throw validation('audience_cannot_read_kind', `${blind.join(', ')} cannot see ${input.kind.toLowerCase()} alerts`, { roles: blind });
     }
     if (input.agentId) {
-      const [agent] = await db.select({ id: virtualAgents.id }).from(virtualAgents).where(eq(virtualAgents.id, input.agentId));
+      // Another team's agent is reported exactly like a missing one (ADR-026).
+      const [agent] = await db
+        .select({ id: virtualAgents.id })
+        .from(virtualAgents)
+        .where(and(eq(virtualAgents.id, input.agentId), readableAgentFilter(principal, virtualAgents.id)));
       if (!agent) throw validation('unknown_agent', 'The virtual agent does not exist');
     }
     const destinationIds = [...new Set(input.destinationIds)];
