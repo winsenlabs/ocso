@@ -10,7 +10,7 @@ const items = (role: Role) => navFor(role).flatMap((g) => g.items.map((i) => i.l
 describe('buildNav (design/OCSONav.dc.html, derived from permissions)', () => {
   it('gives CS Exec only "My work"', () => {
     expect(labels('CS_EXEC')).toEqual(['My work']);
-    expect(items('CS_EXEC')).toEqual(['Home', 'Search', 'Conversations', 'Pickup queue', 'Customers', 'Alerts', 'Settings']);
+    expect(items('CS_EXEC')).toEqual(['Home', 'Search', 'Conversations', 'Pickup queue', 'Customers', 'Alerts', 'My connections', 'Settings']);
   });
 
   it('gives CS Lead Operations, Quality and Governance', () => {
@@ -20,7 +20,7 @@ describe('buildNav (design/OCSONav.dc.html, derived from permissions)', () => {
       'Conversations', 'Virtual agents', 'Queues', 'Customers',
       'Analytics', 'Reviews', 'Prompt corrections', 'Escalation reasons',
       'Alerts', 'SLA policies', 'Team',
-      'Settings',
+      'My connections', 'Settings',
     ]);
   });
 
@@ -45,6 +45,10 @@ describe('buildNav (design/OCSONav.dc.html, derived from permissions)', () => {
 
 describe('activeNavKey', () => {
   const admin = navFor('PLATFORM_TECH_ADMIN');
+
+  it('highlights My connections for the personal tab', () => {
+    expect(activeNavKey(navFor('CS_EXEC'), '/connections', 'mine')).toBe('bottom:my-connections');
+  });
 
   it('prefers the longest matching path', () => {
     expect(activeNavKey(admin, '/system', null)).toBe('platform:system');

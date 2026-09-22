@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Inject, Patch } from '@nestjs/common';
 import { Permission } from '@ocso/auth';
-import { DeploymentSettingsInput, ScalingStatusService, SettingsService, WorkerSettingsInput, type ActorContext } from '@ocso/application';
+import { DeploymentSettingsInput, ScalingStatusService, SettingsService, WorkerSettingsInput, describeRetention, type ActorContext } from '@ocso/application';
 import { Actor, Authenticated, RequirePermission } from '../../common/decorators.js';
 
 @Controller('v1/settings')
@@ -14,6 +14,13 @@ export class SettingsController {
   @Authenticated()
   deployment() {
     return this.settings.deployment();
+  }
+
+  /** Retention classes with defaults, floors and the effective values (docs/15 §8). */
+  @Get('retention')
+  @Authenticated()
+  async retention() {
+    return describeRetention((await this.settings.deployment()).retention);
   }
 
   @Patch('deployment')

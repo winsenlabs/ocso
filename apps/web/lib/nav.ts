@@ -121,7 +121,11 @@ const NAV: readonly GroupDef[] = [
   },
   {
     key: 'bottom',
-    items: [{ key: 'settings', label: 'Settings', href: '/settings' }],
+    items: [
+      // Personal MCP accounts (design/04 "My connections"); not in the OCSONav mockup, which predates user-scoped connections.
+      { key: 'my-connections', label: 'My connections', href: '/connections?tab=mine', requires: P.MCP_CONNECT_PERSONAL },
+      { key: 'settings', label: 'Settings', href: '/settings' },
+    ],
   },
 ];
 

@@ -53,6 +53,7 @@ test('sign-in shows API errors, then the admin sees Platform navigation and not 
     'System', 'Workers', 'Queues & leases', 'Telemetry',
     'Models', 'Connections', 'Channels', 'Secrets', 'Webhooks',
     'Alerts', 'Virtual agents', 'Audit log', 'Team & roles',
+    'My connections',
     'Settings',
   ]);
   expect(nav.groups).not.toContain('My work');
@@ -90,6 +91,7 @@ test('CS Lead sees Operations / Quality / Governance and can create only CS Exec
     'Conversations', 'Virtual agents', 'Queues', 'Customers',
     'Analytics', 'Reviews', 'Prompt corrections', 'Escalation reasons',
     'Alerts', 'SLA policies', 'Team',
+    'My connections',
     'Settings',
   ]);
   await expectNavLinksResolve(page);
@@ -116,7 +118,7 @@ test('CS Exec sees My work only, cannot open Team, and returns to the requested 
 
   const nav = await navModel(page);
   expect(nav.groups).toEqual(['My work']);
-  expect(nav.items).toEqual(['Home', 'Search', 'Conversations', 'Pickup queue', 'Customers', 'Alerts', 'Settings']);
+  expect(nav.items).toEqual(['Home', 'Search', 'Conversations', 'Pickup queue', 'Customers', 'Alerts', 'My connections', 'Settings']);
   await expect(page.locator('.scope-sw')).toContainText(TEAM);
   await expectNavLinksResolve(page);
 
