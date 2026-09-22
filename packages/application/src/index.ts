@@ -27,6 +27,7 @@ export * from './handoffs/routing.js';
 export * from './handoffs/request.js';
 export * from './handoffs/human-control.js';
 export * from './handoffs/human-reply.js';
+export * from './handoffs/staff-attachments.js';
 export * from './models/index.js';
 export * from './mcp/index.js';
 export * from './alerts/index.js';

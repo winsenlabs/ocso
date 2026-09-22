@@ -4,6 +4,7 @@ import type { Db } from '@ocso/db';
 import { DB } from '../../infrastructure/tokens.js';
 import { ConversationAccessService } from './conversation-access.service.js';
 import { ConversationsController } from './conversations.controller.js';
+import { ConversationAttachmentsController } from './conversation-attachments.controller.js';
 import { ConversationToolsController } from './conversation-tools.controller.js';
 import { HumanToolService } from '@ocso/agent-runtime';
 import { McpToolProviderFactory } from '@ocso/bootstrap';
@@ -13,7 +14,7 @@ import { createAjvValidator } from '@ocso/tools';
 import { SECRET_STORE } from '../../infrastructure/tokens.js';
 
 @Module({
-  controllers: [ConversationsController, ConversationToolsController],
+  controllers: [ConversationsController, ConversationToolsController, ConversationAttachmentsController],
   providers: [
     ConversationAccessService,
     { provide: InboxService, inject: [DB], useFactory: (db: Db) => new InboxService(db) },

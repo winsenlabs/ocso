@@ -18,9 +18,10 @@ import {
 import { notFound } from '@ocso/domain';
 import type { Db } from '@ocso/db';
 import type { QueueAdapter } from '@ocso/queue';
+import type { BlobStore } from '@ocso/blob';
 import { z } from 'zod';
 import { Actor, CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
-import { DB, QUEUE } from '../../infrastructure/tokens.js';
+import { BLOB_STORE, DB, QUEUE } from '../../infrastructure/tokens.js';
 import { ConversationAccessService } from './conversation-access.service.js';
 
 const Id = z.uuid();
@@ -36,6 +37,7 @@ export class ConversationsController {
   constructor(
     @Inject(DB) private readonly db: Db,
     @Inject(QUEUE) private readonly queue: QueueAdapter,
+    @Inject(BLOB_STORE) private readonly blobs: BlobStore,
     @Inject(InboxService) private readonly inbox: InboxService,
     @Inject(HumanControlService) private readonly control: HumanControlService,
     @Inject(ConversationAccessService) private readonly access: ConversationAccessService,
@@ -145,6 +147,6 @@ export class ConversationsController {
   @RequirePermission(Permission.CONVERSATIONS_REPLY)
   async reply(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Body({ schema: HumanReplyInput }) body: HumanReplyInput) {
     await this.access.assert(actor.principal!, id);
-    return sendHumanReply(this.db, this.queue, actor, id, body);
+    return sendHumanReply(this.db, this.queue, actor, id, body, { media: this.blobs });
   }
 }

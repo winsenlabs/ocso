@@ -8,6 +8,7 @@ import { emitEvent } from '../events/outbox.js';
 import type { ActorContext } from '../shared/context.js';
 import { lockConversation } from '../conversations/control.js';
 import { appendInteraction } from '../conversations/interaction-writer.js';
+import { verifyStaffMedia, type StoredMediaLookup } from './staff-attachments.js';
 
 export const HumanReplyInput = z.object({
   parts: z.array(InteractionPart).min(1).max(10),
@@ -27,10 +28,12 @@ export async function sendHumanReply(
   actor: ActorContext,
   conversationId: string,
   input: HumanReplyInput,
+  options: { media?: StoredMediaLookup | undefined } = {},
 ): Promise<{ interactionId: string; seq: number; duplicate: boolean }> {
   const p = actor.principal!;
   assertCan(p, Permission.CONVERSATIONS_REPLY);
   if (input.parts.some((part) => part.type === 'TOOL_RESULT')) throw validation('invalid_part', 'Tool results cannot be sent to customers');
+  const parts = await verifyStaffMedia(input.parts, conversationId, options.media);
   const result = await db.transaction(async (tx) => {
     const conv = await lockConversation(tx, conversationId);
     if (conv.controlState !== 'HUMAN_ACTIVE') throw validation('not_human_active', 'Take over or claim the conversation before replying');
@@ -52,7 +55,7 @@ export async function sendHumanReply(
         visibility: 'CUSTOMER',
         idempotencyKey: `human:${input.clientMessageId}`,
         correlationId: actor.correlationId,
-        parts: input.parts,
+        parts,
       },
       { channelId: conv.channelId, deliveryStatus: 'PENDING', now },
     );

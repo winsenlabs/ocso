@@ -149,6 +149,27 @@ describe('web chat → AI → human → AI over the API', () => {
     expect(customerView.body.messages.at(-1)).toMatchObject({ from: 'human', parts: [{ text: 'Reversal done: RVSL-5521904.' }] });
   });
 
+  it('sends only attachments uploaded to this conversation, with server-verified metadata', async () => {
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+    const upload = await h.http().post(`/v1/conversations/${conversationId}/attachments`).set(auth(exec)).set('content-type', 'image/png').set('x-ocso-filename', 'receipt.png').send(png).expect(201);
+    expect(upload.body).toMatchObject({ partType: 'IMAGE', media: { mimeType: 'image/png', status: 'STORED', filename: 'receipt.png' } });
+    expect(upload.body.media.blobKey).toMatch(new RegExp(`^staff/${conversationId}/`));
+    await h.http().post(`/v1/conversations/${conversationId}/attachments`).set(auth(exec)).set('content-type', 'image/png').send(Buffer.from('not an image')).expect(400);
+
+    const send = (id: string, media: Record<string, unknown>) =>
+      h.http().post(`/v1/conversations/${conversationId}/messages`).set(auth(exec)).send({ clientMessageId: id, parts: [{ type: 'IMAGE', media }] });
+    // Keys outside this conversation's staff prefix (e.g. another customer's upload) are refused.
+    const foreign = await send('human-att-01', { blobKey: 'webchat/other-channel/visitor/x.png', mimeType: 'image/png', status: 'STORED' }).expect(400);
+    expect(foreign.body.error.code).toBe('attachment_not_allowed');
+    await send('human-att-02', { blobKey: `staff/${conversationId}/missing.png`, mimeType: 'image/png', status: 'STORED' }).expect(400);
+    // Client-claimed metadata is replaced with what was stored.
+    await send('human-att-03', { ...upload.body.media, mimeType: 'application/pdf', sizeBytes: 999999 }).expect(201);
+    const timeline = await h.http().get(`/v1/conversations/${conversationId}/timeline`).set(auth(exec)).expect(200);
+    const sent = JSON.stringify(timeline.body);
+    expect(sent).toContain('"mimeType":"image/png"');
+    expect(sent).not.toContain('999999');
+  });
+
   it('returns control to the AI, which resumes with the handover context', async () => {
     await h.http().post(`/v1/conversations/${conversationId}/return-to-ai`).set(auth(exec)).send({ handoverSummary: 'Reversal RVSL-5521904 completed.' }).expect(204);
     adapter.script = [{ text: 'Your reference is RVSL-5521904.' }];
