@@ -14,13 +14,15 @@ export interface DrawerProps {
   children: ReactNode;
   /** Sticky footer (.dfoot), e.g. the composer. */
   footer?: ReactNode;
+  /** Extra header buttons (.icon-btn) before Close, e.g. the ⤢ slot in design/05. */
+  actions?: ReactNode;
 }
 
 /**
  * Right overlay drawer (.rdrawer). Non-modal: the page stays usable behind it.
  * Focus moves in on open, Escape closes, focus returns to the opener.
  */
-export function Drawer({ id, title, sub, icon, onClose, children, footer }: DrawerProps) {
+export function Drawer({ id, title, sub, icon, onClose, children, footer, actions }: DrawerProps) {
   const ref = useRef<HTMLElement>(null);
   const titleId = useId();
   useDialogFocus(ref, onClose, false);
@@ -39,6 +41,7 @@ export function Drawer({ id, title, sub, icon, onClose, children, footer }: Draw
             </span>
           ) : null}
         </span>
+        {actions}
         <button type="button" className="icon-btn" onClick={onClose} aria-label="Close">
           ✕
         </button>

@@ -3,9 +3,9 @@ import { Permission, assertCan, viaInternalAgent, type Principal } from '@ocso/a
 import { SettingsService } from '@ocso/application';
 import type { ModelGateway } from '@ocso/agent-runtime';
 import { isDomainError, notFound, validation, type ModelContentPart, type ModelMessage } from '@ocso/domain';
-import { internalAgentMessages, internalAgentThreads, uuidv7, type Db } from '@ocso/db';
-import type { ObjectLink, ToolAnswer } from './contract.js';
-import type { InternalActionService, PendingAction } from './actions.js';
+import { internalAgentActions, internalAgentMessages, internalAgentThreads, uuidv7, type Db } from '@ocso/db';
+import type { ObjectLink, PageContext, ToolAnswer } from './contract.js';
+import type { ActionStatus, InternalActionService, PendingAction } from './actions.js';
 import { internalAgentInstructions } from './instructions.js';
 import type { InternalToolRegistry } from './registry.js';
 
@@ -16,6 +16,8 @@ export interface AgentSink {
   table(table: NonNullable<ToolAnswer['table']>): void;
   action(action: PendingAction): void;
   denied(message: string): void;
+  /** The thread this answer belongs to, as soon as it is known (so an aborted answer can still continue it). */
+  thread?(threadId: string): void;
 }
 
 type StoredPart =
@@ -41,16 +43,23 @@ export class InternalAgentService {
     private readonly actions: InternalActionService,
   ) {}
 
-  async ask(principal: Principal, threadId: string | null, text: string, sink: AgentSink, correlationId: string, signal?: AbortSignal): Promise<{ threadId: string }> {
+  /** Whether a Tech Admin has chosen the model profile Ask OCSO runs on (deployment setting). */
+  async configured(): Promise<boolean> {
+    return (await new SettingsService(this.db).deployment()).internalAgentProfileId !== null;
+  }
+
+  async ask(principal: Principal, threadId: string | null, text: string, sink: AgentSink, correlationId: string, signal?: AbortSignal, page?: PageContext | null): Promise<{ threadId: string }> {
     assertCan(principal, Permission.INTERNAL_AGENT_USE);
+    const askedAt = Date.now();
     const settings = await new SettingsService(this.db).deployment();
     if (!settings.internalAgentProfileId) throw validation('internal_agent_not_configured', 'A Tech Admin must choose a model profile for Ask OCSO in Settings');
-    const thread = await this.thread(principal, threadId, text);
+    const thread = await this.thread(principal, threadId, text, page);
+    sink.thread?.(thread);
     const history = await this.history(thread);
     const actor = { principal: viaInternalAgent(principal), correlationId };
     const messages: ModelMessage[] = [...history, { role: 'user', content: [{ type: 'text', text }] }];
     const stored: StoredPart[] = [];
-    const system = internalAgentInstructions(principal, settings.orgName, new Date().toISOString().slice(0, 10)).map((b, i, all) => ({
+    const system = internalAgentInstructions(principal, settings.orgName, new Date().toISOString().slice(0, 10), page).map((b, i, all) => ({
       ...b,
       ...(i === all.length - 2 ? { breakpointAfter: 'AGENT_PREFIX' as const } : {}),
     }));
@@ -80,9 +89,12 @@ export class InternalAgentService {
       messages.push({ role: 'tool', content: results });
     }
     if (answer) stored.unshift({ type: 'text', text: answer });
+    // Explicit, strictly increasing timestamps: a column default would give both rows the same now(),
+    // and history is read in created_at order.
+    const answeredAt = Math.max(Date.now(), askedAt + 1);
     await this.db.insert(internalAgentMessages).values([
-      { id: uuidv7(), threadId: thread, role: 'user', parts: [{ type: 'text', text }] },
-      { id: uuidv7(), threadId: thread, role: 'assistant', parts: stored },
+      { id: uuidv7(askedAt), threadId: thread, role: 'user', parts: [{ type: 'text', text }], createdAt: new Date(askedAt) },
+      { id: uuidv7(answeredAt), threadId: thread, role: 'assistant', parts: stored, createdAt: new Date(answeredAt) },
     ]);
     await this.db.update(internalAgentThreads).set({ updatedAt: new Date() }).where(eq(internalAgentThreads.id, thread));
     return { threadId: thread };
@@ -93,7 +105,7 @@ export class InternalAgentService {
       const { tool, args } = this.registry.resolve(principal, name, rawArgs);
       const settings = await new SettingsService(this.db).deployment();
       if (tool.risk === 'HIGH_WRITE' || (tool.risk === 'LOW_WRITE' && settings.internalAgentConfirmLowWrites)) {
-        const action = await this.actions.propose(principal, threadId, tool, args);
+        const action = await this.actions.propose(principal, threadId, tool, args, actor);
         sink.action(action);
         stored.push({ type: 'action', action }, { type: 'tool', name, args, ok: true });
         return { type: 'json' as const, value: { status: 'pending_user_confirmation', actionId: action.id, description: action.description } };
@@ -121,19 +133,19 @@ export class InternalAgentService {
     }
   }
 
-  private async thread(principal: Principal, threadId: string | null, firstMessage: string): Promise<string> {
+  private async thread(principal: Principal, threadId: string | null, firstMessage: string, page?: PageContext | null): Promise<string> {
     if (threadId) {
       const [row] = await this.db.select().from(internalAgentThreads).where(and(eq(internalAgentThreads.id, threadId), eq(internalAgentThreads.userId, principal.userId)));
       if (!row) throw notFound('thread', threadId);
       return row.id;
     }
     const id = uuidv7();
-    await this.db.insert(internalAgentThreads).values({ id, userId: principal.userId, title: firstMessage.slice(0, 80) });
+    await this.db.insert(internalAgentThreads).values({ id, userId: principal.userId, title: firstMessage.slice(0, 80), ...(page ? { context: { ...page } } : {}) });
     return id;
   }
 
   private async history(threadId: string): Promise<ModelMessage[]> {
-    const rows = await this.db.select().from(internalAgentMessages).where(eq(internalAgentMessages.threadId, threadId)).orderBy(desc(internalAgentMessages.createdAt)).limit(HISTORY_MESSAGES);
+    const rows = await this.db.select().from(internalAgentMessages).where(eq(internalAgentMessages.threadId, threadId)).orderBy(desc(internalAgentMessages.createdAt), desc(internalAgentMessages.id)).limit(HISTORY_MESSAGES);
     return rows.reverse().flatMap((r) => {
       const text = (r.parts as StoredPart[]).filter((p): p is { type: 'text'; text: string } => p.type === 'text').map((p) => p.text).join('\n');
       return text ? [{ role: r.role, content: [{ type: 'text' as const, text }] }] : [];
@@ -147,7 +159,17 @@ export class InternalAgentService {
   async messages(principal: Principal, threadId: string) {
     const [thread] = await this.db.select().from(internalAgentThreads).where(and(eq(internalAgentThreads.id, threadId), eq(internalAgentThreads.userId, principal.userId)));
     if (!thread) throw notFound('thread', threadId);
-    return this.db.select().from(internalAgentMessages).where(eq(internalAgentMessages.threadId, threadId)).orderBy(asc(internalAgentMessages.createdAt));
+    const [rows, decided] = await Promise.all([
+      this.db.select().from(internalAgentMessages).where(eq(internalAgentMessages.threadId, threadId)).orderBy(asc(internalAgentMessages.createdAt), asc(internalAgentMessages.id)),
+      this.db.select({ id: internalAgentActions.id, status: internalAgentActions.status, expiresAt: internalAgentActions.expiresAt }).from(internalAgentActions).where(eq(internalAgentActions.threadId, threadId)),
+    ]);
+    // Stored action parts are snapshots from proposal time; report where each one stands now.
+    const now = Date.now();
+    const status = new Map(decided.map((a): [string, ActionStatus] => [a.id, a.status === 'PENDING' && a.expiresAt.getTime() < now ? 'EXPIRED' : a.status]));
+    return rows.map((r) => ({
+      ...r,
+      parts: (r.parts as StoredPart[]).map((p) => (p.type === 'action' ? { ...p, action: { ...p.action, status: status.get(p.action.id) ?? 'EXPIRED' } } : p)),
+    }));
   }
 }
 

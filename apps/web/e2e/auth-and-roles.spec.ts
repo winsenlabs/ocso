@@ -128,7 +128,7 @@ test('CS Exec sees My work only, cannot open Team, and returns to the requested 
   await expect(page.getByRole('button', { name: 'Save changes' })).toHaveCount(0);
 });
 
-test('Ask OCSO opens with Ctrl+J and says the internal agent is not available yet', async ({ page }) => {
+test('Ask OCSO opens with Ctrl+J and says it is not set up yet', async ({ page }) => {
   await login(page, ACCOUNTS.exec);
   await settled(page);
   await page.keyboard.press('Control+j');
@@ -137,8 +137,8 @@ test('Ask OCSO opens with Ctrl+J and says the internal agent is not available ye
   await expect(drawer).toContainText('scope · my conversations');
   await expect(drawer).toContainText('role: cs exec');
 
-  await drawer.getByRole('button', { name: 'What needs my attention right now?' }).click();
-  await expect(drawer.getByText('The internal agent is not available yet.')).toBeVisible();
+  // No model profile chosen for the internal agent yet (full flow: internal-agent.spec.ts).
+  await expect(drawer.getByText('Ask OCSO is not set up yet.')).toBeVisible();
 
   await page.keyboard.press('Escape');
   await expect(drawer).toBeHidden();

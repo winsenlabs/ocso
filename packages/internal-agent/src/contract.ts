@@ -22,6 +22,28 @@ export interface ToolAnswer {
   table?: { columns: string[]; rows: Array<Array<string | number>> } | undefined;
 }
 
+/** One field a write would change, shown on the confirmation card (docs/12 §4). */
+export interface ActionChange {
+  label: string;
+  before: string | null;
+  after: string;
+}
+
+export interface ActionPreview {
+  summary?: string | undefined;
+  changes: ActionChange[];
+}
+
+/**
+ * Where the user is in the OCSO UI when asking (design/05 "context · …").
+ * Only a hint for resolving "this conversation"; tools still authorize access.
+ */
+export interface PageContext {
+  path: string;
+  conversationId?: string | undefined;
+  agentId?: string | undefined;
+}
+
 export interface ToolContext {
   db: Db;
   principal: Principal;
@@ -42,6 +64,12 @@ export interface InternalTool<I = unknown> {
   risk: InternalRisk;
   /** Human-readable description of a write for the confirmation card. */
   describe?: ((args: I) => string) | undefined;
+  /**
+   * Current → proposed values for the confirmation card, and optionally a
+   * clearer one-line summary than `describe` (e.g. names instead of ids).
+   * Read-only; never writes.
+   */
+  preview?: ((ctx: ToolContext, args: I) => Promise<ActionPreview>) | undefined;
   run(ctx: ToolContext, args: I): Promise<ToolAnswer>;
 }
 

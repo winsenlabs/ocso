@@ -1,5 +1,7 @@
 import { Permission } from '@ocso/auth';
+import { eq } from 'drizzle-orm';
 import { AgentService, agentSummaries } from '@ocso/application';
+import { virtualAgents } from '@ocso/db';
 import { z } from 'zod';
 import type { InternalTool } from '../contract.js';
 
@@ -40,6 +42,14 @@ export const setAgentStatus: InternalTool<{ agentId: string; status: 'LIVE' | 'P
   permission: Permission.AGENTS_MANAGE,
   risk: 'HIGH_WRITE',
   describe: (a) => `${a.status === 'PAUSED' ? 'Pause' : 'Put live'} virtual agent ${a.agentId}. ${a.status === 'PAUSED' ? 'New customer messages will wait for humans.' : ''}`,
+  async preview(ctx, args) {
+    const [agent] = await ctx.db.select({ name: virtualAgents.name, status: virtualAgents.status }).from(virtualAgents).where(eq(virtualAgents.id, args.agentId));
+    if (!agent) return { changes: [] };
+    return {
+      summary: `${args.status === 'PAUSED' ? `Pause ${agent.name}. New customer messages will wait for humans.` : `Put ${agent.name} live.`}`,
+      changes: [{ label: `${agent.name} · status`, before: agent.status, after: args.status }],
+    };
+  },
   async run(ctx, args) {
     const agent = await new AgentService(ctx.db).setStatus(ctx.actor, args.agentId, args.status);
     return { data: { id: agent.id, name: agent.name, status: agent.status }, links: [{ label: agent.name, detail: `status ${agent.status}`, href: `/agents/${agent.id}` }] };

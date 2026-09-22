@@ -1,10 +1,11 @@
 import { ROLE_LABELS, type Principal } from '@ocso/auth';
+import type { PageContext } from './contract.js';
 
 /**
  * Internal agent instructions (docs/12). Stable across users of the same role
  * so provider prefix caches stay warm; the per-user line comes last.
  */
-export function internalAgentInstructions(principal: Principal, orgName: string, today: string): Array<{ key: string; text: string; stable: boolean }> {
+export function internalAgentInstructions(principal: Principal, orgName: string, today: string, page?: PageContext | null): Array<{ key: string; text: string; stable: boolean }> {
   return [
     {
       key: 'internal_agent_contract',
@@ -22,7 +23,14 @@ How you work
     {
       key: 'internal_agent_context',
       stable: false,
-      text: `Organization: ${orgName}. Today: ${today}. User: ${principal.displayName} (${ROLE_LABELS[principal.role]}).`,
+      text: `Organization: ${orgName}. Today: ${today}. User: ${principal.displayName} (${ROLE_LABELS[principal.role]}).${pageLine(page)}`,
     },
   ];
+}
+
+/** "This conversation" / "this agent" resolve against the page the user has open. */
+function pageLine(page: PageContext | null | undefined): string {
+  if (!page) return '';
+  const ids = [page.conversationId ? `conversation ${page.conversationId}` : null, page.agentId ? `virtual agent ${page.agentId}` : null].filter(Boolean);
+  return `\nThe user has the OCSO page ${page.path} open${ids.length ? ` (${ids.join(', ')})` : ''}. "This" or "here" usually refers to it; look it up with your tools before answering.`;
 }

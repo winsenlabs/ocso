@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, use, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useAskOcsoSession } from '@/components/internal-agent/use-ask-ocso-session';
 import type { AskOcsoCopy } from './ask-ocso-copy';
 import { AskOcsoDrawer } from './ask-ocso-drawer';
 
@@ -41,8 +42,13 @@ export function useAskOcso(): AskOcsoState {
   return state;
 }
 
-/** Renders the drawer when open, with copy resolved from the session on the server. */
+/**
+ * Renders the drawer when open, with copy resolved from the session on the
+ * server. The chat session lives here, not in the drawer, so closing and
+ * reopening keeps the conversation.
+ */
 export function AskOcsoDrawerHost({ copy }: { copy: AskOcsoCopy }) {
   const { open, close } = useAskOcso();
-  return open ? <AskOcsoDrawer id={ASK_OCSO_DRAWER_ID} copy={copy} onClose={close} /> : null;
+  const session = useAskOcsoSession();
+  return open ? <AskOcsoDrawer id={ASK_OCSO_DRAWER_ID} copy={copy} session={session} onClose={close} /> : null;
 }

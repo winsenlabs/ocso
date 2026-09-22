@@ -6,7 +6,7 @@ import { SettingsService } from '@ocso/application';
 import { ModelGateway, UsageRecorder } from '@ocso/agent-runtime';
 import { ScriptedAdapter } from '@ocso/agent-runtime/testing';
 import type { Principal } from '@ocso/auth';
-import { InternalActionService, InternalAgentService, InternalToolRegistry, type AgentSink } from '../src/index.js';
+import { InternalActionService, InternalAgentService, InternalToolRegistry, type AgentSink, type PendingAction } from '../src/index.js';
 
 let t: TestDatabase;
 let adapter: ScriptedAdapter;
@@ -19,7 +19,7 @@ let lead: Principal;
 let exec: Principal;
 
 const sink = () => {
-  const out = { text: '', steps: [] as string[], links: [] as unknown[], actions: [] as Array<{ id: string }>, denied: [] as string[] };
+  const out = { text: '', steps: [] as string[], links: [] as unknown[], actions: [] as PendingAction[], denied: [] as string[], threads: [] as string[] };
   const s: AgentSink = {
     text: (d) => (out.text += d),
     step: (l) => out.steps.push(l),
@@ -27,6 +27,7 @@ const sink = () => {
     table: () => {},
     action: (a) => out.actions.push(a),
     denied: (m) => out.denied.push(m),
+    thread: (id) => out.threads.push(id),
   };
   return { s, out };
 };
@@ -111,5 +112,33 @@ describe('internal OCSO agent permissions (docs/12 §3)', () => {
     const messages = await agent.messages(exec, threadId);
     expect(messages.map((m) => m.role)).toEqual(['user', 'assistant']);
     await expect(agent.messages(lead, threadId)).rejects.toMatchObject({ category: 'not_found' });
+  });
+
+  it('shows what a write would change and reports the decision in thread history', async () => {
+    adapter.script = [{ toolCalls: [{ toolName: 'update_worker_settings', input: { maxWorkers: 12 } }] }, { text: 'Confirm to apply.' }];
+    const { s, out } = sink();
+    const { threadId } = await agent.ask(admin, null, 'Raise max workers to 12', s, 'c8');
+    expect(out.threads).toEqual([threadId]);
+    expect(out.actions[0]!.changes).toEqual([{ label: 'max workers', before: '10', after: '12' }]);
+    expect(out.actions[0]!.description).toBe('Worker configuration · max workers 10 → 12');
+    const pending = await agent.messages(admin, threadId);
+    expect(JSON.stringify(pending[1]!.parts)).toContain('"status":"PENDING"');
+    await actions.reject(admin, out.actions[0]!.id, 'c9');
+    const decided = await agent.messages(admin, threadId);
+    expect(JSON.stringify(decided[1]!.parts)).toContain('"status":"REJECTED"');
+  });
+
+  it('passes the open page to the model and keeps it on the thread', async () => {
+    adapter.script = [{ text: 'Looking at it.' }];
+    const { s } = sink();
+    const conversationId = uuidv7();
+    const { threadId } = await agent.ask(exec, null, 'Summarise this conversation', s, 'c10', undefined, { path: `/conversations/${conversationId}`, conversationId });
+    expect(JSON.stringify(adapter.requests[0]!.system)).toContain(`conversation ${conversationId}`);
+    const { rows } = await t.pool.query(`SELECT context FROM internal_agent_threads WHERE id = $1`, [threadId]);
+    expect(rows[0].context).toEqual({ path: `/conversations/${conversationId}`, conversationId });
+  });
+
+  it('reports whether a model profile is configured', async () => {
+    expect(await agent.configured()).toBe(true);
   });
 });

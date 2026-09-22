@@ -1,24 +1,29 @@
 import { Permission } from '@ocso/auth';
+import type { DrawerState } from '@/components/internal-agent/types';
+import { ApiError } from '@/lib/api/errors';
+import { internalAgentConfigured, listInternalAgentThreads, listProfileOptions } from '@/lib/api/internal-agent';
 import { getSession } from '@/lib/session';
+import { jsonError } from './forward';
 
 /**
- * Placeholder for the internal OCSO agent (docs/12). Authenticates the caller
- * like the real endpoint will, then answers 501 so the drawer can say the
- * agent is not available yet. Replace with an SSE proxy to the API.
+ * GET /api/internal-agent — what the Ask OCSO drawer needs when it opens:
+ * whether a model profile is configured (deployment setting
+ * `internalAgentProfileId`), the user's threads, and — for a Tech Admin when
+ * nothing is configured yet — the profiles they can choose from.
  */
-export async function POST(): Promise<Response> {
-  const session = await getSession();
-  if (!session) {
-    return Response.json({ error: { category: 'authentication', code: 'unauthenticated', message: 'Sign in required' } }, { status: 401 });
+export async function GET(): Promise<Response> {
+  try {
+    const session = await getSession();
+    if (!session) return jsonError(401, 'authentication', 'unauthenticated', 'Sign in required');
+    if (!session.permissions.has(Permission.INTERNAL_AGENT_USE)) {
+      return jsonError(403, 'authorization', 'forbidden', 'Your role cannot use Ask OCSO.');
+    }
+    const [configured, threads] = await Promise.all([internalAgentConfigured(), listInternalAgentThreads()]);
+    const canConfigure = session.permissions.has(Permission.DEPLOYMENT_SETTINGS_MANAGE);
+    const profiles = !configured && canConfigure ? await listProfileOptions() : null;
+    return Response.json({ configured, threads, profiles } satisfies DrawerState);
+  } catch (err) {
+    if (err instanceof ApiError) return jsonError(err.status, err.category, err.code, err.message);
+    return jsonError(500, 'internal', 'internal', 'Ask OCSO could not load.');
   }
-  if (!session.permissions.has(Permission.INTERNAL_AGENT_USE)) {
-    return Response.json(
-      { error: { category: 'authorization', code: 'forbidden', message: 'Your role cannot use the internal agent' } },
-      { status: 403 },
-    );
-  }
-  return Response.json(
-    { error: { category: 'internal', code: 'not_implemented', message: 'The internal OCSO agent is not available yet.' } },
-    { status: 501 },
-  );
 }

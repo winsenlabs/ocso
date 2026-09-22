@@ -3,11 +3,18 @@ import { randomUUID } from 'node:crypto';
 import type { Response } from 'express';
 import { createUIMessageStream, pipeUIMessageStreamToResponse } from 'ai';
 import { Permission, type Principal } from '@ocso/auth';
+import { validation } from '@ocso/domain';
 import { InternalActionService, InternalAgentService } from '@ocso/internal-agent';
 import { z } from 'zod';
 import { CurrentPrincipal, RequirePermission, type OcsoRequest } from '../../common/decorators.js';
 
 const Id = z.uuid();
+/** The page the user has open (design/05 "context · …"): an in-app path plus the object ids on it. */
+const PageContextInput = z.object({
+  path: z.string().max(300).regex(/^\/[A-Za-z0-9/_\-.~%?=&]*$/, 'an OCSO path'),
+  conversationId: z.uuid().optional(),
+  agentId: z.uuid().optional(),
+});
 /** useChat sends UI messages; we only need the latest user text (history lives server-side). */
 const ChatInput = z.object({
   threadId: z.uuid().nullable().optional(),
@@ -15,6 +22,7 @@ const ChatInput = z.object({
     role: z.literal('user'),
     parts: z.array(z.object({ type: z.string(), text: z.string().optional() }).loose()).min(1),
   }),
+  context: PageContextInput.nullable().optional(),
 });
 type ChatInput = z.infer<typeof ChatInput>;
 
@@ -34,6 +42,8 @@ export class InternalAgentController {
   async chat(@CurrentPrincipal() principal: Principal, @Body({ schema: ChatInput }) body: ChatInput, @Req() req: OcsoRequest, @Res() res: Response): Promise<void> {
     const text = body.message.parts.flatMap((p) => (p.type === 'text' && p.text ? [p.text] : [])).join('\n').trim();
     const correlationId = req.correlationId ?? randomUUID();
+    // Before streaming, so the drawer gets a typed 400 it can turn into its setup state.
+    if (!(await this.agent.configured())) throw validation('internal_agent_not_configured', 'A Tech Admin must choose a model profile for Ask OCSO');
     const abort = new AbortController();
     res.on('close', () => abort.abort());
     const stream = createUIMessageStream({
@@ -58,12 +68,14 @@ export class InternalAgentController {
             table: (table) => writer.write({ type: 'data-table', data: table }),
             action: (action) => writer.write({ type: 'data-action', data: action }),
             denied: (message) => writer.write({ type: 'data-denied', data: { message } }),
+            thread: (id) => writer.write({ type: 'data-thread', id: 'thread', data: { threadId: id } }),
           },
           correlationId,
           abort.signal,
+          body.context ?? null,
         );
         if (textOpen) writer.write({ type: 'text-end', id: textId });
-        writer.write({ type: 'data-thread', data: { threadId } });
+        writer.write({ type: 'data-thread', id: 'thread', data: { threadId } });
         writer.write({ type: 'finish' });
       },
       onError: (err) => {

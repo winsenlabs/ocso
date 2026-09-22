@@ -3,7 +3,8 @@ import { viaInternalAgent, type Principal } from '@ocso/auth';
 import { recordAudit } from '@ocso/application';
 import { DomainError, forbidden, notFound } from '@ocso/domain';
 import { internalAgentActions, uuidv7, type Db } from '@ocso/db';
-import type { AnyInternalTool, ToolAnswer } from './contract.js';
+import type { ActorContext } from '@ocso/application';
+import type { ActionChange, ActionPreview, AnyInternalTool, ToolAnswer } from './contract.js';
 import type { InternalToolRegistry } from './registry.js';
 
 const ACTION_TTL_MS = 15 * 60_000;
@@ -14,7 +15,12 @@ export interface PendingAction {
   risk: string;
   description: string;
   expiresAt: string;
+  /** Current → proposed values, when the tool can preview them. */
+  changes?: ActionChange[] | undefined;
 }
+
+/** Lifecycle of a proposed action as the drawer shows it (history reads). */
+export type ActionStatus = 'PENDING' | 'EXECUTED' | 'REJECTED' | 'EXPIRED' | 'FAILED';
 
 /**
  * Confirmation-gated writes (docs/12 §4): the model can only *propose* them;
@@ -27,10 +33,12 @@ export class InternalActionService {
     private readonly registry: InternalToolRegistry,
   ) {}
 
-  async propose(principal: Principal, threadId: string, tool: AnyInternalTool, args: unknown): Promise<PendingAction> {
+  async propose(principal: Principal, threadId: string, tool: AnyInternalTool, args: unknown, actor?: ActorContext): Promise<PendingAction> {
     const id = uuidv7();
-    const description = tool.describe?.(args) ?? `${tool.name} ${JSON.stringify(args)}`;
+    const preview = await this.preview(principal, tool, args, actor);
+    const description = preview?.summary ?? tool.describe?.(args) ?? `${tool.name} ${JSON.stringify(args)}`;
     const expiresAt = new Date(Date.now() + ACTION_TTL_MS);
+    const changes = preview?.changes.length ? preview.changes : undefined;
     await this.db.insert(internalAgentActions).values({
       id,
       threadId,
@@ -41,7 +49,18 @@ export class InternalActionService {
       description,
       expiresAt,
     });
-    return { id, tool: tool.name, risk: tool.risk, description, expiresAt: expiresAt.toISOString() };
+    return { id, tool: tool.name, risk: tool.risk, description, expiresAt: expiresAt.toISOString(), ...(changes ? { changes } : {}) };
+  }
+
+  /** Best effort: a failed preview still leaves the description on the card. */
+  private async preview(principal: Principal, tool: AnyInternalTool, args: unknown, actor?: ActorContext): Promise<ActionPreview | undefined> {
+    if (!tool.preview) return undefined;
+    const via = viaInternalAgent(principal);
+    try {
+      return await tool.preview({ db: this.db, principal: via, actor: actor ?? { principal: via, correlationId: 'preview' }, now: new Date() }, args);
+    } catch {
+      return undefined;
+    }
   }
 
   async confirm(principal: Principal, actionId: string, correlationId: string): Promise<ToolAnswer> {

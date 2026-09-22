@@ -8,35 +8,42 @@ export interface AskOcsoCopy {
   roleChip: string;
   suggestions: string[];
   userInitials: string;
+  /** Shown on confirmation cards: writes are attributed to this person. */
+  userName: string;
+  /** May choose the model profile Ask OCSO runs on (deployment settings). */
+  canConfigure: boolean;
 }
 
 /**
  * Role-aware drawer copy (design/05), derived from permissions. Suggestions
- * are generic questions each role may ask — never references to invented data.
+ * are questions the role's internal-agent tools can answer from live data
+ * (packages/internal-agent registry) — never references to invented objects.
  */
 export function askOcsoCopy(session: Session, userInitials: string): AskOcsoCopy {
   const has = (p: (typeof P)[keyof typeof P]) => session.permissions.has(p);
-  const roleChip = `role: ${session.roleLabel.toLowerCase()}`;
+  const common = {
+    roleChip: `role: ${session.roleLabel.toLowerCase()}`,
+    userInitials,
+    userName: session.user.name,
+    canConfigure: has(P.DEPLOYMENT_SETTINGS_MANAGE),
+  };
   if (has(P.SYSTEM_READ)) {
     return {
+      ...common,
       scopeLine: `scope · platform · ${session.user.deployment.region ?? session.user.deployment.label.toLowerCase()}`,
-      roleChip,
-      suggestions: ['Which MCP connection is causing failures?', 'Show token spend by agent this week'],
-      userInitials,
+      suggestions: ['Which MCP connection is causing failures?', 'Why did latency spike in the last hour?'],
     };
   }
   if (has(P.CONVERSATIONS_READ_ALL)) {
     return {
+      ...common,
       scopeLine: 'scope · virtual agents and business operations',
-      roleChip,
       suggestions: ['Which agent is escalating most often?', 'What needs my attention right now?'],
-      userInitials,
     };
   }
   return {
+    ...common,
     scopeLine: 'scope · my conversations',
-    roleChip,
-    suggestions: ['What needs my attention right now?', 'Is there a similar case I can copy from?'],
-    userInitials,
+    suggestions: ['What needs my attention right now?', 'Which conversations are waiting for a human?'],
   };
 }

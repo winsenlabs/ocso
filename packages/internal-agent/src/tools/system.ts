@@ -5,6 +5,9 @@ import { desc } from 'drizzle-orm';
 import { z } from 'zod';
 import type { InternalTool } from '../contract.js';
 
+/** minWarmWorkers → "min warm workers". */
+const humanize = (key: string) => key.replace(/([A-Z])/g, ' $1').toLowerCase();
+
 export const workerCapacity: InternalTool<Record<string, never>> = {
   name: 'worker_capacity',
   description: 'Worker instances (status, active conversation slots, CPU/memory, heartbeat) and the worker scaling configuration.',
@@ -32,6 +35,15 @@ export const updateWorkerSettings: InternalTool<z.infer<typeof WorkerSettingsInp
   permission: Permission.SYSTEM_CONFIGURE,
   risk: 'HIGH_WRITE',
   describe: (a) => `Worker configuration · ${Object.entries(a).map(([k, v]) => `${k} → ${String(v)}`).join(', ')}`,
+  async preview(ctx, args) {
+    const before = await new SettingsService(ctx.db).workers();
+    const changes = Object.entries(args).flatMap(([key, value]) => {
+      if (value === undefined) return [];
+      const current = (before as Record<string, unknown>)[key];
+      return [{ label: humanize(key), before: current === undefined || current === null ? null : String(current), after: String(value) }];
+    });
+    return { summary: `Worker configuration · ${changes.map((c) => `${c.label} ${c.before ?? '—'} → ${c.after}`).join(', ')}`, changes };
+  },
   async run(ctx, args) {
     const after = await new SettingsService(ctx.db).updateWorkers(ctx.actor, args);
     return { data: after, links: [{ label: 'Worker configuration', detail: `min ${after.minWarmWorkers} · max ${after.maxWorkers} · ${after.conversationsPerWorker}/worker`, href: '/system/workers' }] };
