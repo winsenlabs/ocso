@@ -58,7 +58,7 @@ function inbound(c: Channel): Row | null {
     endpoint: c.webhookPath,
     caption: `${c.name}${c.lastInboundAt ? ` · last inbound ${formatAge(c.lastInboundAt)} ago` : ' · nothing received yet'}`,
     href: null,
-    events: c.kind === 'WHATSAPP' ? 'messages, delivery statuses' : 'customer messages',
+    events: c.kind === 'WHATSAPP' || c.kind === 'TWILIO_WHATSAPP' ? 'messages, delivery statuses' : 'customer messages',
     direction: 'inbound',
     volume: '—',
     failures: '—',

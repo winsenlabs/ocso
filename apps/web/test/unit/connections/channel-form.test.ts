@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { TWILIO_WHATSAPP_DESCRIPTOR } from '../../../../../packages/channels/src/twilio-whatsapp/descriptor';
 import { WEBCHAT_DESCRIPTOR } from '../../../../../packages/channels/src/webchat/descriptor';
 import { WHATSAPP_DESCRIPTOR } from '../../../../../packages/channels/src/whatsapp/descriptor';
 import {
@@ -51,6 +52,15 @@ describe('channel settings form from the adapters’ JSON Schema', () => {
     expect(buildSettings(webchat, values).settings).toEqual({ ...stored, branding: { title: 'Help', position: 'left' } });
   });
 
+  it('renders the Twilio form from its descriptor: titled fields, optional sender, status callbacks on by default', () => {
+    const twilio = settingsGroups(TWILIO_WHATSAPP_DESCRIPTOR.settingsSchema);
+    expect(twilio.fields.find((f) => f.path === 'accountSid')).toMatchObject({ label: 'Account SID', required: true, kind: 'text' });
+    expect(twilio.fields.find((f) => f.path === 'from')).toMatchObject({ label: 'WhatsApp sender', required: false });
+    expect(twilio.fields.find((f) => f.path === 'statusCallback')).toMatchObject({ kind: 'boolean', defaultValue: true });
+    const values = { ...initialSettingsValues(twilio, null), accountSid: 'ACa1b2c3d4e5f60718293a4b5c6d7e8f90', from: 'whatsapp:+14155238886' };
+    expect(buildSettings(twilio, values)).toEqual({ settings: { accountSid: 'ACa1b2c3d4e5f60718293a4b5c6d7e8f90', from: 'whatsapp:+14155238886', statusCallback: true }, errors: {} });
+  });
+
   it('reports client-side problems by path', () => {
     const values = { ...initialSettingsValues(whatsapp, null), phoneNumberId: '', mediaLinkTtlSeconds: '10' };
     expect(buildSettings(whatsapp, values).errors).toEqual({ phoneNumberId: 'Required', mediaLinkTtlSeconds: 'At least 60' });
@@ -78,6 +88,9 @@ describe('channel API problems, secrets and next steps', () => {
   it('builds the webhook URL and the embed snippet', () => {
     expect(inboundWebhookUrl('https://ocso.example.com/', { kind: 'WHATSAPP', publicKey: 'k1', webhookPath: '/channels/whatsapp/k1/webhook' })).toBe('https://ocso.example.com/channels/whatsapp/k1/webhook');
     expect(inboundWebhookUrl('https://ocso.example.com', { kind: 'SMS', publicKey: 'k2', webhookPath: null })).toBe('https://ocso.example.com/channels/sms/k2/webhook');
+    expect(inboundWebhookUrl('https://ocso.example.com', { kind: 'TWILIO_WHATSAPP', publicKey: 'k3', webhookPath: '/channels/twilio-whatsapp/k3/webhook' })).toBe(
+      'https://ocso.example.com/channels/twilio-whatsapp/k3/webhook',
+    );
     expect(embedSnippet('https://ocso.example.com', 'abc')).toBe('<script src="https://ocso.example.com/ocso-webchat.js" data-key="abc" async></script>');
   });
 });

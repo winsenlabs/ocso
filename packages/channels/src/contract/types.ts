@@ -7,8 +7,16 @@ import type { DeliveryStatus, InteractionPart, InteractionPartType, MediaRef } f
  * They never run the agent loop and never touch the database.
  */
 
-export const CHANNEL_KINDS = ['WHATSAPP', 'WEBCHAT', 'SMS', 'RCS', 'VOICE', 'CUSTOM_APP'] as const;
+/**
+ * Known channel kinds (the DB column is text). A kind is usable only when an
+ * adapter for it is registered; the API validates against the registry.
+ */
+export const CHANNEL_KINDS = ['WHATSAPP', 'TWILIO_WHATSAPP', 'WEBCHAT', 'SMS', 'RCS', 'VOICE', 'CUSTOM_APP'] as const;
 export type ChannelKind = (typeof CHANNEL_KINDS)[number];
+
+export function isChannelKind(value: string): value is ChannelKind {
+  return (CHANNEL_KINDS as readonly string[]).includes(value);
+}
 
 export type MediaKind = 'IMAGE' | 'AUDIO' | 'VIDEO' | 'DOCUMENT';
 
@@ -26,6 +34,8 @@ export interface ChannelCapabilities {
   allowedMimeTypes: Readonly<Record<MediaKind, readonly string[]>>;
   /** Hours after the last customer message during which free-form replies are allowed (WhatsApp: 24). */
   sessionWindowHours: number | null;
+  /** Identity kinds this channel can address, most preferred first; delivery picks the customer's identity by it. */
+  identityKinds?: readonly string[] | undefined;
 }
 
 /** Transport-neutral HTTP request as received by the API (raw body kept for signatures). */
@@ -35,6 +45,12 @@ export interface RawHttpRequest {
   headers: Readonly<Record<string, string | undefined>>;
   query: Readonly<Record<string, string | undefined>>;
   rawBody: Buffer | null;
+  /**
+   * The URL as the provider called it: scheme, host and port of the public
+   * origin (OCSO_PUBLIC_URL, not the proxied internal URL), path and query
+   * exactly as received. Needed by URL-bound signatures (Twilio).
+   */
+  url?: string | undefined;
 }
 
 /** Channel configuration with secrets already resolved by trusted code. */
@@ -44,6 +60,8 @@ export interface ChannelRuntimeConfig {
   name: string;
   settings: Readonly<Record<string, unknown>>;
   secrets: Readonly<Record<string, string>>;
+  /** This channel's public inbound webhook URL, when the kind has one and the public origin is known (e.g. Twilio status callbacks). */
+  webhookUrl?: string | undefined;
 }
 
 export type VerificationResult =
@@ -137,6 +155,25 @@ export type SendResult =
       requiresTemplate?: boolean | undefined;
     };
 
+/** The body a provider expects once an inbound webhook has been persisted (e.g. empty TwiML for Twilio). */
+export interface WebhookAcknowledgement {
+  status: 200;
+  contentType: string;
+  body: string;
+}
+
+/** One step of a read-only provider check (credentials, account state); never includes secret values. */
+export interface ConnectionCheck {
+  name: string;
+  ok: boolean;
+  detail: string;
+}
+
+export interface ConnectionCheckResult {
+  ok: boolean;
+  checks: ConnectionCheck[];
+}
+
 export interface ChannelAdapterDeps {
   fetch: typeof fetch;
   now: () => Date;
@@ -160,8 +197,10 @@ export interface ChannelKindDescriptor {
   /** JSON Schema (input shape) of the non-secret settings. */
   settingsSchema: Record<string, unknown>;
   secrets: ChannelSecretField[];
-  /** Provider calls OCSO at `/channels/<kind lower>/<publicKey>/webhook`. */
+  /** Provider calls OCSO at `/channels/<webhookSegment>/<publicKey>/webhook`. */
   inboundWebhook: boolean;
+  /** URL segment of the inbound webhook (lower-case, `a-z0-9-`); defaults to the kind in kebab case. */
+  webhookSegment?: string | undefined;
   /** Customers reach it through the embeddable widget (`/ocso-webchat.js`, `data-key=<publicKey>`). */
   embeddable: boolean;
 }
@@ -175,11 +214,15 @@ export interface ChannelAdapter {
   validateConfig(settings: unknown, secrets: Readonly<Record<string, string>>): string[];
   verifyRequest(req: RawHttpRequest, config: ChannelRuntimeConfig): VerificationResult;
   parseInbound(req: RawHttpRequest, config: ChannelRuntimeConfig): InboundEnvelope;
+  /** Reply for an accepted webhook; when absent the API answers with a JSON ingest summary. */
+  webhookAcknowledgement?(): WebhookAcknowledgement;
   /** Download media referenced by an inbound part (size/MIME/host checks applied). */
   fetchMedia(ref: MediaRef, config: ChannelRuntimeConfig): Promise<FetchedMedia>;
   /** Render customer-safe parts into one or more channel payloads (chunking, formatting). */
   render(parts: readonly InteractionPart[], config: ChannelRuntimeConfig): RenderedOutbound[];
   send(target: OutboundTarget, message: RenderedOutbound, config: ChannelRuntimeConfig, media: OutboundMediaResolver): Promise<SendResult>;
+  /** Read-only check of the stored credentials against the provider; never sends a message. */
+  checkConnection?(config: ChannelRuntimeConfig): Promise<ConnectionCheckResult>;
 }
 
 /** Resolves an outbound media part to something the provider can fetch or upload. */

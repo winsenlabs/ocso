@@ -14,8 +14,16 @@ import { hasPermission, type Session } from '@/lib/session';
 import { connectionsHref, idParam, param } from '../url';
 import { ChannelDialog } from './channel-dialog';
 
-const CODE: Record<string, ChannelCode> = { WHATSAPP: 'WA', WEBCHAT: 'WB', CUSTOM_APP: 'AP', VOICE: 'VO', SMS: 'SM' };
-const LABEL: Record<string, string> = { WHATSAPP: 'WhatsApp Business', WEBCHAT: 'Web chat', CUSTOM_APP: 'Mobile app chat', VOICE: 'Voice', SMS: 'SMS', RCS: 'RCS' };
+const CODE: Record<string, ChannelCode> = { TWILIO_WHATSAPP: 'WA', WHATSAPP: 'WA', WEBCHAT: 'WB', CUSTOM_APP: 'AP', VOICE: 'VO', SMS: 'SM' };
+const LABEL: Record<string, string> = {
+  TWILIO_WHATSAPP: 'WhatsApp — Twilio',
+  WHATSAPP: 'WhatsApp — Meta Cloud API',
+  WEBCHAT: 'Web chat',
+  CUSTOM_APP: 'Mobile app chat',
+  VOICE: 'Voice',
+  SMS: 'SMS',
+  RCS: 'RCS',
+};
 
 function status(c: Channel): { tone: StatusTone; label: string } {
   if (c.status === 'ACTIVE') return { tone: 'good', label: 'live' };
@@ -23,8 +31,10 @@ function status(c: Channel): { tone: StatusTone; label: string } {
   return { tone: 'muted', label: c.status.toLowerCase() };
 }
 
-/** Non-secret identifying settings worth showing (WhatsApp number id, web-chat JWT issuer). */
+/** Non-secret identifying settings worth showing (Twilio sender, WhatsApp number id, web-chat JWT issuer). */
 function identity(c: Channel): { k: string; v: string } | null {
+  const sender = c.settings['from'] ?? c.settings['messagingServiceSid'];
+  if (c.kind === 'TWILIO_WHATSAPP' && typeof sender === 'string') return { k: 'sender', v: sender };
   const phone = c.settings['phoneNumberId'];
   if (typeof phone === 'string') return { k: 'number id', v: phone };
   const issuer = c.settings['hostJwtIssuer'];
@@ -78,7 +88,7 @@ export async function ChannelsTab({ session, params }: { session: Session; param
       {channels.length === 0 ? (
         <EmptyState title="No channels configured yet">
           {canManage
-            ? 'Add a channel: WhatsApp needs your Meta number id and tokens; web chat needs only the sites allowed to embed it.'
+            ? 'Add a channel: WhatsApp through Twilio needs your Account SID, auth token and WhatsApp sender (or Meta’s number id and tokens for the Cloud API); web chat needs only the sites allowed to embed it.'
             : 'A Platform Tech Admin adds channels; each appears here with its status, inbound path, credentials (by name) and default agent.'}
         </EmptyState>
       ) : (

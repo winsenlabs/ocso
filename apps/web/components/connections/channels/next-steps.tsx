@@ -1,53 +1,39 @@
 'use client';
 
 import { CopyButton } from '../copy-button';
+import { ChannelTest } from './channel-test';
+import { ProviderSteps } from './provider-steps';
 import { embedSnippet, inboundWebhookUrl } from './settings-form';
 
 interface Props {
-  channel: { kind: string; publicKey: string; webhookPath: string | null; status: string };
-  kind: { inboundWebhook: boolean; embeddable: boolean; label: string };
+  channel: { id: string; kind: string; publicKey: string; webhookPath: string | null; status: string };
+  kind: { inboundWebhook: boolean; embeddable: boolean; label: string; connectionCheck: boolean };
   publicOrigin: string;
   /** Verify token generated in this dialog (shown once), if any. */
   verifyToken?: string | undefined;
   allowedOrigins: string[];
 }
 
-/** What the admin does next: point the provider at the webhook, or embed the widget. */
+/** What the admin does next: point the provider at the webhook (and test the credentials), or embed the widget. */
 export function ChannelNextSteps({ channel, kind, publicOrigin, verifyToken, allowedOrigins }: Props) {
   const inactive = channel.status !== 'ACTIVE' ? <p className="mono-sm">The channel is {channel.status.toLowerCase()}: set it to Active before customers use it.</p> : null;
   if (kind.inboundWebhook) {
     const url = inboundWebhookUrl(publicOrigin, channel);
     return (
-      <section className="conn-fieldset" aria-label="Connect the provider">
-        <span className="legend">Next · connect {kind.label}</span>
-        <div className="rowsplit" style={{ flexWrap: 'nowrap' }}>
-          <code className="secret-once" aria-label="Webhook URL">
-            {url}
-          </code>
-          <CopyButton value={url} what="webhook URL" />
-        </div>
-        {channel.kind === 'WHATSAPP' ? (
-          <ol className="setup-steps">
-            <li>In the Meta app dashboard open WhatsApp → Configuration → Webhook and choose Edit.</li>
-            <li>Paste the webhook URL above as the Callback URL.</li>
-            <li>
-              Enter the same webhook verify token you saved on this channel
-              {verifyToken ? (
-                <>
-                  {' '}
-                  (<code className="mono">{verifyToken}</code>, shown only now)
-                </>
-              ) : null}
-              , then Verify and save — OCSO answers Meta’s challenge.
-            </li>
-            <li>Subscribe the webhook to the messages field (it carries delivery statuses too).</li>
-            <li>Send a test message to the business number; the channel card shows the last inbound time.</li>
-          </ol>
-        ) : (
-          <p className="mono-sm">Configure the provider to call this URL for inbound messages; requests are verified before anything is stored.</p>
-        )}
-        {inactive}
-      </section>
+      <>
+        <section className="conn-fieldset" aria-label="Connect the provider">
+          <span className="legend">Next · connect {kind.label}</span>
+          <div className="rowsplit" style={{ flexWrap: 'nowrap' }}>
+            <code className="secret-once" aria-label="Webhook URL">
+              {url}
+            </code>
+            <CopyButton value={url} what="webhook URL" />
+          </div>
+          <ProviderSteps kind={channel.kind} verifyToken={verifyToken} />
+          {inactive}
+        </section>
+        {kind.connectionCheck ? <ChannelTest channelId={channel.id} /> : null}
+      </>
     );
   }
   if (kind.embeddable) {

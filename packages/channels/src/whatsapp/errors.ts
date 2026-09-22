@@ -1,5 +1,5 @@
-import type { SendResult } from '../contract/types.js';
 import { safeProviderText } from '../common/redact.js';
+import { sendFailure, type SendFailure } from '../common/send-failure.js';
 import type { GraphError, GraphResult } from './graph-client.js';
 
 /**
@@ -9,7 +9,7 @@ import type { GraphError, GraphResult } from './graph-client.js';
  * caller a template message is the only way to reach the customer.
  */
 
-export type SendFailure = Extract<SendResult, { ok: false }>;
+export { sendFailure, type SendFailure };
 
 interface FailureRule {
   errorCode: string;
@@ -105,8 +105,4 @@ export function mapGraphFailure(result: Exclude<GraphResult, { kind: 'ok' }>, se
     retriable: chosen.retriable,
   };
   return chosen.requiresTemplate ? { ...failure, requiresTemplate: true } : failure;
-}
-
-export function sendFailure(errorCode: string, message: string, retriable = false): SendFailure {
-  return { ok: false, errorCode, message, retriable };
 }

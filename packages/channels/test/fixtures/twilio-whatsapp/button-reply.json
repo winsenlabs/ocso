@@ -1,0 +1,23 @@
+{
+  "SmsMessageSid": "SM5e6f708192a3b4c5d6e7f8a9b0c1d2e3",
+  "NumMedia": "0",
+  "ProfileName": "Priya Deshmukh",
+  "MessageType": "button",
+  "SmsSid": "SM5e6f708192a3b4c5d6e7f8a9b0c1d2e3",
+  "WaId": "919812341208",
+  "SmsStatus": "received",
+  "Body": "Yes, block it",
+  "To": "whatsapp:+14155238886",
+  "MessagingServiceSid": "MG0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+  "NumSegments": "1",
+  "ReferralNumMedia": "0",
+  "MessageSid": "SM5e6f708192a3b4c5d6e7f8a9b0c1d2e3",
+  "AccountSid": "ACa1b2c3d4e5f60718293a4b5c6d7e8f90",
+  "From": "whatsapp:+919812341208",
+  "ApiVersion": "2010-04-01",
+  "ButtonText": "Yes, block it",
+  "ButtonPayload": "block_card_yes",
+  "ButtonType": "REPLY",
+  "OriginalRepliedMessageSid": "SM9f8e7d6c5b4a39281706f5e4d3c2b1a0",
+  "OriginalRepliedMessageSender": "whatsapp:+14155238886"
+}

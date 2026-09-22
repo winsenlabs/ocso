@@ -38,8 +38,17 @@ export const ChannelKindSchema = z.object({
   secrets: z.array(ChannelSecretFieldSchema).default([]),
   inboundWebhook: z.boolean().default(false),
   embeddable: z.boolean().default(false),
+  /** The adapter offers a read-only credential check (POST /v1/channels/:id/test). */
+  connectionCheck: z.boolean().default(false),
 });
 export type ChannelKind = z.infer<typeof ChannelKindSchema>;
+
+/** POST /v1/channels/:id/test: read-only provider check; never includes secret values. */
+export const ChannelTestSchema = z.object({
+  ok: z.boolean(),
+  checks: z.array(z.object({ name: z.string(), ok: z.boolean(), detail: z.string() })),
+});
+export type ChannelTestResult = z.infer<typeof ChannelTestSchema>;
 
 export type ChannelStatus = 'ACTIVE' | 'DISABLED' | 'DRAFT';
 
@@ -58,3 +67,4 @@ export const listChannels = () => api.get('/v1/channels', z.array(ChannelSchema)
 export const listChannelKinds = () => api.get('/v1/channels/kinds', z.array(ChannelKindSchema));
 export const createChannel = (input: ChannelCreate) => api.post('/v1/channels', input, ChannelSchema);
 export const updateChannel = (id: string, input: ChannelUpdate) => api.patch(`/v1/channels/${id}`, input, ChannelSchema);
+export const testChannel = (id: string) => api.post(`/v1/channels/${id}/test`, undefined, ChannelTestSchema, { timeoutMs: 30_000 });

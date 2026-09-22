@@ -3,7 +3,7 @@
 import { refresh } from 'next/cache';
 import { Permission } from '@ocso/auth';
 import { z } from 'zod';
-import { createChannel, updateChannel, type Channel } from '../api/channels';
+import { createChannel, testChannel, updateChannel, type Channel, type ChannelTestResult } from '../api/channels';
 import { describeApiError } from '../api/errors';
 import { getSession } from '../session';
 import type { ActionResult } from './models';
@@ -44,4 +44,18 @@ export async function createChannelAction(input: z.input<typeof Create>): Promis
 /** PATCH /v1/channels/:id: settings replace the stored object; only typed secrets rotate. */
 export async function updateChannelAction(id: string, input: z.input<typeof Fields>): Promise<ActionResult<SavedChannel>> {
   return run(z.object({ id: z.uuid(), body: Fields }), { id, body: input }, (i) => updateChannel(i.id, i.body));
+}
+
+/** POST /v1/channels/:id/test: checks the saved credentials with the provider (read-only; no message is sent). */
+export async function testChannelAction(id: string): Promise<ActionResult<ChannelTestResult>> {
+  const parsed = z.uuid().safeParse(id);
+  if (!parsed.success) return { ok: false, message: 'Unknown channel.' };
+  const session = await getSession();
+  if (!session) return { ok: false, message: 'Your session has ended. Sign in again.' };
+  if (!session.permissions.has(Permission.CHANNELS_MANAGE)) return { ok: false, message: 'Your role cannot manage channels.' };
+  try {
+    return { ok: true, data: await testChannel(parsed.data) };
+  } catch (err) {
+    return { ok: false, message: describeApiError(err) };
+  }
 }

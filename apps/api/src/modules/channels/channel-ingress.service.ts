@@ -2,10 +2,10 @@ import { Inject, Injectable } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { IngressService, type IngressResult } from '@ocso/application';
 import { ChannelRuntime } from '@ocso/agent-runtime';
-import type { InboundEnvelope, RawHttpRequest } from '@ocso/channels';
+import type { ChannelRegistry, InboundEnvelope, RawHttpRequest } from '@ocso/channels';
 import { notFound } from '@ocso/domain';
 import { channels, type Db } from '@ocso/db';
-import { DB } from '../../infrastructure/tokens.js';
+import { CHANNEL_REGISTRY, DB } from '../../infrastructure/tokens.js';
 
 export interface IngressSummary {
   accepted: number;
@@ -26,12 +26,20 @@ export class ChannelIngressService {
     @Inject(DB) private readonly db: Db,
     @Inject(ChannelRuntime) private readonly runtime: ChannelRuntime,
     @Inject(IngressService) private readonly ingress: IngressService,
+    @Inject(CHANNEL_REGISTRY) private readonly registry: ChannelRegistry,
   ) {}
 
   async resolve(publicKey: string, kind: string) {
     const [row] = await this.db.select({ id: channels.id, kind: channels.kind }).from(channels).where(eq(channels.publicKey, publicKey));
     if (!row || row.kind !== kind) throw notFound('channel', publicKey);
     return this.runtime.load(row.id);
+  }
+
+  /** Channel behind `/channels/<segment>/<publicKey>/webhook`; 404 unless the segment's kind owns that key. */
+  async resolveWebhook(segment: string, publicKey: string) {
+    const kind = this.registry.kindForWebhookSegment(segment);
+    if (!kind) throw notFound('channel', publicKey);
+    return this.resolve(publicKey, kind);
   }
 
   async process(channelId: string, envelope: InboundEnvelope, correlationId: string): Promise<IngressSummary> {
@@ -51,11 +59,17 @@ export class ChannelIngressService {
   }
 }
 
-/** Build the transport-neutral request adapters expect (lower-cased headers, raw body). */
-export function toRawRequest(method: 'GET' | 'POST', headers: Record<string, string | string[] | undefined>, query: Record<string, unknown>, rawBody: Buffer | undefined): RawHttpRequest {
+/** Build the transport-neutral request adapters expect (lower-cased headers, raw body, public URL for URL-bound signatures). */
+export function toRawRequest(
+  method: 'GET' | 'POST',
+  headers: Record<string, string | string[] | undefined>,
+  query: Record<string, unknown>,
+  rawBody: Buffer | undefined,
+  url?: string,
+): RawHttpRequest {
   const flat: Record<string, string | undefined> = {};
   for (const [k, v] of Object.entries(headers)) flat[k.toLowerCase()] = Array.isArray(v) ? v.join(',') : v;
   const q: Record<string, string | undefined> = {};
   for (const [k, v] of Object.entries(query)) q[k] = typeof v === 'string' ? v : undefined;
-  return { method, headers: flat, query: q, rawBody: rawBody ?? null };
+  return { method, headers: flat, query: q, rawBody: rawBody ?? null, ...(url ? { url } : {}) };
 }

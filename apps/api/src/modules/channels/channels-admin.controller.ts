@@ -1,8 +1,10 @@
 import { randomBytes } from 'node:crypto';
-import { Body, Controller, Get, Inject, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Param, Patch, Post } from '@nestjs/common';
 import { Permission } from '@ocso/auth';
 import { ChannelInput, ChannelPatch, ChannelService, type ActorContext } from '@ocso/application';
-import type { ChannelKind, ChannelRegistry } from '@ocso/channels';
+import { ChannelRuntime } from '@ocso/agent-runtime';
+import type { ChannelRegistry, ConnectionCheckResult } from '@ocso/channels';
+import { validation } from '@ocso/domain';
 import { z } from 'zod';
 import { Actor, RequirePermission } from '../../common/decorators.js';
 import { CHANNEL_REGISTRY } from '../../infrastructure/tokens.js';
@@ -15,6 +17,7 @@ export class ChannelsAdminController {
   constructor(
     @Inject(ChannelService) private readonly channels: ChannelService,
     @Inject(CHANNEL_REGISTRY) private readonly registry: ChannelRegistry,
+    @Inject(ChannelRuntime) private readonly runtime: ChannelRuntime,
   ) {}
 
   @Get()
@@ -27,7 +30,10 @@ export class ChannelsAdminController {
   @Get('kinds')
   @RequirePermission(Permission.CHANNELS_READ)
   kinds() {
-    return this.registry.kinds().map((kind) => this.registry.get(kind).describe?.() ?? { kind });
+    return this.registry.kinds().map((kind) => {
+      const adapter = this.registry.get(kind);
+      return { ...(adapter.describe?.() ?? { kind }), connectionCheck: typeof adapter.checkConnection === 'function' };
+    });
   }
 
   @Get(':id')
@@ -39,13 +45,26 @@ export class ChannelsAdminController {
   @Post()
   @RequirePermission(Permission.CHANNELS_MANAGE)
   create(@Actor() actor: ActorContext, @Body({ schema: ChannelInput }) body: ChannelInput) {
+    // Channel kinds are plugins: only kinds with a registered adapter can be created.
+    if (!this.registry.has(body.kind)) throw validation('unknown_channel_kind', `kind: channel kind ${body.kind} is not available in this deployment`);
     return this.channels.create(actor, { ...body, secrets: this.withGeneratedSecrets(body.kind, body.secrets) });
+  }
+
+  /** Read-only provider check with the stored credentials (e.g. Twilio: fetch the account); never sends a message. */
+  @Post(':id/test')
+  @HttpCode(200)
+  @RequirePermission(Permission.CHANNELS_MANAGE)
+  async test(@Param('id', { schema: Id }) id: string): Promise<ConnectionCheckResult> {
+    await this.channels.get(id);
+    const { adapter, config } = await this.runtime.load(id);
+    if (!adapter.checkConnection) throw validation('connection_check_unsupported', `${config.kind} channels have no connection check`);
+    return adapter.checkConnection(config);
   }
 
   /** Secrets nobody needs to copy anywhere (e.g. the visitor token key) are generated when left empty. */
   private withGeneratedSecrets(kind: string, secrets: Record<string, string>): Record<string, string> {
-    if (!this.registry.has(kind as ChannelKind)) return secrets;
-    const fields = this.registry.get(kind as ChannelKind).describe?.().secrets ?? [];
+    if (!this.registry.has(kind)) return secrets;
+    const fields = this.registry.get(kind).describe?.().secrets ?? [];
     const generated = Object.fromEntries(fields.filter((f) => f.generate === 'server' && !secrets[f.key]).map((f) => [f.key, randomBytes(32).toString('base64url')]));
     return { ...generated, ...secrets };
   }

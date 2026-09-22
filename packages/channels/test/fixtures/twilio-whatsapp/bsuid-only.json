@@ -1,0 +1,18 @@
+{
+  "SmsMessageSid": "SM8192a3b4c5d6e7f8a9b0c1d2e3f4a5b6",
+  "NumMedia": "0",
+  "ProfileName": "Priya Deshmukh",
+  "MessageType": "text",
+  "SmsSid": "SM8192a3b4c5d6e7f8a9b0c1d2e3f4a5b6",
+  "SmsStatus": "received",
+  "Body": "Hello from a username account",
+  "To": "whatsapp:+14155238886",
+  "MessagingServiceSid": "MG0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+  "NumSegments": "1",
+  "ReferralNumMedia": "0",
+  "MessageSid": "SM8192a3b4c5d6e7f8a9b0c1d2e3f4a5b6",
+  "AccountSid": "ACa1b2c3d4e5f60718293a4b5c6d7e8f90",
+  "From": "whatsapp:IN.13491208655302741918",
+  "ApiVersion": "2010-04-01",
+  "ExternalUserId": "whatsapp:IN.13491208655302741918"
+}

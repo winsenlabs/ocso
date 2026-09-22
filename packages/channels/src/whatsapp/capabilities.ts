@@ -46,6 +46,7 @@ export const WHATSAPP_CAPABILITIES: ChannelCapabilities = Object.freeze<ChannelC
     ],
   },
   sessionWindowHours: WHATSAPP_SESSION_WINDOW_HOURS,
+  identityKinds: ['whatsapp_bsuid', 'whatsapp_phone', 'whatsapp_parent_bsuid'],
 });
 
 /** Whether WhatsApp accepts this MIME type for an outbound message of `kind`. */

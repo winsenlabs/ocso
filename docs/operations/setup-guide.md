@@ -38,7 +38,34 @@ output, cache read, cache write) drives the cost figures in telemetry.
 
 **Connections & models → Channels → Add channel.**
 
-- **WhatsApp Business (Cloud API).** In Meta: a WhatsApp Business account, a phone number, a system-user
+WhatsApp comes in two flavours; pick the one your number is registered with. **WhatsApp — Twilio** is the
+usual path; **WhatsApp — Meta Cloud API** is for numbers registered directly with Meta. Both store the customer
+under the same phone identity, so a person is one customer whichever integration they reach.
+
+- **WhatsApp — Twilio.** In the Twilio Console you need a WhatsApp sender (Messaging → Senders → WhatsApp
+  senders; for testing, the Sandbox `whatsapp:+14155238886`, which recipients join with `join <code>`).
+  In OCSO enter:
+  - **Account SID** (`AC…`, Console → Account info) and the **auth token** (secret). Twilio signs every webhook
+    with the auth token, so it is required even if you send with an API key.
+  - Optionally an **API key SID** (`SK…`) and its **API key secret**: sending and media downloads then use
+    the key instead of the auth token.
+  - The **WhatsApp sender** `whatsapp:+<E.164>` **or** a **Messaging Service SID** (`MG…`) whose sender pool
+    holds the WhatsApp sender (exactly one of the two).
+  - **Request delivery statuses** (on by default): OCSO asks Twilio to post each message's status to the
+    channel's webhook URL. This needs an `https` `OCSO_PUBLIC_URL`; otherwise set the status callback in Twilio.
+
+  After saving, copy the webhook URL shown (`<public URL>/channels/twilio-whatsapp/<key>/webhook`) into the
+  sender's (or Messaging Service's Integration / Sandbox) settings as the **incoming-message webhook, HTTP
+  POST**, and as the **status callback URL**. Paste it exactly — no trailing slash: Twilio signs the exact URL
+  and OCSO rejects any request whose `X-Twilio-Signature` does not match `OCSO_PUBLIC_URL` + that path. Press
+  **Test connection** to check the credentials read-only (Twilio's account is fetched; no message is sent).
+  Outside WhatsApp's 24-hour customer window free-form replies are refused: the reply is marked failed with
+  `outside_session_window` (Twilio error 63016 is mapped the same way). Only approved templates may be sent
+  then — create them in Twilio's Content Template Builder and address them by **Content SID** (`HX…`) with
+  Content Variables (the adapter's `sendTemplate`); OCSO has no operator screen for sending templates yet.
+  Twilio caps a message body at 1,600 characters (OCSO splits longer replies) and sends one media item per
+  message.
+- **WhatsApp — Meta Cloud API.** In Meta: a WhatsApp Business account, a phone number, a system-user
   access token with `whatsapp_business_messaging`, and the app secret. In OCSO: the phone number id
   (and optionally the WABA id), the access token, the app secret and a verify token (**Generate** makes
   one — copy it). After saving, copy the webhook URL shown (`<public URL>/channels/whatsapp/<key>/webhook`)

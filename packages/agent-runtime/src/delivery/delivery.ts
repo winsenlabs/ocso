@@ -31,15 +31,16 @@ export class DeliveryService {
     const partRows = await this.db.select().from(interactionParts).where(eq(interactionParts.interactionId, interactionId)).orderBy(asc(interactionParts.idx));
     const parts = partRows.map((p) => p.content as unknown as InteractionPart);
     const { adapter, config } = await this.channels.load(row.channelId);
-    const safe = customerSafeParts(parts, adapter.capabilities(config));
+    const capabilities = adapter.capabilities(config);
+    const safe = customerSafeParts(parts, capabilities);
     if (!safe.parts.length) return this.markFailed(row.id, row.conversationId, 'no renderable parts', correlationId);
 
-    const [identity] = await this.db
+    const identities = await this.db
       .select()
       .from(customerIdentities)
       .where(and(eq(customerIdentities.customerId, conv!.customerId)))
-      .orderBy(desc(customerIdentities.lastSeenAt))
-      .limit(1);
+      .orderBy(desc(customerIdentities.lastSeenAt));
+    const identity = pickIdentity(identities, capabilities.identityKinds);
     if (!identity) return this.markFailed(row.id, row.conversationId, 'customer has no channel identity', correlationId);
 
     const media: OutboundMediaResolver = {
@@ -73,4 +74,13 @@ export class DeliveryService {
     });
     return { kind: 'failed', reason };
   }
+}
+
+/** The identity the channel prefers (its declared order), else the most recently seen one. */
+function pickIdentity<T extends { kind: string }>(byRecency: readonly T[], preferred: readonly string[] | undefined): T | undefined {
+  for (const kind of preferred ?? []) {
+    const match = byRecency.find((identity) => identity.kind === kind);
+    if (match) return match;
+  }
+  return byRecency[0];
 }

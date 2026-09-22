@@ -43,7 +43,8 @@ export const channels = pgTable(
   'channels',
   {
     id: id(),
-    kind: text().$type<'WHATSAPP' | 'WEBCHAT' | 'SMS' | 'RCS' | 'VOICE' | 'CUSTOM_APP'>().notNull(),
+    /** A registered adapter kind (@ocso/channels CHANNEL_KINDS; text so plugins add kinds without a migration). */
+    kind: text().$type<'WHATSAPP' | 'TWILIO_WHATSAPP' | 'WEBCHAT' | 'SMS' | 'RCS' | 'VOICE' | 'CUSTOM_APP'>().notNull(),
     name: text().notNull(),
     status: text().$type<'ACTIVE' | 'DISABLED' | 'DRAFT'>().notNull().default('DRAFT'),
     /** Public, unguessable key used in widget/webhook URLs. */

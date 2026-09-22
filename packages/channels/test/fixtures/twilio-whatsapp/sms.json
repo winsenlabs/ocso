@@ -1,0 +1,18 @@
+{
+  "SmsMessageSid": "SM92a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7",
+  "NumMedia": "0",
+  "ProfileName": "Priya Deshmukh",
+  "MessageType": "text",
+  "SmsSid": "SM92a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7",
+  "WaId": "919812341208",
+  "SmsStatus": "received",
+  "Body": "plain SMS",
+  "To": "+14155550199",
+  "MessagingServiceSid": "MG0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+  "NumSegments": "1",
+  "ReferralNumMedia": "0",
+  "MessageSid": "SM92a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7",
+  "AccountSid": "ACa1b2c3d4e5f60718293a4b5c6d7e8f90",
+  "From": "+14155550100",
+  "ApiVersion": "2010-04-01"
+}

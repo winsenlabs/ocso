@@ -7,4 +7,5 @@ export { normalizeSha256 } from './common/crypto.js';
 export { baseMimeType, mediaKindForMime } from './common/mime.js';
 export { redactSecrets } from './common/redact.js';
 export * from './whatsapp/index.js';
+export * from './twilio-whatsapp/index.js';
 export * from './webchat/index.js';

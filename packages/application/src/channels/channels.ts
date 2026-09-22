@@ -10,7 +10,8 @@ import { bumpGeneration } from '../cache/generations.js';
 import type { ActorContext } from '../shared/context.js';
 
 export const ChannelInput = z.object({
-  kind: z.enum(['WHATSAPP', 'WEBCHAT', 'SMS', 'RCS', 'VOICE', 'CUSTOM_APP']),
+  /** A registered channel adapter kind (checked against the registry by the API; plugins add kinds). */
+  kind: z.string().regex(/^[A-Z][A-Z0-9_]{1,39}$/, 'must be a channel kind such as WHATSAPP'),
   name: z.string().trim().min(1).max(120),
   settings: z.record(z.string(), z.unknown()).default({}),
   /** Plaintext secrets entered once by the admin; stored in the SecretStore, never returned. */
@@ -38,23 +39,26 @@ export interface ChannelView {
 
 /** Validates settings + secrets for a channel kind (provided by the channel adapter registry). */
 export type ChannelConfigValidator = (kind: string, settings: unknown, secrets: Record<string, string>) => string[];
+/** Public path of a channel (provider webhook or widget page), from the channel adapter registry. */
+export type ChannelPathResolver = (kind: string, publicKey: string) => string | null;
 
 export class ChannelService {
   constructor(
     private readonly db: Db,
     private readonly secrets: SecretStore,
     private readonly validate: ChannelConfigValidator,
+    private readonly publicPath: ChannelPathResolver,
   ) {}
 
   async list(): Promise<ChannelView[]> {
     const rows = await this.db.select().from(channels).orderBy(asc(channels.name));
-    return rows.map(toView);
+    return rows.map((row) => this.toView(row));
   }
 
   async get(id: string): Promise<ChannelView> {
     const [row] = await this.db.select().from(channels).where(eq(channels.id, id));
     if (!row) throw notFound('channel', id);
-    return toView(row);
+    return this.toView(row);
   }
 
   /** Resolve a channel's secret values for trusted adapter code. */
@@ -74,7 +78,7 @@ export class ChannelService {
         .insert(channels)
         .values({
           id,
-          kind: input.kind,
+          kind: input.kind as typeof channels.$inferInsert.kind,
           name: input.name,
           status: input.status,
           publicKey: randomBytes(12).toString('base64url'),
@@ -92,7 +96,7 @@ export class ChannelService {
       });
       return inserted;
     });
-    return toView(row!);
+    return this.toView(row!);
   }
 
   async update(actor: ActorContext, id: string, patch: ChannelPatch): Promise<ChannelView> {
@@ -136,7 +140,7 @@ export class ChannelService {
     for (const [key, ref] of Object.entries(before.secretRefs)) {
       if (newRefs[key] && newRefs[key] !== ref) await this.secrets.delete(ref).catch(() => {});
     }
-    return toView(row!);
+    return this.toView(row!);
   }
 
   private async storeSecrets(channelName: string, values: Record<string, string>): Promise<Record<string, string>> {
@@ -147,20 +151,20 @@ export class ChannelService {
     }
     return refs;
   }
-}
 
-function toView(row: typeof channels.$inferSelect): ChannelView {
-  return {
-    id: row.id,
-    kind: row.kind,
-    name: row.name,
-    status: row.status,
-    publicKey: row.publicKey,
-    settings: row.settings,
-    secretRefs: row.secretRefs,
-    defaultAgentId: row.defaultAgentId,
-    lastInboundAt: row.lastInboundAt?.toISOString() ?? null,
-    webhookPath: row.kind === 'WHATSAPP' ? `/channels/whatsapp/${row.publicKey}/webhook` : row.kind === 'WEBCHAT' ? `/webchat/${row.publicKey}` : null,
-  };
+  private toView(row: typeof channels.$inferSelect): ChannelView {
+    return {
+      id: row.id,
+      kind: row.kind,
+      name: row.name,
+      status: row.status,
+      publicKey: row.publicKey,
+      settings: row.settings,
+      secretRefs: row.secretRefs,
+      defaultAgentId: row.defaultAgentId,
+      lastInboundAt: row.lastInboundAt?.toISOString() ?? null,
+      webhookPath: this.publicPath(row.kind, row.publicKey),
+    };
+  }
 }
 

@@ -1,0 +1,13 @@
+{
+  "SmsSid": "SMc5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0",
+  "SmsStatus": "queued",
+  "MessageStatus": "queued",
+  "ChannelToAddress": "+91981234XXXX",
+  "To": "whatsapp:+919812341208",
+  "ChannelPrefix": "whatsapp",
+  "MessageSid": "SMc5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0",
+  "AccountSid": "ACa1b2c3d4e5f60718293a4b5c6d7e8f90",
+  "From": "whatsapp:+14155238886",
+  "ApiVersion": "2010-04-01",
+  "ChannelInstallSid": "XE7a8b9c0d1e2f30415263748596a7b8c9"
+}

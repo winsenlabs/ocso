@@ -4,10 +4,23 @@ Channel adapters for OCSO (docs/07, ADR-007). An adapter handles transport only:
 
 | Adapter | Factory | Transport |
 |---|---|---|
+| `TwilioWhatsAppChannelAdapter` | `createTwilioWhatsAppAdapter({ fetch, now })` | WhatsApp through Twilio Programmable Messaging (form-encoded webhooks, Messages API) |
 | `WhatsAppChannelAdapter` | `createWhatsAppAdapter({ fetch, now })` | WhatsApp Cloud API, called directly (Graph API version comes from config) |
 | `WebChatChannelAdapter` | `createWebChatAdapter({ now, generateId? })` | OCSO's own widget: JSON in, realtime stream out |
 
-Register both adapters with `ChannelRegistry`. Callers look adapters up by `kind`; they never switch on it.
+Register adapters with `ChannelRegistry`. Callers look adapters up by `kind`; they never switch on it. The registry also maps a descriptor's `webhookSegment` to its kind (`/channels/<segment>/<publicKey>/webhook`) and gives each channel its public path.
+
+---
+
+## WhatsApp via Twilio
+
+Researched in PM/research/06. Settings: `accountSid` (`AC…`), exactly one of `from` (`whatsapp:+E.164`) or `messagingServiceSid` (`MG…`), optional `apiKeySid` (`SK…`), `statusCallback` (default `true`), `apiBaseUrl` (default `https://api.twilio.com`; https except localhost), `mediaLinkTtlSeconds`, `requestTimeoutMs`, `mediaDownloadTimeoutMs`. Secrets: `authToken` (always required — Twilio signs webhooks with it), `apiKeySecret` (required with `apiKeySid`; then used for REST and media instead of the token).
+
+- **Verification.** `X-Twilio-Signature` = base64 HMAC-SHA1(auth token, URL + parameters sorted by name as name+value; repeated values de-duplicated and sorted). The URL is `RawHttpRequest.url` — the public origin plus path and query exactly as received — tried without a port and with one, like twilio-node. Missing/malformed header 401, mismatch 403, GET 400.
+- **Inbound.** One URL receives messages and status callbacks (`MessageStatus` present). Messages: idempotency key `MessageSid`; identity `whatsapp_phone` (E.164, the Meta adapter's kind) with the 2026 `ExternalUserId` BSUID as `whatsapp_bsuid`; `MediaUrl{N}` → PENDING media parts (`source.channel = 'TWILIO_WHATSAPP'`, `externalId` = media URL; `text/vcard` → DOCUMENT), `Body` → caption of the first image/video/document or TEXT, `Latitude`/`Longitude` → LOCATION, `ButtonText`/`ButtonPayload` → `button_reply`, `FlowData` → `flow_reply`, `Referral*` → `referral`, `OriginalRepliedMessageSid` → `replyToExternalId`. SMS, other accounts and empty messages are ignored. Statuses: sent/delivered/read, failed/undelivered → FAILED with `ErrorCode`. The API answers with empty TwiML (`webhookAcknowledgement()`).
+- **Outbound.** WhatsApp formatting as for Meta, chunked to 1,600 characters; one `MediaUrl` per message (a short-lived signed blob URL), captions as `Body` for images only; locations as `Body` + `PersistentAction=geo:lat,long|label`; contacts and buttons as text. The 24-hour window is checked first (`requiresTemplate`); `sendTemplate(target, { contentSid, variables }, config)` sends `ContentSid` + `ContentVariables`. `StatusCallback` = the channel's `webhookUrl` when it is https and `statusCallback` is on. Error codes map like Meta's (63016 → `outside_session_window` + `requiresTemplate`, 63018/20429/429 → `rate_limited`, 20003 → `auth_failed`, 63007 → `invalid_sender`, 21610 → `recipient_opted_out`, 5xx → retriable).
+- **Media.** Only this account's `…/Accounts/{AC}/Messages/{SID}/Media/{ME}` on the configured API origin; Basic credentials only there; redirects followed manually without credentials to `*.twiliocdn.com`, `*.twilio.com` or S3 over https:443; MIME allowlist, per-kind caps (image 5 MB, audio/video 16 MB, documents 20 MB), Content-Type cross-check.
+- **Test.** `checkConnection(config)` fetches the account (read-only) with the REST credentials and, with an API key, again with the auth token.
 
 ---
 
@@ -215,3 +228,4 @@ All tests run offline, using a fake `fetch` and Meta-shaped fixtures. Check thes
   - contacts messages with only `formatted_name` and `first_name`.
 - **Error codes:** real error payloads for 131047, 131056, 130429 and 190, and whether Meta surfaces 131049 at send time or only in a status.
 - **Supported MIME types:** inbound documents of types outside Meta's list (for example `.csv`) are rejected by the capability allowlist. Widen the list if the business needs them.
+- **Twilio (research/06 UNVERIFIED items):** the media redirect hosts (community-reported `mms.twiliocdn.com` / `s3-external-1.amazonaws.com`); whether `To=whatsapp:<BSUID>` is accepted for username-only customers; list-picker reply parameters (only `Body` is relied on); Twilio's webhook timeout/retry behaviour (OCSO acks only after persisting, so a timeout makes Twilio use the fallback URL if one is set).

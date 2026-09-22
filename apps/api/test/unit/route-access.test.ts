@@ -47,8 +47,8 @@ describe('route access coverage', () => {
 const PUBLIC_ROUTES = [
   'GET /.well-known/jwks.json', // public keys for customer-claims verification
   'GET /blobs/*path', // signed, expiring media URLs (signature checked in the handler)
-  'GET /channels/whatsapp/:publicKey/webhook', // Meta subscription challenge (verify token)
-  'POST /channels/whatsapp/:publicKey/webhook', // Meta webhook (HMAC signature)
+  'GET /channels/:segment/:publicKey/webhook', // provider handshake: Meta verify-token challenge; other kinds reject GET
+  'POST /channels/:segment/:publicKey/webhook', // provider webhooks: Meta X-Hub-Signature-256 (HMAC-SHA256 of raw body), Twilio X-Twilio-Signature (HMAC-SHA1 of public URL + form params)
   'GET /health/live',
   'GET /health/ready',
   'GET /oauth/mcp/callback', // OAuth 2.1 redirect (single-use hashed state)

@@ -86,7 +86,7 @@ export function ChannelDialog({ kinds, channel, initialKind, agents, publicOrigi
     .split('\n')
     .map((s) => s.trim())
     .filter(Boolean);
-  const kindInfo = { inboundWebhook: def?.inboundWebhook ?? false, embeddable: def?.embeddable ?? false, label: kindLabel(def) };
+  const kindInfo = { inboundWebhook: def?.inboundWebhook ?? false, embeddable: def?.embeddable ?? false, label: kindLabel(def), connectionCheck: def?.connectionCheck ?? false };
 
   if (saved) {
     return (

@@ -3,6 +3,7 @@ import { CHANNEL_NAMES, type ChannelCode } from '../../../lib/channels';
 /** API channel kinds (packages/channels CHANNEL_KINDS) → the design's two-letter marks. */
 const KIND_TO_CODE: Readonly<Record<string, ChannelCode>> = {
   WHATSAPP: 'WA',
+  TWILIO_WHATSAPP: 'WA',
   WEBCHAT: 'WB',
   CUSTOM_APP: 'AP',
   EMAIL: 'EM',

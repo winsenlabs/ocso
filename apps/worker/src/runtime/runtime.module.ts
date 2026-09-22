@@ -52,8 +52,10 @@ export const HISTORY_WINDOW = 20;
     },
     {
       provide: ChannelRuntime,
-      inject: [DB, CHANNEL_REGISTRY, SECRET_STORE],
-      useFactory: (db: Db, registry: ChannelRegistry, secrets: SecretStore) => new ChannelRuntime(db, registry, secrets),
+      inject: [DB, CHANNEL_REGISTRY, SECRET_STORE, ENV],
+      // publicUrl gives webhook channels their callback URL (Twilio per-message status callbacks).
+      useFactory: (db: Db, registry: ChannelRegistry, secrets: SecretStore, env: WorkerEnv) =>
+        new ChannelRuntime(db, registry, secrets, { publicUrl: env.OCSO_PUBLIC_URL }),
     },
     { provide: MediaMaterializer, inject: [DB, ChannelRuntime, BLOB_STORE], useFactory: (db: Db, c: ChannelRuntime, b: BlobStore) => new MediaMaterializer(db, c, b) },
     { provide: DeliveryService, inject: [DB, ChannelRuntime, BLOB_STORE], useFactory: (db: Db, c: ChannelRuntime, b: BlobStore) => new DeliveryService(db, c, b) },

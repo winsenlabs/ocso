@@ -4,8 +4,9 @@ import { WhatsAppSettings } from './config.js';
 
 export const WHATSAPP_DESCRIPTOR: ChannelKindDescriptor = {
   kind: 'WHATSAPP',
-  label: 'WhatsApp Business (Cloud API)',
-  description: 'Customers message your WhatsApp Business number; Meta calls the OCSO webhook for messages and delivery statuses.',
+  label: 'WhatsApp — Meta Cloud API',
+  description:
+    'Use this when your WhatsApp Business number is registered directly with Meta (no Twilio): OCSO calls the Cloud API and Meta posts messages and delivery statuses to the OCSO webhook.',
   settingsSchema: z.toJSONSchema(WhatsAppSettings, { io: 'input' }) as Record<string, unknown>,
   secrets: [
     { key: 'accessToken', label: 'Access token', required: true, hint: 'System-user access token with whatsapp_business_messaging permission.' },
@@ -19,5 +20,6 @@ export const WHATSAPP_DESCRIPTOR: ChannelKindDescriptor = {
     },
   ],
   inboundWebhook: true,
+  webhookSegment: 'whatsapp',
   embeddable: false,
 };
