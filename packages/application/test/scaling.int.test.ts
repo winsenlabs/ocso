@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eq, sql } from 'drizzle-orm';
 import { createTestDatabase, type TestDatabase } from '@ocso/db/testing';
 import {
@@ -215,8 +215,8 @@ describe('ScalingService', () => {
     let release!: () => void;
     adapter.gate = new Promise((r) => (release = r));
     const first = service.reconcile('startup');
-    await new Promise((r) => setTimeout(r, 20));
-    expect(adapter.applied).toHaveLength(1);
+    // Wait until the first reconcile is inside the adapter (a fixed sleep is flaky under load).
+    await vi.waitFor(() => expect(adapter.applied).toHaveLength(1), { timeout: 5_000, interval: 5 });
     const second = service.reconcile('config_changed');
     const third = service.reconcile('periodic');
     expect(third).toBe(second);
