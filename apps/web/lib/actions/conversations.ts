@@ -82,16 +82,24 @@ export async function addNoteAction(conversationId: string, body: string, passTo
   return run(() => api.post(`${path(conversationId)}/notes`, parsed.data, z.object({ id: z.string() })));
 }
 
-const ReplyInput = z.object({ text: z.string().trim().min(1, 'Write a reply first').max(32_000), clientMessageId: z.string().min(8).max(100) });
+const Attachment = z.object({ partType: z.enum(['IMAGE', 'AUDIO', 'VIDEO', 'DOCUMENT']), media: z.record(z.string(), z.unknown()) });
+const ReplyInput = z
+  .object({ text: z.string().trim().max(32_000), clientMessageId: z.string().min(8).max(100), attachments: z.array(Attachment).max(9) })
+  .refine((v) => v.text.length > 0 || v.attachments.length > 0, 'Write a reply or attach a file first');
 
-/** Customer-visible reply; the API accepts it only while this human holds the conversation. */
-export async function sendReplyAction(conversationId: string, text: string, clientMessageId: string): Promise<ActionResult> {
-  const parsed = ReplyInput.safeParse({ text, clientMessageId });
+/**
+ * Customer-visible reply; the API accepts it only while this human holds the
+ * conversation, and only attachments uploaded to this conversation.
+ */
+export async function sendReplyAction(conversationId: string, text: string, clientMessageId: string, attachments: Array<z.infer<typeof Attachment>> = []): Promise<ActionResult> {
+  const parsed = ReplyInput.safeParse({ text, clientMessageId, attachments });
   if (!Id.safeParse(conversationId).success) return invalid('Unknown conversation');
   if (!parsed.success) return invalid(parsed.error.issues[0]?.message ?? 'Invalid reply');
-  return run(() =>
-    api.post(`${path(conversationId)}/messages`, { clientMessageId: parsed.data.clientMessageId, parts: [{ type: 'TEXT', text: parsed.data.text }] }, z.object({ interactionId: z.string() })),
-  );
+  const parts = [
+    ...(parsed.data.text ? [{ type: 'TEXT', text: parsed.data.text }] : []),
+    ...parsed.data.attachments.map((a) => ({ type: a.partType, media: a.media })),
+  ];
+  return run(() => api.post(`${path(conversationId)}/messages`, { clientMessageId: parsed.data.clientMessageId, parts }, z.object({ interactionId: z.string() })));
 }
 
 export type ToolRunResult = { ok: true; status: 'SUCCEEDED' | 'FAILED'; detail: string | null } | { ok: false; message: string; code?: string };

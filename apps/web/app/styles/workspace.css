@@ -92,3 +92,8 @@ button.tool-opt:hover{border-color:var(--border-2);background:var(--surface-2)}
   .center,.center.span{grid-template-rows:auto auto auto auto;grid-column:1}
   .center .tlwrap{overflow:visible}
 }
+
+/* Staged reply attachments (composer) */
+.comp .attachments { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 0 0; }
+.comp .attachments .fchip { display: inline-flex; align-items: center; gap: 4px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.comp .attachments .icon-btn { width: 18px; height: 18px; font-size: 10px; }

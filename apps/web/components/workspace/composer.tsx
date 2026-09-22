@@ -6,6 +6,7 @@ import type { CopilotState, WorkspaceTool } from '@/lib/api/conversations';
 import { CopilotBlock } from './copilot-block';
 import { ToolAction } from './tool-action';
 import { useActionRunner } from './lib/use-action';
+import { useAttachments } from './lib/use-attachments';
 
 export type ComposerMode = 'reply' | 'note' | 'tool';
 
@@ -37,13 +38,15 @@ export function Composer({ conversationId, customerName, channelLabel, agentName
   const clientId = useRef(newClientMessageId());
   const { pending, error, clearError, run } = useActionRunner();
   const [sentFlash, setSentFlash] = useState<string | null>(null);
+  const files = useAttachments(conversationId);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   const isNote = mode === 'note';
   const text = isNote ? note : reply;
   const setText = isNote ? setNote : setReply;
 
   const submit = () => {
-    if (!text.trim() || pending) return;
+    if ((!text.trim() && (isNote || files.items.length === 0)) || pending || files.uploading) return;
     if (isNote) {
       void run(() => addNoteAction(conversationId, note, passToAgent)).then((ok) => {
         if (ok) {
@@ -53,9 +56,11 @@ export function Composer({ conversationId, customerName, channelLabel, agentName
         }
       });
     } else {
-      void run(() => sendReplyAction(conversationId, reply, clientId.current)).then((ok) => {
+      const attachments = files.items.map((a) => ({ partType: a.partType, media: a.media }));
+      void run(() => sendReplyAction(conversationId, reply, clientId.current, attachments)).then((ok) => {
         if (ok) {
           setReply('');
+          files.clear();
           clientId.current = newClientMessageId();
           setSentFlash(`Sent to ${customerName}`);
         }
@@ -91,7 +96,7 @@ export function Composer({ conversationId, customerName, channelLabel, agentName
             </button>
           ))}
         <span className="sp" style={{ flex: 1 }} />
-        <span className="mono-sm">{channelLabel.toLowerCase()} · text replies</span>
+        <span className="mono-sm">{channelLabel.toLowerCase()} · text and attachments</span>
       </div>
 
       {mode === 'reply' ? <CopilotBlock conversationId={conversationId} agentName={agentName} initial={copilot} onInsert={(t) => setReply((cur) => (cur.trim() ? `${cur.trim()}\n\n${t}` : t))} /> : null}
@@ -126,7 +131,30 @@ export function Composer({ conversationId, customerName, channelLabel, agentName
             }}
             maxLength={isNote ? 8000 : 32000}
           />
+          {!isNote && files.items.length > 0 ? (
+            <div className="attachments" aria-label="Attachments">
+              {files.items.map((a) => (
+                <span key={a.id} className="fchip">
+                  {a.filename}
+                  <button type="button" className="icon-btn" aria-label={`Remove ${a.filename}`} onClick={() => files.remove(a.id)}>
+                    ✕
+                  </button>
+                </span>
+              ))}
+            </div>
+          ) : null}
           <div className="brow">
+            {!isNote ? (
+              <>
+                <input ref={fileInput} type="file" multiple hidden accept="image/*,application/pdf,audio/*,video/*" onChange={(e) => {
+                  void files.add(e.target.files);
+                  e.target.value = '';
+                }} />
+                <button type="button" className="btn tiny" onClick={() => fileInput.current?.click()} disabled={files.uploading}>
+                  {files.uploading ? 'Uploading…' : 'Attach'}
+                </button>
+              </>
+            ) : null}
             {isNote ? (
               <label className="pass">
                 <input type="checkbox" checked={passToAgent} onChange={(e) => setPassToAgent(e.target.checked)} />
@@ -135,16 +163,16 @@ export function Composer({ conversationId, customerName, channelLabel, agentName
             ) : null}
             <span className="mono-sm">{isNote ? 'visible to CS Lead and CS Exec only' : 'shift + enter for a new line'}</span>
             <span className="sp" style={{ flex: 1 }} />
-            {error ? (
+            {error || files.error ? (
               <span className="err" role="alert">
-                {error}
+                {error ?? files.error}
               </span>
             ) : sentFlash ? (
               <span className="mono-sm" role="status">
                 {sentFlash}
               </span>
             ) : null}
-            <button type="submit" className={isNote ? 'btn tiny primary' : 'btn tiny accent'} disabled={pending || !text.trim()}>
+            <button type="submit" className={isNote ? 'btn tiny primary' : 'btn tiny accent'} disabled={pending || files.uploading || (!text.trim() && (isNote || files.items.length === 0))}>
               {pending ? 'Sending…' : isNote ? 'Add note' : 'Send reply'}
             </button>
           </div>
