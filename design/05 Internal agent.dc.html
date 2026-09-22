@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared/base.css" />
+<link rel="stylesheet" href="shared/one.css" />
+<link rel="stylesheet" href="shared/charts.css" />
+<link rel="stylesheet" href="shared/mock.css" />
+<link rel="stylesheet" href="shared/ocso.css" />
+<style>
+.under{filter:saturate(0.85);opacity:0.72}
+.dt-u .dt-head,.dt-u .dt-row{grid-template-columns:minmax(0,1.4fr) 96px 92px 84px 80px}
+.rdrawer .grp{font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.07em;color:var(--ink-4)}
+.sugg{display:grid;gap:5px}
+.sugg button{text-align:left;border:1px solid var(--border);background:var(--bg-2);border-radius:var(--radius-sm);padding:7px 10px;font:inherit;font-size:12.5px;color:var(--ink-2);cursor:pointer}
+.sugg button:hover{border-color:var(--accent-soft-2);color:var(--accent)}
+.minitable{border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:var(--surface)}
+.minitable .r{display:grid;grid-template-columns:minmax(0,1fr) 62px 56px;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border);font-size:12px;align-items:center}
+.minitable .r:last-child{border-bottom:none}
+.minitable .r.h{background:var(--bg-2);font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-4)}
+.minitable .r .n{font-family:var(--font-mono);font-size:11px;text-align:right;font-variant-numeric:tabular-nums}
+</style>
+<title>Ask OCSO — internal agent</title>
+</helmet>
+
+<div class="state-sw" role="tablist" aria-label="Role">
+  <button class="{{ s_admin }}" onClick="{{ go_admin }}">Tech Admin</button>
+  <button class="{{ s_lead }}" onClick="{{ go_lead }}">CS Lead</button>
+  <button class="{{ s_exec }}" onClick="{{ go_exec }}">CS Exec</button>
+</div>
+
+<div class="app" data-screen-label="05 · OCSO internal agent drawer">
+  <dc-import name="OCSONav" role="{{ role }}" active="ask" hint-size="240px,100vh"></dc-import>
+
+  <main class="main under" style="padding:22px 26px 60px">
+    <div class="topbar" style="margin-bottom:16px">
+      <div class="topbar-search"><span>Search</span><span class="topbar-search-shortcut">⌘K</span></div>
+      <span class="topbar-spacer"></span>
+      <button class="topbar-btn">Last 1h</button>
+      <button class="topbar-btn">Alerts</button>
+      <button class="btn tiny accent">Ask OCSO ⌘J</button>
+    </div>
+
+    <sc-if value="{{ isAdmin }}" hint-placeholder-val="{{ true }}">
+      <div class="page-head"><h1>System control center</h1><p class="page-sub">Meridian Bank · ap-south-1 · build 2026.03.18-a</p></div>
+      <div class="tiles" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
+        <div class="tile"><div class="v">312</div><div class="k">active conversations</div></div>
+        <div class="tile"><div class="v">6 of 10</div><div class="k">healthy workers</div></div>
+        <div class="tile warn"><div class="v">2.9s</div><div class="k">time to first token</div></div>
+        <div class="tile warn"><div class="v">4.1%</div><div class="k">provider error rate</div></div>
+        <div class="tile"><div class="v">91.4%</div><div class="k">cached input tokens</div></div>
+      </div>
+      <div class="dtable dt-u">
+        <div class="dt-head"><span>Worker</span><span>Status</span><span>Convs</span><span>Memory</span><span>Heartbeat</span></div>
+        <div class="dt-row"><span class="mono" style="font-size:11.5px">wkr-7f21a</span><span><span class="schip good">healthy</span></span><span class="mono">9 / 10</span><span class="mono-sm">1.8 GB</span><span class="mono-sm">1s ago</span></div>
+        <div class="dt-row"><span class="mono" style="font-size:11.5px">wkr-4c09b</span><span><span class="schip good">healthy</span></span><span class="mono">8 / 10</span><span class="mono-sm">1.6 GB</span><span class="mono-sm">2s ago</span></div>
+        <div class="dt-row"><span class="mono" style="font-size:11.5px">wkr-91ed4</span><span><span class="schip good">healthy</span></span><span class="mono">7 / 10</span><span class="mono-sm">1.5 GB</span><span class="mono-sm">1s ago</span></div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isLead }}" hint-placeholder-val="{{ false }}">
+      <div class="page-head"><h1>Maya — Customer Support</h1><p class="page-sub">live · WhatsApp, Web, App, Email · prompt v14</p></div>
+      <div class="tiles" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
+        <div class="tile"><div class="v">4,812</div><div class="k">conversations</div></div>
+        <div class="tile"><div class="v">81.4%</div><div class="k">ai containment</div></div>
+        <div class="tile warn"><div class="v">18.6%</div><div class="k">escalation rate</div></div>
+        <div class="tile warn"><div class="v">14</div><div class="k">sla breaches</div></div>
+        <div class="tile"><div class="v">4.41</div><div class="k">csat</div></div>
+      </div>
+      <div class="dtable dt-u">
+        <div class="dt-head"><span>Escalation reason</span><span>Handoffs</span><span>Trend</span><span>Queue</span><span>Owner</span></div>
+        <div class="dt-row"><span>Refund above authority</span><span class="mono">312</span><span class="mono-sm">+18%</span><span class="mono-sm">Cards Tier 2</span><span class="mono-sm">A. Rao</span></div>
+        <div class="dt-row"><span>Hardship language</span><span class="mono">184</span><span class="mono-sm">+4%</span><span class="mono-sm">Hardship</span><span class="mono-sm">A. Rao</span></div>
+        <div class="dt-row"><span>Repeated tool failure</span><span class="mono">99</span><span class="mono-sm">+61%</span><span class="mono-sm">Cards Tier 2</span><span class="mono-sm">T. Shetty</span></div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isExec }}" hint-placeholder-val="{{ false }}">
+      <div class="page-head"><h1>My conversations</h1><p class="page-sub">7 assigned · 4 waiting in Cards &amp; EMI · Tier 2</p></div>
+      <div class="tiles" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
+        <div class="tile"><div class="v">7</div><div class="k">assigned to me</div></div>
+        <div class="tile warn"><div class="v">4</div><div class="k">waiting for human</div></div>
+        <div class="tile"><div class="v">1m 12s</div><div class="k">my first response</div></div>
+        <div class="tile"><div class="v">18</div><div class="k">resolved today</div></div>
+        <div class="tile"><div class="v">4.6</div><div class="k">my csat</div></div>
+      </div>
+      <div class="dtable dt-u">
+        <div class="dt-head"><span>Customer</span><span>Agent</span><span>Control</span><span>SLA</span><span>Time</span></div>
+        <div class="dt-row"><span>Priya Deshmukh</span><span class="mono-sm">Maya</span><span><span class="cstate human"><span class="dot"></span>you</span></span><span class="mono-sm">04:12</span><span class="mono-sm">09:52</span></div>
+        <div class="dt-row"><span>Farida Sheikh</span><span class="mono-sm">Riya</span><span><span class="cstate wait"><span class="dot"></span>waiting</span></span><span class="mono-sm" style="color:var(--danger)">breached</span><span class="mono-sm">09:47</span></div>
+        <div class="dt-row"><span>Arvind Nair</span><span class="mono-sm">Maya</span><span><span class="cstate human"><span class="dot"></span>you</span></span><span class="mono-sm">12:05</span><span class="mono-sm">09:44</span></div>
+      </div>
+    </sc-if>
+  </main>
+</div>
+
+<aside class="rdrawer" aria-label="Ask OCSO">
+  <div class="dh">
+    <span class="a-portrait md" style="background:var(--accent)"><svg viewBox="0 0 56 56" style="width:100%;height:100%;display:block"><circle cx="28" cy="28" r="12" fill="none" stroke="#fff" stroke-width="5"></circle><circle cx="28" cy="16" r="4" fill="#fff"></circle></svg></span>
+    <span class="grow"><b style="font-size:13.5px">Ask OCSO</b><span class="mono-sm" style="display:block">{{ scopeLine }}</span></span>
+    <button class="icon-btn" title="Open full page">⤢</button>
+    <button class="icon-btn" title="Close">✕</button>
+  </div>
+
+  <div class="dbody">
+    <div class="rowsplit"><span class="grp">{{ ctxLine }}</span><span class="sp"></span><span class="mono-sm">{{ roleChip }}</span></div>
+
+    <!-- ══ TECH ADMIN ══ -->
+    <sc-if value="{{ isAdmin }}" hint-placeholder-val="{{ true }}">
+      <div class="aturn me"><span class="who">TS</span><span class="bd">Why did latency spike this morning?</span></div>
+      <div class="aturn"><span class="who" style="background:var(--accent);color:#fff">OC</span><span class="bd">
+        <div class="tool" style="display:flex;align-items:center;gap:8px;font-family:var(--font-mono);font-size:10.5px;color:var(--ink-4)">3 steps · provider telemetry · worker metrics · alerts · 1.6 s</div>
+        <div class="ans">Bedrock <b>ap-south-1</b> started throttling at 09:38. TTFT p95 went 780 ms → 2.9 s for 11 minutes and the provider error rate hit 4.1%.<span class="cref">1</span> Nothing was wrong on our side: workers stayed at 60–90% utilisation and queue age never passed 18 s.<span class="cref">2</span> 3 turns fell back to Anthropic and completed normally.<span class="cref">3</span></div>
+        <div class="minitable">
+          <div class="r h"><span>Window</span><span class="n">TTFT p95</span><span class="n">Err</span></div>
+          <div class="r"><span>09:00–09:38</span><span class="n">780ms</span><span class="n">0.2%</span></div>
+          <div class="r"><span>09:38–09:49</span><span class="n" style="color:var(--danger)">2.9s</span><span class="n" style="color:var(--danger)">4.1%</span></div>
+          <div class="r"><span>09:49–now</span><span class="n">910ms</span><span class="n">0.4%</span></div>
+        </div>
+        <a class="ccard" href="03 System control center.dc.html"><span class="okdot d"></span><span><span class="ct">AWS Bedrock · provider health</span><span class="cs2">alert al_2291 · opened 09:40 · unacknowledged</span></span><span class="mono-sm">open →</span></a>
+        <a class="ccard" href="03 System control center.dc.html#workers"><span class="okdot"></span><span><span class="ct">Worker pool · 6 of 10 healthy</span><span class="cs2">queue age peak 18s · no leases lost</span></span><span class="mono-sm">open →</span></a>
+        <div class="rowsplit"><button class="btn tiny ghost">Acknowledge alert</button><button class="btn tiny ghost">Open trace</button></div>
+      </span></div>
+
+      <div class="aturn me"><span class="who">TS</span><span class="bd">Increase minimum warm workers from 2 to 4.</span></div>
+      <div class="aturn"><span class="who" style="background:var(--accent);color:#fff">OC</span><span class="bd">
+        <div class="confirm">
+          <span class="cl">confirm sensitive change</span>
+          <span class="cx"><b>Worker configuration · min warm workers 2 → 4.</b> Two workers start immediately and the floor stays at 4. Estimated cost +₹6,200/day. Autoscale target, max workers and cooldown are unchanged.</span>
+          <span class="rowsplit"><button class="btn tiny accent">Confirm change</button><button class="btn tiny ghost">Cancel</button><span class="sp"></span><span class="mono-sm">attributed to T. Shetty · audit</span></span>
+        </div>
+        <div class="ans" style="font-size:13px;color:var(--ink-2)">I will apply it through the same control API the settings screen uses. Nothing changes until you confirm.</div>
+      </span></div>
+    </sc-if>
+
+    <!-- ══ CS LEAD ══ -->
+    <sc-if value="{{ isLead }}" hint-placeholder-val="{{ false }}">
+      <div class="aturn me"><span class="who">AR</span><span class="bd">What needs my attention right now?</span></div>
+      <div class="aturn"><span class="who" style="background:var(--accent);color:#fff">OC</span><span class="bd">
+        <div class="tool" style="display:flex;align-items:center;gap:8px;font-family:var(--font-mono);font-size:10.5px;color:var(--ink-4)">4 steps · alerts · sla · quality review · corrections · 2.1 s</div>
+        <div class="ans"><b>Four things, in the order I would take them.</b> Maya's escalation rate has been above threshold for two days and it is one reason: refunds above her ₹5,000 authority, up 18%.<span class="cref">1</span> Riya has 14 SLA breaches this week, all on the hardship queue after 20:00 IST when only two execs are on shift.<span class="cref">2</span> Six prompt corrections are staged and unreviewed.<span class="cref">3</span> And one review scored 2.1 for quoting a fee policy wrongly.<span class="cref">4</span></div>
+        <div class="minitable">
+          <div class="r h"><span>Item</span><span class="n">Impact</span><span class="n">Age</span></div>
+          <div class="r"><span>Escalation rate · Maya</span><span class="n">312 convs</span><span class="n">2d</span></div>
+          <div class="r"><span>SLA breaches · Riya</span><span class="n">14</span><span class="n">6d</span></div>
+          <div class="r"><span>Prompt corrections staged</span><span class="n">6</span><span class="n">4d</span></div>
+          <div class="r"><span>Quality review · 2.1</span><span class="n">1 conv</span><span class="n">1d</span></div>
+        </div>
+        <a class="ccard" href="02 Agent overview.dc.html"><span class="okdot w"></span><span><span class="ct">Maya · escalation reasons</span><span class="cs2">refund above authority · 312 handoffs · +18%</span></span><span class="mono-sm">open →</span></a>
+        <a class="ccard" href="02 Agent overview.dc.html"><span class="okdot"></span><span><span class="ct">Prompt corrections · 6 staged</span><span class="cs2">Behavior 3 · Policies 2 · Escalation 1</span></span><span class="mono-sm">open →</span></a>
+        <div class="ans" style="font-size:12.5px;color:var(--ink-3)">The refund threshold is a policy choice, not a prompt defect — raising it to ₹10,000 would remove an estimated 180 handoffs a week. That needs your approval and a policy note.</div>
+      </span></div>
+
+      <div class="aturn me"><span class="who">AR</span><span class="bd">Show me conversations where Maya struggled with refunds.</span></div>
+      <div class="aturn"><span class="who" style="background:var(--accent);color:#fff">OC</span><span class="bd">
+        <div class="ans">41 conversations in the last 7 days where a refund was discussed and Maya needed more than three turns before escalating.<span class="cref">5</span> The pattern is consistent: she asks for a statement image she does not need.</div>
+        <a class="ccard" href="01 Conversation workspace.dc.html"><span class="okdot w"></span><span><span class="ct">conv_9f41ac · Priya Deshmukh</span><span class="cs2">duplicate EMI debit · 4 turns before handoff · reviewed 4.6</span></span><span class="mono-sm">open →</span></a>
+        <div class="denied"><b style="color:var(--ink-2)">Worker and provider telemetry is not included.</b> Your role covers agent quality and business operations; infrastructure detail sits with the Platform Tech Admin. I can send them a question if you want.</div>
+      </span></div>
+    </sc-if>
+
+    <!-- ══ CS EXEC ══ -->
+    <sc-if value="{{ isExec }}" hint-placeholder-val="{{ false }}">
+      <div class="aturn me"><span class="who">NM</span><span class="bd">What needs my attention right now?</span></div>
+      <div class="aturn"><span class="who" style="background:var(--accent);color:#fff">OC</span><span class="bd">
+        <div class="tool" style="display:flex;align-items:center;gap:8px;font-family:var(--font-mono);font-size:10.5px;color:var(--ink-4)">2 steps · my assignments · pickup queue · 0.8 s</div>
+        <div class="ans"><b>One breach and one about to breach.</b> Farida Sheikh has been waiting 1m 38s past SLA on the hardship queue — nobody has claimed it.<span class="cref">1</span> Priya Deshmukh is yours and has 4m 12s left; the reversal is already confirmed, so a short reply closes it.<span class="cref">2</span> Your other five are stable.</div>
+        <a class="ccard" href="01 Conversation workspace.dc.html"><span class="okdot d"></span><span><span class="ct">Farida Sheikh · hardship plan</span><span class="cs2">voice · Riya · waiting for human · breached 01:38</span></span><span class="mono-sm">claim →</span></a>
+        <a class="ccard" href="01 Conversation workspace.dc.html"><span class="okdot w"></span><span><span class="ct">Priya Deshmukh · duplicate EMI debit</span><span class="cs2">whatsapp · Maya · you are handling · 04:12 to SLA</span></span><span class="mono-sm">open →</span></a>
+      </span></div>
+
+      <div class="aturn me"><span class="who">NM</span><span class="bd">Summarise Priya's case and draft a closing reply.</span></div>
+      <div class="aturn"><span class="who" style="background:var(--accent);color:#fff">OC</span><span class="bd">
+        <div class="ans">Duplicate EMI authorisation of ₹12,480 on 14 Mar, confirmed against the ledger and reversed by you at 09:57 under reference RVSL-5521904. Nothing is pending except telling her.</div>
+        <div class="copilot" style="margin:0">
+          <div class="ch2"><span>draft reply · whatsapp</span><span class="sp" style="flex:1"></span><span class="schip accent">not sent</span></div>
+          <div class="cb">“All done, Priya — ₹12,480 is on its way back to your card ending 4417 and will show within 3 working days. Reference RVSL-5521904. Your next instalment of ₹12,480 is unchanged on 14 April.”</div>
+          <div class="rowsplit"><button class="btn tiny accent">Insert in composer</button><button class="btn tiny ghost">Shorter</button></div>
+        </div>
+        <div class="denied"><b style="color:var(--ink-2)">I cannot show Maya's prompt or the platform's model configuration.</b> Those are CS Lead and Tech Admin surfaces. What you can see is this conversation, its tools and your own workload.</div>
+      </span></div>
+    </sc-if>
+  </div>
+
+  <div class="dfoot">
+    <div class="box" style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:9px 11px;display:grid;gap:8px">
+      <textarea placeholder="Ask about this deployment — answers are cited and scoped to your role" rows="2" style="width:100%;min-height:40px;resize:none;background:transparent;border:none;font:inherit;font-size:13px;color:var(--ink);outline:none"></textarea>
+      <div class="rowsplit"><span class="mono-sm">{{ roleChip }}</span><span class="sp"></span><button class="btn tiny ghost">Attach context</button><button class="btn tiny accent">Send</button></div>
+    </div>
+    <div class="sugg">
+      <button>{{ sugg1 }}</button>
+      <button>{{ sugg2 }}</button>
+    </div>
+  </div>
+</aside>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = { role: 'admin' };
+  renderVals() {
+    const r = this.state.role;
+    const set = (v) => () => this.setState({ role: v });
+    const copy = {
+      admin: {
+        scope: 'scope · platform · ap-south-1',
+        ctx: 'context · system control center',
+        chip: 'role: platform tech admin',
+        s1: 'Which MCP connection is causing failures?',
+        s2: 'Show token spend by agent this week'
+      },
+      lead: {
+        scope: 'scope · Maya — Customer Support',
+        ctx: 'context · virtual agent overview',
+        chip: 'role: cs lead',
+        s1: 'Which agent is escalating most often?',
+        s2: 'Draft a prompt correction from conv_9f41ac'
+      },
+      exec: {
+        scope: 'scope · my conversations',
+        ctx: 'context · conv_9f41ac · Priya Deshmukh',
+        chip: 'role: cs exec',
+        s1: 'Is there a similar case I can copy from?',
+        s2: 'What does policy CRD-114 say about fee waivers?'
+      }
+    }[r];
+    return {
+      role: r,
+      s_admin: r === 'admin' ? 'active' : '', s_lead: r === 'lead' ? 'active' : '', s_exec: r === 'exec' ? 'active' : '',
+      go_admin: set('admin'), go_lead: set('lead'), go_exec: set('exec'),
+      isAdmin: r === 'admin', isLead: r === 'lead', isExec: r === 'exec',
+      scopeLine: copy.scope, ctxLine: copy.ctx, roleChip: copy.chip, sugg1: copy.s1, sugg2: copy.s2
+    };
+  }
+}
+</script>
+</body>
+</html>
