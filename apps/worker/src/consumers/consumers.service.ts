@@ -4,8 +4,10 @@ import { AlertDeliveryService, WebhookDeliveryService, isAlertDeliveryRetryable,
 import type { Logger } from '@ocso/observability';
 import { ocsoMetrics } from '@ocso/observability';
 import { backoffSeconds, type HandlerResult, type QueueAdapter, type QueueSubscription } from '@ocso/queue';
+import type { TaskProtection } from '@ocso/deployment';
 import { ALERT_DELIVERY_ATTEMPTS, WEBHOOK_DELIVERY_ATTEMPTS } from '../alerts/alerts.module.js';
 import { LOGGER, QUEUE } from '../infrastructure/tokens.js';
+import { TASK_PROTECTION } from '../scaling/scaling.module.js';
 
 /**
  * Queue consumers owned by this worker. Turn concurrency = conversations per
@@ -16,6 +18,7 @@ export class ConsumersService {
   private subs: QueueSubscription[] = [];
   private turnConcurrency = 0;
   private turnSub: QueueSubscription | null = null;
+  private turnTimeoutSeconds = 90;
 
   constructor(
     @Inject(QUEUE) private readonly queue: QueueAdapter,
@@ -29,6 +32,7 @@ export class ConsumersService {
     @Inject(ConversationInsightsService) private readonly insights: ConversationInsightsService,
     @Inject(EvaluationService) private readonly evaluations: EvaluationService,
     @Inject(LOGGER) private readonly logger: Logger,
+    @Inject(TASK_PROTECTION) private readonly protection: TaskProtection,
   ) {}
 
   start(settings: WorkerSettings): void {
@@ -83,12 +87,14 @@ export class ConsumersService {
 
   /** (Re)subscribe the turn consumer when concurrency or timeout changes. */
   applyTurnSettings(settings: WorkerSettings): void {
+    this.turnTimeoutSeconds = settings.turnTimeoutSeconds;
     if (this.turnSub && this.turnConcurrency === settings.conversationsPerWorker) return;
     const previous = this.turnSub;
     this.turnConcurrency = settings.conversationsPerWorker;
     this.turnSub = this.queue.consume<{ conversationId: string }>(
       'conversation.turn',
-      (m) => this.measure('conversation.turn', () => this.turns.handle(m)),
+      // ECS scale-in protection only while a turn runs (ADR-023); best effort, never fails the turn.
+      (m) => this.measure('conversation.turn', () => this.protection.around(() => this.turns.handle(m), { turnTimeoutSeconds: this.turnTimeoutSeconds })),
       { concurrency: settings.conversationsPerWorker, visibilityTimeoutSeconds: settings.turnTimeoutSeconds + 30, maxAttempts: 5, pollIntervalMs: 250 },
     );
     if (previous) void previous.stop();

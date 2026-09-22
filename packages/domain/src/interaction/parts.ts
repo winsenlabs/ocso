@@ -6,7 +6,8 @@ import { z } from 'zod';
  * Media bytes are externalized to BlobStore — parts carry references only.
  */
 
-export const MediaStatus = z.enum(['PENDING', 'STORED', 'REJECTED', 'FAILED']);
+/** EXPIRED: bytes deleted under the retention policy (docs/15 §8); the reference stays. */
+export const MediaStatus = z.enum(['PENDING', 'STORED', 'REJECTED', 'FAILED', 'EXPIRED']);
 export type MediaStatus = z.infer<typeof MediaStatus>;
 
 export const MediaRef = z.object({

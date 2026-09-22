@@ -1,0 +1,27 @@
+{
+  "name": "@ocso/deployment",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Deployment adapters (docs/13 §4, ADR-023): map Tech Admin worker scaling settings onto Compose (advisory) or ECS Fargate (Application Auto Scaling + CloudWatch).",
+  "exports": {
+    ".": {
+      "@ocso/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@ocso/domain": "workspace:*",
+    "@aws-sdk/client-application-auto-scaling": "catalog:",
+    "@aws-sdk/client-cloudwatch": "catalog:",
+    "@aws-sdk/client-ecs": "catalog:"
+  }
+}

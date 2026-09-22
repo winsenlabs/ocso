@@ -17,6 +17,9 @@ catalog:
   "@aws-sdk/client-s3": 3.1137.0
   "@aws-sdk/s3-request-presigner": 3.1137.0
   "@aws-sdk/client-sqs": 3.1137.0
+  "@aws-sdk/client-application-auto-scaling": 3.1137.0
+  "@aws-sdk/client-cloudwatch": 3.1137.0
+  "@aws-sdk/client-ecs": 3.1137.0
   "@nestjs/common": 12.0.4
   "@nestjs/core": 12.0.4
   "@nestjs/platform-express": 12.0.4

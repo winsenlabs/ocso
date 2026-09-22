@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { recordAudit } from '../audit/audit.js';
 import { emitEvent } from '../events/outbox.js';
 import type { ActorContext, Db } from '../shared/context.js';
+import { RetentionInput } from '../retention/policy.js';
 
 export type DeploymentSettings = typeof deploymentSettings.$inferSelect;
 export type WorkerSettings = typeof workerSettings.$inferSelect;
@@ -21,7 +22,7 @@ export const DeploymentSettingsInput = z.object({
   allowCrossRegionFallback: z.boolean().optional(),
   maxOutputCostPerMTokMicros: z.number().int().positive().nullable().optional(),
   execsCanViewAiActive: z.boolean().optional(),
-  retention: z.record(z.string(), z.number().int().min(1).max(3650)).optional(),
+  retention: RetentionInput.optional(),
   egressAllowedInternalHosts: z.array(z.string().max(253)).max(200).optional(),
   internalAgentProfileId: z.uuid().nullable().optional(),
   internalAgentConfirmLowWrites: z.boolean().optional(),

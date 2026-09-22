@@ -64,6 +64,10 @@ export const WorkerEnv = z.object({
   WORKER_ID: z.string().optional(),
   /** Overrides the DB setting for local experiments; normally unset. */
   WORKER_CAPACITY: z.coerce.number().int().min(1).optional(),
+  /** CloudWatch namespace for the ADR-023 scaling metrics (ECS); defaults to Terraform's `OCSO/<ECS_CLUSTER>`. */
+  OCSO_METRICS_NAMESPACE: z.string().min(1).max(255).optional(),
+  /** Set by the ECS agent inside every task; enables turn-scoped scale-in protection. */
+  ECS_AGENT_URI: z.string().url().optional(),
 });
 export type WorkerEnv = z.infer<typeof WorkerEnv>;
 

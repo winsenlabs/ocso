@@ -44,6 +44,8 @@ export const conversations = pgTable(
     resolvedBy: uuid(),
     /** Insights job requested for the resolution at this time (re-requested after a later resolve). */
     insightsRequestedAt: ts('insights_requested_at'),
+    /** Content removed under the retention policy (metadata and analytics remain). */
+    contentPurgedAt: ts('content_purged_at'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

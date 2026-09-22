@@ -1,0 +1,1 @@
+ALTER TABLE "conversations" ADD COLUMN "content_purged_at" timestamp with time zone;

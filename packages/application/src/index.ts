@@ -39,3 +39,5 @@ export * from './routing/queues.js';
 export * from './customers/customers.js';
 export * from './audit/audit-query.js';
 export * from './webhooks/index.js';
+export * from './scaling/index.js';
+export * from './retention/index.js';

@@ -57,6 +57,27 @@
       "when": 1790072988299,
       "tag": "0007_insights_marker_and_quality_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790073331303,
+      "tag": "0008_worker_scaling_state",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790076855198,
+      "tag": "0009_conversation_content_purge",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790076855908,
+      "tag": "0010_audit_retention_window",
+      "breakpoints": true
     }
   ]
 }

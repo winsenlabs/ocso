@@ -24,6 +24,7 @@
     "@ocso/db": "workspace:*",
     "@ocso/queue": "workspace:*",
     "@ocso/secrets": "workspace:*",
+    "@ocso/deployment": "workspace:*",
     "@aws-sdk/client-secrets-manager": "catalog:",
     "@aws-sdk/client-sqs": "catalog:",
     "drizzle-orm": "catalog:",

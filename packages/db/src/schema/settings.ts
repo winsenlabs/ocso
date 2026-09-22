@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { bigint, boolean, integer, jsonb, pgTable, real, smallint, text, uuid } from 'drizzle-orm/pg-core';
+import { bigint, boolean, check, integer, jsonb, pgTable, real, smallint, text, uuid } from 'drizzle-orm/pg-core';
 import { ts, updatedAt } from './columns.js';
 
 /** Singleton (id = 1): organization identity and deployment-wide policy (ADR-002). */
@@ -44,3 +44,30 @@ export const workerSettings = pgTable('worker_settings', {
   updatedAt: updatedAt(),
   updatedBy: uuid(),
 });
+
+/**
+ * Singleton (id = 1): the last time the worker leader applied worker_settings
+ * to the deployment platform (ADR-023), and its last describe() snapshot. The
+ * API serves this, so it never needs the platform's scaling permissions.
+ */
+export const workerScalingState = pgTable(
+  'worker_scaling_state',
+  {
+    id: smallint().primaryKey().default(1),
+    driver: text().$type<'compose' | 'ecs'>().notNull(),
+    applyStatus: text().$type<'APPLIED' | 'ADVISORY' | 'FAILED'>().notNull(),
+    /** Advisory text, summary, or failure reason — operator-facing. */
+    applyMessage: text().notNull(),
+    /** ScalingApplyResult (commands, changes, warnings, effective values) or the error code. */
+    applyDetail: jsonb().$type<Record<string, unknown>>().notNull().default({}),
+    attemptedAt: ts('attempted_at').notNull(),
+    lastSucceededAt: ts('last_succeeded_at'),
+    /** worker_settings.updated_at the attempt applied; older than the settings = pending. */
+    settingsUpdatedAt: ts('settings_updated_at').notNull(),
+    deployment: jsonb().$type<Record<string, unknown>>(),
+    describedAt: ts('described_at'),
+    describeError: text(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [check('worker_scaling_state_singleton_ck', sql`${t.id} = 1`)],
+);

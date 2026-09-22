@@ -20,6 +20,7 @@
     "@ocso/channels": "workspace:*",
     "@ocso/config": "workspace:*",
     "@ocso/db": "workspace:*",
+    "@ocso/deployment": "workspace:*",
     "@ocso/domain": "workspace:*",
     "@ocso/events": "workspace:*",
     "@ocso/mcp": "workspace:*",

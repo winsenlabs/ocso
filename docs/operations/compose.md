@@ -109,7 +109,8 @@ docker compose down                       # stop (volumes kept)
 **Scaling workers.** Workers hold conversation leases in PostgreSQL. Any worker can take over a
 conversation whose lease expired, so scaling up or down never loses a conversation (docs/10 §9).
 The Tech Admin worker settings (min/max workers, target utilization) are advisory under Compose
-(`DEPLOYMENT_DRIVER=compose`): you choose the replica count. Size `DATABASE_POOL_SIZE` × (api + all
+(`DEPLOYMENT_DRIVER=compose`): you choose the replica count. The worker settings page shows the exact
+`--scale worker=N` command for the warm floor (see [worker-scaling.md](worker-scaling.md)). Size `DATABASE_POOL_SIZE` × (api + all
 workers) below PostgreSQL's `max_connections` (100 by default).
 
 **Health endpoints.**

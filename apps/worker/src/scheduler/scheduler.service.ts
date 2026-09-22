@@ -1,14 +1,15 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
-import { AlertDeliveryService, AlertEngine, CustomerClaimsIssuer, autoAssignUnclaimed, recordWorkerHealthSample, expireOffers, repairStuckEscalations } from '@ocso/application';
+import { AlertDeliveryService, AlertEngine, CustomerClaimsIssuer, ScalingService, autoAssignUnclaimed, recordWorkerHealthSample, expireOffers, repairStuckEscalations, RetentionService } from '@ocso/application';
 import { cleanupExpiredLeases, expireToolConfirmations, reapLostWorkers, relayScheduledJobs, requestResolvedInsights, sweepStrandedTurns } from '@ocso/agent-runtime';
+import type { BlobStore } from '@ocso/blob';
 import type { WorkerEnv } from '@ocso/config';
 import { healthSamples, uuidv7, type Db } from '@ocso/db';
 import type { Logger } from '@ocso/observability';
 import type { QueueAdapter } from '@ocso/queue';
 import type { SecretStore } from '@ocso/secrets';
-import { DB, ENV, LOGGER, QUEUE, SECRET_STORE } from '../infrastructure/tokens.js';
+import { BLOB_STORE, DB, ENV, LOGGER, QUEUE, SECRET_STORE } from '../infrastructure/tokens.js';
 import { LeaderElection } from './leader.js';
 import { subsystemTasks } from './tasks.registry.js';
 
@@ -39,6 +40,8 @@ export class SchedulerService {
     @Inject(AlertEngine) alerts: AlertEngine,
     @Inject(AlertDeliveryService) alertDelivery: AlertDeliveryService,
     @Inject(CustomerClaimsIssuer) claims: CustomerClaimsIssuer,
+    @Inject(ScalingService) scaling: ScalingService,
+    @Inject(BLOB_STORE) blobs: BlobStore,
   ) {
     this.leader = new LeaderElection(env.DATABASE_URL, 'ocso:scheduler');
     this.tasks = [
@@ -53,8 +56,9 @@ export class SchedulerService {
       { name: 'health-sample', everySeconds: 60, run: ({ db }) => sampleDatabaseHealth(db) },
       { name: 'worker-health-sample', everySeconds: 60, run: ({ db }) => recordWorkerHealthSample(db) },
       { name: 'request-insights', everySeconds: 30, run: ({ db, queue }) => requestResolvedInsights(db, queue) },
+      { name: 'retention', everySeconds: 3600, run: ({ db }) => new RetentionService(db, blobs, (msg, err) => logger.warn({ err }, msg)).run() },
       { name: 'purge-done-jobs', everySeconds: 3600, run: ({ db }) => db.execute(sql`DELETE FROM jobs WHERE status = 'done' AND completed_at < now() - interval '1 day'`) },
-      ...subsystemTasks({ db, env, secrets, queue, alerts, alertDelivery, claims }),
+      ...subsystemTasks({ db, env, secrets, queue, alerts, alertDelivery, claims, scaling }),
     ];
   }
 

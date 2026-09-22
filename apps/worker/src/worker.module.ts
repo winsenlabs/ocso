@@ -5,10 +5,11 @@ import { WorkerInfrastructureModule } from './infrastructure/infrastructure.modu
 import { WorkerLifecycleService } from './runtime/lifecycle.service.js';
 import { RuntimeModule } from './runtime/runtime.module.js';
 import { SchedulerService } from './scheduler/scheduler.service.js';
+import { WorkerScalingModule } from './scaling/scaling.module.js';
 
 /** Worker process: executes turns and background jobs; no HTTP API (build rule §18). */
 @Module({
-  imports: [WorkerInfrastructureModule, RuntimeModule, WorkerAlertsModule],
+  imports: [WorkerInfrastructureModule, RuntimeModule, WorkerAlertsModule, WorkerScalingModule],
   providers: [ConsumersService, SchedulerService, WorkerLifecycleService],
 })
 export class WorkerModule {}

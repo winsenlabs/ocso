@@ -306,3 +306,34 @@ Autonomous customer-facing AI output is permitted **only** in `AI_ACTIVE`. `AI_R
 **Decision.** The leader publishes CloudWatch metrics every 60 s (custom metrics are 1-minute resolution): `SlotDemand` (active + queued conversations), `Workers`, `OldestQueueAgeSeconds`, `TurnsInFlight`, `TurnLatencyP95`. ECS worker service scaling = target tracking on metric-math "slot demand per worker" with target = conversations-per-worker × target utilization, plus step scaling on queue age for bursts and scale-from-floor. Workers enable ECS task scale-in protection only while a turn is running (Fargate gives ≤ 120 s on stop). Tech Admin settings map to `RegisterScalableTarget` / `PutScalingPolicy` / `PutMetricAlarm` via the ECS deployment adapter; Compose deployment adapter reports settings as advisory (replica count is operator-controlled).
 
 **Why.** docs/10 §6 — scale on conversation demand and queue age, not CPU.
+
+**Implementation (as built).** Operator note: `docs/operations/worker-scaling.md`.
+
+- **Package.** `@ocso/deployment` is framework-free. It defines the `DeploymentAdapter` contract: `describe`, `applyScaling`, `publishMetrics` and `taskProtection`. It has two drivers:
+  - `ComposeDeploymentAdapter` is always ADVISORY. It returns the exact `docker compose up -d --scale worker=N` for the warm floor and lists the settings Compose cannot enforce.
+  - `EcsDeploymentAdapter` uses AWS SDK v3. Its clients are injectable, so the tests use fakes rather than a mocking library.
+  - Selection is `createDeploymentAdapter(env)` in `@ocso/bootstrap`, worker only.
+- **Who applies.** Only the worker scheduler leader applies scaling. The worker is the one process with the scaling IAM.
+  - It reconciles when it becomes leader, every 5 min, and on `config.changed{area:'workers'}` (leader only).
+  - On ECS it publishes the metrics every 60 s.
+  - `ScalingService` (`@ocso/application`) serializes and coalesces reconciles. It records every attempt in the singleton `worker_scaling_state`: status APPLIED/ADVISORY/FAILED, message, detail, the settings version applied, and the last `describe()` snapshot.
+  - The API serves this record from the DB (`GET /v1/settings/workers` → `scaling`, `GET /v1/settings/workers/deployment`) and holds no AWS scaling permissions. `PENDING` = settings newer than the last attempt.
+- **Terraform contract.** Terraform (ADR-022) creates the scalable target, `<ECS_CLUSTER>-worker-slot-demand` (target tracking), `<ECS_CLUSTER>-worker-queue-age` (step) and the alarm `<ECS_CLUSTER>-worker-queue-age-high`. It ignores the attributes OCSO owns at runtime.
+  - The adapter addresses only those names. It never lists, deletes or creates anything else, and it fails (`scalable_target_missing`) rather than registering a target Terraform did not create.
+  - Reconcile reads first and writes only what differs, comparing semantic fingerprints. Re-putting a target-tracking policy recreates its alarms, so an unconditional re-put every 5 min would keep resetting their evaluation.
+  - The existing alarm keeps Terraform's metric (SQS `ApproximateAgeOfOldestMessage`). Only its threshold changes, plus the step policy in its actions if missing, so Terraform never fights it. A missing alarm is created on OCSO's `OldestQueueAgeSeconds`.
+- **Signals.** Namespace `OCSO_METRICS_NAMESPACE` (default `OCSO/<ECS_CLUSTER>`), single dimension `Service=worker`, zeros published.
+  - `SlotDemand` = busy leases + ready turn wake-ups (queue stats).
+  - `Workers` = HEALTHY with heartbeat ≤ 3 × interval.
+  - `OldestQueueAgeSeconds` comes from the queue driver. Under SQS, whose stats cannot report age, it is the oldest unprocessed customer message in an AI-controlled conversation with no running turn (the sweeper's predicate).
+  - The metric math uses `Average` for both inputs, not `Sum`, so two leaders overlapping for a moment cannot double demand. Target = conversations per worker × utilization. Scale-out cooldown 60 s; scale-in cooldown from settings.
+  - Step policy: +1 task at the threshold, +3 at threshold + 60 s. `scaleOutQueueDepth` needs no separate ECS rule because queued turns are already in `SlotDemand`.
+- **Deviations from the decision text.**
+  - (1) Autoscaling *off* pins min = max = warm floor and **leaves the policies and alarm in place** instead of deleting them. Terraform owns their existence and would recreate them, and with min = max they cannot move capacity.
+  - (2) The fleet floor is ≥ 1 on every driver. The leader publishing the signals is a worker, so from zero the fleet could never scale out again. A setting of 0 is raised, with a warning.
+  - (3) Suspended dynamic scaling and disabled alarm actions set outside OCSO are reported as warnings, not reverted.
+- **Task protection.** `$ECS_AGENT_URI/task-protection/v1/state`, reference-counted around the `conversation.turn` handler.
+  - Updates are serialized and computed from the holder count at send time, so bursts collapse into one call.
+  - Expiry = 2 × turn timeout + 2 min, refreshed while turns keep running.
+  - Failures are logged (rate-limited) and never affect a turn.
+- **Still open.** The metric-math expression is unverified against real CloudWatch data (validate with GetMetricData). The protection toggle's API throttling behaviour under heavy churn is unmeasured.

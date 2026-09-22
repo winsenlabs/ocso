@@ -30,7 +30,8 @@
     "@ocso/secrets": "workspace:*",
     "@ocso/mcp": "workspace:*",
     "@ocso/model-providers": "workspace:*",
-    "@ocso/alerts": "workspace:*"
+    "@ocso/alerts": "workspace:*",
+    "@ocso/deployment": "workspace:*"
   },
   "devDependencies": {
     "@ocso/db": "workspace:*"

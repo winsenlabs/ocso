@@ -1,6 +1,6 @@
 import { Inject, Injectable, type OnApplicationBootstrap, type OnApplicationShutdown } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
-import { EVENTS_CHANNEL, SettingsService, type WorkerSettings } from '@ocso/application';
+import { EVENTS_CHANNEL, ScalingService, SettingsService, type WorkerSettings } from '@ocso/application';
 import { HotContextCache, LeaseManager, TurnProcessor } from '@ocso/agent-runtime';
 import type { PgListener } from '@ocso/bootstrap';
 import { virtualAgents, conversations, type Db } from '@ocso/db';
@@ -31,6 +31,7 @@ export class WorkerLifecycleService implements OnApplicationBootstrap, OnApplica
     @Inject(LISTENER) private readonly listener: PgListener,
     @Inject(DB) private readonly db: Db,
     @Inject(LOGGER) private readonly logger: Logger,
+    @Inject(ScalingService) private readonly scaling: ScalingService,
   ) {}
 
   get ready(): boolean {
@@ -86,7 +87,7 @@ export class WorkerLifecycleService implements OnApplicationBootstrap, OnApplica
   /** Realtime events: cache invalidation and mid-turn cancellation (ADR-019). */
   private async onEvent(channel: string, payload: string): Promise<void> {
     if (channel !== EVENTS_CHANNEL) return;
-    let event: { type?: string; conversationId?: string; payload?: { scope?: string } };
+    let event: { type?: string; conversationId?: string; payload?: { scope?: string; area?: string } };
     try {
       event = JSON.parse(payload);
     } catch {
@@ -94,6 +95,9 @@ export class WorkerLifecycleService implements OnApplicationBootstrap, OnApplica
     }
     if (event.type === 'cache.invalidated' && event.payload?.scope) {
       this.hot.dropScope(event.payload.scope);
+    } else if (event.type === 'config.changed' && event.payload?.area === 'workers' && this.scheduler.isLeader) {
+      // Only the leader applies scaling (ADR-023); others pick settings up on heartbeat.
+      void this.scaling.reconcile('config_changed').catch((err: unknown) => this.logger.warn({ err }, 'scaling reconcile failed'));
     } else if (event.type === 'interaction.received' && event.conversationId && this.turns.activeConversations().includes(event.conversationId)) {
       const [row] = await this.db
         .select({ policy: virtualAgents.midTurnPolicy })

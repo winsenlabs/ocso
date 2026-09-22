@@ -1,4 +1,4 @@
-import { McpConnectionService, relayOutboxToWebhooks, type AlertDeliveryService, type AlertEngine, type CustomerClaimsIssuer } from '@ocso/application';
+import { McpConnectionService, relayOutboxToWebhooks, type AlertDeliveryService, type AlertEngine, type CustomerClaimsIssuer, type ScalingService } from '@ocso/application';
 import type { WorkerEnv } from '@ocso/config';
 import type { Db } from '@ocso/db';
 import type { QueueAdapter } from '@ocso/queue';
@@ -13,6 +13,7 @@ export interface SubsystemDeps {
   alerts: AlertEngine;
   alertDelivery: AlertDeliveryService;
   claims: CustomerClaimsIssuer;
+  scaling: ScalingService;
 }
 
 /**
@@ -29,5 +30,9 @@ export function subsystemTasks(deps: SubsystemDeps): ScheduledTask[] {
     { name: 'alert-redispatch', everySeconds: 120, run: () => deps.alertDelivery.redispatchPending(deps.queue) },
     { name: 'retire-signing-keys', everySeconds: 3600, run: () => deps.claims.retireExpired() },
     { name: 'webhook-relay', everySeconds: 2, run: () => relayOutboxToWebhooks(deps.db, deps.queue) },
+    // Worker scaling (ADR-023): CloudWatch signals each minute (ECS only); settings are
+    // reconciled every 5 min here and immediately on config.changed (lifecycle service).
+    ...(deps.scaling.publishesMetrics ? [{ name: 'scaling-metrics', everySeconds: 60, run: () => deps.scaling.publishMetrics() }] : []),
+    { name: 'scaling-reconcile', everySeconds: 300, run: () => deps.scaling.reconcile('periodic') },
   ];
 }

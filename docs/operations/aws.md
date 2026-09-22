@@ -83,7 +83,8 @@ ACCOUNT=$(aws sts get-caller-identity --query Account --output text); REGION=ap-
 REGISTRY=$ACCOUNT.dkr.ecr.$REGION.amazonaws.com
 aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $REGISTRY
 for target in api worker web migrate; do
-  docker build --target $target -t $REGISTRY/ocso-$target:$TAG .   # from the repository root
+  # from the repository root; APP_VERSION is reported by the app and its telemetry
+  docker build --target $target --build-arg APP_VERSION=$TAG -t $REGISTRY/ocso-$target:$TAG .
   docker push $REGISTRY/ocso-$target:$TAG
 done
 ```
@@ -255,16 +256,15 @@ requires them when the driver is `ecs`, but its role cannot act on them.
 - **Fargate Spot.** `worker.use_spot` puts the warm floor on on-demand FARGATE and the burst on
   FARGATE_SPOT. Spot tasks can be reclaimed with 2 minutes' notice; leases make that safe but slower.
 
-> **Current state of the code (2026-09-22):** the worker-side ECS deployment adapter is being written.
-> Until it ships:
-> - the target-tracking policy sits in INSUFFICIENT_DATA and does nothing
-> - only the SQS queue-age step policy scales **out**
-> - nothing scales **in** automatically
-> - min/max stay at the Terraform values
+> **Runtime behaviour** is described in [worker-scaling.md](worker-scaling.md). In short:
+> - The worker leader publishes the metrics every 60 s and reconciles settings every 5 min and on every change.
+> - It rewrites the target-tracking metric math with `Average` for both inputs.
+> - It changes only the queue-age alarm's threshold.
+> - With autoscaling off it pins min = max.
+> - The outcome shows in `GET /v1/settings/workers` (`scaling`).
 >
-> Lower the count by hand (`aws application-autoscaling register-scalable-target … --min-capacity`, or
-> `update-service --desired-count` within min/max). Before relying on target tracking, check the
-> metric-math expression with `aws cloudwatch get-metric-data` against real data (ADR-023).
+> Before relying on target tracking, check the metric-math expression with `aws cloudwatch
+> get-metric-data` against real data (ADR-023).
 
 ## 8. Observability
 
@@ -313,9 +313,10 @@ organization needs a regional RTO.
 
 ## 10. Known gaps and follow-ups
 
-1. **Scaling signals are not published yet.** The worker-side ECS deployment adapter (metrics, runtime
-   policies, task protection) is in progress (§7). The metric-math expression is also unvalidated
-   (ADR-023).
+1. **Scaling metric math is unvalidated.** The worker's ECS deployment adapter now publishes the
+   signals, applies runtime policies and toggles task protection (§7, worker-scaling.md). The
+   `IF(workers > 0, demand / workers, demand)` expression still needs a GetMetricData check against real
+   data (ADR-023).
 2. **TEMP blob lifecycle.** Resolved: the S3 blob store tags TEMP objects `ocso-retention=TEMP`
    (the task roles hold `s3:PutObjectTagging`), which the `expire-temp-tag` lifecycle rule matches.
 3. **Verified only with `terraform validate` / `fmt`.** No `plan`/`apply` has been run against a real
