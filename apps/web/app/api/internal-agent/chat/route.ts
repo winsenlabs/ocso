@@ -1,4 +1,5 @@
 import { apiBaseUrl, readSessionToken } from '@/lib/api/client';
+import { crossOriginRejected, isSameOriginRequest } from '@/lib/same-origin';
 import { MAX_CHAT_BODY_BYTES, forwardChat, jsonError } from '../forward';
 
 /**
@@ -8,6 +9,7 @@ import { MAX_CHAT_BODY_BYTES, forwardChat, jsonError } from '../forward';
  * and streams the answer back.
  */
 export async function POST(request: Request): Promise<Response> {
+  if (!isSameOriginRequest(request)) return crossOriginRejected();
   const token = await readSessionToken();
   if (!token) return jsonError(401, 'authentication', 'unauthenticated', 'Sign in required');
 

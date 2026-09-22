@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { apiBaseUrl, readSessionToken } from '@/lib/api/client';
+import { crossOriginRejected, isSameOriginRequest } from '@/lib/same-origin';
 
 const Id = z.uuid();
 const MAX_BYTES = 25 * 1024 * 1024;
@@ -11,6 +12,7 @@ const MAX_BYTES = 25 * 1024 * 1024;
  * the API validates it against the conversation channel and stores it.
  */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<Response> {
+  if (!isSameOriginRequest(request)) return crossOriginRejected();
   const { id } = await params;
   if (!Id.safeParse(id).success) return Response.json({ error: { code: 'invalid_conversation', message: 'Unknown conversation' } }, { status: 400 });
   const token = await readSessionToken();
