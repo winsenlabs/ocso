@@ -30,9 +30,15 @@ function loadWorkerEnv(): WorkerEnv {
     },
     {
       provide: DATABASE,
-      inject: [ENV],
-      useFactory: (env: WorkerEnv): Database =>
-        createDatabase({ connectionString: env.DATABASE_URL, maxConnections: env.DATABASE_POOL_SIZE, applicationName: 'ocso-worker', ssl: env.DATABASE_SSL }),
+      inject: [ENV, LOGGER],
+      useFactory: (env: WorkerEnv, logger: Logger): Database =>
+        createDatabase({
+          connectionString: env.DATABASE_URL,
+          maxConnections: env.DATABASE_POOL_SIZE,
+          applicationName: 'ocso-worker',
+          ssl: env.DATABASE_SSL,
+          onError: (err) => logger.warn({ err }, 'idle database connection lost; the pool reconnects'),
+        }),
     },
     { provide: DB, inject: [DATABASE], useFactory: (d: Database) => d.db },
     {
