@@ -6,6 +6,7 @@ import { MemoryQueue } from '@ocso/queue';
 import type { Principal } from '@ocso/auth';
 import {
   AgentService,
+  CustomerService,
   InboxService,
   IngressService,
   addNote,
@@ -101,6 +102,26 @@ describe('control, visibility, timeline', () => {
     const admin: Principal = { ...execInTeam, role: 'PLATFORM_TECH_ADMIN' };
     expect((await inbox.list(admin, policy, { view: 'all', limit: 50 })).items.length).toBe(0);
     expect(all.counts.ai).toBe(2);
+  });
+
+  it('lists only the conversations an exec may open on a customer record', async () => {
+    const policy = { execsCanViewAiActive: true };
+    const [visible] = await t.db.select().from(conversations).limit(1);
+    const otherQueue = uuidv7();
+    await t.db.insert(queues).values({ id: otherQueue, name: 'Private banking' });
+    const hidden = uuidv7();
+    await t.pool.query(
+      `INSERT INTO conversations (id, customer_id, agent_id, channel_id, type, queue_id, last_preview, control_state, resolved_at) SELECT $1, customer_id, agent_id, channel_id, type, $2, 'private matter', 'RESOLVED', now() FROM conversations WHERE id = $3`,
+      [hidden, otherQueue, visible!.id],
+    );
+    const execInTeam: Principal = { userId: uuidv7(), role: 'CS_EXEC', displayName: 'E', teamIds: [teamId], via: 'UI' };
+    const svc = new CustomerService(t.db);
+    const asExec = await svc.get(execInTeam, policy, visible!.customerId);
+    expect(asExec.conversations.map((c) => c.id)).not.toContain(hidden);
+    expect(JSON.stringify(asExec)).not.toContain('private matter');
+    const asLead = await svc.get(lead, policy, visible!.customerId);
+    expect(asLead.conversations.map((c) => c.id)).toContain(hidden);
+    await t.pool.query(`DELETE FROM conversations WHERE id = $1`, [hidden]);
   });
 
   it('applies control transitions with timeline, audit and events', async () => {

@@ -60,10 +60,12 @@ export class CustomerService {
     const [row] = await this.db.select().from(customers).where(and(eq(customers.id, id), this.scope(principal, policy)));
     if (!row) throw forbidden('customer', 'not permitted or not found');
     const identities = await this.db.select().from(customerIdentities).where(eq(customerIdentities.customerId, id));
+    // Only conversations this principal may open: previews are message content.
+    const convScope = conversationScope(principal, policy);
     const convs = await this.db
       .select({ id: conversations.id, controlState: conversations.controlState, openedAt: conversations.openedAt, lastPreview: conversations.lastPreview, agentId: conversations.agentId })
       .from(conversations)
-      .where(eq(conversations.customerId, id))
+      .where(convScope ? and(eq(conversations.customerId, id), convScope) : eq(conversations.customerId, id))
       .orderBy(desc(conversations.openedAt))
       .limit(50);
     return { ...row, identities: identities.map((i) => ({ kind: i.kind, display: maskIdentity(`${i.kind}:${i.value}`), verified: i.verified })), conversations: convs };
