@@ -54,6 +54,8 @@ export const FEATURE_MODULES = [
         ...loggerOptions({ service: 'ocso-api', version: process.env['APP_VERSION'] ?? 'dev', level: process.env['LOG_LEVEL'] ?? 'info' }),
         autoLogging: { ignore: (req) => (req.url ?? '').startsWith('/health') },
         customProps: (req) => ({ correlationId: (req as { correlationId?: string }).correlationId }),
+        // Query strings can carry OAuth codes/state and webhook verify tokens; log paths only.
+        serializers: { req: (req: { id?: unknown; method?: string; url?: string }) => ({ id: req.id, method: req.method, path: (req.url ?? '').split('?')[0] }) },
       },
     }),
     InfrastructureModule,

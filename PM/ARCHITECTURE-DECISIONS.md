@@ -277,6 +277,14 @@ Autonomous customer-facing AI output is permitted **only** in `AI_ACTIVE`. `AI_R
 
 **Consequences.** OCSO owns the OAuth state machine (DB-backed PKCE/state records with expiry). Compose demo MCP server needs an explicit egress host allowlist because it lives on a private network (SSRF guard blocks private ranges by default).
 
+**Implementation rules (as built).**
+- Connection names are slugs (`[a-z0-9-]`, 2–40 chars) because they prefix model-facing tool names (`<connection>__<tool>`), which are unique deployment-wide; personal copies of a USER template get `<name>_u<8 hex>`.
+- Plain `http://` is accepted only for `INTERNAL` connections whose host is in `egressAllowedInternalHosts`; everything else must be `https://`.
+- Tool drift: a change to schema, title, description, output schema or annotations un-approves an approved tool (`changedSinceApproval`) — descriptions are model-visible, so they are a prompt-injection surface. Vanished tools get `removedAt`.
+- OAuth `state` is stored only as a SHA-256 hash and the pending row is deleted before the exchange (single use). Refresh-token rotation is compare-and-swap on the secret version. The callback answers with a 302 carrying only the connection id and an ok/error code; the API request logger records paths without query strings.
+- Personal copies auto-approve only tools whose definition exactly matches the admin-approved template tool.
+- Known gap: a worker losing a refresh race may fail one call before re-reading rotated tokens (fix belongs in `@ocso/mcp` credential session).
+
 **Spec impact.** docs/08 §2 "OAuth 2.1 flows where supported" — refined with the concrete client-registration order (CIMD → pre-registered → DCR fallback).
 
 ---

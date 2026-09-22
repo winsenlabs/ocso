@@ -7,9 +7,10 @@ import type { WorkerEnv } from '@ocso/config';
 import { healthSamples, uuidv7, type Db } from '@ocso/db';
 import type { Logger } from '@ocso/observability';
 import type { QueueAdapter } from '@ocso/queue';
-import { DB, ENV, LOGGER, QUEUE } from '../infrastructure/tokens.js';
+import type { SecretStore } from '@ocso/secrets';
+import { DB, ENV, LOGGER, QUEUE, SECRET_STORE } from '../infrastructure/tokens.js';
 import { LeaderElection } from './leader.js';
-import { EXTRA_TASKS } from './tasks.registry.js';
+import { subsystemTasks } from './tasks.registry.js';
 
 export interface ScheduledTask {
   name: string;
@@ -34,6 +35,7 @@ export class SchedulerService {
     @Inject(QUEUE) private readonly queue: QueueAdapter,
     @Inject(ENV) env: WorkerEnv,
     @Inject(LOGGER) private readonly logger: Logger,
+    @Inject(SECRET_STORE) secrets: SecretStore,
   ) {
     this.leader = new LeaderElection(env.DATABASE_URL, 'ocso:scheduler');
     this.tasks = [
@@ -47,7 +49,7 @@ export class SchedulerService {
       { name: 'relay-scheduled-jobs', everySeconds: 5, run: ({ db, queue }) => relayScheduledJobs(db, queue) },
       { name: 'health-sample', everySeconds: 60, run: ({ db }) => sampleDatabaseHealth(db) },
       { name: 'purge-done-jobs', everySeconds: 3600, run: ({ db }) => db.execute(sql`DELETE FROM jobs WHERE status = 'done' AND completed_at < now() - interval '1 day'`) },
-      ...EXTRA_TASKS,
+      ...subsystemTasks({ db, env, secrets }),
     ];
   }
 
