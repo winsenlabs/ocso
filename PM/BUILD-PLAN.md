@@ -36,16 +36,16 @@ A task is only COMPLETE when its acceptance criteria are demonstrated by an auto
 | Phase | Name | Exit criterion | Status |
 |---|---|---|---|
 | P0 | Research & planning | Research notes, BUILD-PLAN, ADRs committed | COMPLETE |
-| P1 | Foundation | `docker compose up` yields healthy web/api/worker/db; login works for all three roles | IN PROGRESS — monorepo, config, logging, errors, DB + migrations + runner, auth/RBAC/setup API done and tested; worker app, web shell (agent running), Compose pending |
-| P2 | Conversation spine | Customer holds a persistent multimodal web-chat conversation with a named agent (mock model) | IN PROGRESS — domain model, ingress, identity, inbox, timeline, control transitions done and tested; API routes, web chat endpoints, workspace UI pending |
-| P3 | Agent runtime & prompt compiler | Robust persistent streamed turns via AI SDK behind OCSO interfaces; prompt versions; summaries; usage | IN PROGRESS — compiler, versions, turn processor, agent loop, usage, streaming deltas done and tested; rolling summary job pending |
-| P4 | Provider fleet & caching | Six provider adapters, logical profiles, policy-bound fallback, provider prompt caching + OCSO turn cache with metrics | IN PROGRESS — six adapters + per-provider caching + contract tests, fallback policy, gateway, hot turn cache done; profile/provider admin API + UI pending; live verification needs credentials |
-| P5 | MCP & tools | Admin connects an MCP server (OAuth 2.1), approves tools; agent calls tools safely with authorization + confirmation | IN PROGRESS — tool authorizer, runner, confirmation hold done; MCP package (agent running) and admin flow pending |
-| P6 | WhatsApp & channel behavior | Production-style WhatsApp channel: verification, identity, media, delivery status, idempotency | IN PROGRESS — adapter, delivery, media, statuses done and tested with fixtures; webhook routes pending; live verification needs a Meta number |
-| P7 | Human operations | Full AI → human → AI lifecycle with pickup, auto-assign, notes, SLA, copilot | IN PROGRESS — handoff/assignment/take-over/return-to-AI services done and tested; API, UI, SLA scheduler, copilot pending |
-| P8 | Observability & alerts | Role-specific telemetry; alert engine with dedupe, lifecycle and pluggable delivery | NOT STARTED |
-| P9 | Internal OCSO agent | Permissioned conversational operation of OCSO with confirmation + audit | NOT STARTED |
-| P10 | Scaling & AWS production | Leases/recovery hardened; SQS/S3/Secrets Manager adapters; ECS Fargate Terraform; autoscaling adapter; load + chaos tests | NOT STARTED |
+| P1 | Foundation | `docker compose up` yields healthy web/api/worker/db; login works for all three roles | IN PROGRESS — foundation, auth/RBAC, web foundation complete; Compose verification in progress |
+| P2 | Conversation spine | Customer holds a persistent multimodal web-chat conversation with a named agent (mock model) | IN PROGRESS — spine, ingress, web chat API complete and E2E-tested; workspace UI + widget being built |
+| P3 | Agent runtime & prompt compiler | Robust persistent streamed turns via AI SDK behind OCSO interfaces; prompt versions; summaries; usage | IN PROGRESS — compiler, versions, turns, summaries, usage, streaming complete and tested; prompt editor UI (E3.4) pending |
+| P4 | Provider fleet & caching | Six provider adapters, logical profiles, policy-bound fallback, provider prompt caching + OCSO turn cache with metrics | IN PROGRESS — adapters, per-provider caching, fallback, turn cache complete; profiles UI being built |
+| P5 | MCP & tools | Admin connects an MCP server (OAuth 2.1), approves tools; agent calls tools safely with authorization + confirmation | IN PROGRESS — MCP manager, OAuth 2.1, authorization, confirmation, customer claims complete; UI being built |
+| P6 | WhatsApp & channel behavior | Production-style WhatsApp channel: verification, identity, media, delivery status, idempotency | IN PROGRESS — WhatsApp adapter + webhooks complete; channel setup UI pending; live verification needs Meta number |
+| P7 | Human operations | Full AI → human → AI lifecycle with pickup, auto-assign, notes, SLA, copilot | IN PROGRESS — lifecycle, assignment, copilot backend complete and tested; workspace UI being built |
+| P8 | Observability & alerts | Role-specific telemetry; alert engine with dedupe, lifecycle and pluggable delivery | IN PROGRESS — OTel + alert engine/delivery complete; telemetry/analytics/quality backend and screens in progress |
+| P9 | Internal OCSO agent | Permissioned conversational operation of OCSO with confirmation + audit | IN PROGRESS — backend complete and tested; drawer UI being built |
+| P10 | Scaling & AWS production | Leases/recovery hardened; SQS/S3/Secrets Manager adapters; ECS Fargate Terraform; autoscaling adapter; load + chaos tests | IN PROGRESS — SQS/S3/Secrets Manager adapters done; deployment adapter + Terraform in progress; load/chaos pending |
 | P11 | Hardening & release | Full e2e suite, security review, docs, operator runbooks | NOT STARTED |
 
 Phases are vertical slices: each includes persistence, authorization, API, UI where relevant, tests and observability (build rule §22).
@@ -63,7 +63,7 @@ Phases are vertical slices: each includes persistence, authorization, API, UI wh
 | T0.1.4 | NestJS 12, Next.js 16, TypeScript 7, ORM/migrations, validation, testing, OpenTelemetry, pnpm/turbo → `research/04-backend-frontend-stack.md` | COMPLETE |
 | T0.1.5 | SQS, ECS Fargate autoscaling, S3, Secrets Manager, Terraform, Compose, OTel→CloudWatch → `research/05-aws-deploy-and-queues.md` | COMPLETE |
 
-### E0.2 Planning artifacts — IN PROGRESS
+### E0.2 Planning artifacts — IN PROGRESS — living documents, updated as work lands
 | ID | Task | Status |
 |---|---|---|
 | T0.2.1 | `PM/BUILD-PLAN.md` (this file) | IN PROGRESS |
@@ -74,7 +74,7 @@ Phases are vertical slices: each includes persistence, authorization, API, UI wh
 
 ## P1 — Foundation
 
-### E1.1 Monorepo & toolchain — NOT STARTED
+### E1.1 Monorepo & toolchain — IN PROGRESS — monorepo/toolchain done; source-guard lint + CI workflow in progress
 **T1.1.1 Workspace scaffold** — NOT STARTED
 - Subtasks: pnpm workspace + catalogs; turbo pipeline (`build`, `typecheck`, `lint`, `test`, `test:int`); strict base tsconfig; ESLint + Prettier; `.editorconfig`; `.nvmrc`; `.env.example`.
 - Layout: `apps/{api,worker,web}`, `packages/{domain,contracts,db,events,queue,auth,secrets,blob,config,observability,prompt-compiler,model-providers,agent-runtime,channels,mcp,alerts,deployment}`, `examples/mcp-bank-demo`, `infra/{compose,aws}`.
@@ -90,27 +90,27 @@ Phases are vertical slices: each includes persistence, authorization, API, UI wh
 **T1.1.3 CI workflow** — NOT STARTED
 - GitHub Actions: install, lint, typecheck, unit, integration (Postgres service), web build, e2e (Playwright) on PR.
 
-### E1.2 Configuration, logging, errors — NOT STARTED
+### E1.2 Configuration, logging, errors — COMPLETE
 **T1.2.1 Typed configuration** (`packages/config`) — zod-validated env for api/worker/web; adapter selection (`QUEUE_DRIVER=postgres|sqs`, `BLOB_DRIVER=local|s3`, `SECRETS_DRIVER=local|aws`, `DEPLOYMENT_DRIVER=compose|ecs`); fail-fast with readable errors. Tests: invalid config rejected; secrets never echoed in error output.
 
 **T1.2.2 Typed error model** (`packages/domain/errors`) — categories from docs/14 §5 (validation, authentication, authorization, not_found, conflict, provider_unavailable, provider_rate_limited, tool_unavailable, tool_rejected, timeout, policy_denied, capacity, internal); Nest exception filter mapping to HTTP + stable error codes; never leak raw provider exceptions. Tests: mapping table unit test.
 
 **T1.2.3 Structured logging** (`packages/observability`) — pino JSON with redaction paths for secrets/tokens/authorization headers; correlation fields (request_id, conversation_id, turn_id, worker_id, trace_id). Tests: redaction unit test.
 
-### E1.3 Database foundation — NOT STARTED
+### E1.3 Database foundation — COMPLETE
 **T1.3.1 ORM + migration tooling** — per ADR-004; migrations committed as SQL; `migrate` entrypoint run as an explicit deploy step (Compose one-shot service / ECS one-off task), never on app startup.
 **T1.3.2 Core schema v1** — users, sessions, teams, team_members, deployment_settings, audit_events (append-only enforced by trigger), outbox/event tables. Later phases add their own migrations.
 **T1.3.3 Test database harness** — per-suite database creation against local Postgres or Testcontainers; migrations applied; truncate helpers.
 - Acceptance: `migrate` idempotent; audit_events UPDATE/DELETE rejected by DB.
 - Tests: migration up on empty DB; audit immutability integration test.
 
-### E1.4 API & worker skeletons — NOT STARTED
+### E1.4 API & worker skeletons — COMPLETE
 **T1.4.1 NestJS API app** — bootstrap, raw body for webhooks, validation pipe (zod), exception filter, request-id + OTel correlation, `/health/live`, `/health/ready` (DB), `/health/dependencies` (queue, blob, secrets, providers, MCP — informational, never fails liveness).
 **T1.4.2 NestJS worker app** — standalone application context; worker registration row + heartbeat; graceful drain on SIGTERM; `/health/live` + `/health/ready` on a small internal port for container health checks.
 **T1.4.3 Module boundaries** — Nest module per domain area (auth, users, teams, agents, prompts, customers, conversations, interactions, handoffs, assignments, queues, channels, mcp, tools, models, usage, alerts, analytics, telemetry, system, internal-agent, audit); contracts exported via explicit `*.module.ts` exports only.
 - Tests: health endpoints e2e; worker heartbeat integration test.
 
-### E1.5 Authentication & RBAC — NOT STARTED
+### E1.5 Authentication & RBAC — COMPLETE — API RBAC + route-access test, web login/setup with Playwright role flows
 **T1.5.1 Local authentication** — email + password (argon2id/scrypt per ADR), server-side sessions (hashed token, HttpOnly SameSite cookie, rotation, expiry, revoke), login rate limiting, audit of security events.
 **T1.5.2 First-run setup** — when no users exist, `/setup` in the web UI creates the first Platform Tech Admin using a one-time setup token printed to the API log / provided via env. No CLI.
 **T1.5.3 Permission model** (`packages/auth`) — explicit `Permission` catalogue; role → permission matrix for PLATFORM_TECH_ADMIN, CS_LEAD, CS_EXEC; `Principal` type; resource policies (conversation access by queue/team membership/assignment; agent-scoped lead access).
@@ -118,7 +118,7 @@ Phases are vertical slices: each includes persistence, authorization, API, UI wh
 **T1.5.5 Users & teams management** — CRUD for users (Tech Admin: all roles; CS Lead: CS Execs/teams per policy), role changes audited, deactivate/reactivate.
 - Tests (required): RBAC matrix unit tests; route-coverage test; resource-policy tests (exec cannot read conversation outside their queues); role-change audit.
 
-### E1.6 Web foundation — NOT STARTED
+### E1.6 Web foundation — COMPLETE — design system, shell, role-aware nav, team/settings pages; 13 Playwright tests
 **T1.6.1 Next.js app** — App Router, standalone output, API proxy (same-origin `/api/*`), session handling, protected layout, role-aware nav.
 **T1.6.2 Design system port** — `design/shared/{base,one,charts,mock,ocso}.css` imported verbatim as the canonical visual layer; fonts (Inter, JetBrains Mono); light/dark theme toggle.
 **T1.6.3 Shared UI primitives** (`apps/web/components/ui/*`) — Sidebar/OCSONav, Topbar, PageHead, SecHead, Tabs, StatusChip (`schip`), ControlState (`cstate`), SlaTimer (`sla`), ChannelMark, RiskBadge, Tile/Tiles, MetricMatrix (`mtx`), HBar chart (`hb`), Sparkline/LineChart (SVG), DataTable (`dtable`), KV list, Alert banner, Drawer (`rdrawer`), Modal + Stepper, Timeline events (`ev`, `sysev`, `toolev`), PromptComponentCard (`pcomp`), VersionRow (`vrow`), ProviderCard (`pvd`), McpConnectionRow, ConfirmCard (`confirm`), Copilot card, Empty state, Filter chips (`fchip`).
@@ -126,7 +126,7 @@ Phases are vertical slices: each includes persistence, authorization, API, UI wh
 - Acceptance: primitives render identically to design mockups (visual check against `design/*.dc.html`).
 - Tests: component unit tests for state → class mapping; Playwright login for each role.
 
-### E1.7 Local deployment — NOT STARTED
+### E1.7 Local deployment — IN PROGRESS — Dockerfile/Compose/seed being built and verified
 **T1.7.1 Dockerfiles** — multi-stage per app (api, worker, web) from the pnpm monorepo; non-root; healthchecks.
 **T1.7.2 `compose.yaml`** — web, api, worker, postgres, migrate (one-shot, `service_completed_successfully`), optional profiles: `demo` (mock MCP bank server + demo seed), `observability` (OTel collector + Jaeger), `s3` (S3-compatible store if chosen in ADR-011).
 **T1.7.3 Compose docs** — `.env.example`, volumes, backups, upgrades/migrations, secret handling, one-command start.
@@ -137,7 +137,7 @@ Phases are vertical slices: each includes persistence, authorization, API, UI wh
 
 ## P2 — Conversation spine
 
-### E2.1 Domain core — NOT STARTED
+### E2.1 Domain core — COMPLETE
 **T2.1.1 Conversation control state machine** (`packages/domain/conversation`) — states AI_ACTIVE, ESCALATION_REQUESTED, WAITING_FOR_HUMAN, HUMAN_ACTIVE, AI_RESUMING, RESOLVED; explicit transition table with guard + actor requirements; business status orthogonal; derived `control_mode`.
 - Tests (required): exhaustive transition table test (every allowed + every rejected transition).
 
@@ -145,38 +145,38 @@ Phases are vertical slices: each includes persistence, authorization, API, UI wh
 
 **T2.1.3 Event envelope & catalogue** (`packages/events`) — `OCSOEvent<T>` (id, type, version, occurredAt, correlationId, conversationId?, agentId?, payload); versioned catalogue from docs/02 §8; transactional outbox; realtime fan-out (Postgres LISTEN/NOTIFY per ADR-009) to SSE.
 
-### E2.2 Persistence (migration 0002) — NOT STARTED
+### E2.2 Persistence (migration 0002) — COMPLETE
 Tables: virtual_agents, customers, customer_identities, channels, conversations, interactions, interaction_parts, internal_notes, turns, conversation_summaries, jobs (Postgres queue), conversation_leases, workers.
 - Indexes per docs/03 §5.
 - Tests: repository integration tests; identity uniqueness; interaction idempotency key uniqueness.
 
-### E2.3 Virtual agents (basic) — NOT STARTED
+### E2.3 Virtual agents (basic) — IN PROGRESS — API complete; agent screens pending (after analytics API)
 CRUD + status (DRAFT/LIVE/PAUSED), purpose/type, channel assignment, default queue, multimodal settings, business hours; CS Lead permissions; audit.
 
-### E2.4 Customers & identity resolution — NOT STARTED
+### E2.4 Customers & identity resolution — IN PROGRESS — resolution/relink + API complete; customers page pending
 Deterministic resolution `(channel_type, provider_identifier) → CustomerIdentity → Customer`; create-on-first-contact; merge/link identities (audited); customer context attributes; customers list/detail UI.
 - Tests: resolution determinism; concurrent first-contact race (unique constraint + retry).
 
-### E2.5 Ingress pipeline — NOT STARTED
+### E2.5 Ingress pipeline — COMPLETE
 Channel-neutral `IngressService`: verify → normalize → resolve identity → find/create conversation → persist interaction + parts idempotently → enqueue turn when AI owns the conversation → emit events.
 - Tests (required): duplicate webhook delivery produces exactly one interaction and one turn.
 
-### E2.6 Queue abstraction v1 — NOT STARTED
+### E2.6 Queue abstraction v1 — COMPLETE
 `QueueAdapter` contract (publish with groupKey/dedupeKey/delay; consume with concurrency, ack/nack/extend; stats for depth/age); Postgres implementation (SKIP LOCKED, visibility timeout, retries with backoff, DLQ status, delayed jobs, lease-aware affinity claim).
 - Tests: contract test suite runnable against every implementation; concurrency test (N consumers, no double processing).
 
-### E2.7 Worker turn execution v1 — NOT STARTED
+### E2.7 Worker turn execution v1 — COMPLETE
 Consume `conversation.turn` → acquire lease → gather unprocessed customer interactions → run agent runtime (mock model in this phase) → persist response interaction → outbound delivery job → release/refresh lease.
 
-### E2.8 Web chat channel — NOT STARTED
+### E2.8 Web chat channel — IN PROGRESS — public API complete; embeddable widget being built
 - Public widget page `/webchat/[channelKey]` (embeddable), visitor identity (signed visitor token; optional host-app JWT for authenticated customers), attachments (image/document), streaming via AI SDK UI `useChat` with an OCSO transport, resume on reload, human replies delivered live.
 - API: `POST /public/webchat/:channel/messages`, `GET /public/webchat/:channel/stream` (SSE), history, attachment upload via BlobStore.
 - Tests: widget e2e with mock model; identity token validation.
 
-### E2.9 Blob storage v1 — NOT STARTED
+### E2.9 Blob storage v1 — COMPLETE
 `BlobStore` contract; local filesystem driver (Compose); MIME sniffing + allowlist, size limits, signed short-lived download URLs through the API, retention metadata.
 
-### E2.10 CS workspace (read + live) — NOT STARTED
+### E2.10 CS workspace (read + live) — IN PROGRESS — workspace UI being built
 Conversation list + timeline + context rail reproducing `design/01`; SSE live updates.
 
 **P2 exit:** customer holds a persistent multimodal web-chat conversation with "Maya"; history survives api/worker restart.
@@ -185,32 +185,32 @@ Conversation list + timeline + context rail reproducing `design/01`; SSE live up
 
 ## P3 — Agent runtime & prompt compiler
 
-### E3.1 Model provider contract — NOT STARTED
+### E3.1 Model provider contract — COMPLETE
 `ModelProviderAdapter { stream, generate, capabilities, health }` in `packages/model-providers`; OCSO-owned request/response/stream-event types (no AI SDK types leak across the boundary); normalized usage `{ inputTokens, outputTokens, cachedInputTokens, cacheWriteTokens, reasoningTokens, latencyMs, ttftMs, providerRequestId }`; normalized errors.
 - Tests (required): adapter contract suite (shared, run per adapter).
 
-### E3.2 AI SDK integration — NOT STARTED
+### E3.2 AI SDK integration — COMPLETE
 Generic AI-SDK-backed adapter core: message mapping (OCSO parts → AI SDK content parts incl. images/files/audio), tool schema mapping (JSON Schema), streaming with TTFT measurement, abort/timeout, step results; OCSO executes tools (no SDK auto-execute) so authorization runs in OCSO code.
 
-### E3.3 Prompt compiler — NOT STARTED
+### E3.3 Prompt compiler — COMPLETE
 `packages/prompt-compiler`: ordered components (runtime contract, identity, objective, behavior, policies, tool instructions, escalation policy, channel constraints, stable business context | customer context, rolling summary, recent turns, current turn); stable-prefix boundary + cache breakpoint markers; per-component and prefix hashes; token estimates; untrusted-content delimiting (customer text, tool descriptions/results); never interpolates secrets.
 - Tests (required): deterministic output; ordering; hash stability; prefix unchanged when only dynamic content changes; injection delimiting.
 
-### E3.4 Prompt versioning — NOT STARTED
+### E3.4 Prompt versioning — IN PROGRESS — service + API + tests complete; prompt editor/versions UI pending
 Immutable `prompt_versions` (components, component hashes, compiled hash, author, timestamp, reason, parent, changed components); drafts; activation (audited) with RBAC split (CS Lead: business components; runtime contract platform-owned; tool schemas Tech Admin); diff between versions; rollback = activate older version.
 - UI: Prompt tab + Versions tab (`design/02`).
 - Tests (required): versions immutable; activation audit; permission boundaries per component.
 
-### E3.5 Tool loop — NOT STARTED
+### E3.5 Tool loop — COMPLETE
 Multi-step loop with step limit; built-in OCSO tools (`ocso.request_handoff`, `ocso.search_history`, `ocso.set_conversation_attributes`); tool errors typed and summarized for the model (no raw exceptions); durable checkpoints (tool request persisted before side effect; result after).
 
-### E3.6 Rolling summary & context compaction — NOT STARTED
+### E3.6 Rolling summary & context compaction — COMPLETE
 Summary job (summarizer profile) when unsummarized interactions exceed threshold; versioned summaries with `covers_through_seq`; recent-turn window; `ocso.search_history` retrieval of older evidence.
 
-### E3.7 Usage accounting — NOT STARTED
+### E3.7 Usage accounting — COMPLETE — usage events per request incl. COPILOT; telemetry views under E8.2
 `usage_events` per model request (purpose TURN/SUMMARY/COPILOT/INTERNAL_AGENT/CLASSIFIER), linked to turn/conversation/agent/profile/provider; cost metadata from a pricing table maintained by Tech Admin.
 
-### E3.8 Turn concurrency policy — NOT STARTED
+### E3.8 Turn concurrency policy — COMPLETE
 Per-agent setting `QUEUE_BEHIND` | `CANCEL_AND_RESTART` for customer messages arriving mid-turn; cancellation only before customer-visible output or side-effecting tool execution; deterministic; audited in turn records.
 - Tests (required): both policies; no duplicate replies.
 
@@ -220,7 +220,7 @@ Per-agent setting `QUEUE_BEHIND` | `CANCEL_AND_RESTART` for customer messages ar
 
 ## P4 — Provider fleet & caching
 
-### E4.1 Provider adapters — NOT STARTED
+### E4.1 Provider adapters — COMPLETE — contract-tested with recorded fixtures; live verification needs customer credentials
 One module per provider, registered in a provider registry (no central switch):
 | ID | Provider | Notes | Status |
 |---|---|---|---|
@@ -233,7 +233,7 @@ One module per provider, registered in a provider registry (no central switch):
 | T4.1.7 | Dev-only scripted provider | deterministic mock for local demo + tests; disabled unless `OCSO_ENABLE_DEV_PROVIDERS=true` | NOT STARTED |
 - Each: config schema + validation, capability declaration, health check, "Test call" endpoint, contract tests with recorded provider-format HTTP fixtures (no live credentials needed), setup docs. Live verification needs credentials.
 
-### E4.2 Provider prompt caching — one task per provider — NOT STARTED
+### E4.2 Provider prompt caching — one task per provider — COMPLETE — per-provider caching implemented and tested for all six; live hit-rate verification needs credentials; Sarvam caching not documented by vendor (reported as unsupported until observed)
 Driven by `research/01` prompt-cache matrix. Each adapter maps the compiler's stable-prefix/breakpoint markers to the provider's native mechanism and maps provider cache metrics into normalized `cachedInputTokens` / `cacheWriteTokens`.
 | ID | Provider | Mechanism (confirm in research/01) | Status |
 |---|---|---|---|
@@ -245,19 +245,19 @@ Driven by `research/01` prompt-cache matrix. Each adapter maps the compiler's st
 | T4.2.6 | Sarvam API | no documented control; map `cached_tokens` if returned; capability `unverified`; UI shows "no documented cache support" | NOT STARTED |
 - Tests (required): per provider — request carries correct cache directives; usage fixture maps to normalized cache metrics; cache policy `OFF` removes directives.
 
-### E4.3 Logical model profiles — NOT STARTED
+### E4.3 Logical model profiles — IN PROGRESS — API complete; profiles UI being built
 `model_providers` + `model_profiles` (provider, model, region, timeout, temperature/reasoning, max output tokens, retry policy, cache policy, ordered fallbacks, capability requirements); agents reference profiles only; profile edit audited and triggers cache invalidation. UI: providers + profiles + New profile dialog (`design/04`).
 
-### E4.4 Fallback policy — NOT STARTED
+### E4.4 Fallback policy — COMPLETE
 Pure policy engine: candidate ordering; filters for provider allowlist, data-residency zone, cross-provider/cross-region permissions, capability requirements, cost ceiling; retriable-error classification; never after customer-visible streaming started; every fallback emits `model.fallback` event + usage record + audit entry.
 - Tests (required): residency violation blocked; allowlist blocked; capability mismatch blocked; retriable vs non-retriable; audit emitted.
 
-### E4.5 OCSO turn/context cache — NOT STARTED
+### E4.5 OCSO turn/context cache — COMPLETE
 Derived cache of compiled stable prefix, effective tool schema set + hash, customer context, rolling summary, recent-turn bundle; two tiers (worker in-memory LRU for leased conversations + Postgres snapshot for recovery); keys composed from content hashes/version IDs; invalidation on prompt activation, tool/schema change, policy change, material customer-context change, model/cache config change, channel behavior change (generation counters + NOTIFY + hash validation at read).
 - Metrics: OCSO cache hit/miss per layer, rebuild time.
 - Tests (required): each invalidation trigger; stale entry never served after hash change; worker recovery with cold cache.
 
-### E4.6 Provider concurrency limits — NOT STARTED
+### E4.6 Provider concurrency limits — COMPLETE — per-process semaphore per provider
 Per-provider max in-flight requests (Tech Admin); worker-local semaphore + deployment-wide budget; backpressure surfaced as capacity errors and queue delay, not failures.
 
 **P4 exit:** changing a profile's provider requires no agent change; cache metrics visible per provider/profile.
@@ -266,33 +266,33 @@ Per-provider max in-flight requests (Tech Admin); worker-local semaphore + deplo
 
 ## P5 — MCP & tools
 
-### E5.1 MCP connection manager — NOT STARTED
+### E5.1 MCP connection manager — IN PROGRESS — backend (wizard, OAuth 2.1, health) complete; UI being built
 Wizard (`design/04` six steps): enter URL → discover (initialize, server info, capabilities, tools with pagination) → authenticate (none / static header / OAuth 2.1 with PKCE, protected-resource + AS metadata discovery, client registration per spec, resource indicators, token refresh) → review tools (risk class seeded from annotations; admin classifies) → approve (scope SHARED/USER, agents allowed, confirmation policy) → active (health checks, schema sync).
 - SSRF protection: scheme/host validation, private-range and metadata-IP blocking unless connection network = INTERNAL and host allowlisted; redirect limits.
 - Tokens stored only in SecretStore; DB holds refs.
 
-### E5.2 User-scoped connections — NOT STARTED
+### E5.2 User-scoped connections — IN PROGRESS — backend complete; UI being built
 Per-user OAuth connections for USER-scope servers; effective tool resolution includes current user's connections where relevant (human tool actions, internal agent).
 
-### E5.3 Tool registry & schema sync — NOT STARTED
+### E5.3 Tool registry & schema sync — COMPLETE — drift un-approves changed tools
 Normalized tool records (qualified name, description treated as untrusted data, input schema + hash, annotations, risk class READ/WRITE/SENSITIVE, approval); re-discovery diff with approval of changed/added tools; schema change triggers turn-cache invalidation.
 
-### E5.4 Tool authorization — NOT STARTED
+### E5.4 Tool authorization — COMPLETE
 Deterministic `ToolAuthorizer`: tool exists → connection usable → agent allowed → acting principal allowed → scope allowed → argument schema valid → confirmation satisfied → argument policy rules (e.g. amount > limit ⇒ confirmation/deny).
 - Tests (required): each rejection path; model cannot self-authorize via arguments or prompt text.
 
-### E5.5 Sensitive action confirmation — NOT STARTED
+### E5.5 Sensitive action confirmation — IN PROGRESS — hold/confirm/deny/expiry complete and tested; workspace confirm card being built
 `tool_calls` AWAITING_CONFIRMATION; agent informs customer/hand-off per policy; CS Exec "Confirm and run" in workspace executes with human attribution; expiry; audit.
 - Tests (required): confirmation required; denial; expiry; audit.
 
-### E5.6 Customer identity claims — NOT STARTED
+### E5.6 Customer identity claims — COMPLETE — ES256 + JWKS + rotation; demo server verifies
 Short-lived signed JWT (ES256, key in SecretStore, JWKS at `/.well-known/jwks.json`) with minimal claims (sub, conversation, agent, scopes, iat/exp, jti); attached only for connections marked trusted; rotation.
 - Tests: claim contents minimal; expiry; signature verifiable via JWKS.
 
-### E5.7 Tool execution & audit — NOT STARTED
+### E5.7 Tool execution & audit — COMPLETE
 Timeouts, retries only for idempotent/read tools, idempotency keys for writes where supported, sanitized args/results (secret redaction), latency, correlation IDs; human tool actions from the workspace.
 
-### E5.8 Demo MCP server — NOT STARTED
+### E5.8 Demo MCP server — COMPLETE
 `examples/mcp-bank-demo`: standalone external "Meridian core" MCP server (read: accounts/transactions/schedule; write: raise dispute; sensitive: reverse transaction) with bearer and OAuth modes, for Compose demo profile and tests. Not part of OCSO core.
 
 **P5 exit:** admin connects demo server via OAuth, approves tools; Maya reads data, raises a write, and a sensitive reversal requires human confirmation.
@@ -301,18 +301,18 @@ Timeouts, retries only for idempotent/read tools, idempotency keys for writes wh
 
 ## P6 — WhatsApp & channel behavior
 
-### E6.1 Channel adapter contract — NOT STARTED
+### E6.1 Channel adapter contract — COMPLETE
 `ChannelAdapter` (verify, parse inbound envelopes incl. statuses, fetch media, render, send, capabilities, limits); channel registry; channel admin UI (`design/04` Channels tab) with secrets by reference.
 
-### E6.2 WhatsApp Cloud API adapter — NOT STARTED
+### E6.2 WhatsApp Cloud API adapter — IN PROGRESS — adapter + webhook routes complete; channel setup UI pending; live verification needs a Meta number
 Per ADR-007: direct Cloud API implementation (Graph API version configurable), GET challenge, `X-Hub-Signature-256` over raw body (constant-time), inbound text/image/audio/video/document/location/contacts/interactive/reaction normalization, BSUID/phone identity, media two-step download to BlobStore (host allowlist, size caps, MIME validation), delivery statuses sent/delivered/read/failed, 24-hour window + template fallback, error-code mapping, rate limits.
 - Tests (required): signature verification; duplicate wamid ignored; each message type fixture; status callbacks update delivery state; media download safety.
 
-### E6.3 Rendering policy — NOT STARTED
+### E6.3 Rendering policy — COMPLETE
 Channel renderers emit only customer-safe content (no tool traces/internal notes/policy metadata); WhatsApp formatting and chunking; capability-driven media/structured rendering.
 - Tests: internal events never rendered to customer channels.
 
-### E6.4 Outbound delivery — NOT STARTED
+### E6.4 Outbound delivery — COMPLETE
 Delivery jobs with retry/backoff, recorded provider message IDs, failure surfacing to CS UI and alerts.
 
 **P6 exit:** production-style WhatsApp agent (live verification needs Meta credentials).
@@ -321,36 +321,36 @@ Delivery jobs with retry/backoff, recorded provider message IDs, failure surfaci
 
 ## P7 — Human operations
 
-### E7.1 Queues, teams, routing — NOT STARTED
+### E7.1 Queues, teams, routing — IN PROGRESS — API complete; queues/SLA UI pending
 Queues (mode AUTO_ASSIGN | OPEN_PICKUP, pickup-then-auto-assign delay, strategy, skills, languages), teams, membership, exec availability + capacity; UI for CS Lead (Routing tab, Queues, Team).
 
-### E7.2 Escalation rules — NOT STARTED
+### E7.2 Escalation rules — IN PROGRESS — API complete; escalation rules UI pending
 Triggers: customer request, agent decision (tool), keyword/intent, policy/risk, repeated tool failure, SLA, low-confidence (where configured), business conditions; per-agent + global rules; target queue + priority + mode; fired counts. UI: Escalation tab.
 
-### E7.3 Handoff lifecycle — NOT STARTED
+### E7.3 Handoff lifecycle — IN PROGRESS — backend complete and tested; workspace UI being built
 Handoff records (reason, trigger, requested/assigned/accepted/returned/resolved timestamps, summary); ESCALATION_REQUESTED → WAITING_FOR_HUMAN routing; customer-facing handoff message via channel.
 
-### E7.4 Assignment — NOT STARTED
+### E7.4 Assignment — IN PROGRESS — backend complete and tested (claim race); workspace UI being built
 Pure assignment strategy (eligibility: team, availability, capacity, skills, language, account owner; ranking: least active workload then longest idle); auto-assign with accept + timeout reassignment; open pickup claim (atomic); transfer; unassign.
 - Tests (required): assignment/pickup races (two execs claim → exactly one wins); strategy ranking.
 
-### E7.5 Human takeover & replies — NOT STARTED
+### E7.5 Human takeover & replies — IN PROGRESS — backend complete and tested; workspace UI being built
 Take over from AI_ACTIVE; HUMAN_ACTIVE blocks autonomous AI replies (runtime guard + worker check); human replies via channel; internal notes (separate table, never rendered to customers); human tool actions.
 - Tests (required): human takeover; AI never sends while HUMAN_ACTIVE (including in-flight turn at takeover time).
 
-### E7.6 Return to AI — NOT STARTED
+### E7.6 Return to AI — IN PROGRESS — backend complete and tested; workspace UI being built
 AI_RESUMING with editable handover summary + selected notes passed to agent; resume on next customer message (or immediate follow-up if configured); cancel return; same agent, full context.
 - Tests (required): return-to-AI resumes with handover context; cancel return.
 
-### E7.7 Resolve / reopen / dispositions / tags — NOT STARTED
+### E7.7 Resolve / reopen / dispositions / tags — IN PROGRESS — resolve/reopen complete; dispositions/tags UI pending
 
-### E7.8 SLA engine — NOT STARTED
+### E7.8 SLA engine — IN PROGRESS — SLA policies + offer expiry/auto-assign schedules + breach alerts done; SLA page pending
 SLA policies (first human response, pickup by priority, resolution by type); due timestamps; ok/risk/breach state; breach events; business alerts.
 
-### E7.9 AI copilot — NOT STARTED
+### E7.9 AI copilot — IN PROGRESS — on-demand + proactive drafts complete and tested; workspace card being built
 Draft suggestions for the human (never auto-sent), rewrite shorter, insert into composer; usage accounted as COPILOT.
 
-### E7.10 Workspace UI completion — NOT STARTED
+### E7.10 Workspace UI completion — IN PROGRESS
 Views all / assigned to me / waiting for human / AI active / priority / resolved; claim, take over, return, resolve, reopen, transfer; composer modes reply/note/tool action; context rail (customer, accounts via approved tools, AI summary, assignment, approved tools, recent actions, tags); pickup queue page.
 
 **P7 exit:** full AI → human → AI lifecycle through the UI.
@@ -359,32 +359,32 @@ Views all / assigned to me / waiting for human / AI active / priority / resolved
 
 ## P8 — Observability, analytics & alerts
 
-### E8.1 OpenTelemetry — NOT STARTED
+### E8.1 OpenTelemetry — COMPLETE
 Traces for HTTP, turn, model request, tool call, queue job, alert evaluation; metrics (turn latency, TTFT, tokens, cache, queue depth/age, leases, provider errors, tool latency); log correlation; OTLP export configurable; trace IDs stored on turns/usage/tool calls for pivoting.
 
-### E8.2 Telemetry read models — NOT STARTED
+### E8.2 Telemetry read models — IN PROGRESS — telemetry read models being built
 Postgres-backed aggregates for in-product dashboards (usage_events, turns, tool_calls, health samples, worker stats, queue stats) with time-bucket queries/rollups; uptime from health samples.
 
-### E8.3 Tech Admin system control center — NOT STARTED
+### E8.3 Tech Admin system control center — IN PROGRESS — worker config UI done; control center pending
 `design/03`: status bar, service health, uptime, tiles, latency chart, token + cache usage by profile, worker instances + config editor, provider health cards, MCP health table; Queues & leases page; Telemetry page (tokens/cache/cost by agent/profile/provider, provider failure/retry/timeout, traces links, logs links).
 
-### E8.4 CS Lead analytics — NOT STARTED
+### E8.4 CS Lead analytics — IN PROGRESS — analytics services being built
 Agent overview (`design/02` Overview + Analytics tabs): conversations, containment, escalation rate, resolution, first response, SLA breaches, tool failure rate, CSAT; escalation reasons; failure topics; knowledge gaps; prompt-correction opportunities; channel breakdown; handling time; sales/service outcomes. Conversation insights job (explicit, auditable classifier output per conversation: topic, outcome, escalation reason, knowledge gap question). No opaque "quality score".
 
-### E8.5 QA reviews & prompt corrections — NOT STARTED
+### E8.5 QA reviews & prompt corrections — IN PROGRESS — reviews/corrections services being built
 Conversation reviews (reviewer, outcome tag, score with explicit rubric, notes); prompt correction workflow (source turn → observed → desired → component → staged into draft → new version → optional replay evaluation → activation).
 
-### E8.6 Replay evaluation — NOT STARTED
+### E8.6 Replay evaluation — IN PROGRESS
 Run a draft prompt version against selected historical customer turns (no side effects: tools stubbed/read-only), side-by-side results, summary counts; used before activation.
 
-### E8.7 CS Exec operational indicators — NOT STARTED
+### E8.7 CS Exec operational indicators — IN PROGRESS
 Home + workspace: assigned, pickup queue, waiting time, SLA state, handoff status, workload.
 
-### E8.8 Alert engine — NOT STARTED
+### E8.8 Alert engine — IN PROGRESS — engine (16 evaluators), lifecycle, API, worker schedule complete and tested; alerts UI pending
 Rules (technical/business, platform-wide or agent-specific, condition + window, severity, audience roles, destinations, dedupe window, auto-resolve); evaluator registry (workers below min, queue age, provider failure spike, MCP down, latency SLO, token/cost spike, auth failures, DB degraded, escalation spike, SLA breaches, repeated failure intent, agent quality signal, tool/business failures, conversion anomaly); leader-elected scheduler; lifecycle OPEN → ACKNOWLEDGED → RESOLVED; audit.
 - Tests (required): each evaluator; dedupe/window; auto-resolve; audience filtering.
 
-### E8.9 Alert delivery adapters — NOT STARTED
+### E8.9 Alert delivery adapters — COMPLETE — in-app, email, Slack, Teams, webhook (signed), PagerDuty
 In-app (+ SSE), email (SMTP), Slack, Microsoft Teams, generic webhook (HMAC-signed), PagerDuty Events v2; retries; delivery status. UI: alerts list, rules, destinations.
 
 ### E8.10 Outbound event webhooks — NOT STARTED
@@ -396,16 +396,16 @@ Subscriptions (URL, events, signing secret), delivery log, retries (`design/04` 
 
 ## P9 — Internal OCSO agent
 
-### E9.1 Internal tool catalogue — NOT STARTED
+### E9.1 Internal tool catalogue — COMPLETE
 Tools wrap existing application services (no direct DB access); each declares permission + risk (READ / LOW_WRITE / HIGH_WRITE); catalogue filtered by the user's permissions before the model sees it; re-authorized on execution.
 
-### E9.2 Agent loop & streaming — NOT STARTED
+### E9.2 Agent loop & streaming — COMPLETE
 `internal-agent` model profile; cited answers (links to OCSO objects), inline tables, cards; AI SDK UI streaming to the drawer; session history persisted per user.
 
-### E9.3 Confirmation & audit — NOT STARTED
+### E9.3 Confirmation & audit — COMPLETE
 HIGH_WRITE (and configurable LOW_WRITE) create pending actions that require an explicit UI confirmation click; all actions audited as `via=INTERNAL_AGENT` attributed to the human.
 
-### E9.4 Drawer + full page UI — NOT STARTED
+### E9.4 Drawer + full page UI — IN PROGRESS — drawer being built
 `design/05`: ⌘J drawer on every screen, role-aware suggestions, context of the current screen, RBAC refusals explained.
 - Tests (required): internal agent permissions (exec cannot reach admin tools; lead cannot read infra telemetry; confirmation required for sensitive writes; audit written).
 
@@ -415,20 +415,20 @@ HIGH_WRITE (and configurable LOW_WRITE) create pending actions that require an e
 
 ## P10 — Scaling & AWS production
 
-### E10.1 Leases & recovery hardening — NOT STARTED
+### E10.1 Leases & recovery hardening — IN PROGRESS — leases/fencing/recovery tested; chaos tests pending (E10.6)
 Lease acquire/heartbeat/transfer/expiry with fencing (lease_version checked on every customer-visible write); slot accounting; recovery sweeper; drain.
 - Tests (required): worker killed mid-turn → another worker recovers from Postgres, no duplicate customer reply; stale-lease writes rejected.
 
-### E10.2 SQS queue adapter — NOT STARTED
+### E10.2 SQS queue adapter — COMPLETE
 FIFO with MessageGroupId = conversation, dedup IDs, long polling, visibility extension heartbeat, DLQ; passes the queue contract suite (against ElasticMQ/LocalStack in tests).
 
-### E10.3 S3 blob store + Secrets Manager secret store — NOT STARTED
+### E10.3 S3 blob store + Secrets Manager secret store — COMPLETE
 S3 (SSE-KMS, presigned URLs), Secrets Manager (create/put/get with caching); contract suites shared with local drivers.
 
-### E10.4 Deployment adapter & autoscaling — NOT STARTED
+### E10.4 Deployment adapter & autoscaling — IN PROGRESS — ECS/Compose deployment adapter being built
 `DeploymentAdapter`: Compose (advisory) and ECS (register scalable target min/max, target tracking on published slot-utilization metric, step scaling on queue age, cooldowns, task scale-in protection while holding leases); leader publishes CloudWatch metrics; Tech Admin worker config applies through it.
 
-### E10.5 Terraform for ECS Fargate — NOT STARTED
+### E10.5 Terraform for ECS Fargate — IN PROGRESS — Terraform modules being built
 VPC, ALB (path routing web/api), ECS cluster, web/api/worker services, migration task, RDS PostgreSQL, SQS + DLQ, S3, Secrets Manager, KMS, CloudWatch logs, OTel collector sidecar, IAM, ECR; `terraform validate` in CI (containerized).
 
 ### E10.6 Load & chaos tests — NOT STARTED
@@ -454,23 +454,23 @@ Load script (web-chat channel, mock model with latency) measuring turn latency a
 
 | Test area | Task(s) | Status |
 |---|---|---|
-| RBAC | T1.5.3, T1.5.4 | NOT STARTED |
-| Conversation state machine | T2.1.1 | NOT STARTED |
-| Worker leases / recovery | E10.1, E2.7 | NOT STARTED |
-| Duplicate webhook handling | E2.5, E6.2 | NOT STARTED |
-| Prompt compilation | E3.3 | NOT STARTED |
-| Prompt versioning | E3.4 | NOT STARTED |
-| Prompt-cache invalidation | E4.2, E4.5 | NOT STARTED |
-| Turn-cache invalidation | E4.5 | NOT STARTED |
-| Provider adapter contracts | E3.1, E4.1 | NOT STARTED |
-| Provider fallback policy | E4.4 | NOT STARTED |
-| MCP authorization | E5.4 | NOT STARTED |
-| Sensitive tool confirmation | E5.5 | NOT STARTED |
-| Human takeover | E7.5 | NOT STARTED |
-| Return-to-AI | E7.6 | NOT STARTED |
-| Assignment / pickup | E7.4 | NOT STARTED |
-| Alert rules | E8.8 | NOT STARTED |
-| Internal agent permissions | E9.1–E9.3 | NOT STARTED |
+| RBAC | T1.5.3, T1.5.4 | COMPLETE — packages/auth/test/rbac.test.ts, apps/api/test/unit/route-access.test.ts, apps/api/test/int/{auth,alerts,security}.int.test.ts, apps/web/e2e/auth-and-roles.spec.ts |
+| Conversation state machine | T2.1.1 | COMPLETE — packages/domain/test/transitions.test.ts |
+| Worker leases / recovery | E10.1, E2.7 | COMPLETE — packages/agent-runtime/test/runtime.int.test.ts (race, fencing, drain, recovery), packages/queue/test/pg-queue.int.test.ts |
+| Duplicate webhook handling | E2.5, E6.2 | COMPLETE — packages/application/test/spine.int.test.ts, packages/channels/test/whatsapp-inbound.test.ts, apps/api/test/int/conversation-flow.int.test.ts |
+| Prompt compilation | E3.3 | COMPLETE — packages/prompt-compiler/test/compile.test.ts |
+| Prompt versioning | E3.4 | COMPLETE — packages/application/test/prompt-versions.int.test.ts, packages/db/test/migrations.int.test.ts |
+| Prompt-cache invalidation | E4.2, E4.5 | COMPLETE — packages/model-providers/test/contract (per-provider cache params), prompt-compiler prefix-hash tests |
+| Turn-cache invalidation | E4.5 | COMPLETE — packages/agent-runtime/test/runtime.int.test.ts (HOT/COLD on activation) |
+| Provider adapter contracts | E3.1, E4.1 | COMPLETE — packages/model-providers/test/contract |
+| Provider fallback policy | E4.4 | COMPLETE — packages/model-providers/test/fallback-policy.test.ts |
+| MCP authorization | E5.4 | COMPLETE — packages/tools/test/authorizer.test.ts, packages/application/test/mcp-*.int.test.ts, apps/api/test/int/mcp*.int.test.ts |
+| Sensitive tool confirmation | E5.5 | COMPLETE — packages/agent-runtime/test/human-tools.int.test.ts, runtime.int.test.ts |
+| Human takeover | E7.5 | COMPLETE — packages/application/test/spine.int.test.ts, runtime.int.test.ts (supersession) |
+| Return-to-AI | E7.6 | COMPLETE — spine.int.test.ts, runtime.int.test.ts (handover), apps/api/test/int/conversation-flow.int.test.ts |
+| Assignment / pickup | E7.4 | COMPLETE — packages/domain/test/routing-and-sla.test.ts, spine.int.test.ts (claim race) |
+| Alert rules | E8.8 | COMPLETE — packages/application/test/alerts-*.int.test.ts, packages/alerts/test/* |
+| Internal agent permissions | E9.1–E9.3 | COMPLETE — packages/internal-agent/test/internal-agent.int.test.ts |
 
 ## Definition of complete — traceability
 
@@ -504,3 +504,4 @@ Load script (web-chat channel, mock model with latency) measuring turn latency a
 | Date | Change |
 |---|---|
 | 2026-09-22 | Plan created from full read of README, docs/00–99 and design/*. Provider caching split into one task per provider (E4.2). |
+| 2026-09-22 | Status sync: foundation, runtime, providers, MCP manager, alerts, internal agent backend, human tools/confirmation, copilot backend, customer claims landed with tests; UI screens, telemetry/analytics, Compose, Terraform and scaling adapter in progress. |
