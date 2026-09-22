@@ -141,7 +141,8 @@ test('CS Lead gets a streamed answer, can stop one, and the thread is kept', asy
   await expect(log(page)).toContainText('Thanks for reaching out!');
   expect(await log(page).textContent()).not.toContain('ask for a human');
   await expect(log(page)).toContainText('You said: "How are the queues doing today?"');
-  await expect(log(page)).toContainText('ask for a human.)', { timeout: 15_000 });
+  // The scripted reply ends with its closing parenthesis once fully streamed.
+  await expect(log(page)).toContainText('{json}]].)', { timeout: 15_000 });
   await expect(stop).toBeHidden();
 
   // Same thread for the follow-up (history lists one conversation).
