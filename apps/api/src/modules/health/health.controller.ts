@@ -3,7 +3,8 @@ import type { Response } from 'express';
 import { sql } from 'drizzle-orm';
 import type { Db } from '@ocso/db';
 import type { QueueAdapter } from '@ocso/queue';
-import { Public } from '../../common/decorators.js';
+import { Permission } from '@ocso/auth';
+import { Public, RequirePermission } from '../../common/decorators.js';
 import { DB, QUEUE } from '../../infrastructure/tokens.js';
 
 /**
@@ -36,8 +37,9 @@ export class HealthController {
     }
   }
 
+  /** Dependency latencies are operational detail: Tech Admin only (load balancers use /health/ready). */
   @Get('dependencies')
-  @Public()
+  @RequirePermission(Permission.SYSTEM_READ)
   async dependencies(): Promise<Record<string, { status: string; latencyMs?: number }>> {
     const timed = async (fn: () => Promise<unknown>) => {
       const start = performance.now();
