@@ -5,7 +5,7 @@ import { controlAction } from '@/lib/actions/conversations';
 import type { ConversationDetail } from '@/lib/api/conversations';
 import { formatClock, formatDuration, formatTime } from '@/lib/format';
 import type { ControlView, WorkspaceAction } from './lib/control';
-import { pickupSla, slaLabel } from './lib/sla';
+import { pickupSla, resolutionLabel, resolutionSla, slaLabel } from './lib/sla';
 import { useActionRunner } from './lib/use-action';
 
 export type DialogKind = 'return' | 'resolve' | 'transfer';
@@ -41,6 +41,7 @@ export function ControlBanner({ detail, view, now, timeZone, customerTurns, pass
     ) : null;
 
   let body;
+  const resolution = resolutionSla(detail.controlState, detail.openedAt, detail.resolutionDueAt, now);
   switch (detail.controlState) {
     case 'AI_ACTIVE':
       body = (
@@ -65,6 +66,7 @@ export function ControlBanner({ detail, view, now, timeZone, customerTurns, pass
         waited ? `waiting ${waited}` : null,
         detail.queue?.name ?? null,
         sla ? `SLA ${slaLabel(sla)}` : null,
+        resolution ? resolutionLabel(resolution) : null,
       ].filter(Boolean);
       body = (
         <div className="takeover wait">
@@ -88,7 +90,10 @@ export function ControlBanner({ detail, view, now, timeZone, customerTurns, pass
         <div className="takeover">
           <ControlState state="human" />
           <span className="tt">{view.holdsIt ? 'You are handling this conversation.' : `${detail.assignedUser?.name ?? 'A colleague'} is handling this conversation.`}</span>
-          <span className="ts">{agent} is attached and will not reply to the customer until control returns.</span>
+          <span className="ts">
+            {agent} is attached and will not reply to the customer until control returns.
+            {resolution ? ` · ${resolutionLabel(resolution)}` : ''}
+          </span>
           <span className="sp" style={{ flex: 1 }} />
           {button('return-to-ai', 'Return to AI')}
           {button('resolve', 'Resolve')}

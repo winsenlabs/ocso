@@ -37,6 +37,26 @@ export function pickupSla(
   return { level, remainingSeconds, progress };
 }
 
+/**
+ * Resolution SLA (queue policy × conversation type, from opening or reopening).
+ * Runs until the conversation is resolved, whoever holds it.
+ */
+export function resolutionSla(controlState: string, openedAt: string, resolutionDueAt: string | null, now: number): SlaView | null {
+  if (controlState === 'RESOLVED' || !resolutionDueAt) return null;
+  const due = Date.parse(resolutionDueAt);
+  const start = Date.parse(openedAt);
+  if (!Number.isFinite(due)) return null;
+  const remainingSeconds = Math.round((due - now) / 1000);
+  const progress = Number.isFinite(start) && due > start ? clamp01((now - start) / (due - start)) : remainingSeconds <= 0 ? 1 : 0;
+  const level: SlaView['level'] = remainingSeconds <= 0 ? 'breach' : progress >= AT_RISK_FRACTION ? 'risk' : 'ok';
+  return { level, remainingSeconds, progress };
+}
+
+/** "resolve in 1h 20m" / "resolution overdue 00:12". */
+export function resolutionLabel(sla: SlaView): string {
+  return sla.level === 'breach' ? `resolution overdue ${formatClock(sla.remainingSeconds)}` : `resolve in ${formatClock(sla.remainingSeconds)}`;
+}
+
 /** "04:12 to SLA" / "breached 01:38". */
 export function slaLabel(sla: SlaView): string {
   return sla.level === 'breach' ? `breached ${formatClock(sla.remainingSeconds)}` : `${formatClock(sla.remainingSeconds)} to SLA`;

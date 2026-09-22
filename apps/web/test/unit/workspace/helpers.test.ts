@@ -4,11 +4,23 @@ import { SseParser, formatBlock, parseBlock } from '../../../lib/realtime/sse';
 import { isRealtimeEventType } from '../../../lib/realtime/events';
 import { channelCode, channelLabel } from '../../../components/workspace/lib/channel';
 import { controlLabel, customerDisplayName } from '../../../components/workspace/lib/labels';
-import { pickupSla, slaLabel } from '../../../components/workspace/lib/sla';
+import { pickupSla, resolutionLabel, resolutionSla, slaLabel } from '../../../components/workspace/lib/sla';
 import { factsOf, fileBadge, formatBytes, riskOf, toolDot, toolMeta } from '../../../components/workspace/lib/timeline';
 
 const T0 = Date.parse('2026-09-22T09:00:00Z');
 const at = (sec: number) => new Date(T0 + sec * 1000).toISOString();
+
+describe('resolution SLA', () => {
+  it('runs from opening until resolved, whoever holds the conversation', () => {
+    expect(resolutionSla('HUMAN_ACTIVE', at(0), at(14_400), T0 + 3_600_000)).toEqual({ level: 'ok', remainingSeconds: 10_800, progress: 0.25 });
+    expect(resolutionSla('AI_ACTIVE', at(0), at(14_400), T0 + 11_000_000)?.level).toBe('risk');
+    const overdue = resolutionSla('WAITING_FOR_HUMAN', at(0), at(600), T0 + 700_000)!;
+    expect(overdue.level).toBe('breach');
+    expect(resolutionLabel(overdue)).toMatch(/^resolution overdue /);
+    expect(resolutionSla('RESOLVED', at(0), at(600), T0 + 700_000)).toBeNull();
+    expect(resolutionSla('HUMAN_ACTIVE', at(0), null, T0)).toBeNull();
+  });
+});
 
 describe('pickup SLA (design/01 SLA timers)', () => {
   it('counts down only while the conversation waits for a human', () => {

@@ -32,6 +32,7 @@ export const ConversationSummarySchema = z.object({
   lastInteractionAt: z.string(),
   waitingSince: z.string().nullable(),
   slaDueAt: z.string().nullable(),
+  resolutionDueAt: z.string().nullable().default(null),
   tags: z.array(z.string()),
   handoff: z.object({ reason: z.string(), mode: z.string(), status: z.string() }).nullable().default(null),
   resolvedAt: z.string().nullable().default(null),
@@ -59,6 +60,7 @@ export const ConversationDetailSchema = z.object({
   tags: z.array(z.string()),
   waitingSince: z.string().nullable(),
   slaDueAt: z.string().nullable(),
+  resolutionDueAt: z.string().nullable().default(null),
   customer: z.object({
     id: z.string(),
     name: z.string().nullable(),
