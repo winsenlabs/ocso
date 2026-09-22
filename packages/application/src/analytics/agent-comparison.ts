@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { Permission, assertCan, type Principal } from '@ocso/auth';
 import type { Db, DbOrTx } from '@ocso/db';
+import { readableAgentsSql } from '../agents/access.js';
 import { SettingsService } from '../settings/settings.js';
 import { costPer } from './agent-analytics.js';
 import { costStats, csatStats, toolFailureStats } from './agent-side-metrics.js';
@@ -47,13 +48,20 @@ async function topReasons(db: DbOrTx, w: AnalyticsWindow): Promise<Map<string, s
   return new Map(rows.map((r) => [r.agent_id, r.reason]));
 }
 
-/** Agent-by-agent KPIs with the same formulas as the single-agent view (docs/11 §3 "agent-by-agent trends"). */
+/**
+ * Agent-by-agent KPIs with the same formulas as the single-agent view (docs/11
+ * §3 "agent-by-agent trends"), over the agents the principal can read (a CS
+ * Lead's teams' agents, ADR-026).
+ */
 export async function agentComparison(db: Db, principal: Principal, days: number, now: Date = new Date()): Promise<AgentComparison> {
   assertCan(principal, Permission.ANALYTICS_BUSINESS_READ);
   const { timezone } = await new SettingsService(db).deployment();
-  const w = windowOf(null, days, now, timezone);
+  const scope = readableAgentsSql(principal);
+  const w = windowOf(null, days, now, timezone, scope);
   const [agents, kpis, csat, cost, tools, reasons] = await Promise.all([
-    db.execute<{ id: string; name: string; conversation_type: string; status: string }>(sql`SELECT id, name, conversation_type, status FROM virtual_agents ORDER BY name`),
+    db.execute<{ id: string; name: string; conversation_type: string; status: string }>(
+      sql`SELECT id, name, conversation_type, status FROM virtual_agents ${scope ? sql`WHERE id IN (${scope})` : sql``} ORDER BY name`,
+    ),
     conversationKpis(db, w, now),
     csatStats(db, w),
     costStats(db, w),

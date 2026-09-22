@@ -46,6 +46,9 @@ export async function SettingsContent() {
             ]}
           />
           <span className="mono-sm">Theme: the moon button in the sidebar footer. It is remembered on this device.</span>
+          <a className="btn tiny" href="/account/security" style={{ justifySelf: 'start', marginTop: 8 }}>
+            Account security: password, two-factor, passkeys, sessions
+          </a>
         </section>
       </div>
     </div>

@@ -1,4 +1,5 @@
 export * from './identity.js';
+export * from './auth.js';
 export * from './settings.js';
 export * from './models.js';
 export * from './routing.js';

@@ -39,7 +39,7 @@ const CS_EXEC: readonly Permission[] = [
 
 const CS_LEAD: readonly Permission[] = [
   ...CS_EXEC,
-  P.CONVERSATIONS_READ_ALL,
+  P.CONVERSATIONS_READ_TEAM,
   P.CONVERSATIONS_ASSIGN,
   P.CUSTOMERS_MANAGE,
   P.AGENTS_MANAGE,
@@ -65,8 +65,9 @@ const CS_LEAD: readonly Permission[] = [
 
 /**
  * Tech Admin owns the platform. Deliberately NOT granted conversation content
- * (conversations.read / read_all): technical debugging uses traces, usage and
- * turn metadata, which never include transcript text.
+ * (conversations.read / read_team): technical debugging uses traces, usage and
+ * turn metadata, which never include transcript text. Reads every agent and
+ * reassigns owning teams (governance), but never edits prompts, tools or go-live.
  */
 const PLATFORM_TECH_ADMIN: readonly Permission[] = [
   P.SYSTEM_READ,
@@ -90,8 +91,11 @@ const PLATFORM_TECH_ADMIN: readonly Permission[] = [
   P.USERS_READ,
   P.USERS_MANAGE,
   P.AUDIT_READ,
+  P.AUDIT_READ_ALL,
   P.DEPLOYMENT_SETTINGS_MANAGE,
   P.AGENTS_READ,
+  P.AGENTS_READ_ALL,
+  P.AGENTS_ASSIGN_OWNER,
   P.QUEUES_READ,
   P.INTERNAL_AGENT_USE,
 ];

@@ -8,10 +8,13 @@ import type { Principal } from '@ocso/auth';
 import { InMemorySecretRows, LocalSecretStore, parseMasterKey } from '@ocso/secrets';
 import { AgentToolGrantService, McpConnectionService, type ActorContext, type ConnectionView } from '../src/index.js';
 import { startV2Server, type McpTestServer } from '../../mcp/test/helpers/custom-servers.js';
+import { createTeam, ownAgents } from './support/ownership.js';
 import { startDemo, type DemoServer } from '../../mcp/test/helpers/demo-server.js';
 
 const TOKEN = 'meridian-demo-bearer-token-5f1c2a';
-const user = (role: Principal['role'], name: string): Principal => ({ userId: uuidv7(), role, displayName: name, teamIds: [], via: 'UI' });
+// Lead and exec belong to the team that owns both agents (ADR-026).
+const TEAM = uuidv7();
+const user = (role: Principal['role'], name: string): Principal => ({ userId: uuidv7(), role, displayName: name, teamIds: role === 'PLATFORM_TECH_ADMIN' ? [] : [TEAM], via: 'UI' });
 const admin = user('PLATFORM_TECH_ADMIN', 'Tejas Shetty');
 const lead = user('CS_LEAD', 'Anjali Rao');
 const exec = user('CS_EXEC', 'Ravi Kumar');
@@ -67,6 +70,7 @@ beforeAll(async () => {
   for (const [id, name] of [[agentA, 'Maya'], [agentB, 'Riya']] as const) {
     await t.db.insert(virtualAgents).values({ id, name, slug: name.toLowerCase(), conversationType: 'SUPPORT' });
   }
+  await ownAgents(t.db, await createTeam(t.db, TEAM), agentA, agentB);
   secrets = new LocalSecretStore(new InMemorySecretRows(), parseMasterKey('k1', randomBytes(32).toString('base64')));
   svc = new McpConnectionService({ db: t.db, secrets, publicUrl: 'http://localhost:3000' });
   grants = new AgentToolGrantService(t.db);

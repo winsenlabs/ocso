@@ -1,6 +1,6 @@
 import { Permission } from '@ocso/auth';
-import { eq } from 'drizzle-orm';
-import { AgentService, agentSummaries } from '@ocso/application';
+import { and, eq, sql } from 'drizzle-orm';
+import { AgentService, agentSummaries, manageableAgentsSql } from '@ocso/application';
 import { virtualAgents } from '@ocso/db';
 import { z } from 'zod';
 import type { InternalTool } from '../contract.js';
@@ -10,12 +10,13 @@ const pct = (v: number | null) => (v === null ? '—' : `${(v * 100).toFixed(1)}
 export const agentPerformance: InternalTool<{ windowDays: number }> = {
   name: 'agent_performance',
   description:
-    'KPIs per virtual agent over a window: conversations, AI containment, escalation rate, CSAT, open and waiting conversations. Use it for "which agent escalates most" and agent comparisons. Definitions: containment = conversations without a handoff / all; escalation = conversations with a handoff / all.',
+    'KPIs per virtual agent the user can see (a CS Lead: the agents their teams own) over a window: conversations, AI containment, escalation rate, CSAT, open and waiting conversations. Use it for "which agent escalates most" and agent comparisons. Definitions: containment = conversations without a handoff / all; escalation = conversations with a handoff / all.',
   input: z.object({ windowDays: z.number().int().min(1).max(90).default(7) }),
   permission: Permission.AGENTS_READ,
   risk: 'READ',
   async run(ctx, args) {
-    const [agents, stats] = await Promise.all([new AgentService(ctx.db).list(), agentSummaries(ctx.db, args.windowDays)]);
+    // Same scope as GET /v1/agents: the user's teams' agents (ADR-026).
+    const [agents, stats] = await Promise.all([new AgentService(ctx.db).list(ctx.principal), agentSummaries(ctx.db, args.windowDays)]);
     const rows = agents
       .map((a) => ({ agent: a, s: stats.get(a.id) }))
       .sort((x, y) => (y.s?.escalationRate ?? -1) - (x.s?.escalationRate ?? -1));
@@ -43,7 +44,11 @@ export const setAgentStatus: InternalTool<{ agentId: string; status: 'LIVE' | 'P
   risk: 'HIGH_WRITE',
   describe: (a) => `${a.status === 'PAUSED' ? 'Pause' : 'Put live'} virtual agent ${a.agentId}. ${a.status === 'PAUSED' ? 'New customer messages will wait for humans.' : ''}`,
   async preview(ctx, args) {
-    const [agent] = await ctx.db.select({ name: virtualAgents.name, status: virtualAgents.status }).from(virtualAgents).where(eq(virtualAgents.id, args.agentId));
+    // Only agents the user's teams own; another team's agent previews like a missing one.
+    const [agent] = await ctx.db
+      .select({ name: virtualAgents.name, status: virtualAgents.status })
+      .from(virtualAgents)
+      .where(and(eq(virtualAgents.id, args.agentId), sql`${virtualAgents.id} IN (${manageableAgentsSql(ctx.principal)})`));
     if (!agent) return { changes: [] };
     return {
       summary: `${args.status === 'PAUSED' ? `Pause ${agent.name}. New customer messages will wait for humans.` : `Put ${agent.name} live.`}`,

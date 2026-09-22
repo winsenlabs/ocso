@@ -6,9 +6,12 @@ import type { Principal } from '@ocso/auth';
 import { InMemorySecretRows, LocalSecretStore, parseMasterKey } from '@ocso/secrets';
 import { AgentToolGrantService, McpConnectionService, PersonalConnectionService, type ActorContext, type ConnectionView } from '../src/index.js';
 import { startDemo, type DemoServer } from '../../mcp/test/helpers/demo-server.js';
+import { createTeam, ownAgents } from './support/ownership.js';
 
 const TOKEN = 'ops-desk-shared-bearer-token-771';
-const user = (role: Principal['role'], name: string): Principal => ({ userId: uuidv7(), role, displayName: name, teamIds: [], via: 'UI' });
+// Everyone but the Tech Admin is in the team that owns Maya (ADR-026).
+const TEAM = uuidv7();
+const user = (role: Principal['role'], name: string): Principal => ({ userId: uuidv7(), role, displayName: name, teamIds: role === 'PLATFORM_TECH_ADMIN' ? [] : [TEAM], via: 'UI' });
 const admin = user('PLATFORM_TECH_ADMIN', 'Tejas Shetty');
 const lead = user('CS_LEAD', 'Anjali Rao');
 const ravi = user('CS_EXEC', 'Ravi Kumar');
@@ -32,6 +35,7 @@ beforeAll(async () => {
   }
   await t.pool.query(`UPDATE deployment_settings SET egress_allowed_internal_hosts = ARRAY['127.0.0.1']`);
   await t.db.insert(virtualAgents).values({ id: agentId, name: 'Maya', slug: 'maya', conversationType: 'SUPPORT' });
+  await ownAgents(t.db, await createTeam(t.db, TEAM), agentId);
   secrets = new LocalSecretStore(new InMemorySecretRows(), parseMasterKey('k1', randomBytes(32).toString('base64')));
   svc = new McpConnectionService({ db: t.db, secrets, publicUrl: 'http://localhost:3000' });
   personal = new PersonalConnectionService(t.db);

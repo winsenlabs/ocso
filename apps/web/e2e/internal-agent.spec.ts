@@ -88,7 +88,11 @@ test.beforeAll(async ({ playwright }) => {
   const profile = await api.post('/v1/model-profiles', { headers: auth('admin'), data: { name: PROFILE, providerId: (await provider.json()).id, model: 'scripted-1', retries: 0 } });
   expect(profile.status()).toBe(201);
   ids.profile = (await profile.json()).id;
-  const agent = await api.post('/v1/agents', { headers: auth('lead'), data: { name: 'Maya', conversationType: 'SUPPORT' } });
+  // Agents belong to teams (ADR-026): the lead joins a team that owns Maya.
+  const teams: Array<{ id: string; name: string }> = await (await api.get('/v1/teams', { headers: auth('lead') })).json();
+  const teamId = teams.find((t) => t.name === 'IA Owners')?.id ?? (await (await api.post('/v1/teams', { headers: auth('lead'), data: { name: 'IA Owners' } })).json()).id;
+  expect((await api.patch(`/v1/users/${ids.lead}`, { headers: auth('admin'), data: { teamIds: [teamId] } })).ok()).toBe(true);
+  const agent = await api.post('/v1/agents', { headers: auth('lead'), data: { name: 'Maya', conversationType: 'SUPPORT', teamIds: [teamId] } });
   expect(agent.status()).toBe(201);
   ids.agent = (await agent.json()).id;
 });
@@ -127,7 +131,7 @@ test('CS Lead gets a streamed answer, can stop one, and the thread is kept', asy
   await login(page, ACCOUNTS.lead);
   await settled(page);
   await page.getByRole('button', { name: /Ask OCSO/ }).first().click();
-  await expect(drawer(page)).toContainText('scope · virtual agents and business operations');
+  await expect(drawer(page)).toContainText("scope · your teams' virtual agents and business operations");
   await expect(drawer(page)).toContainText('role: cs lead');
   await expect(drawer(page)).toContainText('context · home');
 

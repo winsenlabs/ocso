@@ -9,6 +9,8 @@ export const E2E = {
   dbName: process.env['E2E_DB_NAME'] ?? 'ocso_web_e2e',
   pgUrl: (process.env['E2E_PG_URL'] ?? 'postgres://localhost:5432').replace(/\/+$/, ''),
   setupToken: process.env['E2E_SETUP_TOKEN'] ?? 'e2e-setup-token-0123456789abcdef',
+  /** Break-glass recovery token the API runs with (e2e/stack/start-api.mjs). */
+  recoveryToken: process.env['E2E_RECOVERY_TOKEN'] ?? 'e2e-recovery-token-0123456789-abcdefghij',
 } as const;
 
 export const apiUrl = `http://localhost:${E2E.apiPort}`;

@@ -1,6 +1,6 @@
 import { sql, type SQL } from 'drizzle-orm';
 import type { DbOrTx } from '@ocso/db';
-import { agentClause, at, cohortWhere, int, iso, labelKey, type AnalyticsWindow } from './values.js';
+import { windowAgents, at, cohortWhere, int, iso, labelKey, type AnalyticsWindow } from './values.js';
 
 export interface LabelCount {
   key: string;
@@ -51,7 +51,7 @@ export async function knowledgeGaps(db: DbOrTx, w: AnalyticsWindow, limit = 10):
       SELECT ${labelKey(col)} AS key, trim(${col}) AS label, i.generated_at, c.opened_at
         FROM conversation_insights i
         JOIN conversations c ON c.id = i.conversation_id
-       WHERE ${agentClause(sql`i.agent_id`, w.agentId)} AND ${col} IS NOT NULL AND trim(${col}) <> '' AND c.opened_at < ${at(w.to)}
+       WHERE ${windowAgents(sql`i.agent_id`, w)} AND ${col} IS NOT NULL AND trim(${col}) <> '' AND c.opened_at < ${at(w.to)}
     )
     SELECT key, max(label) AS label,
            count(*) FILTER (WHERE opened_at >= ${at(w.from)})::int AS n,

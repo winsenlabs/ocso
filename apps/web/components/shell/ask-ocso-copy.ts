@@ -34,10 +34,10 @@ export function askOcsoCopy(session: Session, userInitials: string): AskOcsoCopy
       suggestions: ['Which MCP connection is causing failures?', 'Why did latency spike in the last hour?'],
     };
   }
-  if (has(P.CONVERSATIONS_READ_ALL)) {
+  if (has(P.CONVERSATIONS_READ_TEAM)) {
     return {
       ...common,
-      scopeLine: 'scope · virtual agents and business operations',
+      scopeLine: "scope · your teams' virtual agents and business operations",
       suggestions: ['Which agent is escalating most often?', 'What needs my attention right now?'],
     };
   }

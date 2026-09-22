@@ -11,3 +11,9 @@ export const LOGGER = Symbol('LOGGER');
 export const CHANNEL_REGISTRY = Symbol('CHANNEL_REGISTRY');
 export const PROVIDER_SOURCE = Symbol('PROVIDER_SOURCE');
 export const TOOL_PROVIDERS = Symbol('TOOL_PROVIDERS');
+/** Deployment email sender (`EmailSender` from @ocso/email), selected by EMAIL_DRIVER at start-up. */
+export const EMAIL_SENDER = Symbol('EMAIL_SENDER');
+/** Secret-free `EmailStatus` of that sender (driver, from, reply-to, warnings). */
+export const EMAIL_STATUS = Symbol('EMAIL_STATUS');
+/** Resolved email config incl. credentials — infrastructure-internal, never exported. */
+export const EMAIL_CONFIG = Symbol('EMAIL_CONFIG');

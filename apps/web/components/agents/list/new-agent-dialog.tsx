@@ -8,17 +8,21 @@ import { createAgentAction } from '@/lib/actions/agents';
 import { CONVERSATION_TYPES, type ConversationType } from '../data/agent-schemas';
 import type { Option } from '../data/options';
 import { CONVERSATION_TYPE_LABELS } from '../lib/labels';
+import { ownerProblem, type TeamRef } from '../lib/owners';
 import { useAgentAction } from '../shared/use-action';
 
 interface Props {
   profiles: Option[] | null;
   queues: Option[] | null;
   channels: Option[] | null;
+  /** The lead's own teams: an agent is owned by at least one of them (ADR-026). */
+  ownerTeams: TeamRef[];
 }
 
 /**
  * "New agent" (design/02 list): a named AI employee starts as a DRAFT with an
- * initial prompt version; it goes live from its page once a model profile is set.
+ * initial prompt version, owned by one or more of the lead's teams; it goes
+ * live from its page once a model profile is set.
  */
 export function NewAgentButton(props: Props) {
   const [open, setOpen] = useState(false);
@@ -32,14 +36,18 @@ export function NewAgentButton(props: Props) {
   );
 }
 
-function NewAgentDialog({ profiles, queues, channels, onClose }: Props & { onClose: () => void }) {
+function NewAgentDialog({ profiles, queues, channels, ownerTeams, onClose }: Props & { onClose: () => void }) {
   const router = useRouter();
   const action = useAgentAction();
   const [type, setType] = useState<ConversationType>('SUPPORT');
   const [picked, setPicked] = useState<string[]>([]);
+  // One team: it is the owner. Several: the lead chooses (the first is preselected).
+  const [owners, setOwners] = useState<string[]>(ownerTeams.slice(0, 1).map((t) => t.id));
+  const ownersProblem = ownerProblem(owners);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (ownersProblem) return action.setError(ownersProblem);
     const form = new FormData(event.currentTarget);
     const text = (name: string) => String(form.get(name) ?? '');
     const id = (name: string) => text(name) || null;
@@ -53,6 +61,7 @@ function NewAgentDialog({ profiles, queues, channels, onClose }: Props & { onClo
           modelProfileId: id('modelProfileId'),
           defaultQueueId: id('defaultQueueId'),
           channelIds: picked,
+          teamIds: owners,
         }),
       (data) => router.push(`/agents/${data.id}`),
     );
@@ -95,6 +104,22 @@ function NewAgentDialog({ profiles, queues, channels, onClose }: Props & { onClo
             </select>
           </div>
         </div>
+        <fieldset className="fld" style={{ border: 'none', padding: 0, margin: 0 }}>
+          <legend style={{ fontSize: 12, color: 'var(--ink-2)', fontWeight: 500, marginBottom: 5 }}>Owning team</legend>
+          <div className="checks">
+            {ownerTeams.map((t) => (
+              <label key={t.id}>
+                <input
+                  type="checkbox"
+                  checked={owners.includes(t.id)}
+                  onChange={(e) => setOwners((prev) => (e.target.checked ? [...prev, t.id] : prev.filter((x) => x !== t.id)))}
+                />
+                {t.name}
+              </label>
+            ))}
+          </div>
+          <span className="hint">{ownersProblem ?? 'only CS Leads of the owning teams see and manage this agent'}</span>
+        </fieldset>
         <div className="fld">
           <label htmlFor="na-purpose">Purpose</label>
           <input id="na-purpose" name="purpose" maxLength={200} placeholder="Customer Support" />

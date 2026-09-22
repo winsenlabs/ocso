@@ -13,7 +13,7 @@ let conversationId: string;
 beforeAll(async () => {
   h = await createRuntimeHarness();
   const prompts = new PromptService(h.t.db);
-  const draft = await prompts.draft(h.agentId);
+  const draft = await prompts.draft(h.lead.principal!, h.agentId);
   await prompts.saveDraft(h.lead, h.agentId, { ...draft.components, policies: 'Duplicate debits are reversed within 3 working days (policy CRD-114).' });
   const version = await prompts.createVersionFromDraft(h.lead, h.agentId, { reason: 'add card dispute policy' });
   await prompts.activate(h.lead, h.agentId, version.id);

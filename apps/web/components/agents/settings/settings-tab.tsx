@@ -5,14 +5,23 @@ import type { AgentPageData } from '../detail/load';
 import { hoursRows, timeZoneOptions } from '../lib/business-hours';
 import { CONVERSATION_TYPE_LABELS, MID_TURN_LABELS } from '../lib/labels';
 import { BusinessHoursForm } from './business-hours-form';
+import { OwnersCard } from './owners-card';
 import { SettingsForm } from './settings-form';
 
-/** Settings tab: identity, model profiles (primary / summarizer / copilot), runtime limits and human business hours. */
+/** Owning teams (ADR-026): editable by the Tech Admin (any team) or a lead (their own teams), read-only otherwise. */
+function Owners({ data }: { data: AgentPageData }) {
+  const { agent, options, can, session } = data;
+  const mode = can.assignOwner ? 'admin' : can.manage ? 'lead' : null;
+  return <OwnersCard agentId={agent.id} owners={agent.teams} mode={mode} teams={options.teams ?? agent.teams} myTeamIds={session.user.teamIds} />;
+}
+
+/** Settings tab: owning teams, identity, model profiles (primary / summarizer / copilot), runtime limits and human business hours. */
 export function SettingsTab({ data }: { data: AgentPageData }) {
   const { agent, options, can } = data;
   if (can.manage) {
     return (
       <div style={{ display: 'grid', gap: 18 }}>
+        <Owners data={data} />
         <SettingsForm key={agent.updatedAt} agent={agent} profiles={options.profiles ?? []} />
         <BusinessHoursForm agentId={agent.id} hours={agent.businessHours} timeZones={timeZoneOptions(agent.businessHours.timezone, Intl.supportedValuesOf('timeZone'))} />
       </div>
@@ -22,6 +31,7 @@ export function SettingsTab({ data }: { data: AgentPageData }) {
   const media = [agent.multimodal.imageInput && 'images', agent.multimodal.documentInput && 'documents', agent.multimodal.audioInput && 'audio'].filter(Boolean).join(', ');
   return (
     <div className="g g2">
+      <Owners data={data} />
       <ChartCard title="Identity">
         <KeyValue
           items={[

@@ -3,11 +3,12 @@ import type { ActorContext } from '@ocso/application';
 import { escalationRules, promptVersions, virtualAgents } from '@ocso/db';
 import type { SeedContext } from '../context.js';
 import { AGENTS, type AgentKey, type DemoAgent } from '../data/agents.js';
-import type { ProfileKey, QueueKey } from '../data/organization.js';
+import type { LeadKey, ProfileKey, QueueKey, TeamKey } from '../data/organization.js';
 
 export interface AgentRefs {
   profiles: Record<ProfileKey, string>;
   queues: Record<QueueKey, string>;
+  teams: Record<TeamKey, string>;
 }
 
 async function ensureAgent(ctx: SeedContext, lead: ActorContext, agent: DemoAgent, refs: AgentRefs): Promise<string> {
@@ -23,11 +24,12 @@ async function ensureAgent(ctx: SeedContext, lead: ActorContext, agent: DemoAgen
     summarizerProfileId: refs.profiles.summarizer,
     copilotProfileId: refs.profiles.supportFast,
     defaultQueueId: refs.queues[agent.queue],
+    teamIds: agent.owners.map((t) => refs.teams[t]),
     multimodal: agent.multimodal,
     midTurnPolicy: 'QUEUE_BEHIND',
     maxToolSteps: 6,
   });
-  ctx.log(`created virtual agent ${agent.name} (${agent.conversationType})`);
+  ctx.log(`created virtual agent ${agent.name} (${agent.conversationType}, owned by ${agent.owners.join(', ')})`);
   return created.id;
 }
 
@@ -60,10 +62,14 @@ async function ensureEscalations(ctx: SeedContext, lead: ActorContext, agentId: 
   }
 }
 
-/** Virtual agents with curated prompts and escalation rules (design/02). Returns ids by slug. */
-export async function seedAgents(ctx: SeedContext, lead: ActorContext, refs: AgentRefs): Promise<Record<AgentKey, string>> {
+/**
+ * Virtual agents with curated prompts and escalation rules (design/02), each
+ * built by a CS Lead of its owning team (ADR-026). Returns ids by slug.
+ */
+export async function seedAgents(ctx: SeedContext, leads: Record<LeadKey, ActorContext>, refs: AgentRefs): Promise<Record<AgentKey, string>> {
   const ids = {} as Record<AgentKey, string>;
   for (const agent of AGENTS) {
+    const lead = leads[agent.lead];
     const id = await ensureAgent(ctx, lead, agent, refs);
     await ensurePrompt(ctx, lead, id, agent);
     await ensureEscalations(ctx, lead, id, agent, refs.queues);
@@ -72,11 +78,12 @@ export async function seedAgents(ctx: SeedContext, lead: ActorContext, refs: Age
   return ids;
 }
 
-/** Link channels and go live (requires an active prompt and a model profile). */
-export async function publishAgents(ctx: SeedContext, lead: ActorContext, agentIds: Record<AgentKey, string>, webchatChannelId: string): Promise<void> {
+/** Link channels and go live (requires an active prompt and a model profile), as the owning team's lead. */
+export async function publishAgents(ctx: SeedContext, leads: Record<LeadKey, ActorContext>, agentIds: Record<AgentKey, string>, webchatChannelId: string): Promise<void> {
   for (const agent of AGENTS) {
     const id = agentIds[agent.slug];
-    const current = await ctx.services.agents.get(id);
+    const lead = leads[agent.lead];
+    const current = await ctx.services.agents.get(lead.principal!, id);
     if (agent.webchat && !current.channelIds.includes(webchatChannelId)) {
       await ctx.services.agents.update(lead, id, { channelIds: [...current.channelIds, webchatChannelId] });
     }

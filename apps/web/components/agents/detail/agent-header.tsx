@@ -6,6 +6,7 @@ import { StatusChip } from '@/components/ui/status-chip';
 import { initials } from '@/lib/format';
 import { optionName } from '../data/options';
 import { CONVERSATION_TYPE_LABELS, agentPresence, formatDay } from '../lib/labels';
+import { ownerLabel } from '../lib/owners';
 import { agentHref } from '../lib/tabs';
 import type { AgentPageData } from './load';
 import { AgentStatusButton } from './status-button';
@@ -36,6 +37,18 @@ export function AgentHeader({ data }: { data: AgentPageData }) {
         </div>
         {agent.description ? <p className="desc">{agent.description}</p> : null}
         <div className="facts">
+          <Fact
+            k="owning teams"
+            v={
+              can.assignOwner || can.manage ? (
+                <Link href={agentHref(agent.id, { tab: 'settings' })} aria-label={`Owning teams: ${ownerLabel(agent.teams)} (change in Settings)`}>
+                  {ownerLabel(agent.teams)}
+                </Link>
+              ) : (
+                ownerLabel(agent.teams)
+              )
+            }
+          />
           <Fact k="channels" v={channelsFact(data)} />
           <Fact
             k="model profile"

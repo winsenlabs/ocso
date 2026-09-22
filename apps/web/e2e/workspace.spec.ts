@@ -64,9 +64,12 @@ test.beforeAll(async ({ playwright }) => {
     await call('POST', '/v1/setup', null, { setupToken: E2E.setupToken, orgName: 'E2E Bank', adminName: ACCOUNTS.admin.name, adminEmail: ACCOUNTS.admin.email, adminPassword: ACCOUNTS.admin.password, timezone: 'Asia/Kolkata' });
   }
   tok.admin = await loginApi(ACCOUNTS.admin.email, ACCOUNTS.admin.password);
-  await call('POST', '/v1/users', tok.admin, { name: LEAD.name, email: LEAD.email, role: 'CS_LEAD', password: LEAD.password, teamIds: [], languages: [], maxConcurrent: 5 });
+  const lead = await call<{ id: string }>('POST', '/v1/users', tok.admin, { name: LEAD.name, email: LEAD.email, role: 'CS_LEAD', password: LEAD.password, teamIds: [], languages: [], maxConcurrent: 5 });
   tok.lead = await loginApi(LEAD.email, LEAD.password);
   ids.team = (await call<{ id: string }>('POST', '/v1/teams', tok.lead, { name: 'WS Cards & EMI' })).id;
+  // The lead manages the agent through an owning team of their own, outside the queue's team (ADR-026).
+  const owners = (await call<{ id: string }>('POST', '/v1/teams', tok.lead, { name: 'WS Agent owners' })).id;
+  await call('PATCH', `/v1/users/${lead.id}`, tok.admin, { teamIds: [owners] });
   await call('POST', '/v1/users', tok.lead, { name: EXEC.name, email: EXEC.email, role: 'CS_EXEC', password: EXEC.password, teamIds: [ids.team], languages: [], maxConcurrent: 5 });
   tok.exec = await loginApi(EXEC.email, EXEC.password);
   ids.queue = (await call<{ id: string }>('POST', '/v1/queues', tok.lead, { name: 'WS Cards & EMI · Tier 2', teamIds: [ids.team] })).id;
@@ -74,7 +77,7 @@ test.beforeAll(async ({ playwright }) => {
   // Deterministic development model (ADR-015) behind a real provider/profile.
   ids.provider = (await call<{ id: string }>('POST', '/v1/model-providers', tok.admin, { kind: 'DEV_SCRIPTED', name: 'WS Scripted', settings: { latencyMs: 50, chunkDelayMs: 15 } })).id;
   ids.profile = (await call<{ id: string }>('POST', '/v1/model-profiles', tok.admin, { name: 'ws-support', providerId: ids.provider, model: 'scripted-1', retries: 0 })).id;
-  ids.agent = (await call<{ id: string }>('POST', '/v1/agents', tok.lead, { name: 'Maya', slug: 'maya-ws', purpose: 'customer support', conversationType: 'SUPPORT', modelProfileId: ids.profile, defaultQueueId: ids.queue })).id;
+  ids.agent = (await call<{ id: string }>('POST', '/v1/agents', tok.lead, { name: 'Maya', slug: 'maya-ws', purpose: 'customer support', conversationType: 'SUPPORT', modelProfileId: ids.profile, defaultQueueId: ids.queue, teamIds: [owners] })).id;
   await call('POST', `/v1/agents/${ids.agent}/status`, tok.lead, { status: 'LIVE' });
   const channel = await call<{ publicKey: string }>('POST', '/v1/channels', tok.admin, {
     kind: 'WEBCHAT',

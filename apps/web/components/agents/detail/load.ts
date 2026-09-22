@@ -8,6 +8,8 @@ import { loadAgentOptions, type AgentOptions } from '../data/options';
 /** What every agent tab may do, from the session's permissions (the API enforces the same). */
 export interface AgentCan {
   manage: boolean;
+  /** Reassign owning teams across any team (Tech Admin, ADR-026). */
+  assignOwner: boolean;
   editPrompt: boolean;
   activate: boolean;
   tools: boolean;
@@ -38,6 +40,7 @@ export function agentCan(session: Session): AgentCan {
   const has = (p: Permission) => session.permissions.has(p);
   return {
     manage: has(Permission.AGENTS_MANAGE),
+    assignOwner: has(Permission.AGENTS_ASSIGN_OWNER),
     editPrompt: has(Permission.PROMPTS_EDIT),
     activate: has(Permission.PROMPTS_ACTIVATE),
     tools: has(Permission.AGENT_TOOLS_MANAGE),

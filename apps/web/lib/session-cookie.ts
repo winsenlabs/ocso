@@ -1,32 +1,32 @@
 /**
- * Session cookie contract (ADR-020). The API session token lives only in this
- * httpOnly cookie; browsers never read it and never call the API directly.
+ * Session cookie contract (ADR-020, ADR-025). Better Auth sets the session
+ * cookie (httpOnly, SameSite=Lax, `__Secure-` prefixed when Secure) on the
+ * public origin; the BFF reads it server-side and forwards its value to the
+ * API as `Authorization: Bearer`. Browsers never read it and never call /v1.
  * Shared by proxy.ts, server actions and the session loader.
  */
-export const SESSION_COOKIE = 'ocso_session';
+export const COOKIE_PREFIX = 'ocso';
+export const SESSION_COOKIE = `${COOKIE_PREFIX}.session_token`;
+export const SECURE_SESSION_COOKIE = `__Secure-${SESSION_COOKIE}`;
+/** Pending second-factor challenge after a correct password (10 minutes). */
+export const TWO_FACTOR_COOKIE = `${COOKIE_PREFIX}.two_factor`;
 
-export interface SessionCookieOptions {
-  httpOnly: true;
-  secure: boolean;
-  sameSite: 'lax';
-  path: '/';
-  maxAge: number;
+/** Every Better Auth cookie name (plain and `__Secure-`), for sign-out and relaying. */
+export function isAuthCookie(name: string): boolean {
+  return name.replace(/^__Secure-/, '').startsWith(`${COOKIE_PREFIX}.`);
 }
 
-/**
- * `secure` follows NODE_ENV unless SESSION_COOKIE_SECURE overrides it (for a
- * Compose deployment reached over plain HTTP on a private network).
- */
-export function sessionCookieOptions(expiresAt: string, now: Date = new Date()): SessionCookieOptions {
-  const override = process.env['SESSION_COOKIE_SECURE'];
-  const secure = override === undefined ? process.env.NODE_ENV === 'production' : override === 'true';
-  const seconds = Math.floor((Date.parse(expiresAt) - now.getTime()) / 1000);
-  return { httpOnly: true, secure, sameSite: 'lax', path: '/', maxAge: Number.isFinite(seconds) ? Math.max(0, seconds) : 0 };
+/** The session cookie value (secure variant first), from any cookie reader. */
+export function sessionCookieValue(get: (name: string) => string | undefined): string | null {
+  return get(SECURE_SESSION_COOKIE) ?? get(SESSION_COOKIE) ?? null;
 }
+
+/** Pages that must never be a post-login destination (they are part of signing in). */
+const AUTH_PAGES = ['/login', '/setup', '/forgot-password', '/reset-password', '/invite', '/recover', '/mfa-setup'];
 
 /** Only same-origin relative paths are accepted as post-login destinations. */
 export function safeNextPath(value: unknown): string {
   if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') || value.startsWith('/\\')) return '/';
-  if (value.startsWith('/login') || value.startsWith('/setup')) return '/';
+  if (AUTH_PAGES.some((page) => value === page || value.startsWith(`${page}?`) || value.startsWith(`${page}/`))) return '/';
   return value;
 }

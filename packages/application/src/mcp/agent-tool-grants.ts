@@ -6,6 +6,7 @@ import type { ArgumentRule } from '@ocso/tools';
 import { recordAudit } from '../audit/audit.js';
 import { bumpGeneration } from '../cache/generations.js';
 import { emitEvent } from '../events/outbox.js';
+import { assertAgentManageable, assertAgentReadable } from '../agents/access.js';
 import type { ActorContext } from '../shared/context.js';
 import { requirePermission } from './access.js';
 import { SetAgentToolGrantsInput } from './inputs.js';
@@ -49,7 +50,9 @@ function grantable(agentId: string): SQL {
 /**
  * Per-agent tool grants (docs/08 §6 "agent allowed"): the CS Lead enables
  * specific approved tools for a virtual agent, with deterministic argument
- * rules. Every change invalidates the agent's cached tool catalogue.
+ * rules. Every change invalidates the agent's cached tool catalogue. Reads
+ * need a readable agent, changes a lead of an owning team (ADR-026); 404
+ * otherwise.
  */
 export class AgentToolGrantService {
   constructor(private readonly db: Db) {}
@@ -59,13 +62,14 @@ export class AgentToolGrantService {
     if (!principal || !(can(principal, Permission.AGENTS_READ) || can(principal, Permission.AGENT_TOOLS_MANAGE))) {
       throw forbidden(Permission.AGENTS_READ, 'requires agents.read or agent_tools.manage');
     }
-    await this.assertAgent(this.db, agentId);
+    await assertAgentReadable(this.db, principal, agentId);
     return this.view(this.db, agentId);
   }
 
   /** Replace the agent's grant set. Only grantable tools are accepted; argument rule paths must exist in the tool's input schema. */
   async set(actor: ActorContext, agentId: string, raw: SetAgentToolGrantsInput): Promise<AgentToolsView> {
     requirePermission(actor, Permission.AGENT_TOOLS_MANAGE);
+    await assertAgentManageable(this.db, actor.principal!, agentId);
     const input = SetAgentToolGrantsInput.parse(raw);
     const ids = input.grants.map((g) => g.toolId);
     if (new Set(ids).size !== ids.length) throw validation('duplicate_tool_grant', 'Each tool may be granted once');

@@ -41,17 +41,18 @@ export async function createRuntimeHarness(): Promise<RuntimeHarness> {
   const queue = new MemoryQueue();
   const leadId = uuidv7();
   await t.pool.query(`INSERT INTO users (id, email, name, role, availability) VALUES ($1, 'lead@x.test', 'Anjali Rao', 'CS_LEAD', 'AVAILABLE')`, [leadId]);
-  const lead: ActorContext = { principal: { userId: leadId, role: 'CS_LEAD', displayName: 'Anjali Rao', teamIds: [], via: 'UI' }, correlationId: 'test' };
+  const teamId = uuidv7();
+  // The lead manages Maya through Cards, her owning team (ADR-026); no team_members row, so routing candidates are unchanged.
+  const lead: ActorContext = { principal: { userId: leadId, role: 'CS_LEAD', displayName: 'Anjali Rao', teamIds: [teamId], via: 'UI' }, correlationId: 'test' };
   const providerId = uuidv7();
   await t.db.insert(modelProviders).values({ id: providerId, kind: 'DEV_SCRIPTED', name: 'Scripted', residencyZone: 'IN' });
   const profileId = uuidv7();
   await t.db.insert(modelProfiles).values({ id: profileId, name: 'support-primary', providerId, model: 'scripted', retries: 0 });
-  const teamId = uuidv7();
   const queueId = uuidv7();
   await t.db.insert(teams).values({ id: teamId, name: 'Cards' });
   await t.db.insert(queues).values({ id: queueId, name: 'Cards & EMI · Tier 2' });
   await t.db.insert(queueTeams).values({ queueId, teamId });
-  const agent = await new AgentService(t.db).create(lead, { name: 'Maya', purpose: 'customer support', conversationType: 'SUPPORT', description: '', modelProfileId: profileId, defaultQueueId: queueId });
+  const agent = await new AgentService(t.db).create(lead, { name: 'Maya', purpose: 'customer support', conversationType: 'SUPPORT', description: '', modelProfileId: profileId, defaultQueueId: queueId, teamIds: [teamId] });
   await t.db.update(virtualAgents).set({ status: 'LIVE' }).where(eq(virtualAgents.id, agent.id));
   const channelId = uuidv7();
   await t.db.insert(channels).values({ id: channelId, kind: 'WEBCHAT', name: 'Web chat', status: 'ACTIVE', publicKey: `pk-${channelId.slice(-6)}`, defaultAgentId: agent.id });

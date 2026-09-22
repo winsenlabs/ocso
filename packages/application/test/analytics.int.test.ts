@@ -29,6 +29,7 @@ import {
 } from '@ocso/db';
 import type { Principal } from '@ocso/auth';
 import { AgentAnalyticsService, HomeService, QueueAnalyticsService, agentComparison, agentSummaries } from '../src/analytics/index.js';
+import { ownAgents } from './support/ownership.js';
 
 const now = new Date();
 const SEC = 1000;
@@ -121,7 +122,10 @@ async function seed() {
   ]);
   id.team = uuidv7();
   await db.insert(teams).values({ id: id.team, name: 'Cards' });
-  await db.insert(teamMembers).values({ teamId: id.team, userId: id.exec });
+  await db.insert(teamMembers).values([
+    { teamId: id.team, userId: id.exec },
+    { teamId: id.team, userId: id.lead },
+  ]);
   id.q1 = uuidv7();
   id.q2 = uuidv7();
   await db.insert(queues).values([
@@ -129,7 +133,8 @@ async function seed() {
     { id: id.q2, name: 'Hardship desk' },
   ]);
   await db.insert(queueTeams).values({ queueId: id.q1, teamId: id.team });
-  lead = P(id.lead, 'CS_LEAD');
+  // The lead's team owns both agents (ADR-026); scoping itself is covered in agent-ownership.int.test.ts.
+  lead = P(id.lead, 'CS_LEAD', [id.team]);
   exec = P(id.exec, 'CS_EXEC', [id.team]);
   admin = P(id.admin, 'PLATFORM_TECH_ADMIN');
 
@@ -139,6 +144,7 @@ async function seed() {
     { id: id.maya, name: 'Maya', slug: 'maya', conversationType: 'SUPPORT', status: 'LIVE' },
     { id: id.arjun, name: 'Arjun', slug: 'arjun', conversationType: 'SALES', status: 'LIVE' },
   ]);
+  await ownAgents(db, id.team, id.maya, id.arjun);
   const version = (n: number, createdAt: Date) => ({
     id: uuidv7(), agentId: id.maya!, version: n, components: { behavior: `v${n}` }, componentHashes: {}, promptHash: `pc_${n}`, runtimeContractVersion: '1', changedComponents: ['behavior'], reason: `reason v${n}`, createdAt,
   });
@@ -328,7 +334,8 @@ describe('queue analytics', () => {
   it('reports waiting, staffing, wait time and an explicit state per queue', async () => {
     const { queues: rows } = await new QueueAnalyticsService(t.db, () => now).list(lead, 7);
     const cards = rows.find((q) => q.name === 'Cards & EMI')!;
-    expect(cards).toMatchObject({ waiting: 1, onShift: 1, members: 1, breaches: 1, slaBreachesInWindow: 1, avgWaitSeconds: 60, pickedUp: 1, state: 'watch' });
+    // members: the exec and the lead (the lead joined the team that owns the agents).
+    expect(cards).toMatchObject({ waiting: 1, onShift: 1, members: 2, breaches: 1, slaBreachesInWindow: 1, avgWaitSeconds: 60, pickedUp: 1, state: 'watch' });
     expect(rows.find((q) => q.name === 'Hardship desk')).toMatchObject({ waiting: 1, onShift: 0, state: 'understaffed' });
   });
 });

@@ -11,6 +11,7 @@ import { createLogger } from '@ocso/observability';
 import { ChannelRuntime, ContextBuilder, HotContextCache, LeaseManager, MediaMaterializer, ModelGateway, ToolRunner, TurnProcessor, UsageRecorder } from '@ocso/agent-runtime';
 import { ScriptedAdapter } from '@ocso/agent-runtime/testing';
 import { completeSetup, startApi, type ApiHarness } from './harness.js';
+import { setTeams } from './teams.js';
 
 /** Widget-facing additions to the public web chat API (config, origin allowlist, history notices). */
 
@@ -28,9 +29,10 @@ beforeAll(async () => {
   h = await startApi();
   const admin = await completeSetup(h);
   const mk = (email: string, name: string, role: string) => h.http().post('/v1/users').set(auth(admin)).send({ email, name, role, password: 'a password 12345' }).expect(201);
-  await mk('lead@ocso.test', 'Lena Lead', 'CS_LEAD');
+  const leadId = (await mk('lead@ocso.test', 'Lena Lead', 'CS_LEAD')).body.id;
   lead = await h.loginAs('lead@ocso.test', 'a password 12345');
   const team = (await h.http().post('/v1/teams').set(auth(lead)).send({ name: 'Web' }).expect(201)).body.id;
+  await setTeams(h, admin, leadId, [team]); // the lead's team owns the agent (ADR-026)
   await h.http().post('/v1/users').set(auth(admin)).send({ email: 'exec@ocso.test', name: 'Priya Rao', role: 'CS_EXEC', password: 'a password 12345', teamIds: [team] }).expect(201);
   exec = await h.loginAs('exec@ocso.test', 'a password 12345');
   await h.http().put('/v1/me/availability').set(auth(exec)).send({ availability: 'AVAILABLE' }).expect(200);
@@ -39,7 +41,7 @@ beforeAll(async () => {
   await h.db.db.insert(modelProviders).values({ id: provider, kind: 'DEV_SCRIPTED', name: 'Scripted' });
   const profile = uuidv7();
   await h.db.db.insert(modelProfiles).values({ id: profile, name: 'widget-primary', providerId: provider, model: 'scripted', retries: 0 });
-  const agent = (await h.http().post('/v1/agents').set(auth(lead)).send({ name: 'Maya', purpose: 'support', conversationType: 'SUPPORT', modelProfileId: profile, defaultQueueId: queue }).expect(201)).body.id;
+  const agent = (await h.http().post('/v1/agents').set(auth(lead)).send({ name: 'Maya', purpose: 'support', conversationType: 'SUPPORT', modelProfileId: profile, defaultQueueId: queue, teamIds: [team] }).expect(201)).body.id;
   await h.http().post(`/v1/agents/${agent}/status`).set(auth(lead)).send({ status: 'LIVE' }).expect(201);
   const settings = { allowedOrigins: [HOST], audioAttachments: true, branding: { title: 'Meridian help', accentColor: '#0f766e', greeting: 'Hi! Ask us anything.' } };
   key = (await h.http().post('/v1/channels').set(auth(admin)).send({ kind: 'WEBCHAT', name: 'Site chat', status: 'ACTIVE', defaultAgentId: agent, settings, secrets: { visitorTokenSecret: randomBytes(32).toString('hex') } }).expect(201)).body.publicKey;

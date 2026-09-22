@@ -1,48 +1,87 @@
 'use server';
 
-import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
-import { completeSetup, login, logout } from '../api/auth';
+import { completeSetup, recoverAccount } from '../api/auth';
 import { ApiError, describeApiError } from '../api/errors';
-import { SESSION_COOKIE, safeNextPath, sessionCookieOptions } from '../session-cookie';
+import { authMessage, callAuth, clearAuthCookies } from '../auth/better-auth';
+import { TWO_FACTOR_COOKIE, safeNextPath } from '../session-cookie';
 import { field, fieldErrorsFrom, type FormState } from './form-state';
-import { clientIp } from '../client-ip';
+
+/** Sign-in form state: `step: 'mfa'` once the password was right and a second factor is due. */
+export type LoginState = FormState & { step?: 'password' | 'mfa' };
 
 const LoginForm = z.object({
   email: z.email('Enter a valid email address').max(320),
   password: z.string().min(1, 'Enter your password').max(256),
 });
 
-/** POST /v1/auth/login, then store the token in the httpOnly session cookie (ADR-020). */
-export async function loginAction(_prev: FormState, formData: FormData): Promise<FormState> {
+/**
+ * Email + password through Better Auth's /sign-in/email (ADR-025). Its
+ * Set-Cookie (session, or the two-factor challenge) is relayed to the browser.
+ */
+export async function loginAction(_prev: LoginState, formData: FormData): Promise<LoginState> {
   const email = field(formData, 'email').trim();
   const parsed = LoginForm.safeParse({ email, password: field(formData, 'password') });
-  if (!parsed.success) {
-    return { status: 'error', fieldErrors: fieldErrorsFrom(parsed.error.issues), values: { email } };
-  }
-  try {
-    const session = await login(parsed.data.email, parsed.data.password, await clientIp());
-    (await cookies()).set(SESSION_COOKIE, session.token, sessionCookieOptions(session.expiresAt));
-  } catch (err) {
-    return { status: 'error', message: loginMessage(err), values: { email } };
+  if (!parsed.success) return { status: 'error', step: 'password', fieldErrors: fieldErrorsFrom(parsed.error.issues), values: { email } };
+  const result = await callAuth<{ twoFactorRedirect?: boolean }>('/sign-in/email', { email: parsed.data.email, password: parsed.data.password, rememberMe: true });
+  if (!result.ok) return { status: 'error', step: 'password', message: authMessage(result, 'Sign-in failed'), values: { email } };
+  if (result.data?.twoFactorRedirect) return { status: 'idle', step: 'mfa', values: { email } };
+  redirect(safeNextPath(field(formData, 'next')));
+}
+
+const CodeForm = z.object({ code: z.string().trim().min(6, 'Enter the code').max(32) });
+
+/** Second step: the authenticator code (or a backup code) against the pending two-factor challenge. */
+export async function verifyMfaAction(_prev: LoginState, formData: FormData): Promise<LoginState> {
+  const values = { email: field(formData, 'email') };
+  const backup = field(formData, 'method') === 'backup';
+  const parsed = CodeForm.safeParse({ code: field(formData, 'code').replace(/\s+/g, '') });
+  if (!parsed.success) return { status: 'error', step: 'mfa', fieldErrors: fieldErrorsFrom(parsed.error.issues), values };
+  const result = await callAuth(backup ? '/two-factor/verify-backup-code' : '/two-factor/verify-totp', { code: parsed.data.code }, { forwardCookies: [TWO_FACTOR_COOKIE] });
+  if (!result.ok) {
+    const expired = result.code === 'INVALID_TWO_FACTOR_COOKIE' || result.code === 'TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE';
+    return { status: 'error', step: expired ? 'password' : 'mfa', message: authMessage(result, 'Verification failed'), values };
   }
   redirect(safeNextPath(field(formData, 'next')));
 }
 
-/** Revoke the API session (best effort) and clear the cookie. */
+/** Better Auth sign-out (deletes the session row, audited), then clear every auth cookie. */
 export async function logoutAction(): Promise<void> {
-  const jar = await cookies();
-  const token = jar.get(SESSION_COOKIE)?.value;
-  if (token) {
-    try {
-      await logout(token);
-    } catch {
-      // The session may already be expired or revoked; clearing the cookie is what matters here.
-    }
-  }
-  jar.delete(SESSION_COOKIE);
+  await callAuth('/sign-out', {}, { session: true });
+  await clearAuthCookies();
   redirect('/login');
+}
+
+const EmailForm = z.object({ email: z.email('Enter a valid email address').max(320) });
+
+/** "Forgot password?": always the same answer, whether or not the address exists. */
+export async function forgotPasswordAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const email = field(formData, 'email').trim();
+  const parsed = EmailForm.safeParse({ email });
+  if (!parsed.success) return { status: 'error', fieldErrors: fieldErrorsFrom(parsed.error.issues), values: { email } };
+  const result = await callAuth('/request-password-reset', { email: parsed.data.email });
+  // Only rate limiting and outages are reported; anything else gets the same answer as success.
+  if (!result.ok && (result.status === 429 || result.code === 'UNREACHABLE')) return { status: 'error', message: authMessage(result), values: { email } };
+  return { status: 'success', message: 'If an account uses this address, a link to choose a new password is on its way. It works once and expires in an hour.' };
+}
+
+const SetPasswordForm = z
+  .object({
+    token: z.string().min(10, 'This link is incomplete').max(200),
+    password: z.string().min(12, 'Use at least 12 characters').max(256, 'Use at most 256 characters'),
+    confirm: z.string(),
+  })
+  .refine((v) => v.password === v.confirm, { path: ['confirm'], message: 'The passwords do not match' });
+
+/** Invite acceptance and password reset: Better Auth's /reset-password consumes the single-use token. */
+export async function setPasswordAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const purpose = field(formData, 'purpose') === 'invite' ? 'invite' : 'reset';
+  const parsed = SetPasswordForm.safeParse({ token: field(formData, 'token'), password: field(formData, 'password'), confirm: field(formData, 'confirm') });
+  if (!parsed.success) return { status: 'error', fieldErrors: fieldErrorsFrom(parsed.error.issues) };
+  const result = await callAuth('/reset-password', { token: parsed.data.token, newPassword: parsed.data.password });
+  if (!result.ok) return { status: 'error', message: authMessage(result, 'The password could not be set') };
+  redirect(purpose === 'invite' ? '/login?invite=accepted' : '/login?reset=done');
 }
 
 const SetupForm = z.object({
@@ -73,7 +112,21 @@ export async function setupAction(_prev: FormState, formData: FormData): Promise
   redirect('/login?setup=done');
 }
 
-function loginMessage(err: unknown): string {
-  if (err instanceof ApiError && err.category === 'validation') return 'Enter a valid email address and password.';
-  return describeApiError(err);
+const RecoverForm = z.object({
+  recoveryToken: z.string().trim().min(32, 'The recovery token is at least 32 characters').max(512),
+  email: z.email('Enter a valid email address').max(320),
+  newPassword: z.string().min(12, 'Use at least 12 characters').max(256),
+});
+
+/** Break-glass recovery with OCSO_RECOVERY_TOKEN (ADR-025). */
+export async function recoverAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const values = { email: field(formData, 'email').trim() };
+  const parsed = RecoverForm.safeParse({ ...values, recoveryToken: field(formData, 'recoveryToken'), newPassword: field(formData, 'newPassword') });
+  if (!parsed.success) return { status: 'error', fieldErrors: fieldErrorsFrom(parsed.error.issues), values };
+  try {
+    await recoverAccount(parsed.data);
+  } catch (err) {
+    return { status: 'error', message: describeApiError(err), values };
+  }
+  redirect('/login?recovered=1');
 }

@@ -1,7 +1,7 @@
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import { displayId } from '@ocso/domain';
 import type { DbOrTx } from '@ocso/db';
-import { agentClause, at, int, iso, num, type AnalyticsWindow } from './values.js';
+import { agentClause, windowAgents, at, int, iso, num, type AnalyticsWindow } from './values.js';
 
 export interface CorrectionOpportunity {
   id: string;
@@ -34,11 +34,12 @@ export interface ReviewedConversation {
   openedAt: string;
 }
 
-/** OPEN/STAGED prompt corrections (definitions.corrections) via prompt_corrections_agent_idx. */
+/** OPEN/STAGED prompt corrections (definitions.corrections) via prompt_corrections_agent_idx; `scope` narrows agentId = null (ADR-026). */
 export async function correctionOpportunities(
   db: DbOrTx,
   agentId: string | null,
   limit = 10,
+  scope: SQL | null = null,
 ): Promise<{ open: number; staged: number; items: CorrectionOpportunity[] }> {
   const { rows } = await db.execute<{
     id: string; agent_id: string; agent_name: string; title: string; observed: string; desired: string; component_key: string;
@@ -50,7 +51,7 @@ export async function correctionOpportunities(
            (count(*) FILTER (WHERE p.status = 'STAGED') OVER ())::int AS staged_n
       FROM prompt_corrections p
       JOIN virtual_agents a ON a.id = p.agent_id
-     WHERE ${agentClause(sql`p.agent_id`, agentId)} AND p.status IN ('OPEN', 'STAGED')
+     WHERE ${agentClause(sql`p.agent_id`, agentId, scope)} AND p.status IN ('OPEN', 'STAGED')
      ORDER BY p.occurrences DESC, p.created_at DESC
      LIMIT ${limit}`);
   return {
@@ -88,7 +89,7 @@ export async function reviewedConversations(db: DbOrTx, w: AnalyticsWindow, limi
       JOIN users u ON u.id = r.reviewer_id
       LEFT JOIN channels ch ON ch.id = c.channel_id
       LEFT JOIN conversation_insights i ON i.conversation_id = r.conversation_id
-     WHERE ${agentClause(sql`r.agent_id`, w.agentId)} AND r.created_at >= ${at(w.from)} AND r.created_at < ${at(w.to)}
+     WHERE ${windowAgents(sql`r.agent_id`, w)} AND r.created_at >= ${at(w.from)} AND r.created_at < ${at(w.to)}
      ORDER BY r.created_at DESC
      LIMIT ${limit}`);
   return {

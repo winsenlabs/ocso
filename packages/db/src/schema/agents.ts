@@ -1,6 +1,6 @@
 import { boolean, index, integer, jsonb, pgTable, primaryKey, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { createdAt, id, ts, updatedAt } from './columns.js';
-import { users } from './identity.js';
+import { teams, users } from './identity.js';
 import { modelProfiles } from './models.js';
 import { queues } from './routing.js';
 
@@ -49,6 +49,25 @@ export const virtualAgents = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [uniqueIndex('virtual_agents_slug_uq').on(t.slug)],
+);
+
+/**
+ * Owning teams of a virtual agent (ADR-026). A CS Lead reads and manages an
+ * agent only through membership in one of these teams; an agent with no row
+ * here is visible to the Platform Tech Admin only until one is assigned.
+ */
+export const agentTeams = pgTable(
+  'agent_teams',
+  {
+    agentId: uuid()
+      .notNull()
+      .references(() => virtualAgents.id, { onDelete: 'cascade' }),
+    teamId: uuid()
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.agentId, t.teamId] }), index('agent_teams_team_idx').on(t.teamId)],
 );
 
 /** Immutable prompt version (docs/05 §2). Never updated after insert except activation stamps. */

@@ -13,6 +13,7 @@ import { hasPermission, requireSession } from '@/lib/session';
 import type { Agent } from '../data/agent-schemas';
 import { loadAgentOptions, optionName, type Option } from '../data/options';
 import { CONVERSATION_TYPE_LABELS, agentPresence } from '../lib/labels';
+import { creatableTeams, ownerLabel } from '../lib/owners';
 import { Def, Definitions } from '../shared/definition';
 import { NewAgentButton } from './new-agent-dialog';
 
@@ -22,12 +23,24 @@ export const PAGE_SUB = 'Named AI employees: their prompts, tools, channels and 
 const TONES: readonly AvatarTone[] = ['indigo', 'violet', 'rose', 'amber', 'emerald', 'sky', 'teal'];
 const tone = (t: string): AvatarTone => (TONES as readonly string[]).includes(t) ? (t as AvatarTone) : 'indigo';
 
-/** Page head with "New agent" for roles that can create agents. */
+/** Page head with "New agent" for leads who belong to a team (agents are owned by teams, ADR-026). */
 export async function AgentsHead() {
   const session = await requireSession();
   if (!hasPermission(session, Permission.AGENTS_MANAGE)) return <PageHead title={PAGE_TITLE} sub={PAGE_SUB} />;
   const options = await loadAgentOptions(session);
-  return <PageHead title={PAGE_TITLE} sub={PAGE_SUB} actions={<NewAgentButton profiles={options.profiles} queues={options.queues} channels={options.channels} />} />;
+  const ownerTeams = creatableTeams(options.teams ?? [], session.user.teamIds);
+  if (!ownerTeams.length) return <PageHead title={PAGE_TITLE} sub={PAGE_SUB} />;
+  return <PageHead title={PAGE_TITLE} sub={PAGE_SUB} actions={<NewAgentButton profiles={options.profiles} queues={options.queues} channels={options.channels} ownerTeams={ownerTeams} />} />;
+}
+
+/** A CS Lead outside every team manages no agent: point them at the Team page. */
+function NoTeam() {
+  return (
+    <EmptyState title="Join or create a team to create agents">
+      Virtual agents belong to teams, and CS Leads manage the agents their teams own. Create a team on the{' '}
+      <Link href="/team">Team page</Link> and ask your Platform Tech Admin to add you to it.
+    </EmptyState>
+  );
 }
 
 export async function AgentsList() {
@@ -39,12 +52,14 @@ export async function AgentsList() {
     loadAgentOptions(session),
     analytics ? optional(getAgentComparison(7)) : Promise.resolve(null),
   ]);
+  const manages = hasPermission(session, Permission.AGENTS_MANAGE);
   if (agents.length === 0) {
+    if (manages && session.user.teamIds.length === 0) return <NoTeam />;
     return (
       <EmptyState title="No virtual agents yet">
-        {hasPermission(session, Permission.AGENTS_MANAGE)
-          ? 'Create a virtual agent, give it a model profile and a channel, then take it live.'
-          : 'A CS Lead creates virtual agents. They will appear here with their prompt, tools and 7-day performance.'}
+        {manages
+          ? 'Create a virtual agent for one of your teams, give it a model profile and a channel, then take it live.'
+          : 'A CS Lead creates virtual agents. Agents your teams own or that route to your queues appear here with their prompt, tools and 7-day performance.'}
       </EmptyState>
     );
   }
@@ -83,7 +98,7 @@ function columns(profiles: Option[] | null, defs: Record<string, string>): Colum
           <span style={{ minWidth: 0 }}>
             <b style={{ fontSize: 12.5 }}>{a.name}</b>
             <span className="mono-sm" style={{ display: 'block' }}>
-              {a.purpose || a.slug}
+              {a.purpose || a.slug} · {ownerLabel(a.teams)}
             </span>
           </span>
         </Link>

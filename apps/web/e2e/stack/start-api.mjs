@@ -44,10 +44,21 @@ const shared = {
   OCSO_ENABLE_DEV_PROVIDERS: 'true',
 };
 
+// Authentication (ADR-025): a fixed Better Auth secret, the log email driver with the test-only
+// hook that lets specs read invite / reset links (refused in production), and break-glass recovery.
 const api = spawn(process.execPath, ['--import', './dist/instrumentation.js', 'dist/main.js'], {
   cwd: join(repo, 'apps/api'),
   stdio: 'inherit',
-  env: { ...process.env, ...shared, PORT: port, OCSO_SETUP_TOKEN: setupToken },
+  env: {
+    ...process.env,
+    ...shared,
+    PORT: port,
+    OCSO_SETUP_TOKEN: setupToken,
+    BETTER_AUTH_SECRET: randomBytes(32).toString('base64url'),
+    EMAIL_DRIVER: 'log',
+    OCSO_ENABLE_TEST_HOOKS: 'true',
+    OCSO_RECOVERY_TOKEN: process.env.E2E_RECOVERY_TOKEN ?? 'e2e-recovery-token-0123456789-abcdefghij',
+  },
 });
 
 const workerMain = join(repo, 'apps/worker/dist/main.js');

@@ -1,6 +1,6 @@
 import type { EscalationRuleInput } from '@ocso/application';
 import type { PromptComponents } from '@ocso/prompt-compiler';
-import type { ProfileKey, QueueKey } from './organization.js';
+import type { LeadKey, ProfileKey, QueueKey, TeamKey } from './organization.js';
 import { ARJUN_PROMPT, MAYA_PROMPT, RIYA_PROMPT } from './prompts.js';
 
 export type AgentKey = 'maya' | 'arjun' | 'riya';
@@ -16,6 +16,10 @@ export interface DemoAgent {
   description: string;
   profile: ProfileKey;
   queue: QueueKey;
+  /** Owning teams (ADR-026): only CS Leads of these teams see and manage the agent. */
+  owners: TeamKey[];
+  /** The CS Lead (a member of an owning team) who builds and publishes it. */
+  lead: LeadKey;
   multimodal: { imageInput: boolean; documentInput: boolean; audioInput: boolean; maxMediaPerTurn: number };
   /** Reason recorded on the curated prompt version (also the idempotency key for that step). */
   promptReason: string;
@@ -62,6 +66,8 @@ export const AGENTS: readonly DemoAgent[] = [
       'Handles card, EMI and statement questions for retail customers on WhatsApp and web chat. Resolves end to end where policy allows, escalates refunds above ₹5,000 and any hardship or dispute language to the Cards & EMI queue.',
     profile: 'supportPrimary',
     queue: 'cardsT2',
+    owners: ['cards'],
+    lead: 'lead',
     multimodal: { imageInput: true, documentInput: true, audioInput: false, maxMediaPerTurn: 4 },
     promptReason: 'Meridian support prompt: duplicate-debit path, CRD-114 and hardship rules',
     prompt: MAYA_PROMPT,
@@ -76,6 +82,8 @@ export const AGENTS: readonly DemoAgent[] = [
     description: 'Answers product questions on personal loans and cards, compares options honestly and books sales callbacks for qualified customers.',
     profile: 'salesPrimary',
     queue: 'salesCallback',
+    owners: ['sales'],
+    lead: 'lead2',
     multimodal: { imageInput: false, documentInput: false, audioInput: false, maxMediaPerTurn: 0 },
     promptReason: 'Meridian sales prompt: fair-practices code and callback rules',
     prompt: ARJUN_PROMPT,
@@ -90,6 +98,8 @@ export const AGENTS: readonly DemoAgent[] = [
     description: 'Reminds customers of overdue card and EMI payments, agrees payment dates and hands hardship cases to the Hardship desk on first mention.',
     profile: 'supportPrimary',
     queue: 'hardship',
+    owners: ['hardship'],
+    lead: 'lead',
     multimodal: { imageInput: false, documentInput: true, audioInput: false, maxMediaPerTurn: 2 },
     promptReason: 'Meridian collections prompt: hardship stop and contact-hours policy',
     prompt: RIYA_PROMPT,

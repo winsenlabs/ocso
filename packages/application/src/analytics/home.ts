@@ -36,7 +36,7 @@ export class HomeService {
       return { role: 'PLATFORM_TECH_ADMIN', generatedAt, user, admin: await adminHome(this.db, now, dayStart, this.options.queueStats) };
     }
     if (principal.role === 'CS_LEAD' && can(principal, Permission.ANALYTICS_BUSINESS_READ)) {
-      return { role: 'CS_LEAD', generatedAt, user, lead: await leadHome(this.db, now, timezone) };
+      return { role: 'CS_LEAD', generatedAt, user, lead: await leadHome(this.db, principal, now, timezone) };
     }
     if (principal.role === 'CS_EXEC' && can(principal, Permission.CONVERSATIONS_READ)) {
       const [dayStart, queueIds] = await Promise.all([startOfDay(this.db, now, timezone), new QueueService(this.db).queuesForTeams(principal.teamIds)]);

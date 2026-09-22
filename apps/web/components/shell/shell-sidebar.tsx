@@ -44,6 +44,5 @@ function scopePath(session: Session, teams: Team[] | null): string {
   const names = teams ? teamNames(teams, session.user.teamIds) : [];
   if (names.length) return names.join(' · ');
   if (session.permissions.has(Permission.SYSTEM_READ)) return 'Platform · whole deployment';
-  if (session.permissions.has(Permission.CONVERSATIONS_READ_ALL)) return 'All teams';
   return 'No team assigned';
 }

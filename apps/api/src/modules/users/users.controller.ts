@@ -1,10 +1,12 @@
-import { Body, Controller, Get, Inject, Param, Patch, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Patch, Post, Put } from '@nestjs/common';
 import { Permission } from '@ocso/auth';
-import { CreateUserInput, TeamInput, TeamService, UpdateUserInput, UserService, type ActorContext } from '@ocso/application';
+import { AuthMailer, CreateUserInput, TeamInput, TeamService, UpdateUserInput, UserService, type ActorContext } from '@ocso/application';
 import { z } from 'zod';
 import { Actor, Authenticated, RequirePermission, RequireAnyPermission } from '../../common/decorators.js';
 
 const Availability = z.object({ availability: z.enum(['AVAILABLE', 'AWAY', 'OFFLINE']) });
+const MemberInput = z.object({ userId: z.uuid() });
+type MemberInput = z.infer<typeof MemberInput>;
 type Availability = z.infer<typeof Availability>;
 
 @Controller('v1')
@@ -12,6 +14,7 @@ export class UsersController {
   constructor(
     @Inject(UserService) private readonly users: UserService,
     @Inject(TeamService) private readonly teams: TeamService,
+    @Inject(AuthMailer) private readonly mailer: AuthMailer,
   ) {}
 
   @Get('users')
@@ -25,6 +28,27 @@ export class UsersController {
   @RequireAnyPermission(Permission.USERS_MANAGE, Permission.USERS_MANAGE_EXECS)
   create(@Actor() actor: ActorContext, @Body({ schema: CreateUserInput }) body: CreateUserInput) {
     return this.users.create(actor, body);
+  }
+
+  /** How new users get their first sign-in here: emailed invites, or links/passwords handed over (log driver). */
+  @Get('users/onboarding')
+  @RequireAnyPermission(Permission.USERS_MANAGE, Permission.USERS_MANAGE_EXECS)
+  onboarding() {
+    return { emailDelivery: this.mailer.delivers ? 'email' : 'log', inviteTtlHours: this.users.inviteTtlHours, allowInitialPasswords: this.users.allowInitialPasswords };
+  }
+
+  @Post('users/:id/invite')
+  @RequireAnyPermission(Permission.USERS_MANAGE, Permission.USERS_MANAGE_EXECS)
+  @HttpCode(200)
+  resendInvite(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string) {
+    return this.users.resendInvite(actor, id);
+  }
+
+  @Post('users/:id/password-reset')
+  @RequireAnyPermission(Permission.USERS_MANAGE, Permission.USERS_MANAGE_EXECS)
+  @HttpCode(200)
+  sendPasswordReset(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string) {
+    return this.users.sendPasswordReset(actor, id);
   }
 
   @Patch('users/:id')
@@ -50,6 +74,21 @@ export class UsersController {
   @RequirePermission(Permission.TEAMS_MANAGE)
   createTeam(@Actor() actor: ActorContext, @Body({ schema: TeamInput }) body: TeamInput) {
     return this.teams.create(actor, body);
+  }
+
+  /** Tech Admin: any membership. CS Lead: CS Execs and themselves, on teams they belong to (enforced in TeamService). */
+  @Post('teams/:id/members')
+  @RequireAnyPermission(Permission.USERS_MANAGE, Permission.TEAMS_MANAGE)
+  @HttpCode(204)
+  async addMember(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string, @Body({ schema: MemberInput }) body: MemberInput): Promise<void> {
+    await this.teams.addMember(actor, id, body.userId);
+  }
+
+  @Delete('teams/:id/members/:userId')
+  @RequireAnyPermission(Permission.USERS_MANAGE, Permission.TEAMS_MANAGE)
+  @HttpCode(204)
+  async removeMember(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string, @Param('userId', { schema: z.uuid() }) userId: string): Promise<void> {
+    await this.teams.removeMember(actor, id, userId);
   }
 
   @Patch('teams/:id')

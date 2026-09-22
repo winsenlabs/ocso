@@ -22,7 +22,9 @@ const queue = new MemoryQueue();
 let channelId: string;
 let queueId: string;
 let teamId: string;
-const lead: Principal = { userId: '00000000-0000-7000-8000-00000000000a', role: 'CS_LEAD', displayName: 'Anjali Rao', teamIds: [], via: 'UI' };
+// The lead belongs to Cards, which owns Maya and serves her queue (ADR-026).
+const CARDS = uuidv7();
+const lead: Principal = { userId: '00000000-0000-7000-8000-00000000000a', role: 'CS_LEAD', displayName: 'Anjali Rao', teamIds: [CARDS], via: 'UI' };
 const ctx = (principal: Principal | null): ActorContext => ({ principal, correlationId: 'test' });
 const msg = (id: string, text: string, phone = '+919812341208'): IngressMessage => ({
   externalMessageId: id,
@@ -37,12 +39,12 @@ const msg = (id: string, text: string, phone = '+919812341208'): IngressMessage 
 beforeAll(async () => {
   t = await createTestDatabase();
   await t.pool.query(`INSERT INTO users (id, email, name, role) VALUES ($1, 'lead@x.test', 'Anjali Rao', 'CS_LEAD')`, [lead.userId]);
-  teamId = uuidv7();
+  teamId = CARDS;
   queueId = uuidv7();
   await t.db.insert(teams).values({ id: teamId, name: 'Cards' });
   await t.db.insert(queues).values({ id: queueId, name: 'Cards & EMI · Tier 2' });
   await t.db.insert(queueTeams).values({ queueId, teamId });
-  const agent = await new AgentService(t.db).create(ctx(lead), { name: 'Maya', purpose: 'customer support', conversationType: 'SUPPORT', description: '', defaultQueueId: queueId });
+  const agent = await new AgentService(t.db).create(ctx(lead), { name: 'Maya', purpose: 'customer support', conversationType: 'SUPPORT', description: '', defaultQueueId: queueId, teamIds: [teamId] });
   await t.db.update(virtualAgents).set({ status: 'LIVE' }).where(eq(virtualAgents.id, agent.id));
   channelId = uuidv7();
   await t.db.insert(channels).values({ id: channelId, kind: 'WHATSAPP', name: 'WhatsApp', status: 'ACTIVE', publicKey: 'pk1', defaultAgentId: agent.id });

@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { completeSetup, startApi, type ApiHarness } from './harness.js';
+import { teamOf } from './teams.js';
 
 /** Agent business hours through the HTTP API: create/update, path-addressed validation, audit, permissions. */
 
@@ -7,6 +8,7 @@ let h: ApiHarness;
 let lead: string;
 let exec: string;
 let agentId: string;
+let team: string;
 const auth = (token: string) => ({ authorization: `Bearer ${token}` });
 const HOURS = { timezone: 'Asia/Kolkata', humanHours: { mon: ['08:00', '23:00'], tue: ['08:00', '23:00'] } };
 
@@ -14,10 +16,12 @@ beforeAll(async () => {
   h = await startApi();
   const admin = await completeSetup(h);
   const mk = (email: string, role: string) => h.http().post('/v1/users').set(auth(admin)).send({ email, name: email.split('@')[0], role, password: 'a password 12345' }).expect(201);
-  await mk('lead@ocso.test', 'CS_LEAD');
-  await mk('exec@ocso.test', 'CS_EXEC');
+  const leadId = (await mk('lead@ocso.test', 'CS_LEAD')).body.id;
+  const execId = (await mk('exec@ocso.test', 'CS_EXEC')).body.id;
   lead = await h.loginAs('lead@ocso.test', 'a password 12345');
   exec = await h.loginAs('exec@ocso.test', 'a password 12345');
+  // Lead and exec share the team that owns the agents (ADR-026).
+  team = await teamOf(h, { admin, lead }, 'Cards', [leadId, execId]);
 });
 afterAll(async () => {
   await h?.close();
@@ -25,10 +29,10 @@ afterAll(async () => {
 
 describe('agent business hours API', () => {
   it('creates an agent with business hours and defaults to humans 24×7 without them', async () => {
-    const created = await h.http().post('/v1/agents').set(auth(lead)).send({ name: 'Maya', purpose: 'Customer Support', description: 'Cards', conversationType: 'SUPPORT', businessHours: HOURS }).expect(201);
+    const created = await h.http().post('/v1/agents').set(auth(lead)).send({ name: 'Maya', purpose: 'Customer Support', description: 'Cards', conversationType: 'SUPPORT', businessHours: HOURS, teamIds: [team] }).expect(201);
     agentId = created.body.id;
     expect(created.body.businessHours).toEqual(HOURS);
-    const plain = await h.http().post('/v1/agents').set(auth(lead)).send({ name: 'Arjun', conversationType: 'SALES' }).expect(201);
+    const plain = await h.http().post('/v1/agents').set(auth(lead)).send({ name: 'Arjun', conversationType: 'SALES', teamIds: [team] }).expect(201);
     expect(plain.body.businessHours).toEqual({ timezone: 'UTC', humanHours: {} });
   });
 

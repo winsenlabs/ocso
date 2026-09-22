@@ -1,11 +1,13 @@
-import { expect, test } from '@playwright/test';
-import { ACCOUNTS, E2E } from './config';
-import { createUser, expectNavLinksResolve, login, logout, navModel, settled } from './helpers';
+import { expect, test, type Page } from '@playwright/test';
+import { ACCOUNTS, E2E, apiUrl } from './config';
+import { acceptInvite, createUser, expectNavLinksResolve, login, logout, navModel, settled } from './helpers';
+import { totp } from './totp';
 
 /**
  * One serial story on a fresh database: first-run setup → Tech Admin →
- * CS Lead → CS Exec, asserting the role-specific navigation of
- * design/OCSONav.dc.html at each step.
+ * invites a CS Lead → CS Lead invites a CS Exec, asserting the role-specific
+ * navigation of design/OCSONav.dc.html at each step; then MFA enrolment when
+ * the Tech Admin requires it, and a forgotten password (ADR-025).
  */
 test.describe.configure({ mode: 'serial' });
 
@@ -78,7 +80,7 @@ test('admin creates a CS Lead from Team & roles', async ({ page }) => {
   await page.getByRole('button', { name: 'Cancel' }).click();
 
   await createUser(page, { ...ACCOUNTS.lead, role: 'CS_LEAD' });
-  await expect(page.getByRole('status').filter({ hasText: `Created ${ACCOUNTS.lead.name} · CS Lead` })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: `Invited ${ACCOUNTS.lead.name} · CS Lead` })).toBeVisible();
   await logout(page);
 });
 
@@ -159,9 +161,93 @@ test('Tech Admin saves deployment settings', async ({ page }) => {
 
 test('logout clears the session so app routes go back to sign-in', async ({ page, context }) => {
   await login(page, ACCOUNTS.admin);
-  expect((await context.cookies()).some((c) => c.name === 'ocso_session' && c.httpOnly)).toBe(true);
+  expect((await context.cookies()).some((c) => c.name === 'ocso.session_token' && c.httpOnly && c.sameSite === 'Lax')).toBe(true);
   await logout(page);
-  expect((await context.cookies()).some((c) => c.name === 'ocso_session')).toBe(false);
+  expect((await context.cookies()).some((c) => c.name === 'ocso.session_token')).toBe(false);
   await page.goto('/team');
   await page.waitForURL('**/login?next=%2Fteam');
+});
+
+/** Reads the setup key shown next to the QR code and answers with the current code. */
+async function enrolAuthenticator(page: Page, password: string): Promise<string> {
+  await page.getByLabel('Current password').fill(password);
+  await page.getByRole('button', { name: 'Set up authenticator app' }).click();
+  const secret = (await page.getByLabel('Setup key').textContent())?.trim() ?? '';
+  expect(secret).toMatch(/^[A-Z2-7]+=*$/);
+  await page.getByLabel('6-digit code from the app').fill(totp(secret));
+  await page.getByRole('button', { name: 'Verify and turn on' }).click();
+  await expect(page.getByText('Two-factor authentication is on.')).toBeVisible();
+  await expect(page.getByRole('list', { name: 'Backup codes' }).getByRole('listitem')).toHaveCount(10);
+  return secret;
+}
+
+test('Tech Admin requires MFA for CS Leads: the lead enrols at sign-in, then signs in with a code', async ({ page }) => {
+  await login(page, ACCOUNTS.admin);
+  await page.goto('/settings');
+  const policy = page.getByRole('form', { name: 'Require MFA for roles' });
+  await policy.getByLabel('CS Lead').check();
+  await policy.getByRole('button', { name: 'Save MFA policy' }).click();
+  await expect(page.getByText('MFA is now required for the selected roles')).toBeVisible();
+  await logout(page);
+
+  // Password alone lands on forced enrolment; nothing else is reachable.
+  await page.goto('/login');
+  await page.getByLabel('Work email').fill(ACCOUNTS.lead.email);
+  await page.getByLabel('Password', { exact: true }).fill(ACCOUNTS.lead.password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.waitForURL('**/mfa-setup');
+  await page.goto('/team');
+  await page.waitForURL('**/mfa-setup');
+  const secret = await enrolAuthenticator(page, ACCOUNTS.lead.password);
+  await page.getByRole('link', { name: /continue/ }).click();
+  await expect(page.getByRole('navigation', { name: 'Primary' })).toBeVisible();
+  await logout(page);
+
+  await page.getByLabel('Work email').fill(ACCOUNTS.lead.email);
+  await page.getByLabel('Password', { exact: true }).fill(ACCOUNTS.lead.password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByLabel('Authentication code').fill('000000');
+  await page.getByRole('button', { name: 'Verify' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'That code is not valid' })).toBeVisible();
+  await page.getByLabel('Authentication code').fill(totp(secret));
+  await page.getByRole('button', { name: 'Verify' }).click();
+  await page.waitForURL((url) => url.pathname === '/');
+  await expect(page.getByRole('navigation', { name: 'Primary' })).toBeVisible();
+  await page.goto('/account/security');
+  await expect(page.getByRole('region', { name: 'Two-factor authentication' })).toContainText('on');
+  await expect(page.getByRole('region', { name: 'Active sessions' })).toContainText('password + code');
+  await logout(page);
+
+  // Other specs sign leads in with a password only: lift the requirement again.
+  await login(page, ACCOUNTS.admin);
+  await page.goto('/settings');
+  await page.getByRole('form', { name: 'Require MFA for roles' }).getByLabel('CS Lead').uncheck();
+  await page.getByRole('form', { name: 'Require MFA for roles' }).getByRole('button', { name: 'Save MFA policy' }).click();
+  await expect(page.getByText('MFA is no longer required for any role.')).toBeVisible();
+});
+
+test('a CS Exec who forgot their password resets it from the emailed link', async ({ page, request }) => {
+  await page.goto('/login');
+  await page.getByRole('link', { name: 'Forgot password?' }).click();
+  await expect(page.getByRole('heading', { name: 'Forgot your password?' })).toBeVisible();
+  await page.getByLabel('Work email').fill(ACCOUNTS.exec.email);
+  await page.getByRole('button', { name: 'Email me a reset link' }).click();
+  await expect(page.getByText('Check your email.')).toBeVisible();
+
+  // The e2e API uses the log email driver; a test-only hook (refused in production) exposes the message.
+  const admin = await request.post(`${apiUrl}/v1/auth/login`, { data: { email: ACCOUNTS.admin.email, password: ACCOUNTS.admin.password } });
+  const token = ((await admin.json()) as { token: string }).token;
+  const mail = await request.get(`${apiUrl}/v1/test-hooks/emails?to=${encodeURIComponent(ACCOUNTS.exec.email)}`, { headers: { authorization: `Bearer ${token}` } });
+  const messages = (await mail.json()) as Array<{ kind: string | null; text: string }>;
+  const link = /https?:\/\/\S+\/reset-password\?token=[\w-]+/.exec(messages.filter((m) => m.kind === 'password_reset').at(-1)?.text ?? '')?.[0];
+  expect(link).toBeTruthy();
+
+  const newPassword = `${ACCOUNTS.exec.password}-renewed`;
+  await acceptInvite(page, link!, newPassword, 'Set new password');
+  await page.goto('/login');
+  await page.getByLabel('Work email').fill(ACCOUNTS.exec.email);
+  await page.getByLabel('Password', { exact: true }).fill(ACCOUNTS.exec.password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Invalid email or password' })).toBeVisible();
+  await login(page, { ...ACCOUNTS.exec, password: newPassword });
 });

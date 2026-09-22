@@ -4,11 +4,12 @@ import { SettingsService } from '@ocso/application';
 import { PgListener, createBlobStore, createChannelRegistry, createQueue, createSecretStore, pgQueueNotifier } from '@ocso/bootstrap';
 import { WorkerEnv, assertDriverConfig, loadEnv } from '@ocso/config';
 import { createDatabase, type Database } from '@ocso/db';
+import { emailStatus, resolveEmailConfig, senderFor, type ResolvedEmailConfig } from '@ocso/email';
 import { createLogger, type Logger } from '@ocso/observability';
 import { shutdownOtel } from '@ocso/observability/otel';
 import { EVENTS_CHANNEL } from '@ocso/application';
 import { JOBS_CHANNEL } from '@ocso/bootstrap';
-import { BLOB_STORE, CHANNEL_REGISTRY, DATABASE, DB, ENV, LISTENER, LOGGER, QUEUE, SECRET_STORE, WORKER_ID } from './tokens.js';
+import { BLOB_STORE, CHANNEL_REGISTRY, DATABASE, DB, EMAIL_CONFIG, EMAIL_SENDER, EMAIL_STATUS, ENV, LISTENER, LOGGER, QUEUE, SECRET_STORE, WORKER_ID } from './tokens.js';
 
 function loadWorkerEnv(): WorkerEnv {
   const env = loadEnv(WorkerEnv);
@@ -60,8 +61,19 @@ function loadWorkerEnv(): WorkerEnv {
     { provide: BLOB_STORE, inject: [ENV], useFactory: createBlobStore },
     { provide: CHANNEL_REGISTRY, useFactory: () => createChannelRegistry() },
     { provide: SettingsService, inject: [DB], useFactory: (db) => new SettingsService(db) },
+    // Transactional email (alert emails today): same env contract and start-up validation as the API.
+    { provide: EMAIL_CONFIG, inject: [ENV], useFactory: (env: WorkerEnv) => resolveEmailConfig(env) },
+    {
+      provide: EMAIL_SENDER,
+      inject: [EMAIL_CONFIG, LOGGER],
+      useFactory: (config: ResolvedEmailConfig, logger: Logger) => {
+        for (const warning of config.warnings) logger.warn(warning);
+        return senderFor(config, { log: (line) => logger.info(line) });
+      },
+    },
+    { provide: EMAIL_STATUS, inject: [EMAIL_CONFIG], useFactory: emailStatus },
   ],
-  exports: [ENV, WORKER_ID, LOGGER, DATABASE, DB, LISTENER, QUEUE, SECRET_STORE, BLOB_STORE, CHANNEL_REGISTRY, SettingsService],
+  exports: [ENV, WORKER_ID, LOGGER, DATABASE, DB, LISTENER, QUEUE, SECRET_STORE, BLOB_STORE, CHANNEL_REGISTRY, SettingsService, EMAIL_SENDER, EMAIL_STATUS],
 })
 export class WorkerInfrastructureModule implements OnApplicationShutdown {
   constructor(

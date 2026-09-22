@@ -56,7 +56,11 @@ const AgentFields = z.object({
   channelIds: z.array(Id),
 });
 export type AgentFieldsInput = z.input<typeof AgentFields>;
-const NewAgent = AgentFields.pick({ name: true, purpose: true, conversationType: true, description: true, modelProfileId: true, defaultQueueId: true, channelIds: true });
+const OwnerTeams = z.array(Id).min(1, 'Choose at least one owning team').max(20);
+const NewAgent = AgentFields.pick({ name: true, purpose: true, conversationType: true, description: true, modelProfileId: true, defaultQueueId: true, channelIds: true }).extend({
+  /** Owning teams (ADR-026): teams the lead belongs to; the API rejects others. */
+  teamIds: OwnerTeams,
+});
 export type NewAgentInput = z.input<typeof NewAgent>;
 
 export async function createAgentAction(input: NewAgentInput): Promise<ActionResult<{ id: string }>> {
@@ -90,6 +94,20 @@ export async function updateBusinessHoursAction(id: string, hours: BusinessHours
   if (result.ok) return result;
   const { fields, other } = hoursIssues(result.message.replace(/(^|; )hours\./g, '$1businessHours.'));
   return { ok: false, message: other.join('; '), fields };
+}
+
+/**
+ * Replace an agent's owning teams (PUT /v1/agents/:id/owners). A CS Lead may
+ * change only teams they belong to; the Tech Admin (agents.assign_owner) may
+ * reassign any team. The API enforces the rules and audits the change.
+ */
+export async function setAgentOwnersAction(id: string, teamIds: string[]): Promise<ActionResult> {
+  const session = await getSession();
+  const permission = session?.permissions.has(Permission.AGENTS_ASSIGN_OWNER) ? Permission.AGENTS_ASSIGN_OWNER : Permission.AGENTS_MANAGE;
+  return run(permission, 'change owning teams', z.object({ id: Id, teamIds: OwnerTeams }), { id, teamIds }, async (i) => {
+    await api.put(`${agentPath(i.id)}/owners`, { teamIds: i.teamIds }, z.object({ id: z.string() }));
+    return null;
+  });
 }
 
 export async function setAgentStatusAction(id: string, status: 'LIVE' | 'PAUSED'): Promise<ActionResult> {

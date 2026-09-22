@@ -1,12 +1,14 @@
 import { and, asc, eq, inArray } from 'drizzle-orm';
-import { Permission, assertCan } from '@ocso/auth';
+import { Permission, assertCan, type Principal } from '@ocso/auth';
 import { BusinessHoursSchema, WEEKDAYS, conflict, isAlwaysOpen, notFound, validation, type BusinessHoursInput } from '@ocso/domain';
-import { agentChannels, conversations, handoffs, modelProfiles, promptVersions, virtualAgents, uuidv7, type Db } from '@ocso/db';
+import { agentChannels, agentTeams, conversations, handoffs, modelProfiles, promptVersions, virtualAgents, uuidv7, type Db } from '@ocso/db';
 import { z } from 'zod';
 import { recordAudit } from '../audit/audit.js';
 import { bumpGeneration } from '../cache/generations.js';
 import { emitEvent } from '../events/outbox.js';
 import type { ActorContext } from '../shared/context.js';
+import { assertAgentManageable, assertAgentReadable, owningTeams, readableAgentFilter, type AgentTeamRef } from './access.js';
+import { OwnerTeamIds, assertNewOwners, ownerAuthority, replaceOwners } from './owners.js';
 import { initialComponents } from './prompt-templates.js';
 import { createPromptVersion } from './prompt-versions.js';
 
@@ -34,32 +36,60 @@ const AgentFields = z.object({
   channelIds: z.array(z.uuid()).optional(),
   /** When humans take handoffs (IANA zone + per-day HH:MM spans); `humanHours: {}` = humans 24×7. The AI answers 24×7. */
   businessHours: BusinessHoursSchema.optional(),
+  /** Owning teams (ADR-026). Create: required, teams the creating lead belongs to. Update: the owner-change rules in owners.ts. */
+  teamIds: OwnerTeamIds.optional(),
 });
-export const AgentInput = AgentFields.extend({ purpose: AgentFields.shape.purpose.default(''), description: AgentFields.shape.description.default('') });
+export const AgentInput = AgentFields.extend({
+  purpose: AgentFields.shape.purpose.default(''),
+  description: AgentFields.shape.description.default(''),
+  teamIds: OwnerTeamIds,
+});
 export type AgentInput = z.infer<typeof AgentInput>;
 /** No defaults: zod 4 applies `.default()` inside `.partial()`, which would blank fields a patch leaves out. */
 export const AgentPatch = AgentFields.partial();
 export type AgentPatch = z.infer<typeof AgentPatch>;
 
 export type AgentRow = typeof virtualAgents.$inferSelect;
+/** An agent as the API returns it: the row plus its owning teams (ADR-026). */
+export type AgentView = AgentRow & { teams: AgentTeamRef[] };
 
-/** Named virtual agents (docs/01 §4). A logical entity — never bound to a worker. */
+/**
+ * Named virtual agents (docs/01 §4). A logical entity — never bound to a worker.
+ * Reads and writes are scoped by owning team (agents/access.ts, ADR-026).
+ */
 export class AgentService {
   constructor(private readonly db: Db) {}
 
-  list(): Promise<AgentRow[]> {
-    return this.db.select().from(virtualAgents).orderBy(asc(virtualAgents.name));
+  /** Agents the principal may read (their teams' agents; every agent with agents.read_all). */
+  async list(principal: Principal): Promise<AgentView[]> {
+    assertCan(principal, Permission.AGENTS_READ);
+    const rows = await this.db.select().from(virtualAgents).where(readableAgentFilter(principal, virtualAgents.id)).orderBy(asc(virtualAgents.name));
+    const owners = await owningTeams(this.db, rows.map((r) => r.id));
+    return rows.map((r) => ({ ...r, teams: owners.get(r.id) ?? [] }));
   }
 
-  async get(id: string): Promise<AgentRow & { channelIds: string[] }> {
+  /** One readable agent; 404 when it does not exist or belongs to other teams only. */
+  async get(principal: Principal, id: string): Promise<AgentView & { channelIds: string[] }> {
+    assertCan(principal, Permission.AGENTS_READ);
+    await assertAgentReadable(this.db, principal, id);
+    return this.load(id);
+  }
+
+  private async load(id: string): Promise<AgentView & { channelIds: string[] }> {
     const [row] = await this.db.select().from(virtualAgents).where(eq(virtualAgents.id, id));
     if (!row) throw notFound('agent', id);
-    const channels = await this.db.select({ channelId: agentChannels.channelId }).from(agentChannels).where(eq(agentChannels.agentId, id));
-    return { ...row, channelIds: channels.map((c) => c.channelId) };
+    const [channels, owners] = await Promise.all([
+      this.db.select({ channelId: agentChannels.channelId }).from(agentChannels).where(eq(agentChannels.agentId, id)),
+      owningTeams(this.db, [id]),
+    ]);
+    return { ...row, teams: owners.get(id) ?? [], channelIds: channels.map((c) => c.channelId) };
   }
 
-  async create(actor: ActorContext, input: AgentInput): Promise<AgentRow> {
-    assertCan(actor.principal!, Permission.AGENTS_MANAGE);
+  /** Create an agent owned by `input.teamIds` (at least one; teams the creating lead belongs to). */
+  async create(actor: ActorContext, input: AgentInput): Promise<AgentView> {
+    const principal = actor.principal!;
+    assertCan(principal, Permission.AGENTS_MANAGE);
+    const owners = assertNewOwners(principal, input.teamIds);
     const id = uuidv7();
     const slug = input.slug ?? slugify(input.name, id);
     return this.db.transaction(async (tx) => {
@@ -85,6 +115,7 @@ export class AgentService {
           createdBy: actor.principal!.userId,
         })
         .returning();
+      await tx.insert(agentTeams).values(owners.map((teamId) => ({ agentId: id, teamId })));
       if (input.channelIds?.length) await tx.insert(agentChannels).values(input.channelIds.map((channelId) => ({ agentId: id, channelId })));
       const version = await createPromptVersion(tx, actor, {
         agentId: id,
@@ -94,18 +125,22 @@ export class AgentService {
       });
       await tx.update(virtualAgents).set({ activePromptVersionId: version.id }).where(eq(virtualAgents.id, id));
       await tx.update(promptVersions).set({ firstActivatedAt: new Date() }).where(eq(promptVersions.id, version.id));
-      await recordAudit(tx, actor, { action: 'agent.create', targetType: 'agent', targetId: id, summary: `Created virtual agent ${input.name}`, after: input });
+      await recordAudit(tx, actor, { action: 'agent.create', targetType: 'agent', targetId: id, summary: `Created virtual agent ${input.name}`, after: { ...input, teamIds: owners } });
       await emitEvent(tx, actor, 'config.changed', { area: 'agent', entityId: id }, { agentId: id });
-      return { ...agent!, activePromptVersionId: version.id };
+      const teams = (await owningTeams(tx, [id])).get(id) ?? [];
+      return { ...agent!, activePromptVersionId: version.id, teams };
     });
   }
 
-  async update(actor: ActorContext, id: string, patch: AgentPatch): Promise<AgentRow> {
-    assertCan(actor.principal!, Permission.AGENTS_MANAGE);
+  async update(actor: ActorContext, id: string, patch: AgentPatch): Promise<AgentView> {
+    const principal = actor.principal!;
+    assertCan(principal, Permission.AGENTS_MANAGE);
+    await assertAgentManageable(this.db, principal, id);
     return this.db.transaction(async (tx) => {
       const [before] = await tx.select().from(virtualAgents).where(eq(virtualAgents.id, id)).for('update');
       if (!before) throw notFound('agent', id);
-      const { channelIds, ...fields } = patch;
+      const { channelIds, teamIds, ...fields } = patch;
+      if (teamIds) await replaceOwners(tx, actor, before, teamIds, 'OWN_TEAMS');
       const [after] = await tx
         .update(virtualAgents)
         .set({ ...Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined)), updatedAt: new Date() })
@@ -126,13 +161,32 @@ export class AgentService {
           .set({ autoAssignAt: null })
           .where(and(eq(handoffs.status, 'WAITING'), eq(handoffs.mode, 'AUTO_ASSIGN'), inArray(handoffs.conversationId, waiting)));
       }
-      return after!;
+      return { ...after!, teams: (await owningTeams(tx, [id])).get(id) ?? [] };
     });
+  }
+
+  /**
+   * Replace the owning teams (PUT /v1/agents/:id/owners). A Tech Admin
+   * (agents.assign_owner) may assign any teams; a CS Lead only within their own
+   * teams (owners.ts). Audited as agent.owners_change.
+   */
+  async setOwners(actor: ActorContext, id: string, teamIds: readonly string[]): Promise<AgentView & { channelIds: string[] }> {
+    const principal = actor.principal!;
+    const authority = ownerAuthority(principal);
+    if (authority === 'ASSIGN_ANY') await assertAgentReadable(this.db, principal, id);
+    else await assertAgentManageable(this.db, principal, id);
+    await this.db.transaction(async (tx) => {
+      const [agent] = await tx.select({ id: virtualAgents.id, name: virtualAgents.name }).from(virtualAgents).where(eq(virtualAgents.id, id)).for('update');
+      if (!agent) throw notFound('agent', id);
+      await replaceOwners(tx, actor, agent, teamIds, authority);
+    });
+    return this.load(id);
   }
 
   /** Go live / pause. Live requires an active prompt version and a model profile. */
   async setStatus(actor: ActorContext, id: string, status: 'LIVE' | 'PAUSED'): Promise<AgentRow> {
     assertCan(actor.principal!, Permission.AGENTS_MANAGE);
+    await assertAgentManageable(this.db, actor.principal!, id);
     return this.db.transaction(async (tx) => {
       const [agent] = await tx.select().from(virtualAgents).where(eq(virtualAgents.id, id)).for('update');
       if (!agent) throw notFound('agent', id);

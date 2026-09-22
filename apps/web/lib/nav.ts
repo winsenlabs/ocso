@@ -45,7 +45,7 @@ const NAV: readonly GroupDef[] = [
     key: 'my-work',
     label: 'My work',
     gate: [P.CONVERSATIONS_READ],
-    unless: [P.CONVERSATIONS_READ_ALL],
+    unless: [P.CONVERSATIONS_READ_TEAM],
     items: [
       { key: 'conversations', label: 'Conversations', href: '/conversations', requires: P.CONVERSATIONS_READ },
       { key: 'pickup', label: 'Pickup queue', href: '/queues', requires: P.CONVERSATIONS_CLAIM },
@@ -56,9 +56,9 @@ const NAV: readonly GroupDef[] = [
   {
     key: 'operations',
     label: 'Operations',
-    gate: [P.CONVERSATIONS_READ_ALL],
+    gate: [P.CONVERSATIONS_READ_TEAM],
     items: [
-      { key: 'conversations', label: 'Conversations', href: '/conversations', requires: P.CONVERSATIONS_READ_ALL },
+      { key: 'conversations', label: 'Conversations', href: '/conversations', requires: P.CONVERSATIONS_READ_TEAM },
       { key: 'agents', label: 'Virtual agents', href: '/agents', requires: P.AGENTS_MANAGE },
       { key: 'queues', label: 'Queues', href: '/queues', requires: P.QUEUES_MANAGE },
       { key: 'customers', label: 'Customers', href: '/customers', requires: P.CUSTOMERS_READ },
@@ -149,7 +149,7 @@ export type HomeVariant = 'exec' | 'lead' | 'admin';
 
 /** Which role home (design/06) a user sees, derived from what they can do. */
 export function homeVariant(permissions: ReadonlySet<Permission>): HomeVariant {
-  if (permissions.has(P.CONVERSATIONS_READ_ALL)) return 'lead';
+  if (permissions.has(P.CONVERSATIONS_READ_TEAM)) return 'lead';
   if (permissions.has(P.CONVERSATIONS_READ)) return 'exec';
   return 'admin';
 }

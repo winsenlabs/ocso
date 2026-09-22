@@ -30,7 +30,7 @@ let host: ChildProcess | null = null;
 const tok = { admin: '', lead: '', exec: '' };
 const ids = { key: '', conversation: '' };
 
-async function call<T = Record<string, unknown>>(method: 'GET' | 'POST' | 'PUT', path: string, token: string | null, body?: unknown): Promise<T> {
+async function call<T = Record<string, unknown>>(method: 'GET' | 'POST' | 'PUT' | 'PATCH', path: string, token: string | null, body?: unknown): Promise<T> {
   const res = await api.fetch(path, { method, headers: token ? { authorization: `Bearer ${token}` } : {}, ...(body !== undefined ? { data: body } : {}) });
   if (res.status() >= 300) throw new Error(`${method} ${path} → ${res.status()} ${await res.text()}`);
   return (res.status() === 204 ? {} : await res.json()) as T;
@@ -79,16 +79,19 @@ test.beforeAll(async ({ playwright, browser }) => {
     await call('POST', '/v1/setup', null, { setupToken: E2E.setupToken, orgName: 'E2E Bank', adminName: ACCOUNTS.admin.name, adminEmail: ACCOUNTS.admin.email, adminPassword: ACCOUNTS.admin.password, timezone: 'Asia/Kolkata' });
   }
   tok.admin = await loginApi(ACCOUNTS.admin.email, ACCOUNTS.admin.password);
-  await call('POST', '/v1/users', tok.admin, { name: LEAD.name, email: LEAD.email, role: 'CS_LEAD', password: LEAD.password, teamIds: [], languages: [], maxConcurrent: 5 });
+  const lead = await call<{ id: string }>('POST', '/v1/users', tok.admin, { name: LEAD.name, email: LEAD.email, role: 'CS_LEAD', password: LEAD.password, teamIds: [], languages: [], maxConcurrent: 5 });
   tok.lead = await loginApi(LEAD.email, LEAD.password);
   const team = (await call<{ id: string }>('POST', '/v1/teams', tok.lead, { name: 'WC Orders' })).id;
+  // The lead manages the agent through an owning team of their own, outside the queue's team (ADR-026).
+  const owners = (await call<{ id: string }>('POST', '/v1/teams', tok.lead, { name: 'WC Agent owners' })).id;
+  await call('PATCH', `/v1/users/${lead.id}`, tok.admin, { teamIds: [owners] });
   await call('POST', '/v1/users', tok.lead, { name: EXEC.name, email: EXEC.email, role: 'CS_EXEC', password: EXEC.password, teamIds: [team], languages: [], maxConcurrent: 5 });
   tok.exec = await loginApi(EXEC.email, EXEC.password);
   const queue = (await call<{ id: string }>('POST', '/v1/queues', tok.lead, { name: 'WC Orders · Tier 1', teamIds: [team] })).id;
   // Deterministic development model (ADR-015); slow enough chunks that streaming is observable.
   const provider = (await call<{ id: string }>('POST', '/v1/model-providers', tok.admin, { kind: 'DEV_SCRIPTED', name: 'WC Scripted', settings: { latencyMs: 100, chunkDelayMs: 80 } })).id;
   const profile = (await call<{ id: string }>('POST', '/v1/model-profiles', tok.admin, { name: 'wc-support', providerId: provider, model: 'scripted-1', retries: 0 })).id;
-  const agent = (await call<{ id: string }>('POST', '/v1/agents', tok.lead, { name: 'Ava', slug: 'ava-wc', purpose: 'order support', conversationType: 'SUPPORT', modelProfileId: profile, defaultQueueId: queue })).id;
+  const agent = (await call<{ id: string }>('POST', '/v1/agents', tok.lead, { name: 'Ava', slug: 'ava-wc', purpose: 'order support', conversationType: 'SUPPORT', modelProfileId: profile, defaultQueueId: queue, teamIds: [owners] })).id;
   await call('POST', `/v1/agents/${agent}/status`, tok.lead, { status: 'LIVE' });
   const channel = await call<{ publicKey: string }>('POST', '/v1/channels', tok.admin, {
     kind: 'WEBCHAT',

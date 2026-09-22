@@ -18,7 +18,7 @@ export async function InboxPane() {
     hasPermission(session, Permission.AGENTS_READ) ? loadAgentOptions().catch(() => [] as Option[]) : Promise.resolve([] as Option[]),
     hasPermission(session, Permission.QUEUES_READ) ? loadQueueOptions().catch(() => [] as Option[]) : Promise.resolve([] as Option[]),
   ]);
-  const defaultView = hasPermission(session, Permission.CONVERSATIONS_READ_ALL) ? 'all' : 'mine';
+  const defaultView = hasPermission(session, Permission.CONVERSATIONS_READ_TEAM) ? 'all' : 'mine';
   return <InboxClient defaultView={defaultView} agents={agents} queues={queues} meId={session.user.id} timeZone={session.user.deployment.timezone} />;
 }
 

@@ -21,6 +21,7 @@ import {
 } from '@ocso/agent-runtime';
 import { ScriptedAdapter } from '@ocso/agent-runtime/testing';
 import { completeSetup, startApi, type ApiHarness } from './harness.js';
+import { setTeams } from './teams.js';
 
 let h: ApiHarness;
 let admin: string;
@@ -36,9 +37,10 @@ beforeAll(async () => {
   admin = await completeSetup(h);
   const mk = async (email: string, role: string, extra: Record<string, unknown> = {}) =>
     h.http().post('/v1/users').set(auth(admin)).send({ email, name: email.split('@')[0], role, password: 'a password 12345', ...extra }).expect(201);
-  await mk('lead@ocso.test', 'CS_LEAD');
+  const leadId = (await mk('lead@ocso.test', 'CS_LEAD')).body.id;
   lead = await h.loginAs('lead@ocso.test', 'a password 12345');
   ids.team = (await h.http().post('/v1/teams').set(auth(lead)).send({ name: 'Cards' }).expect(201)).body.id;
+  await setTeams(h, admin, leadId, [ids.team!]); // the lead's team owns Maya (ADR-026)
   await mk('exec@ocso.test', 'CS_EXEC', { teamIds: [ids.team] });
   exec = await h.loginAs('exec@ocso.test', 'a password 12345');
   await h.http().put('/v1/me/availability').set(auth(exec)).send({ availability: 'AVAILABLE' }).expect(200);
@@ -50,7 +52,7 @@ beforeAll(async () => {
   ids.profile = uuidv7();
   await h.db.db.insert(modelProfiles).values({ id: ids.profile, name: 'support-primary', providerId: ids.provider, model: 'scripted', retries: 0 });
 
-  const agent = await h.http().post('/v1/agents').set(auth(lead)).send({ name: 'Maya', purpose: 'customer support', conversationType: 'SUPPORT', modelProfileId: ids.profile, defaultQueueId: ids.queue }).expect(201);
+  const agent = await h.http().post('/v1/agents').set(auth(lead)).send({ name: 'Maya', purpose: 'customer support', conversationType: 'SUPPORT', modelProfileId: ids.profile, defaultQueueId: ids.queue, teamIds: [ids.team] }).expect(201);
   ids.agent = agent.body.id;
   await h.http().post(`/v1/agents/${ids.agent}/status`).set(auth(lead)).send({ status: 'LIVE' }).expect(201);
 

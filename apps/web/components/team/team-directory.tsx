@@ -42,8 +42,8 @@ export async function TeamDirectory() {
           />
         }
       />
-      <SecHead title="People" count={users.length} desc="role changes and deactivation end the user's sessions immediately" />
-      <UsersTable users={users} teams={teams} timeZone={session.user.deployment.timezone} />
+      <SecHead title="People" count={users.length} desc="invited users choose their own password · role changes and deactivation end their sessions immediately" />
+      <UsersTable users={users} teams={teams} timeZone={session.user.deployment.timezone} viewer={{ id: session.user.id, manageable: creatable }} />
       <SecHead title="Teams" count={teams.length} style={{ marginTop: 22 }} />
       <TeamsTable teams={teams} />
     </>

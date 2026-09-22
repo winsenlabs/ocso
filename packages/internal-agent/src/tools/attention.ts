@@ -1,7 +1,7 @@
 import { and, eq, gt, inArray, isNotNull, ne, sql } from 'drizzle-orm';
 import { Permission, can } from '@ocso/auth';
-import { InboxService, QueueService, SettingsService, agentSummaries } from '@ocso/application';
-import { mcpConnections, modelProviders, usageEvents, workers, virtualAgents } from '@ocso/db';
+import { AgentService, InboxService, QueueService, SettingsService, agentSummaries } from '@ocso/application';
+import { mcpConnections, modelProviders, usageEvents, workers } from '@ocso/db';
 import { z } from 'zod';
 import type { InternalTool, ObjectLink, ToolContext } from '../contract.js';
 
@@ -59,7 +59,8 @@ async function conversationItems(ctx: ToolContext) {
 }
 
 async function businessItems(ctx: ToolContext) {
-  const [stats, agents, queues] = await Promise.all([agentSummaries(ctx.db, 7), ctx.db.select().from(virtualAgents), new QueueService(ctx.db).list()]);
+  // Agents in the user's scope only (a CS Lead: their teams' agents, ADR-026).
+  const [stats, agents, queues] = await Promise.all([agentSummaries(ctx.db, 7), new AgentService(ctx.db).list(ctx.principal), new QueueService(ctx.db).list()]);
   const out = [];
   for (const a of agents) {
     const s = stats.get(a.id);

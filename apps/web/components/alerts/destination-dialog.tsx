@@ -7,7 +7,7 @@ import { Modal } from '@/components/ui/modal';
 import { createDestinationAction, deleteDestinationAction, updateDestinationAction } from '@/lib/actions/alerts';
 import type { NotificationDestination } from '@/lib/api/alerts';
 import { ConfirmButton } from './confirm-button';
-import { DESTINATION_SPECS, buildConfig, configText, specOf } from './destination-form';
+import { DESTINATION_SPECS, buildConfig, configText, fieldVisible, secretVisible, specOf } from './destination-form';
 
 /** Add or edit a notification destination (POST / PATCH /v1/notification-destinations). Secrets are write-only. */
 export function DestinationDialog({ destination, closeHref }: { destination: NotificationDestination | null; closeHref: string }) {
@@ -21,10 +21,11 @@ export function DestinationDialog({ destination, closeHref }: { destination: Not
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const spec = specOf(kind);
+  const fields = spec.fields.filter((f) => fieldVisible(f, text));
 
   function save() {
     setError(null);
-    const body = { name, config: buildConfig(kind, text), enabled, ...(secret ? { secret } : {}) };
+    const body = { name, config: buildConfig(kind, text), enabled, ...(secret && secretVisible(spec, text) ? { secret } : {}) };
     start(async () => {
       const r = destination ? await updateDestinationAction(destination.id, body) : await createDestinationAction({ ...body, kind });
       if (r.ok) close();
@@ -96,9 +97,9 @@ export function DestinationDialog({ destination, closeHref }: { destination: Not
             </select>
           </div>
         </div>
-        {spec.fields.length ? (
+        {fields.length ? (
           <div className="fld-row">
-            {spec.fields.map((f) => {
+            {fields.map((f) => {
               const id = `dest-${f.name}`;
               const value = text[f.name] ?? '';
               const set = (v: string) => setText((t) => ({ ...t, [f.name]: v }));
@@ -127,7 +128,7 @@ export function DestinationDialog({ destination, closeHref }: { destination: Not
         ) : (
           <span className="mono-sm">In-app alerts appear in the OCSO alert inbox for the rule&apos;s audience. No configuration needed.</span>
         )}
-        {spec.secret ? (
+        {spec.secret && secretVisible(spec, text) ? (
           <div className="fld">
             <label htmlFor="dest-secret">
               {spec.secret.label}

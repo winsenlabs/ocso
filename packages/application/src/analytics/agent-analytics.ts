@@ -3,6 +3,7 @@ import { Permission, assertCan, type Principal } from '@ocso/auth';
 import { notFound } from '@ocso/domain';
 import { virtualAgents, type Db } from '@ocso/db';
 import { z } from 'zod';
+import { assertAgentReadable, readableAgentsSql } from '../agents/access.js';
 import { SettingsService } from '../settings/settings.js';
 import { csatStats, costStats, toolFailureStats, type CsatStat } from './agent-side-metrics.js';
 import { channelBreakdown, handlingTime, type ChannelBreakdown, type HandlingTime } from './channel-and-handling.js';
@@ -63,7 +64,8 @@ const tile = <T>(value: T, previous: T, definition: string): Tile<T> => ({ value
 /**
  * CS Lead agent analytics (design/02 Overview + Analytics tabs). Every number
  * is a documented formula over explicit rows — no composite quality score.
- * agentId = null aggregates every virtual agent.
+ * agentId = null aggregates every agent the principal can read (a CS Lead's
+ * teams' agents, ADR-026); another team's agent is not found.
  */
 export class AgentAnalyticsService {
   constructor(
@@ -73,10 +75,12 @@ export class AgentAnalyticsService {
 
   async analytics(principal: Principal, agentId: string | null, days: number): Promise<AgentAnalytics> {
     assertCan(principal, Permission.ANALYTICS_BUSINESS_READ);
+    if (agentId) await assertAgentReadable(this.db, principal, agentId);
     const agent = agentId ? await this.agent(agentId) : null;
     const now = this.now();
     const { timezone } = await new SettingsService(this.db).deployment();
-    const w = windowOf(agentId, days, now, timezone);
+    const scope = readableAgentsSql(principal);
+    const w = windowOf(agentId, days, now, timezone, scope);
     const prev = previousWindow(w);
     const [kpis, prevKpis, csat, cost, tools] = await Promise.all([
       conversationKpis(this.db, w, now),
@@ -90,14 +94,14 @@ export class AgentAnalyticsService {
     const p = prevKpis.total;
     const seriesStart = new Date(now.getTime() - SERIES_DAYS * 86_400_000);
     const [points, markers, reasons, failures, topics, gaps, mix, corrections, reviews, channels, handling, sales, tags] = await Promise.all([
-      containmentSeries(this.db, agentId, SERIES_DAYS, now, timezone),
-      promptVersionMarkers(this.db, agentId, seriesStart, now),
+      containmentSeries(this.db, agentId, SERIES_DAYS, now, timezone, scope),
+      promptVersionMarkers(this.db, agentId, seriesStart, now, scope),
       escalationReasons(this.db, w),
       topInsightLabels(this.db, w, 'failure'),
       topInsightLabels(this.db, w, 'topic'),
       knowledgeGaps(this.db, w),
       insightMix(this.db, w),
-      correctionOpportunities(this.db, agentId),
+      correctionOpportunities(this.db, agentId, 10, scope),
       reviewedConversations(this.db, w),
       channelBreakdown(this.db, w),
       handlingTime(this.db, w),

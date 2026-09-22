@@ -1,5 +1,5 @@
 import { and, desc, eq, max } from 'drizzle-orm';
-import { Permission, assertCan } from '@ocso/auth';
+import { Permission, assertCan, type Principal } from '@ocso/auth';
 import { notFound, validation } from '@ocso/domain';
 import { promptDrafts, promptVersions, virtualAgents, uuidv7, type Db, type DbOrTx } from '@ocso/db';
 import {
@@ -17,6 +17,7 @@ import { bumpGeneration } from '../cache/generations.js';
 import { emitEvent } from '../events/outbox.js';
 import type { ActorContext } from '../shared/context.js';
 import { markCorrectionsApplied } from '../quality/corrections-applied.js';
+import { assertAgentManageable, assertAgentReadable } from './access.js';
 
 export const ComponentsInput = z.object(
   Object.fromEntries(BUSINESS_COMPONENT_KEYS.map((k) => [k, z.string().max(20_000)])) as Record<BusinessComponentKey, z.ZodString>,
@@ -68,15 +69,25 @@ export async function createPromptVersion(
   return row!;
 }
 
-/** Prompt drafts, versions, activation and diffs (design/02 Prompt + Versions tabs). */
+/**
+ * Prompt drafts, versions, activation and diffs (design/02 Prompt + Versions tabs).
+ * Reads need a readable agent, writes a managed one (owning team, ADR-026); both 404 otherwise.
+ */
 export class PromptService {
   constructor(private readonly db: Db) {}
 
-  async versions(agentId: string): Promise<PromptVersionRow[]> {
+  private async canEdit(actor: ActorContext, permission: Permission, agentId: string): Promise<void> {
+    assertCan(actor.principal!, permission);
+    await assertAgentManageable(this.db, actor.principal!, agentId);
+  }
+
+  async versions(principal: Principal, agentId: string): Promise<PromptVersionRow[]> {
+    await assertAgentReadable(this.db, principal, agentId);
     return this.db.select().from(promptVersions).where(eq(promptVersions.agentId, agentId)).orderBy(desc(promptVersions.version));
   }
 
-  async draft(agentId: string): Promise<{ components: PromptComponents; baseVersionId: string | null; dirty: boolean }> {
+  async draft(principal: Principal, agentId: string): Promise<{ components: PromptComponents; baseVersionId: string | null; dirty: boolean }> {
+    await assertAgentReadable(this.db, principal, agentId);
     const [agent] = await this.db.select().from(virtualAgents).where(eq(virtualAgents.id, agentId));
     if (!agent) throw notFound('agent', agentId);
     const [draft] = await this.db.select().from(promptDrafts).where(eq(promptDrafts.agentId, agentId));
@@ -90,7 +101,7 @@ export class PromptService {
   }
 
   async saveDraft(actor: ActorContext, agentId: string, components: PromptComponents): Promise<void> {
-    assertCan(actor.principal!, Permission.PROMPTS_EDIT);
+    await this.canEdit(actor, Permission.PROMPTS_EDIT, agentId);
     const [agent] = await this.db.select().from(virtualAgents).where(eq(virtualAgents.id, agentId));
     if (!agent) throw notFound('agent', agentId);
     await this.db
@@ -100,7 +111,7 @@ export class PromptService {
   }
 
   async createVersionFromDraft(actor: ActorContext, agentId: string, input: CreateVersionInput): Promise<PromptVersionRow> {
-    assertCan(actor.principal!, Permission.PROMPTS_EDIT);
+    await this.canEdit(actor, Permission.PROMPTS_EDIT, agentId);
     return this.db.transaction(async (tx) => {
       const [draft] = await tx.select().from(promptDrafts).where(eq(promptDrafts.agentId, agentId)).for('update');
       if (!draft) throw validation('no_draft', 'There is no draft to version');
@@ -120,13 +131,13 @@ export class PromptService {
   }
 
   async discardDraft(actor: ActorContext, agentId: string): Promise<void> {
-    assertCan(actor.principal!, Permission.PROMPTS_EDIT);
+    await this.canEdit(actor, Permission.PROMPTS_EDIT, agentId);
     await this.db.delete(promptDrafts).where(eq(promptDrafts.agentId, agentId));
   }
 
   /** Activation (or rollback to an older version). Invalidates the agent's derived caches. */
   async activate(actor: ActorContext, agentId: string, versionId: string): Promise<void> {
-    assertCan(actor.principal!, Permission.PROMPTS_ACTIVATE);
+    await this.canEdit(actor, Permission.PROMPTS_ACTIVATE, agentId);
     await this.db.transaction(async (tx) => {
       const [version] = await tx.select().from(promptVersions).where(and(eq(promptVersions.id, versionId), eq(promptVersions.agentId, agentId)));
       if (!version) throw notFound('prompt_version', versionId);
@@ -147,7 +158,8 @@ export class PromptService {
     });
   }
 
-  async diff(agentId: string, fromId: string, toId: string): Promise<Array<{ key: string; before: string; after: string }>> {
+  async diff(principal: Principal, agentId: string, fromId: string, toId: string): Promise<Array<{ key: string; before: string; after: string }>> {
+    await assertAgentReadable(this.db, principal, agentId);
     const [from] = await this.db.select().from(promptVersions).where(and(eq(promptVersions.id, fromId), eq(promptVersions.agentId, agentId)));
     const [to] = await this.db.select().from(promptVersions).where(and(eq(promptVersions.id, toId), eq(promptVersions.agentId, agentId)));
     if (!from || !to) throw notFound('prompt_version', !from ? fromId : toId);

@@ -1,7 +1,8 @@
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
-  resolve: { conditions: ['@ocso/source'] },
+  // `@/…` is the web app's import alias (apps/web/tsconfig.json paths), for component tests.
+  resolve: { conditions: ['@ocso/source'], alias: [{ find: /^@\/(.*)$/, replacement: `${import.meta.dirname}/apps/web/$1` }] },
   ssr: { resolve: { conditions: ['@ocso/source'] } },
   test: {
     projects: [

@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { and, eq, sql } from 'drizzle-orm';
 import { createTestDatabase, type TestDatabase } from '@ocso/db/testing';
-import { alertDeliveries, alertRules, alerts, loginAttempts, notificationDestinations, uuidv7 } from '@ocso/db';
+import { alertDeliveries, alertRules, alerts, loginAttempts, notificationDestinations, uuidv7, virtualAgents } from '@ocso/db';
 import type { Principal } from '@ocso/auth';
 import { MemoryQueue } from '@ocso/queue';
 import { AlertEngine, AlertService, type ActorContext, type AlertRuleRow } from '../src/index.js';
+import { createTeam, ownAgents } from './support/ownership.js';
 
 let t: TestDatabase;
 let queue: MemoryQueue;
@@ -12,7 +13,9 @@ let engine: AlertEngine;
 const T0 = new Date();
 const at = (seconds: number) => new Date(T0.getTime() + seconds * 1000);
 const ctx = (principal: Principal | null): ActorContext => ({ principal, correlationId: 'test' });
-const principal = (role: Principal['role']): Principal => ({ userId: uuidv7(), role, displayName: role, teamIds: [], via: 'UI' });
+// Lead and exec share the team that owns the agent the business alert is about (ADR-026).
+const TEAM = uuidv7();
+const principal = (role: Principal['role']): Principal => ({ userId: uuidv7(), role, displayName: role, teamIds: role === 'PLATFORM_TECH_ADMIN' ? [] : [TEAM], via: 'UI' });
 const admin = principal('PLATFORM_TECH_ADMIN');
 const lead = principal('CS_LEAD');
 const exec = principal('CS_EXEC');
@@ -22,6 +25,7 @@ beforeAll(async () => {
   t = await createTestDatabase();
   queue = new MemoryQueue();
   engine = new AlertEngine({ db: t.db, queue });
+  await createTeam(t.db, TEAM);
   await t.db.insert(notificationDestinations).values([
     { id: dest.inApp, name: 'In-app', kind: 'IN_APP' },
     { id: dest.webhook, name: 'Ops webhook', kind: 'WEBHOOK', config: { url: 'https://hooks.example.com/x' }, secretRef: 'sec_x' },
@@ -145,6 +149,8 @@ describe('alert inbox: audience scoping, acknowledge, resolve', () => {
       .values({ id: uuidv7(), name: 'SLA', kind: 'BUSINESS', condition: 'sla_breaches_above', audienceRoles: ['CS_LEAD', 'CS_EXEC'], destinationIds: [dest.webhook, dest.slack] })
       .returning();
     businessRule = r!.id;
+    await t.db.insert(virtualAgents).values({ id: agentId, name: 'Maya', slug: 'maya-lifecycle', conversationType: 'SUPPORT' });
+    await ownAgents(t.db, TEAM, agentId);
     const base = { title: 'x', body: 'b', source: 's', severity: 'WARNING' as const, openedAt: T0, lastSeenAt: T0 };
     await t.db.insert(alerts).values([
       { ...base, id: ids.technical, fingerprint: `f-${ids.technical}`, kind: 'TECHNICAL', audienceRoles: ['PLATFORM_TECH_ADMIN'], title: 'Provider down', severity: 'CRITICAL' },

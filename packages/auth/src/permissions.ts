@@ -1,12 +1,19 @@
 /**
  * Permission catalogue. Every privileged API route and internal-agent tool
  * declares exactly one of these; the role matrix in roles.ts grants them.
- * Resource-level checks (which conversations, which agents) live in policies/.
+ * Resource-level checks (which conversations, which agents) live in the
+ * application services: conversations/access.ts and agents/access.ts (ADR-026).
  */
 export const Permission = {
   // Conversations & customers (operations plane)
+  /** Conversations assigned to you or in queues your teams serve (AI-active ones only when the deployment allows). */
   CONVERSATIONS_READ: 'conversations.read',
-  CONVERSATIONS_READ_ALL: 'conversations.read_all',
+  /**
+   * Team oversight (ADR-026): every conversation handled by a virtual agent your
+   * teams own or routed to a queue your teams serve, whatever its state or
+   * assignee. Not "all conversations": other teams' agents stay invisible.
+   */
+  CONVERSATIONS_READ_TEAM: 'conversations.read_team',
   CONVERSATIONS_CLAIM: 'conversations.claim',
   CONVERSATIONS_TAKE_OVER: 'conversations.take_over',
   CONVERSATIONS_REPLY: 'conversations.reply',
@@ -22,8 +29,14 @@ export const Permission = {
   COPILOT_USE: 'copilot.use',
 
   // Virtual agents & business configuration
+  /** Agents your teams own; without agents.manage also agents reachable through your teams' queues (ADR-026). */
   AGENTS_READ: 'agents.read',
+  /** Every virtual agent regardless of owning team (platform governance; technical fields). */
+  AGENTS_READ_ALL: 'agents.read_all',
+  /** Create agents and manage the agents your teams own (settings, status, owning teams within your teams). */
   AGENTS_MANAGE: 'agents.manage',
+  /** Reassign any agent's owning teams (e.g. when a lead leaves); audited. */
+  AGENTS_ASSIGN_OWNER: 'agents.assign_owner',
   PROMPTS_EDIT: 'prompts.edit',
   PROMPTS_ACTIVATE: 'prompts.activate',
   AGENT_TOOLS_MANAGE: 'agent_tools.manage',
@@ -66,6 +79,8 @@ export const Permission = {
   USERS_MANAGE: 'users.manage',
   USERS_MANAGE_EXECS: 'users.manage_execs',
   AUDIT_READ: 'audit.read',
+  /** The whole audit log; without it, audit reads are scoped to the reader's teams (ADR-026). */
+  AUDIT_READ_ALL: 'audit.read_all',
   DEPLOYMENT_SETTINGS_MANAGE: 'deployment_settings.manage',
 
   // Internal OCSO agent

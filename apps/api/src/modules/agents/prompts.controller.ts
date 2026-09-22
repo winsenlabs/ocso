@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Post, Put, Query } from '@nestjs/common';
-import { Permission } from '@ocso/auth';
+import { Permission, type Principal } from '@ocso/auth';
 import {
   AgentService,
   ComponentsInput,
@@ -14,7 +14,7 @@ import { users, type Db } from '@ocso/db';
 import { COMPONENT_DESCRIPTORS, compilePrompt, estimateTokens, type PromptComponents } from '@ocso/prompt-compiler';
 import { inArray } from 'drizzle-orm';
 import { z } from 'zod';
-import { Actor, RequirePermission } from '../../common/decorators.js';
+import { Actor, CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
 import { DB } from '../../infrastructure/tokens.js';
 
 const Id = z.uuid();
@@ -24,7 +24,12 @@ type Components = z.infer<typeof ComponentsInput>;
 const RulePatch = EscalationRuleInput.partial();
 type RulePatch = z.infer<typeof RulePatch>;
 
-/** Structured prompt editing, versioning and escalation rules (design/02 Prompt/Versions/Escalation tabs). */
+/**
+ * Structured prompt editing, versioning and escalation rules (design/02
+ * Prompt/Versions/Escalation tabs). The services scope every call to agents
+ * the caller can read (reads) or whose owning team they are in (writes); 404
+ * otherwise (ADR-026).
+ */
 @Controller('v1/agents/:agentId')
 export class PromptsController {
   constructor(
@@ -36,8 +41,8 @@ export class PromptsController {
 
   @Get('prompt')
   @RequirePermission(Permission.AGENTS_READ)
-  async prompt(@Param('agentId', { schema: Id }) agentId: string) {
-    const [draft, versions] = await Promise.all([this.prompts.draft(agentId), this.prompts.versions(agentId)]);
+  async prompt(@CurrentPrincipal() principal: Principal, @Param('agentId', { schema: Id }) agentId: string) {
+    const [draft, versions] = await Promise.all([this.prompts.draft(principal, agentId), this.prompts.versions(principal, agentId)]);
     const authorIds = [...new Set(versions.flatMap((v) => (v.authorId ? [v.authorId] : [])))];
     const authors = authorIds.length ? await this.db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, authorIds)) : [];
     const authorName = new Map(authors.map((a) => [a.id, a.name]));
@@ -57,8 +62,8 @@ export class PromptsController {
   /** Compiled preview with a synthetic customer turn: token estimates and hashes per layer. */
   @Get('prompt/preview')
   @RequirePermission(Permission.AGENTS_READ)
-  async preview(@Param('agentId', { schema: Id }) agentId: string) {
-    const [agent, draft] = await Promise.all([this.agents.get(agentId), this.prompts.draft(agentId)]);
+  async preview(@CurrentPrincipal() principal: Principal, @Param('agentId', { schema: Id }) agentId: string) {
+    const [agent, draft] = await Promise.all([this.agents.get(principal, agentId), this.prompts.draft(principal, agentId)]);
     const compiled = compilePrompt({
       agent: { id: agent.id, name: agent.name, conversationType: agent.conversationType },
       promptVersion: { id: 'draft', version: 0, components: draft.components },
@@ -105,14 +110,14 @@ export class PromptsController {
 
   @Get('prompt/diff')
   @RequirePermission(Permission.AGENTS_READ)
-  diff(@Param('agentId', { schema: Id }) agentId: string, @Query({ schema: DiffQuery }) q: DiffQuery) {
-    return this.prompts.diff(agentId, q.from, q.to);
+  diff(@CurrentPrincipal() principal: Principal, @Param('agentId', { schema: Id }) agentId: string, @Query({ schema: DiffQuery }) q: DiffQuery) {
+    return this.prompts.diff(principal, agentId, q.from, q.to);
   }
 
   @Get('escalation-rules')
   @RequirePermission(Permission.AGENTS_READ)
-  listRules(@Param('agentId', { schema: Id }) agentId: string) {
-    return this.rules.list(agentId);
+  listRules(@CurrentPrincipal() principal: Principal, @Param('agentId', { schema: Id }) agentId: string) {
+    return this.rules.list(principal, agentId);
   }
 
   @Post('escalation-rules')
@@ -123,14 +128,19 @@ export class PromptsController {
 
   @Put('escalation-rules/:ruleId')
   @RequirePermission(Permission.ESCALATION_MANAGE)
-  updateRule(@Actor() actor: ActorContext, @Param('ruleId', { schema: Id }) ruleId: string, @Body({ schema: RulePatch }) body: RulePatch) {
-    return this.rules.update(actor, ruleId, body);
+  updateRule(
+    @Actor() actor: ActorContext,
+    @Param('agentId', { schema: Id }) agentId: string,
+    @Param('ruleId', { schema: Id }) ruleId: string,
+    @Body({ schema: RulePatch }) body: RulePatch,
+  ) {
+    return this.rules.update(actor, agentId, ruleId, body);
   }
 
   @Delete('escalation-rules/:ruleId')
   @HttpCode(204)
   @RequirePermission(Permission.ESCALATION_MANAGE)
-  async deleteRule(@Actor() actor: ActorContext, @Param('ruleId', { schema: Id }) ruleId: string) {
-    await this.rules.remove(actor, ruleId);
+  async deleteRule(@Actor() actor: ActorContext, @Param('agentId', { schema: Id }) agentId: string, @Param('ruleId', { schema: Id }) ruleId: string) {
+    await this.rules.remove(actor, agentId, ruleId);
   }
 }

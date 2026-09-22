@@ -1,20 +1,29 @@
 import { Inject, Injectable, type CanActivate, type ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { can } from '@ocso/auth';
-import { SessionService } from '@ocso/application';
+import { AuthPolicyService, loadPrincipal, mfaPending } from '@ocso/application';
+import type { AuthServer } from '@ocso/application/auth-server';
+import type { Db } from '@ocso/db';
 import { DomainError, forbidden } from '@ocso/domain';
+import { AUTH, DB } from '../infrastructure/tokens.js';
 import { ACCESS_KEY, type AccessRule, type OcsoRequest } from './decorators.js';
+
+const unauthenticated = () => new DomainError('authentication', 'unauthenticated', 'Sign in required');
 
 /**
  * Global guard. Deny by default: every route must declare @Public,
- * @Authenticated or @RequirePermission. Permission checks run in code on every
- * request (build rule §14); services add resource-level checks.
+ * @Authenticated or @RequirePermission. Authentication is Better Auth's
+ * session (ADR-025: the BFF forwards it as `Authorization: Bearer`; /v1 never
+ * accepts cookies); authorization stays OCSO's — permission checks run in code
+ * on every request (build rule §14) and services add resource-level checks.
  */
 @Injectable()
 export class AuthGuard implements CanActivate {
   constructor(
     @Inject(Reflector) private readonly reflector: Reflector,
-    @Inject(SessionService) private readonly sessions: SessionService,
+    @Inject(AUTH) private readonly auth: AuthServer,
+    @Inject(DB) private readonly db: Db,
+    @Inject(AuthPolicyService) private readonly authPolicy: AuthPolicyService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -24,11 +33,18 @@ export class AuthGuard implements CanActivate {
 
     const req = context.switchToHttp().getRequest<OcsoRequest>();
     const token = bearer(req.headers.authorization);
-    const principal = token ? await this.sessions.authenticate(token) : null;
-    if (!principal) throw new DomainError('authentication', 'unauthenticated', 'Sign in required');
+    if (!token) throw unauthenticated();
+    // Better Auth verifies the signed token and expiry; OCSO's policy plugin enforces the idle window.
+    const result = await this.auth.getSession(new Headers({ authorization: `Bearer ${token}` }));
+    const principal = result ? await loadPrincipal(this.db, result.user.id, 'UI', result.session.id) : null;
+    if (!result || !principal) throw unauthenticated();
+    const mfa = await this.authPolicy.mfaState(principal.role, result.session.authMethod, result.user.twoFactorEnabled);
     req.principal = principal;
-    req.sessionToken = token ?? undefined;
+    req.authSession = { id: result.session.id, bearer: token, authMethod: result.session.authMethod, expiresAt: result.session.expiresAt, mfa };
 
+    if (mfaPending(mfa) && !(rule.kind === 'authenticated' && rule.allowPendingMfa)) {
+      throw new DomainError('authorization', 'mfa_enrollment_required', 'Set up two-factor authentication to continue');
+    }
     if (rule.kind === 'permission' && !can(principal, rule.permission)) {
       throw forbidden(rule.permission, `role ${principal.role} lacks ${rule.permission}`);
     }
@@ -39,8 +55,9 @@ export class AuthGuard implements CanActivate {
   }
 }
 
+/** The signed session token (`<token>.<hmac>`, possibly URL-encoded) from a Bearer header. */
 function bearer(header: string | undefined): string | null {
-  if (!header?.startsWith('Bearer ')) return null;
+  if (!header || header.slice(0, 7).toLowerCase() !== 'bearer ') return null;
   const token = header.slice(7).trim();
-  return token.length >= 20 && token.length <= 200 ? token : null;
+  return token.length >= 20 && token.length <= 400 ? token : null;
 }

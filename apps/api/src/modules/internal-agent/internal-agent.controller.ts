@@ -5,8 +5,12 @@ import { createUIMessageStream, pipeUIMessageStreamToResponse } from 'ai';
 import { Permission, type Principal } from '@ocso/auth';
 import { validation } from '@ocso/domain';
 import { InternalActionService, InternalAgentService } from '@ocso/internal-agent';
+import { SessionLiveness } from '@ocso/application';
+import type { ApiEnv } from '@ocso/config';
 import { z } from 'zod';
 import { CurrentPrincipal, RequirePermission, type OcsoRequest } from '../../common/decorators.js';
+import { abortWhenSessionEnds } from '../../common/session-watch.js';
+import { ENV } from '../../infrastructure/tokens.js';
 
 const Id = z.uuid();
 /** The page the user has open (design/05 "context · …"): an in-app path plus the object ids on it. */
@@ -35,6 +39,8 @@ export class InternalAgentController {
   constructor(
     @Inject(InternalAgentService) private readonly agent: InternalAgentService,
     @Inject(InternalActionService) private readonly actions: InternalActionService,
+    @Inject(SessionLiveness) private readonly liveness: SessionLiveness,
+    @Inject(ENV) private readonly env: ApiEnv,
   ) {}
 
   @Post('chat')
@@ -45,7 +51,12 @@ export class InternalAgentController {
     // Before streaming, so the drawer gets a typed 400 it can turn into its setup state.
     if (!(await this.agent.configured())) throw validation('internal_agent_not_configured', 'A Tech Admin must choose a model profile for Ask OCSO');
     const abort = new AbortController();
-    res.on('close', () => abort.abort());
+    // Long answers re-check the session like every stream (ADR-025): revocation stops the model call.
+    const stopWatching = abortWhenSessionEnds(this.liveness, req.authSession?.id, this.env.SESSION_STREAM_RECHECK_SECONDS * 1000, abort);
+    res.on('close', () => {
+      stopWatching();
+      abort.abort();
+    });
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
         const textId = randomUUID();

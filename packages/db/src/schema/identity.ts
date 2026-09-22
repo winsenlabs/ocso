@@ -10,7 +10,13 @@ export const users = pgTable(
     name: text().notNull(),
     role: text().$type<'PLATFORM_TECH_ADMIN' | 'CS_LEAD' | 'CS_EXEC'>().notNull(),
     status: text().$type<'ACTIVE' | 'DISABLED'>().notNull().default('ACTIVE'),
-    passwordHash: text(),
+    /** Better Auth fields (ADR-025). An accepted invite or SSO sign-in verifies the address. */
+    emailVerified: boolean().notNull().default(false),
+    image: text(),
+    twoFactorEnabled: boolean().notNull().default(false),
+    /** Pending invite: set when an invite link is sent, cleared when it is accepted. */
+    invitedAt: ts('invited_at'),
+    inviteExpiresAt: ts('invite_expires_at'),
     availability: text().$type<'AVAILABLE' | 'AWAY' | 'OFFLINE'>().notNull().default('OFFLINE'),
     maxConcurrent: integer().notNull().default(8),
     languages: text().array().notNull().default(sql`'{}'::text[]`),
@@ -23,25 +29,10 @@ export const users = pgTable(
   (t) => [uniqueIndex('users_email_uq').on(sql`lower(${t.email})`)],
 );
 
-export const sessions = pgTable(
-  'sessions',
-  {
-    id: id(),
-    tokenHash: text().notNull(),
-    userId: uuid()
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    createdAt: createdAt(),
-    lastSeenAt: ts('last_seen_at').notNull().defaultNow(),
-    idleExpiresAt: ts('idle_expires_at').notNull(),
-    expiresAt: ts('expires_at').notNull(),
-    revokedAt: ts('revoked_at'),
-    ip: text(),
-    userAgent: text(),
-  },
-  (t) => [uniqueIndex('sessions_token_uq').on(t.tokenHash), index('sessions_user_idx').on(t.userId)],
-);
-
+/**
+ * Sign-in attempts (success and failure) recorded by OCSO's Better Auth policy
+ * plugin: per-account throttling and the auth-failure alert (docs/11).
+ */
 export const loginAttempts = pgTable(
   'login_attempts',
   {

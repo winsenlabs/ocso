@@ -1,13 +1,13 @@
 import 'server-only';
 import { cookies } from 'next/headers';
 import type { z } from 'zod';
-import { SESSION_COOKIE } from '../session-cookie';
+import { sessionCookieValue } from '../session-cookie';
 import { ApiError, apiErrorFromResponse, unreachableError } from './errors';
 
 /**
  * Server-only fetch wrapper for the NestJS API (ADR-020). Server Components,
- * server actions and route handlers call the API with the session token from
- * the httpOnly cookie as a Bearer token. Responses are never cached.
+ * server actions and route handlers call the API with the Better Auth session
+ * from the httpOnly cookie as a Bearer token. Responses are never cached.
  */
 
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -27,8 +27,10 @@ export interface ApiCallOptions {
   headers?: Readonly<Record<string, string>> | undefined;
 }
 
+/** The Better Auth session (signed token from the httpOnly cookie), forwarded to the API as Bearer (ADR-025). */
 export async function readSessionToken(): Promise<string | null> {
-  return (await cookies()).get(SESSION_COOKIE)?.value ?? null;
+  const jar = await cookies();
+  return sessionCookieValue((name) => jar.get(name)?.value);
 }
 
 async function send(method: Method, path: string, body: unknown, options: ApiCallOptions): Promise<Response> {

@@ -19,14 +19,14 @@ test('app API routes answer 401 JSON instead of redirecting', async ({ request }
 });
 
 test('sign-in and setup pages are reachable without a session', async ({ request }) => {
-  for (const path of ['/login', '/setup']) {
+  for (const path of ['/login', '/setup', '/forgot-password', '/reset-password', '/invite', '/recover']) {
     const res = await request.get(path, { maxRedirects: 0 });
     expect(res.status(), path).toBe(200);
   }
 });
 
 test('an invalid session cookie is rejected by the API and lands on sign-in', async ({ page, context, baseURL }) => {
-  await context.addCookies([{ name: 'ocso_session', value: 'x'.repeat(40), url: baseURL ?? '' }]);
+  await context.addCookies([{ name: 'ocso.session_token', value: `${'x'.repeat(32)}.forged-signature`, url: baseURL ?? '' }]);
   await page.goto('/team');
   // /login (or /setup, if this file runs before the setup story) — never the app.
   await page.waitForURL((url) => url.pathname === '/login' || url.pathname === '/setup');
@@ -41,4 +41,14 @@ test('public ingress paths are forwarded to the API, not rendered by Next', asyn
     expect(res.headers()['content-type'] ?? '', path).toContain('application/json');
     expect((await res.json()).error, path).toBeTruthy();
   }
+});
+
+test('/api/auth is Better Auth on the API, reachable without a session and closed beyond its allowlist', async ({ request }) => {
+  const session = await request.get('/api/auth/get-session', { maxRedirects: 0 });
+  expect(session.status()).toBe(200);
+  expect(await session.json()).toBeNull();
+  // Sign-up and user self-updates are not part of OCSO (ADR-025): 404 from the API, not a Next page or redirect.
+  const signUp = await request.post('/api/auth/sign-up/email', { data: { email: 'x@e2e.test', password: 'long enough password', name: 'X' }, maxRedirects: 0 });
+  expect(signUp.status()).toBe(404);
+  expect(signUp.headers()['content-type'] ?? '').toContain('application/json');
 });

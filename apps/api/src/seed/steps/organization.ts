@@ -3,17 +3,20 @@ import { sql } from 'drizzle-orm';
 import { SetupService, type ActorContext } from '@ocso/application';
 import { teams, users } from '@ocso/db';
 import { actorFor, type SeedContext } from '../context.js';
-import { ORG, TEAMS, USERS, type DemoUser, type TeamKey } from '../data/organization.js';
+import { ORG, TEAMS, USERS, type DemoUser, type LeadKey, type TeamKey } from '../data/organization.js';
 
 export interface SeededPeople {
   admin: ActorContext;
   lead: ActorContext;
+  /** Both CS Leads, with their team memberships (agents are managed through them). */
+  leads: Record<LeadKey, ActorContext>;
   ids: Record<DemoUser['key'], string>;
   teamIds: Record<TeamKey, string>;
 }
 
 const adminUser = USERS.find((u) => u.key === 'admin')!;
 const leadUser = USERS.find((u) => u.key === 'lead')!;
+const salesLeadUser = USERS.find((u) => u.key === 'lead2')!;
 
 async function userIdByEmail(ctx: SeedContext, email: string): Promise<string | null> {
   const [row] = await ctx.db.select({ id: users.id }).from(users).where(sql`lower(${users.email}) = lower(${email})`);
@@ -68,7 +71,7 @@ async function ensureTeams(ctx: SeedContext, lead: ActorContext): Promise<Record
   return ids;
 }
 
-/** Organization identity, the four demo people (all three roles) and their teams. */
+/** Organization identity, the five demo people (all three roles, two CS Leads) and their teams. */
 export async function seedOrganization(ctx: SeedContext): Promise<SeededPeople> {
   const adminId = await ensureAdmin(ctx);
   const admin = actorFor(ctx, { id: adminId, name: adminUser.name, role: adminUser.role });
@@ -88,9 +91,13 @@ export async function seedOrganization(ctx: SeedContext): Promise<SeededPeople> 
   await ctx.services.users.update(admin, leadId, { teamIds: leadTeams });
   const lead = actorFor(ctx, { id: leadId, name: leadUser.name, role: leadUser.role, teamIds: leadTeams });
 
-  const ids = { admin: adminId, lead: leadId } as Record<DemoUser['key'], string>;
+  const salesTeams = salesLeadUser.teams.map((t) => teamIds[t]);
+  const salesLeadId = await ensureUser(ctx, admin, salesLeadUser, salesTeams);
+  const lead2 = actorFor(ctx, { id: salesLeadId, name: salesLeadUser.name, role: salesLeadUser.role, teamIds: salesTeams });
+
+  const ids = { admin: adminId, lead: leadId, lead2: salesLeadId } as Record<DemoUser['key'], string>;
   for (const user of USERS.filter((u) => u.role === 'CS_EXEC')) {
     ids[user.key] = await ensureUser(ctx, admin, user, user.teams.map((t) => teamIds[t]));
   }
-  return { admin, lead, ids, teamIds };
+  return { admin, lead, leads: { lead, lead2 }, ids, teamIds };
 }

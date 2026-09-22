@@ -2,12 +2,19 @@ import { randomBytes } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { createTestDatabase, type TestDatabase } from '@ocso/db/testing';
+import type { LogEmailSender } from '@ocso/email';
+import { EMAIL_SENDER } from '../../src/infrastructure/tokens.js';
 
 export interface ApiHarness {
   app: INestApplication;
   db: TestDatabase;
   http: () => ReturnType<typeof request>;
+  /** Better Auth email + password sign-in (POST /api/auth/sign-in/email); returns the bearer token. */
   loginAs(email: string, password: string): Promise<string>;
+  /** Emails the log driver captured for an address (newest last). */
+  emailsTo(email: string): Array<{ subject: string; text: string; kind: string | null }>;
+  /** The token from the newest /invite or /reset-password link emailed to an address. */
+  linkToken(email: string, page: '/invite' | '/reset-password'): string;
   close(): Promise<void>;
 }
 
@@ -30,13 +37,30 @@ export async function startApi(): Promise<ApiHarness> {
   const app = await createApp({ logger: false });
   await app.init();
   const http = () => request(app.getHttpServer());
+  const emailsTo = (email: string) =>
+    app
+      .get<LogEmailSender>(EMAIL_SENDER)
+      .sent.filter((m) => [m.to].flat().some((to) => to.toLowerCase() === email.toLowerCase()))
+      .map((m) => ({ subject: m.subject, text: m.text, kind: m.tags?.['kind'] ?? null }));
   return {
     app,
     db,
     http,
     async loginAs(email, password) {
-      const res = await http().post('/v1/auth/login').send({ email, password }).expect(200);
-      return res.body.token as string;
+      const res = await http().post('/api/auth/sign-in/email').send({ email, password }).expect(200);
+      const token = res.headers['set-auth-token'];
+      if (typeof token !== 'string' || !token) throw new Error(`no bearer token for ${email}`);
+      return token;
+    },
+    emailsTo,
+    linkToken(email, page) {
+      const messages = emailsTo(email);
+      const escaped = page.replace('/', '\\/');
+      for (const m of messages.reverse()) {
+        const match = new RegExp(`${escaped}\\?token=([\\w-]+)`).exec(m.text);
+        if (match?.[1]) return match[1];
+      }
+      throw new Error(`no ${page} link emailed to ${email}`);
     },
     async close() {
       await app.close();
@@ -52,4 +76,17 @@ export async function completeSetup(h: ApiHarness): Promise<string> {
     .send({ setupToken: SETUP_TOKEN, orgName: 'Meridian Bank', adminName: 'Admin', adminEmail: ADMIN.email, adminPassword: ADMIN.password })
     .expect(201);
   return h.loginAs(ADMIN.email, ADMIN.password);
+}
+
+/**
+ * A user with a password, written straight to the database (no invite email):
+ * for tests whose email driver is a real provider, where the API only invites.
+ */
+export async function addUserWithPassword(h: ApiHarness, user: { email: string; name: string; role: 'PLATFORM_TECH_ADMIN' | 'CS_LEAD' | 'CS_EXEC'; password: string }): Promise<string> {
+  const { hashPassword, setPasswordCredential } = await import('@ocso/application');
+  const { users, uuidv7 } = await import('@ocso/db');
+  const id = uuidv7();
+  await h.db.db.insert(users).values({ id, email: user.email.toLowerCase(), name: user.name, role: user.role, emailVerified: true });
+  await setPasswordCredential(h.db.db, id, await hashPassword(user.password));
+  return id;
 }

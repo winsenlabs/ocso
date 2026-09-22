@@ -34,10 +34,16 @@ to Next.js, and Next.js calls the API over the internal network (ADR-020). Postg
 ## 2. First run
 
 ```bash
-cp .env.example .env          # optional; every setting has a safe default
+cp .env.example .env          # set EMAIL_* first (section 9); the rest has safe defaults
 docker compose up -d --build  # keygen → postgres → migrate → api + worker → web
 docker compose ps             # api, worker, web become "healthy"; keygen and migrate "exited (0)"
 ```
+
+**Configure email before inviting anyone.** Invites, password resets and sign-in codes go out by email
+(section 9). A first `docker compose up` starts without it so you can try OCSO: messages then only reach
+the api/worker log, and Settings → Email shows a warning. For a real deployment set `EMAIL_DRIVER=resend`
+(or `smtp`); set `EMAIL_ALLOW_LOG_IN_PRODUCTION=false` to make a missing email configuration a start-up
+error.
 
 **Key generation.** Secrets are never in `compose.yaml`, `.env`, or git. On first start the `keygen`
 one-shot writes each missing secret to the `secrets` named volume:
@@ -49,6 +55,7 @@ one-shot writes each missing secret to the `secrets` named volume:
 | `app/master_key` | SecretStore key-encryption key (ADR-012). Losing it loses every stored credential |
 | `app/blob_signing_key` | HMAC for signed blob URLs |
 | `app/setup_token` | One-time `/setup` token |
+| `app/better_auth_secret` | Better Auth secret (ADR-025): signs session cookies, encrypts authenticator secrets and backup codes. Rotating it signs everyone out and users re-enrol their authenticator apps |
 | `app/demo_mcp_token`, `demo/*` | Demo MCP bearer token (`demo` profile) |
 | `app/aws_credentials`, `seaweedfs/s3.json` | SeaweedFS S3 identity (`s3` profile; readable by SeaweedFS uid 1000 only) |
 
@@ -67,6 +74,21 @@ docker compose logs api | grep "setup token"
 
 After setup the token no longer works: `/setup` refuses once a user exists.
 
+**Sign-in and sessions (ADR-025).** The API sets the session cookie on the public origin (`/api/auth/*`
+is forwarded by the web app), so these are **api** settings:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `SESSION_COOKIE_SECURE` | `true` | `Secure` + `__Secure-` prefix. Browsers accept it on `http://localhost`; set `false` only for a plain-http trial on another host |
+| `SESSION_IDLE_MINUTES` / `SESSION_ABSOLUTE_HOURS` | `120` / `24` | Idle and absolute session lifetime |
+| `BETTER_AUTH_SECRET` | keygen file | Override only to share one value across hosts |
+| `OCSO_AUTH_TRUSTED_ORIGINS` | empty | Extra origins Better Auth trusts, e.g. an OIDC IdP on a private network |
+| `OCSO_RECOVERY_TOKEN` / `_FILE` | unset | Break-glass `/recover` for a locked-out Tech Admin (setup guide §1). Set, use once, remove |
+| `OCSO_TRUSTED_PROXY_HOPS` (web) | `0` | Reverse proxies in front of web; the client address used for sign-in rate limits comes from this hop |
+
+Upgrading from a release before ADR-025 applies migrations 0014/0015: passwords keep working, every
+user signs in once more (old sessions cannot be carried over), and emails are stored in lower case.
+
 **Or seed the Meridian Bank demo** (only on a fresh database):
 
 ```bash
@@ -76,7 +98,8 @@ docker compose logs seed      # prints the logins
 
 This creates:
 - **Organization.** Meridian Bank, `ap-south-1`, `Asia/Kolkata`, residency `IN`.
-- **Users.** Tech Admin Tarun Shetty, CS Lead Anjali Rao, CS Execs Nikhil Menon and Meera Pillai.
+- **Users.** Tech Admin Tarun Shetty, CS Leads Anjali Rao (Cards & EMI, Hardship) and Rohan Kapoor
+  (Sales), CS Execs Nikhil Menon and Meera Pillai.
   Emails are `@meridian.example`. The password for all of them is `OCSO_DEMO_PASSWORD`, which
   defaults to `meridian-demo-2026`.
 - **Teams.** Three teams.
@@ -84,6 +107,8 @@ This creates:
 - **Models.** The development-only scripted model provider, plus the profiles `support-primary`,
   `support-fast`, `sales-primary` and `summarizer`.
 - **Agents.** Maya, Arjun and Riya, with curated prompt versions and escalation rules, all LIVE.
+  Agents are owned by teams (ADR-026): Maya → Cards & EMI and Riya → Hardship (managed by Anjali),
+  Arjun → Sales (managed by Rohan); each lead sees only their teams' agents.
 - **Channels.** A web chat channel.
 - **MCP.** The demo MCP server `meridian-core`, discovered, authenticated, classified and approved
   for Maya, with `payments.reverse_transaction` above ₹5,000 requiring confirmation.
@@ -244,13 +269,69 @@ This profile runs SeaweedFS (Apache-2.0, ADR-011); MinIO is not used. The `s3-in
 the `ocso-media` bucket, and credentials come from the `secrets` volume. Switching drivers does not
 migrate existing blobs. Pick one before going live.
 
-## 9. Troubleshooting
+## 9. Email (Resend or SMTP)
+
+OCSO sends invites, password resets, email verification and sign-in codes, security notices (password
+changed, new sign-in) and alert emails through one deployment-wide sender. Email is authentication
+infrastructure, so it is configured here — environment and secret files — and never in the web app.
+**Settings → Email** shows the Tech Admin what is configured and has a **Send test email** button.
+
+| Variable | Meaning |
+|---|---|
+| `EMAIL_DRIVER` | `resend` (recommended), `smtp`, or `log` (development only; production needs `EMAIL_ALLOW_LOG_IN_PRODUCTION=true`) |
+| `EMAIL_FROM` | Sender, e.g. `Acme Support <support@mail.acme.com>`, on a domain verified with the provider |
+| `EMAIL_REPLY_TO` | Optional reply address, e.g. your support inbox |
+| `RESEND_API_KEY_FILE` | File with the Resend API key (`RESEND_API_KEY` also works, but leaves the key in `.env`) |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD_FILE` | SMTP relay; `SMTP_SECURE=true` for implicit TLS on 465, otherwise STARTTLS is required (`SMTP_REQUIRE_TLS=false` only for a local relay) |
+
+**Resend setup.**
+
+1. In Resend, **Domains → Add domain**. Use a subdomain you send from, such as `mail.acme.com`, so the
+   reputation of your main domain stays separate.
+2. At your DNS provider, create the records Resend shows, copying the values exactly: the DKIM `TXT`
+   record at `resend._domainkey`, and the `MX` and SPF `TXT` records on the `send` sub-subdomain (the
+   bounce / Return-Path domain). Add a DMARC `TXT` record at `_dmarc` if the domain has none, e.g.
+   `v=DMARC1; p=none; rua=mailto:dmarc@acme.com`; Resend does not create it. Wait until the domain
+   shows **Verified** (usually minutes; DNS can take longer).
+3. **API Keys → Create API key** with **Sending access**, restricted to that domain.
+4. Store the key on the `secrets` volume (it never goes into `compose.yaml` or git), then configure `.env`:
+
+```bash
+read -rs KEY && printf '%s' "$KEY" | docker compose run --rm -T --no-deps keygen sh -c \
+  'umask 277 && cat > /secrets/app/resend_api_key && chown 1000:1000 /secrets/app/resend_api_key'; unset KEY
+```
+
+```dotenv
+EMAIL_DRIVER=resend
+EMAIL_FROM=Acme Support <support@mail.acme.com>
+EMAIL_REPLY_TO=support@acme.com
+RESEND_API_KEY_FILE=/run/secrets/ocso/resend_api_key
+```
+
+5. `docker compose up -d`, then **Settings → Email → Send test email**. Include the file in your
+   `secrets` volume backups (section 5). To rotate, overwrite the file the same way and restart api and worker.
+
+OCSO sends each message with an `Idempotency-Key`, so retries never send twice. Rate limits (`429`) and
+Resend outages are retried for alert emails; a rejected key or an unverified domain fails at once and
+the test button reports it as an `auth` error.
+
+**SMTP.** Any relay works (Amazon SES SMTP, Postmark, Mailgun, a corporate relay, or Resend's own SMTP
+at `smtp.resend.com`, user `resend`, password = API key). Write the password to
+`/secrets/app/smtp_password` like the Resend key above and set `EMAIL_DRIVER=smtp`, `EMAIL_FROM`,
+`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER` and `SMTP_PASSWORD_FILE=/run/secrets/ocso/smtp_password`.
+
+**Alert emails.** Email alert destinations send with this deployment sender by default ("Send with:
+deployment" — only recipients to enter). A destination can still use its own SMTP relay.
+
+## 10. Troubleshooting
 
 | Symptom | Check |
 |---|---|
 | `migrate` exited non-zero | `docker compose logs migrate`. An edited, already-applied migration is refused on purpose. Restore the file. |
 | api stays `starting` or unhealthy | `docker compose logs api`. `Invalid OCSO configuration` lists the bad variable, with secret values hidden. |
-| `ocso-entrypoint: … unreadable file` | The `secrets` volume is missing a file. Run `docker compose up keygen` and check `docker compose logs keygen`. |
+| `ocso-entrypoint: … unreadable file` | The `secrets` volume is missing a file. Run `docker compose up keygen` and check `docker compose logs keygen`. For `RESEND_API_KEY_FILE` / `SMTP_PASSWORD_FILE`, write the file first (section 9). |
+| `EMAIL_DRIVER is required in production` | Configure email (section 9), or set `EMAIL_ALLOW_LOG_IN_PRODUCTION=true` for a trial without email. |
+| Test email fails with `auth` | Resend: the domain in `EMAIL_FROM` is not verified, or the API key is revoked or restricted to another domain. SMTP: wrong user or password. |
 | Login page loads but sign-in fails on a remote host over http | The session cookie is `Secure`. Use TLS, or set `SESSION_COOKIE_SECURE=false` for a trial. |
 | Public webhook paths return 404 | They must be under `/channels`, `/public`, `/oauth`, `/.well-known` or `/blobs`. Only those are proxied to the API. |
 | `seed` says "already set up by a person" | The demo seed only runs on a fresh database: `docker compose down -v` (deletes all data). |

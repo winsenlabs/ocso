@@ -1,5 +1,5 @@
 import { and, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
-import { Permission, assertCan, can, type Principal } from '@ocso/auth';
+import { Permission, assertCan, type Principal } from '@ocso/auth';
 import { forbidden, notFound } from '@ocso/domain';
 import { conversations, customerIdentities, customers, type Db } from '@ocso/db';
 import { z } from 'zod';
@@ -19,15 +19,16 @@ export const CustomerPatch = z.object({
 export type CustomerPatch = z.infer<typeof CustomerPatch>;
 
 /**
- * Customers (docs/03 Customer). CS Execs only see customers they have a
- * permitted conversation with; leads see all. Attribute changes are "material
- * customer context" and invalidate turn caches (docs/05 §5).
+ * Customers (docs/03 Customer). Everyone sees exactly the customers they have
+ * a visible conversation with (conversationScope: a CS Lead's teams' agents
+ * and queues, an exec's queues and assignments — ADR-026); others are not
+ * found. Attribute changes are "material customer context" and invalidate
+ * turn caches (docs/05 §5).
  */
 export class CustomerService {
   constructor(private readonly db: Db) {}
 
   private scope(principal: Principal, policy: VisibilityPolicy): SQL | undefined {
-    if (can(principal, Permission.CUSTOMERS_MANAGE)) return undefined;
     const convScope = conversationScope(principal, policy);
     return sql`EXISTS (SELECT 1 FROM ${conversations} WHERE ${conversations.customerId} = ${customers.id} ${convScope ? sql`AND ${convScope}` : sql``})`;
   }
@@ -71,10 +72,11 @@ export class CustomerService {
     return { ...row, identities: identities.map((i) => ({ kind: i.kind, display: maskIdentity(`${i.kind}:${i.value}`), verified: i.verified })), conversations: convs };
   }
 
-  async update(actor: ActorContext, id: string, patch: CustomerPatch): Promise<void> {
+  /** Only customers the actor can see (same scope as get); the policy decides exec visibility. */
+  async update(actor: ActorContext, id: string, patch: CustomerPatch, policy: VisibilityPolicy): Promise<void> {
     assertCan(actor.principal!, Permission.CUSTOMERS_MANAGE);
     await this.db.transaction(async (tx) => {
-      const [before] = await tx.select().from(customers).where(eq(customers.id, id)).for('update');
+      const [before] = await tx.select().from(customers).where(and(eq(customers.id, id), this.scope(actor.principal!, policy))).for('update');
       if (!before) throw notFound('customer', id);
       await tx
         .update(customers)

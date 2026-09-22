@@ -1,13 +1,13 @@
 import { sql } from 'drizzle-orm';
 import { Permission, assertCan, type Principal } from '@ocso/auth';
-import { DEFINITIONS, SettingsService, previousWindow, windowOf, type AnalyticsWindow } from '@ocso/application';
+import { DEFINITIONS, SettingsService, previousWindow, readableAgentsSql, windowOf, type AnalyticsWindow } from '@ocso/application';
 import type { Db } from '@ocso/db';
 
 /**
  * Escalation reasons over time (CS Lead "Escalation reasons" page, docs/11 §3).
  * Same population as `definitions.escalationReasons` — handoffs whose trigger is
- * not HUMAN_REQUEST on conversations of every virtual agent opened inside the
- * window — ranked, compared with the previous same-length window, split by
+ * not HUMAN_REQUEST on conversations of the agents the caller can read (a CS
+ * Lead's teams' agents, ADR-026) opened inside the window — ranked, compared with the previous same-length window, split by
  * agent and routed queue, and bucketed per calendar day.
  */
 
@@ -41,14 +41,14 @@ export interface EscalationReasonsReport {
 
 const at = (d: Date) => sql`${d.toISOString()}::timestamptz`;
 const cohort = (w: AnalyticsWindow) =>
-  sql`c.agent_id IN (SELECT id FROM virtual_agents) AND c.opened_at >= ${at(w.from)} AND c.opened_at < ${at(w.to)}`;
+  sql`c.agent_id IN (${w.scope ?? sql`SELECT id FROM virtual_agents`}) AND c.opened_at >= ${at(w.from)} AND c.opened_at < ${at(w.to)}`;
 const int = (v: unknown) => (v === null || v === undefined ? 0 : Number(v));
 const key = (code: string, trigger: string) => `${code}\u0000${trigger}`;
 
 export async function escalationReasonsReport(db: Db, principal: Principal, days: number, now: Date = new Date()): Promise<EscalationReasonsReport> {
   assertCan(principal, Permission.ANALYTICS_BUSINESS_READ);
   const { timezone } = await new SettingsService(db).deployment();
-  const w = windowOf(null, days, now, timezone);
+  const w = windowOf(null, days, now, timezone, readableAgentsSql(principal));
   const prev = previousWindow(w);
 
   const [current, previous, agents, queues, daily] = await Promise.all([

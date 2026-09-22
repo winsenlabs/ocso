@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { modelProfiles, modelProviders, uuidv7 } from '@ocso/db';
 import { completeSetup, startApi, type ApiHarness } from './harness.js';
+import { setTeams } from './teams.js';
 
 /**
  * WhatsApp via Twilio over the real API: plugin-driven channel kinds, the
@@ -58,15 +59,17 @@ beforeAll(async () => {
 
   h = await startApi();
   admin = await completeSetup(h);
-  await h.http().post('/v1/users').set(auth(admin)).send({ email: 'lead@ocso.test', name: 'lead', role: 'CS_LEAD', password: 'a password 12345' }).expect(201);
+  const leadId = (await h.http().post('/v1/users').set(auth(admin)).send({ email: 'lead@ocso.test', name: 'lead', role: 'CS_LEAD', password: 'a password 12345' }).expect(201)).body.id as string;
   const lead = await h.loginAs('lead@ocso.test', 'a password 12345');
   const team = (await h.http().post('/v1/teams').set(auth(lead)).send({ name: 'Cards' }).expect(201)).body.id;
+  // Agents are owned by teams (ADR-026): the lead must belong to the owning team.
+  await setTeams(h, admin, leadId, [team]);
   const queue = (await h.http().post('/v1/queues').set(auth(lead)).send({ name: 'Cards', teamIds: [team] }).expect(201)).body.id;
   const provider = uuidv7();
   await h.db.db.insert(modelProviders).values({ id: provider, kind: 'DEV_SCRIPTED', name: 'Scripted' });
   const profile = uuidv7();
   await h.db.db.insert(modelProfiles).values({ id: profile, name: 'support-primary', providerId: provider, model: 'scripted', retries: 0 });
-  const agent = (await h.http().post('/v1/agents').set(auth(lead)).send({ name: 'Maya', purpose: 'customer support', conversationType: 'SUPPORT', modelProfileId: profile, defaultQueueId: queue }).expect(201)).body.id;
+  const agent = (await h.http().post('/v1/agents').set(auth(lead)).send({ name: 'Maya', purpose: 'customer support', conversationType: 'SUPPORT', modelProfileId: profile, defaultQueueId: queue, teamIds: [team] }).expect(201)).body.id;
 
   const created = await h
     .http()

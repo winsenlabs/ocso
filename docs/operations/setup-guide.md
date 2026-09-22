@@ -5,14 +5,51 @@ step is done in the web app by the role named; everything is audited.
 
 ## 1. First run (Platform Tech Admin)
 
+Before the first start, the operator configures **email** (invites, password resets, sign-in codes,
+alert emails): `EMAIL_DRIVER=resend`, `EMAIL_FROM` on a domain verified in Resend, and the API key as a
+secret file — [compose.md §9](compose.md#9-email-resend-or-smtp). It is deployment configuration, not a
+UI setting; in production api and worker do not start without it.
+
 1. Open the public URL; you are sent to `/setup`. Enter the one-time setup token (Compose:
    `docker compose logs api | grep "setup token"`; AWS: the bootstrap secret), the organization, and the
    first Tech Admin's email and password. The token stops working once a user exists. Default alert
    rules are created at the same time.
 2. **Settings** → deployment label, region label, timezone, data-residency zone, fallback policy
    (cross-provider / cross-region), whether CS Execs may view AI-active conversations, and data retention
-   per class (see docs/15 notes).
-3. **Team & roles** → invite the CS Leads. CS Leads create teams and CS Execs.
+   per class (see docs/15 notes). **Email** shows the configured driver and sender; use **Send test
+   email** to check delivery before inviting anyone.
+3. **Team & roles** → **New user** invites people: name, work email, role (the Tech Admin can invite any
+   role; a CS Lead only CS Execs), teams. OCSO emails a single-use link (valid 72 hours) where the person
+   chooses their own password; the table shows *invite pending* / *invite expired* and **Resend invite**
+   (the old link stops working). **Reset link** sends an existing user a 24-hour link to choose a new
+   password (their sessions end when they use it). While email is not configured (log driver), no
+   email leaves OCSO: the dialog shows the link once for you to hand over privately. CS Leads create
+   teams (they join the teams they create) and add CS Execs to their own teams.
+4. **Settings → Sign-in security** (Tech Admin):
+   - **Require MFA for roles.** Users of a checked role must use a second factor. Someone signing in
+     with only a password is sent to *Set up two-factor authentication* (authenticator app: scan the QR
+     code or type the key, confirm a code, save the 10 backup codes — shown once) and cannot use
+     anything else until done. Passkeys and SSO count as a second factor. Recommended: Platform Tech
+     Admin and CS Lead.
+   - **Single sign-on.** *Add SSO provider*: OpenID Connect (issuer URL, client ID, client secret —
+     write-only) or SAML 2.0 (IdP single sign-on URL, IdP entity ID, signing certificate), plus the
+     email domains it serves. Register the shown redirect URI (OIDC) or ACS URL + SP metadata URL
+     (SAML) at the IdP. Users whose email is on a listed domain see *Continue with single sign-on* on
+     the sign-in page. An existing (e.g. invited) user is linked by email; unknown users are refused
+     unless you switch the provider to *Auto-provision* (they are then created as CS Execs). An IdP on
+     a private network must be listed in `OCSO_AUTH_TRUSTED_ORIGINS`.
+5. **Your account → Account security** (everyone): change password (signs out your other sessions),
+   turn on two-factor authentication, add passkeys (sign in with your device's fingerprint, face or
+   PIN), see where you are signed in and sign out other sessions. The sign-in page has **Forgot
+   password?** (1-hour emailed link).
+
+**Break-glass.** Keep at least one Platform Tech Admin who signs in with a password (OCSO refuses to
+disable or demote the last one) and store their backup codes safely. If every Tech Admin is locked out
+(lost authenticator and backup codes, IdP down, no email), the operator sets `OCSO_RECOVERY_TOKEN` to a
+random value of at least 32 characters (Compose: in `.env` or as `OCSO_RECOVERY_TOKEN_FILE` on the
+secrets volume), restarts the api and opens `/recover`: token, the Tech Admin's email and a new
+password. It resets that admin's password, removes their authenticator app (they enrol again) and ends
+their sessions; each token value works once and the use is audited. Remove the variable afterwards.
 
 ## 2. Model providers and profiles (Tech Admin)
 
@@ -99,8 +136,18 @@ use it, confirmation policy, trusted) → active. Health is checked on the confi
 
 ## 5. Virtual agents (CS Lead)
 
-**Virtual agents → New agent**: name, purpose, conversation type, model profile (plus optional summarizer
-and copilot profiles), default queue, channels. Then:
+**Teams come first.** Every virtual agent is owned by one or more teams, and a CS Lead sees and manages
+only the agents their teams own (ADR-026). Before creating agents:
+
+- a CS Lead creates the team on **Team** (teams are a CS Lead capability);
+- the Platform Tech Admin adds the lead to it (**Team → user → teams**; a lead cannot change their own
+  memberships). A lead in no team sees "Join or create a team to create agents" instead of **New agent**.
+
+**Virtual agents → New agent**: name, **owning team** (one or more of your teams), purpose, conversation
+type, model profile (plus optional summarizer and copilot profiles), default queue, channels. Other teams'
+leads cannot see the agent, its conversations (unless routed to their queues), analytics, reviews or alerts.
+The agent's **Settings → Owning teams** card adds or removes your own teams as owners; the Tech Admin can
+reassign any agent there (e.g. when a lead leaves), and every change is audited. Then:
 
 1. **Prompt** — edit the business components (identity, objective, behavior, policies, escalation, …).
    The preview shows the compiled prompt, token estimate and the cache-prefix hash. **Create version** with
@@ -116,16 +163,17 @@ and copilot profiles), default queue, channels. Then:
 
 ## 6. People and operations (CS Lead)
 
-Teams, CS Execs (languages, skills, maximum concurrent conversations), queues (routing mode, teams, SLA policy). CS Execs set
-their availability on Home. Reviews, prompt corrections, analytics and escalation reasons are under
+Teams (create them before agents, §5), CS Execs (languages, skills, maximum concurrent conversations), queues (routing mode, teams, SLA policy). CS Execs set
+their availability on Home. A lead's inbox, customers, analytics, reviews and alerts cover their teams'
+agents plus conversations routed to queues their teams serve; CS Execs keep their queue-based view. Reviews, prompt corrections, analytics and escalation reasons are under
 Quality.
 
 ## 7. Alerts and webhooks
 
 - **Alerts** — default rules exist from setup. Tech Admins manage technical rules (workers, queue age,
   provider errors, latency, MCP health, token/cost spikes, …); CS Leads manage business rules (escalation
-  rate, SLA breaches, CSAT, tool failures, …). Destinations: in-app, email (SMTP), Slack, Teams, signed
-  webhook, PagerDuty — each with a **Test** button.
+  rate, SLA breaches, CSAT, tool failures, …). Destinations: in-app, email (the deployment sender by default,
+  or its own SMTP relay), Slack, Teams, signed webhook, PagerDuty — each with a **Test** button.
 - **Webhooks** (Tech Admin) — subscribe external systems to events such as `conversation.resolved` or
   `alert.opened`. The signing secret is shown once; verify `X-OCSO-Signature: t=<unix>,v1=<hex
   HMAC-SHA256(secret, "<t>.<body>")>` and dedupe on the envelope `id`.

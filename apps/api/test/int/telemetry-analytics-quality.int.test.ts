@@ -60,18 +60,27 @@ beforeAll(async () => {
     OCSO_TRACE_URL_TEMPLATE: 'http://localhost:16686/trace/{traceId}',
   });
   app = await bootApi();
-  const { AgentService, ChannelService, IngressService, SessionService, hashPassword } = await import('@ocso/application');
+  const { AgentService, ChannelService, IngressService, hashPassword, setPasswordCredential } = await import('@ocso/application');
+  const { AUTH } = await import('../../src/infrastructure/tokens.js');
+  const auth = app.get<{ handler(r: Request): Promise<Response> }>(AUTH);
   const hash = await hashPassword(PASSWORD);
   ids.team = uuidv7();
   await db.db.insert(teams).values({ id: ids.team, name: 'Cards' });
   for (const [key, role, name] of [['admin', 'PLATFORM_TECH_ADMIN', 'T. Shetty'], ['lead', 'CS_LEAD', 'Anjali Rao'], ['exec', 'CS_EXEC', 'Nikhil Menon']] as const) {
     ids[key] = uuidv7();
-    await db.db.insert(users).values({ id: ids[key]!, email: `${key}@ocso.test`, name, role, passwordHash: hash, availability: 'AVAILABLE' });
-    tokens[key] = (await new SessionService(db.db).login(`${key}@ocso.test`, PASSWORD, { correlationId: 'test' })).token;
+    await db.db.insert(users).values({ id: ids[key]!, email: `${key}@ocso.test`, name, role, emailVerified: true, availability: 'AVAILABLE' });
+    await setPasswordCredential(db.db, ids[key]!, hash);
+    // Better Auth sign-in (ADR-025); the bearer token comes back in `set-auth-token`.
+    const signIn = await auth.handler(new Request('http://localhost:3000/api/auth/sign-in/email', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: `${key}@ocso.test`, password: PASSWORD }) }));
+    tokens[key] = signIn.headers.get('set-auth-token') ?? '';
   }
-  await db.db.insert(teamMembers).values({ teamId: ids.team, userId: ids.exec! });
-  const principal = (key: 'admin' | 'lead'): Principal => ({ userId: ids[key]!, role: key === 'admin' ? 'PLATFORM_TECH_ADMIN' : 'CS_LEAD', displayName: key, teamIds: [], via: 'UI' });
-  ids.agent = (await new AgentService(db.db).create({ principal: principal('lead'), correlationId: 't' }, { name: 'Maya', purpose: 'customer support', conversationType: 'SUPPORT', description: '' })).id;
+  // The lead is in Cards, the team that owns Maya (ADR-026: leads reach agents through their teams).
+  await db.db.insert(teamMembers).values([
+    { teamId: ids.team, userId: ids.exec! },
+    { teamId: ids.team, userId: ids.lead! },
+  ]);
+  const principal = (key: 'admin' | 'lead'): Principal => ({ userId: ids[key]!, role: key === 'admin' ? 'PLATFORM_TECH_ADMIN' : 'CS_LEAD', displayName: key, teamIds: key === 'lead' ? [ids.team!] : [], via: 'UI' });
+  ids.agent = (await new AgentService(db.db).create({ principal: principal('lead'), correlationId: 't' }, { name: 'Maya', purpose: 'customer support', conversationType: 'SUPPORT', description: '', teamIds: [ids.team!] })).id;
   ids.secret = randomBytes(32).toString('hex');
   const channel = await app.get(ChannelService).create({ principal: principal('admin'), correlationId: 't' }, { kind: 'WEBCHAT', name: 'Web chat', status: 'ACTIVE', settings: {}, secrets: { visitorTokenSecret: ids.secret }, defaultAgentId: ids.agent });
   ids.channel = channel.id;

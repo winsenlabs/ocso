@@ -106,7 +106,8 @@ export class RetentionService {
       sql`DELETE FROM mcp_health_samples WHERE id IN (SELECT id FROM mcp_health_samples WHERE sampled_at < ${cutoff} LIMIT ${ROW_BATCH})`,
       sql`DELETE FROM webhook_deliveries WHERE id IN (SELECT id FROM webhook_deliveries WHERE status <> 'PENDING' AND created_at < ${cutoff} LIMIT ${ROW_BATCH})`,
       sql`DELETE FROM login_attempts WHERE id IN (SELECT id FROM login_attempts WHERE occurred_at < ${cutoff} LIMIT ${ROW_BATCH})`,
-      sql`DELETE FROM sessions WHERE id IN (SELECT id FROM sessions WHERE expires_at < ${cutoff} LIMIT ${ROW_BATCH})`,
+      sql`DELETE FROM auth_sessions WHERE id IN (SELECT id FROM auth_sessions WHERE expires_at < ${cutoff} LIMIT ${ROW_BATCH})`,
+      sql`DELETE FROM auth_verifications WHERE id IN (SELECT id FROM auth_verifications WHERE expires_at < ${cutoff} LIMIT ${ROW_BATCH})`,
       sql`DELETE FROM jobs WHERE id IN (SELECT id FROM jobs WHERE status = 'dead' AND completed_at < ${cutoff} LIMIT ${ROW_BATCH})`,
       sql`DELETE FROM scheduled_jobs WHERE id IN (SELECT id FROM scheduled_jobs WHERE dispatched_at < ${cutoff} LIMIT ${ROW_BATCH})`,
     ];

@@ -4,6 +4,7 @@ import { conflict, notFound, validation } from '@ocso/domain';
 import { conversations, interactions, promptCorrections, promptVersions, uuidv7, virtualAgents, type Db, type DbOrTx } from '@ocso/db';
 import { BUSINESS_COMPONENT_KEYS, type BusinessComponentKey, type PromptComponents } from '@ocso/prompt-compiler';
 import { z } from 'zod';
+import { assertAgentReadable, manageableAgentsSql, readableAgentFilter } from '../agents/access.js';
 import { PromptService } from '../agents/prompt-versions.js';
 import { recordAudit } from '../audit/audit.js';
 import type { ActorContext } from '../shared/context.js';
@@ -56,6 +57,7 @@ export function composeComponent(current: string, text: string, mode: 'APPEND' |
  * desired behavior and the component to change; stage it into the agent's
  * prompt draft (never the live prompt); a new version with correctionIds marks
  * it APPLIED. Nothing mutates a prompt invisibly: every step is audited.
+ * Scoped to the agents the lead's teams own (ADR-026): others are not found.
  */
 export class CorrectionService {
   private readonly prompts: PromptService;
@@ -66,11 +68,18 @@ export class CorrectionService {
 
   async list(principal: Principal, q: CorrectionQuery): Promise<CorrectionView[]> {
     assertCan(principal, Permission.CORRECTIONS_MANAGE);
+    if (q.agentId) await assertAgentReadable(this.db, principal, q.agentId);
     const rows = await this.db
       .select({ c: promptCorrections, agentName: virtualAgents.name })
       .from(promptCorrections)
       .innerJoin(virtualAgents, eq(virtualAgents.id, promptCorrections.agentId))
-      .where(and(q.agentId ? eq(promptCorrections.agentId, q.agentId) : undefined, q.status ? eq(promptCorrections.status, q.status) : undefined))
+      .where(
+        and(
+          readableAgentFilter(principal, promptCorrections.agentId),
+          q.agentId ? eq(promptCorrections.agentId, q.agentId) : undefined,
+          q.status ? eq(promptCorrections.status, q.status) : undefined,
+        ),
+      )
       .orderBy(asc(sql`array_position(ARRAY['OPEN','STAGED','APPLIED','REJECTED'], ${promptCorrections.status})`), desc(promptCorrections.occurrences), desc(promptCorrections.createdAt))
       .limit(q.limit);
     return rows.map(({ c, agentName }) => view(c, agentName));
@@ -82,7 +91,7 @@ export class CorrectionService {
       .select({ c: promptCorrections, agentName: virtualAgents.name })
       .from(promptCorrections)
       .innerJoin(virtualAgents, eq(virtualAgents.id, promptCorrections.agentId))
-      .where(eq(promptCorrections.id, id));
+      .where(and(eq(promptCorrections.id, id), readableAgentFilter(principal, promptCorrections.agentId)));
     if (!row) throw notFound('prompt_correction', id);
     return view(row.c, row.agentName);
   }
@@ -97,6 +106,8 @@ export class CorrectionService {
     const title = input.title ?? truncate(input.desired, 120);
     return this.db.transaction(async (tx) => {
       const agentId = await resolveAgent(tx, input);
+      const [managed] = await tx.select({ id: virtualAgents.id }).from(virtualAgents).where(and(eq(virtualAgents.id, agentId), sql`${virtualAgents.id} IN (${manageableAgentsSql(principal)})`));
+      if (!managed) throw input.conversationId ? notFound('conversation', input.conversationId) : notFound('agent', agentId);
       const [existing] = await tx
         .select({ id: promptCorrections.id })
         .from(promptCorrections)
@@ -137,13 +148,12 @@ export class CorrectionService {
   /** Write the proposed text into the agent's prompt DRAFT component and mark the correction STAGED. */
   async stage(actor: ActorContext, id: string, input: StageCorrectionInput): Promise<{ componentKey: BusinessComponentKey; changed: boolean }> {
     assertCan(actor.principal!, Permission.CORRECTIONS_MANAGE);
-    const [row] = await this.db.select().from(promptCorrections).where(eq(promptCorrections.id, id));
-    if (!row) throw notFound('prompt_correction', id);
+    const row = await this.loadManaged(actor, id);
     if (row.status !== 'OPEN' && row.status !== 'STAGED') throw conflict('correction_not_open', `Correction is ${row.status}`);
     const text = input.proposedText ?? row.proposedText;
     if (!text) throw validation('proposed_text_required', 'Provide the text to stage into the prompt draft');
     const key = row.componentKey as BusinessComponentKey;
-    const draft = await this.prompts.draft(row.agentId);
+    const draft = await this.prompts.draft(actor.principal!, row.agentId);
     const components = Object.fromEntries(BUSINESS_COMPONENT_KEYS.map((k) => [k, draft.components[k] ?? ''])) as Record<BusinessComponentKey, string>;
     const before = components[key];
     components[key] = composeComponent(before, text, input.mode);
@@ -165,6 +175,7 @@ export class CorrectionService {
 
   async reject(actor: ActorContext, id: string, input: RejectCorrectionInput): Promise<void> {
     assertCan(actor.principal!, Permission.CORRECTIONS_MANAGE);
+    await this.loadManaged(actor, id);
     await this.db.transaction(async (tx) => {
       const [row] = await tx.select().from(promptCorrections).where(eq(promptCorrections.id, id)).for('update');
       if (!row) throw notFound('prompt_correction', id);
@@ -177,6 +188,16 @@ export class CorrectionService {
         summary: `Rejected: ${row.title}${input.reason ? ` · ${input.reason}` : ''}${row.status === 'STAGED' ? ' (draft text left for the editor to review)' : ''}`,
       });
     });
+  }
+
+  /** A correction of an agent the actor's teams own; not found otherwise. */
+  private async loadManaged(actor: ActorContext, id: string): Promise<CorrectionRow> {
+    const [row] = await this.db
+      .select()
+      .from(promptCorrections)
+      .where(and(eq(promptCorrections.id, id), sql`${promptCorrections.agentId} IN (${manageableAgentsSql(actor.principal!)})`));
+    if (!row) throw notFound('prompt_correction', id);
+    return row;
   }
 }
 

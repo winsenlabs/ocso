@@ -11,6 +11,8 @@
 //   app/database_url              1000 0400  postgres://ocso:<db_password>@postgres:5432/ocso
 //   app/blob_signing_key          1000 0400  HMAC for local signed blob URLs
 //   app/setup_token               1000 0400  first-run /setup token
+//   app/better_auth_secret        1000 0400  Better Auth secret (ADR-025): signs session cookies,
+//                                            encrypts TOTP secrets — rotating it signs everyone out
 //   app/demo_mcp_token            1000 0400  bearer token for the demo MCP server (demo profile)
 //   app/aws_credentials           1000 0400  SeaweedFS S3 credentials (s3 profile), INI format
 //   demo/demo_mcp_token           1000 0400  same token, for the demo MCP server container
@@ -62,6 +64,7 @@ ensure(app, 'database_url', APP_UID, () => `postgres://ocso:${dbPassword}@postgr
 ensure(app, 'master_key', APP_UID, () => randomBytes(32).toString('base64'));
 ensure(app, 'blob_signing_key', APP_UID, () => b64url(32));
 ensure(app, 'setup_token', APP_UID, () => b64url(24));
+ensure(app, 'better_auth_secret', APP_UID, () => b64url(48));
 
 const mcpToken = ensure(app, 'demo_mcp_token', APP_UID, () => b64url(32));
 ensure(demo, 'demo_mcp_token', APP_UID, () => mcpToken);

@@ -31,7 +31,7 @@ export async function AgentDetail({ params, searchParams }: { params: Params; se
   if (!agent) {
     return (
       <EmptyState title="Agent not found" actions={<Link className="btn" href="/agents">All virtual agents</Link>}>
-        This virtual agent does not exist or was removed.
+        This virtual agent does not exist, or it belongs to a team you are not in.
       </EmptyState>
     );
   }

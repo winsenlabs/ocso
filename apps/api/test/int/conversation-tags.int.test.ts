@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 import { auditEvents, conversations, customers, modelProfiles, modelProviders, outboxEvents, uuidv7 } from '@ocso/db';
 import { completeSetup, startApi, type ApiHarness } from './harness.js';
+import { setTeams } from './teams.js';
 
 /**
  * Conversation tags over the API: PUT …/tags (normalized replace set, audit,
@@ -36,6 +37,8 @@ beforeAll(async () => {
   lead = await h.loginAs('lead@ocso.test', PASSWORD);
   ids.team = (await h.http().post('/v1/teams').set(auth(lead)).send({ name: 'Cards' }).expect(201)).body.id;
   ids.otherTeam = (await h.http().post('/v1/teams').set(auth(lead)).send({ name: 'Loans' }).expect(201)).body.id;
+  // The lead joins Cards, the team that owns Maya (ADR-026).
+  await setTeams(h, admin, ids.lead!, [ids.team!]);
   ids.exec = await mk('exec@ocso.test', 'CS_EXEC', { teamIds: [ids.team] });
   exec = await h.loginAs('exec@ocso.test', PASSWORD);
   await mk('outsider@ocso.test', 'CS_EXEC', { teamIds: [ids.otherTeam] });
@@ -45,7 +48,7 @@ beforeAll(async () => {
   await h.db.db.insert(modelProviders).values({ id: ids.provider, kind: 'DEV_SCRIPTED', name: 'Scripted' });
   ids.profile = uuidv7();
   await h.db.db.insert(modelProfiles).values({ id: ids.profile, name: 'support', providerId: ids.provider, model: 'scripted', retries: 0 });
-  ids.agent = (await h.http().post('/v1/agents').set(auth(lead)).send({ name: 'Maya', purpose: 'support', conversationType: 'SUPPORT', modelProfileId: ids.profile, defaultQueueId: ids.queue }).expect(201)).body.id;
+  ids.agent = (await h.http().post('/v1/agents').set(auth(lead)).send({ name: 'Maya', purpose: 'support', conversationType: 'SUPPORT', modelProfileId: ids.profile, defaultQueueId: ids.queue, teamIds: [ids.team] }).expect(201)).body.id;
 
   ids.mine = await conversation('HUMAN_ACTIVE', { assignedUserId: ids.exec });
   ids.waiting = await conversation('WAITING_FOR_HUMAN', { waitingSince: new Date() });

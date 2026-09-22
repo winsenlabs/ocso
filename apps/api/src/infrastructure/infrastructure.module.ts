@@ -1,10 +1,12 @@
-import { Global, Inject, Module, type OnApplicationShutdown } from '@nestjs/common';
+import { Global, Inject, Logger, Module, type OnApplicationShutdown } from '@nestjs/common';
 import { hostname } from 'node:os';
-import { SessionService, SettingsService, SetupService, generatedSetupToken } from '@ocso/application';
+import { SettingsService, SetupService, generatedSetupToken } from '@ocso/application';
 import { createBlobStore, createChannelRegistry, createQueue, createSecretStore } from '@ocso/bootstrap';
 import { ApiEnv, assertDriverConfig, loadEnv } from '@ocso/config';
 import { createDatabase, type Database } from '@ocso/db';
-import { BLOB_STORE, CHANNEL_REGISTRY, DATABASE, DB, ENV, QUEUE, SECRET_STORE, SETUP_TOKEN } from './tokens.js';
+import { emailStatus, resolveEmailConfig, senderFor, type ResolvedEmailConfig } from '@ocso/email';
+import { AUTH_EXPORTS, AUTH_PROVIDERS } from './auth.providers.js';
+import { BLOB_STORE, CHANNEL_REGISTRY, DATABASE, DB, EMAIL_CONFIG, EMAIL_SENDER, EMAIL_STATUS, ENV, QUEUE, SECRET_STORE, SETUP_TOKEN } from './tokens.js';
 
 function loadApiEnv(): ApiEnv {
   const env = loadEnv(ApiEnv);
@@ -40,16 +42,23 @@ function loadApiEnv(): ApiEnv {
       inject: [ENV],
       useFactory: (env: ApiEnv) => env.OCSO_SETUP_TOKEN ?? generatedSetupToken(),
     },
-    {
-      provide: SessionService,
-      inject: [DB, ENV],
-      useFactory: (db, env: ApiEnv) =>
-        new SessionService(db, { idleMinutes: env.SESSION_IDLE_MINUTES, absoluteHours: env.SESSION_ABSOLUTE_HOURS, maxFailures: 8, failureWindowMinutes: 15 }),
-    },
+    ...AUTH_PROVIDERS,
     { provide: SettingsService, inject: [DB], useFactory: (db) => new SettingsService(db) },
     { provide: SetupService, inject: [DB, SETUP_TOKEN], useFactory: (db, token: string) => new SetupService(db, token) },
+    // Transactional email: validated at start-up (fails fast on bad config, and on the log driver in production).
+    { provide: EMAIL_CONFIG, inject: [ENV], useFactory: (env: ApiEnv) => resolveEmailConfig(env) },
+    {
+      provide: EMAIL_SENDER,
+      inject: [EMAIL_CONFIG],
+      useFactory: (config: ResolvedEmailConfig) => {
+        const logger = new Logger('Email');
+        for (const warning of config.warnings) logger.warn(warning);
+        return senderFor(config, { log: (line) => logger.log(line) });
+      },
+    },
+    { provide: EMAIL_STATUS, inject: [EMAIL_CONFIG], useFactory: emailStatus },
   ],
-  exports: [ENV, DATABASE, DB, SECRET_STORE, BLOB_STORE, CHANNEL_REGISTRY, QUEUE, SETUP_TOKEN, SessionService, SettingsService, SetupService],
+  exports: [ENV, DATABASE, DB, SECRET_STORE, BLOB_STORE, CHANNEL_REGISTRY, QUEUE, SETUP_TOKEN, SettingsService, SetupService, EMAIL_SENDER, EMAIL_STATUS, ...AUTH_EXPORTS],
 })
 export class InfrastructureModule implements OnApplicationShutdown {
   constructor(@Inject(DATABASE) private readonly database: Database) {}

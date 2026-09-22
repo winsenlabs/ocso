@@ -7,6 +7,7 @@ import { MemoryQueue } from '@ocso/queue';
 import { AgentService } from '../src/agents/agents.js';
 import { PromptService } from '../src/agents/prompt-versions.js';
 import type { ActorContext } from '../src/shared/context.js';
+import { createTeam } from './support/ownership.js';
 import {
   CorrectionService,
   CsatService,
@@ -23,7 +24,9 @@ import {
 let t: TestDatabase;
 let agentId: string;
 let convId: string;
-const principal = (userId: string, role: Principal['role']): Principal => ({ userId, role, displayName: role === 'CS_LEAD' ? 'Anjali Rao' : 'Someone', teamIds: [], via: 'UI' });
+// Everyone is in the team that owns Maya (ADR-026); scoping itself is covered in agent-ownership.int.test.ts.
+const TEAM = uuidv7();
+const principal = (userId: string, role: Principal['role']): Principal => ({ userId, role, displayName: role === 'CS_LEAD' ? 'Anjali Rao' : 'Someone', teamIds: [TEAM], via: 'UI' });
 const ctx = (p: Principal): ActorContext => ({ principal: p, correlationId: 'quality-test' });
 const lead = principal('00000000-0000-7000-8000-00000000001a', 'CS_LEAD');
 const exec = principal('00000000-0000-7000-8000-00000000001e', 'CS_EXEC');
@@ -42,7 +45,8 @@ async function conversation(state = 'RESOLVED', resolvedAt: Date | null = new Da
 beforeAll(async () => {
   t = await createTestDatabase();
   for (const p of [lead, exec, admin]) await t.pool.query(`INSERT INTO users (id, email, name, role) VALUES ($1, $2, $3, $4)`, [p.userId, `${p.role}@x.test`, p.displayName, p.role]);
-  agentId = (await new AgentService(t.db).create(ctx(lead), { name: 'Maya', purpose: 'customer support', conversationType: 'SUPPORT', description: '' })).id;
+  await createTeam(t.db, TEAM);
+  agentId = (await new AgentService(t.db).create(ctx(lead), { name: 'Maya', purpose: 'customer support', conversationType: 'SUPPORT', description: '', teamIds: [TEAM] })).id;
   convId = await conversation();
 });
 afterAll(async () => {
@@ -95,10 +99,10 @@ describe('prompt corrections', () => {
 
   it('stages proposed text into the prompt draft, idempotently, without touching the live version', async () => {
     const prompts = new PromptService(t.db);
-    const before = await prompts.draft(agentId);
+    const before = await prompts.draft(lead, agentId);
     const staged = await corrections().stage(ctx(lead), first, { mode: 'APPEND' });
     expect(staged).toEqual({ componentKey: 'behavior', changed: true });
-    const draft = await prompts.draft(agentId);
+    const draft = await prompts.draft(lead, agentId);
     expect(draft.dirty).toBe(true);
     expect(draft.components.behavior).toBe(`${before.components.behavior}\n• Check the ledger before asking for a statement.`);
     expect((await corrections().stage(ctx(lead), first, { mode: 'APPEND' })).changed).toBe(false);
@@ -107,10 +111,10 @@ describe('prompt corrections', () => {
     second = (await corrections().create(ctx(lead), { agentId, observed: 'promised 24h', desired: 'never promise a time', componentKey: 'policies' })).id;
     await expect(corrections().stage(ctx(lead), second, { mode: 'APPEND' })).rejects.toMatchObject({ code: 'proposed_text_required' });
     await corrections().stage(ctx(lead), second, { mode: 'REPLACE', proposedText: '• Never state a resolution time for disputes.' });
-    const both = await prompts.draft(agentId);
+    const both = await prompts.draft(lead, agentId);
     expect(both.components.policies).toBe('• Never state a resolution time for disputes.');
     expect(both.components.behavior).toContain('Check the ledger');
-    const active = await prompts.versions(agentId);
+    const active = await prompts.versions(lead, agentId);
     expect(active).toHaveLength(1); // nothing versioned or activated invisibly
     expect(composeComponent('a', 'b', 'APPEND')).toBe('a\nb');
   });
@@ -165,7 +169,7 @@ describe('evaluation runs', () => {
   it('queues a run over the prompt draft and publishes evaluation.run', async () => {
     const queue = new MemoryQueue();
     const svc = new EvaluationRunService(t.db, queue);
-    await new PromptService(t.db).saveDraft(ctx(lead), agentId, { ...(await new PromptService(t.db).draft(agentId)).components, behavior: 'DRAFT BEHAVIOR' });
+    await new PromptService(t.db).saveDraft(ctx(lead), agentId, { ...(await new PromptService(t.db).draft(lead, agentId)).components, behavior: 'DRAFT BEHAVIOR' });
     const run = await svc.create(ctx(lead), EvaluationRunInput.parse({ agentId, caseCount: 10 }));
     expect(run).toMatchObject({ status: 'QUEUED', caseCount: 10, createdByName: 'Anjali Rao', baselineVersion: 1 }); // v2 exists but v1 is active
     expect(run.candidateComponents['behavior']).toBe('DRAFT BEHAVIOR');

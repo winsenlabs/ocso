@@ -19,7 +19,11 @@
     "server-only": "0.0.1",
     "zod": "catalog:",
     "@ocso/auth": "workspace:*",
-    "@ocso/domain": "workspace:*"
+    "@ocso/domain": "workspace:*",
+    "better-auth": "catalog:",
+    "@better-auth/passkey": "catalog:",
+    "@better-auth/sso": "catalog:",
+    "uqr": "0.1.3"
   },
   "devDependencies": {
     "@types/react": "19.3.0",

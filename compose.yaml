@@ -94,6 +94,26 @@ x-server-env: &server-env
   # the production guard in @ocso/config needs the explicit allow flag too.
   OCSO_ENABLE_DEV_PROVIDERS: ${OCSO_ENABLE_DEV_PROVIDERS:-${OCSO_DEMO_SEED:-false}}
   OCSO_ALLOW_DEV_PROVIDERS_IN_PRODUCTION: ${OCSO_ALLOW_DEV_PROVIDERS_IN_PRODUCTION:-${OCSO_DEMO_SEED:-false}}
+  # Transactional email: invites, password resets, sign-in codes, alert emails
+  # (docs/operations/compose.md §9). Until EMAIL_DRIVER is resend or smtp, email
+  # only reaches the api/worker log (a trial starts without it); Settings → Email
+  # and the logs warn that invites and resets are not delivered. Set
+  # EMAIL_ALLOW_LOG_IN_PRODUCTION=false to make missing email a start-up error. Keys never go in this file: set
+  # RESEND_API_KEY_FILE / SMTP_PASSWORD_FILE to a file on the secrets volume
+  # (/run/secrets/ocso/...); the entrypoint resolves them. A non-empty value wins.
+  EMAIL_DRIVER: ${EMAIL_DRIVER:-}
+  EMAIL_FROM: ${EMAIL_FROM:-}
+  EMAIL_REPLY_TO: ${EMAIL_REPLY_TO:-}
+  EMAIL_ALLOW_LOG_IN_PRODUCTION: ${EMAIL_ALLOW_LOG_IN_PRODUCTION:-true}
+  RESEND_API_KEY: ${RESEND_API_KEY:-}
+  RESEND_API_KEY_FILE: ${RESEND_API_KEY_FILE:-}
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-}
+  SMTP_SECURE: ${SMTP_SECURE:-}
+  SMTP_REQUIRE_TLS: ${SMTP_REQUIRE_TLS:-}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  SMTP_PASSWORD_FILE: ${SMTP_PASSWORD_FILE:-}
   # OpenTelemetry export (observability profile runs the collector).
   OTEL_ENABLED: ${OTEL_ENABLED:-false}
   OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
@@ -173,6 +193,19 @@ services:
       OCSO_SETUP_TOKEN: ${OCSO_SETUP_TOKEN:-}
       OCSO_SETUP_TOKEN_FILE: /run/secrets/ocso/setup_token
       TRUST_PROXY: "true"
+      # Authentication (Better Auth, ADR-025; docs/operations/compose.md §2). The secret
+      # comes from keygen; a non-empty BETTER_AUTH_SECRET wins. The API sets the
+      # session cookie, so its Secure flag is configured here.
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
+      BETTER_AUTH_SECRET_FILE: /run/secrets/ocso/better_auth_secret
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
+      SESSION_IDLE_MINUTES: ${SESSION_IDLE_MINUTES:-120}
+      SESSION_ABSOLUTE_HOURS: ${SESSION_ABSOLUTE_HOURS:-24}
+      # Extra trusted origins, e.g. an OIDC IdP on a private network (comma-separated).
+      OCSO_AUTH_TRUSTED_ORIGINS: ${OCSO_AUTH_TRUSTED_ORIGINS:-}
+      # Break-glass account recovery: set only while you need it, then remove it.
+      OCSO_RECOVERY_TOKEN: ${OCSO_RECOVERY_TOKEN:-}
+      OCSO_RECOVERY_TOKEN_FILE: ${OCSO_RECOVERY_TOKEN_FILE:-}
     volumes:
       - *app-secrets
       - blobs:/var/lib/ocso/blobs
@@ -241,9 +274,8 @@ services:
     environment:
       NODE_ENV: production
       API_URL: http://api:4000
-      # Secure session cookie (default in production). Browsers accept it on
-      # http://localhost; set false ONLY for plain-http trials on another host.
-      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
+      # Public origin: the Origin the BFF sends with cookie-bearing auth calls (ADR-025).
+      OCSO_PUBLIC_URL: ${OCSO_PUBLIC_URL:-http://localhost:3000}
       # Reverse proxies in front of web (0 = published directly: X-Forwarded-For is ignored).
       OCSO_TRUSTED_PROXY_HOPS: ${OCSO_TRUSTED_PROXY_HOPS:-0}
     tmpfs:

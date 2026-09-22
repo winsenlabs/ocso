@@ -19,9 +19,13 @@ export const iso = (v: unknown): string | null => (v === null || v === undefined
 /** Timestamp parameter with an explicit type (overloaded SQL functions need it). */
 export const at = (d: Date): SQL => sql`${d.toISOString()}::timestamptz`;
 
-/** Restrict a raw `agent_id` column to one agent, or to all virtual agents (keeps the (agent_id, …) indexes usable). */
-export const agentClause = (column: SQL, agentId: string | null): SQL =>
-  agentId ? sql`${column} = ${agentId}::uuid` : sql`${column} IN (SELECT id FROM virtual_agents)`;
+/**
+ * Restrict a raw `agent_id` column to one agent, to a scope subquery of agent
+ * ids (a CS Lead's teams' agents, ADR-026), or to all virtual agents (keeps
+ * the (agent_id, …) indexes usable).
+ */
+export const agentClause = (column: SQL, agentId: string | null, scope: SQL | null = null): SQL =>
+  agentId ? sql`${column} = ${agentId}::uuid` : scope ? sql`${column} IN (${scope})` : sql`${column} IN (SELECT id FROM virtual_agents)`;
 
 /** Normalized grouping key for free-text classifier labels (case/whitespace-insensitive). */
 export const labelKey = (column: SQL): SQL => sql`lower(regexp_replace(trim(${column}), '[[:space:]]+', ' ', 'g'))`;
@@ -35,17 +39,22 @@ export async function startOfDay(db: DbOrTx, now: Date, timezone: string): Promi
 }
 
 export interface AnalyticsWindow {
-  /** null = every virtual agent. */
+  /** null = every virtual agent in `scope`. */
   agentId: string | null;
+  /** Agents an aggregate (agentId null) covers: a subquery of agent ids, or null = every virtual agent. */
+  scope: SQL | null;
   from: Date;
   to: Date;
   days: number;
   timezone: string;
 }
 
-export function windowOf(agentId: string | null, days: number, now: Date, timezone: string): AnalyticsWindow {
-  return { agentId, from: new Date(now.getTime() - days * 86_400_000), to: now, days, timezone };
+export function windowOf(agentId: string | null, days: number, now: Date, timezone: string, scope: SQL | null = null): AnalyticsWindow {
+  return { agentId, scope, from: new Date(now.getTime() - days * 86_400_000), to: now, days, timezone };
 }
+
+/** agentClause for the window's agent(s). */
+export const windowAgents = (column: SQL, w: AnalyticsWindow): SQL => agentClause(column, w.agentId, w.scope);
 
 /** The same-length window immediately before `w` (for deltas). */
 export function previousWindow(w: AnalyticsWindow): AnalyticsWindow {
@@ -57,4 +66,4 @@ export function previousWindow(w: AnalyticsWindow): AnalyticsWindow {
  * window. Every conversation-based KPI uses this population.
  */
 export const cohortWhere = (w: AnalyticsWindow, alias = sql`c`): SQL =>
-  sql`${agentClause(sql`${alias}.agent_id`, w.agentId)} AND ${alias}.opened_at >= ${at(w.from)} AND ${alias}.opened_at < ${at(w.to)}`;
+  sql`${windowAgents(sql`${alias}.agent_id`, w)} AND ${alias}.opened_at >= ${at(w.from)} AND ${alias}.opened_at < ${at(w.to)}`;

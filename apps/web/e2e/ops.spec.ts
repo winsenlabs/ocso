@@ -41,15 +41,18 @@ test.beforeAll(async ({ playwright }) => {
     await call('POST', '/v1/setup', null, { setupToken: E2E.setupToken, orgName: 'E2E Bank', adminName: ACCOUNTS.admin.name, adminEmail: ACCOUNTS.admin.email, adminPassword: ACCOUNTS.admin.password, timezone: 'Asia/Kolkata' });
   }
   tok.admin = await loginApi(ACCOUNTS.admin.email, ACCOUNTS.admin.password);
-  await call('POST', '/v1/users', tok.admin, { name: LEAD.name, email: LEAD.email, role: 'CS_LEAD', password: LEAD.password, teamIds: [], languages: [], maxConcurrent: 5 });
+  const lead = await call<{ id: string }>('POST', '/v1/users', tok.admin, { name: LEAD.name, email: LEAD.email, role: 'CS_LEAD', password: LEAD.password, teamIds: [], languages: [], maxConcurrent: 5 });
   tok.lead = await loginApi(LEAD.email, LEAD.password);
   ids.team = (await call<{ id: string }>('POST', '/v1/teams', tok.lead, { name: TEAM })).id;
+  // The lead manages the agent through an owning team of their own, outside the queue's team (ADR-026).
+  const owners = (await call<{ id: string }>('POST', '/v1/teams', tok.lead, { name: 'OPS Agent owners' })).id;
+  await call('PATCH', `/v1/users/${lead.id}`, tok.admin, { teamIds: [owners] });
   await call('POST', '/v1/users', tok.lead, { name: EXEC.name, email: EXEC.email, role: 'CS_EXEC', password: EXEC.password, teamIds: [ids.team], languages: [], maxConcurrent: 5 });
   ids.seedQueue = (await call<{ id: string }>('POST', '/v1/queues', tok.lead, { name: 'OPS Seed queue', teamIds: [ids.team] })).id;
 
   const provider = await call<{ id: string }>('POST', '/v1/model-providers', tok.admin, { kind: 'DEV_SCRIPTED', name: 'OPS Scripted', settings: { latencyMs: 50, chunkDelayMs: 15 } });
   const profile = await call<{ id: string }>('POST', '/v1/model-profiles', tok.admin, { name: 'ops-support', providerId: provider.id, model: 'scripted-1', retries: 0 });
-  ids.agent = (await call<{ id: string }>('POST', '/v1/agents', tok.lead, { name: AGENT, slug: 'mira-ops', purpose: 'customer support', conversationType: 'SUPPORT', modelProfileId: profile.id, defaultQueueId: ids.seedQueue })).id;
+  ids.agent = (await call<{ id: string }>('POST', '/v1/agents', tok.lead, { name: AGENT, slug: 'mira-ops', purpose: 'customer support', conversationType: 'SUPPORT', modelProfileId: profile.id, defaultQueueId: ids.seedQueue, teamIds: [owners] })).id;
   await call('POST', `/v1/agents/${ids.agent}/status`, tok.lead, { status: 'LIVE' });
   const channel = await call<{ publicKey: string }>('POST', '/v1/channels', tok.admin, { kind: 'WEBCHAT', name: 'OPS Web chat', status: 'ACTIVE', defaultAgentId: ids.agent, secrets: { visitorTokenSecret: randomBytes(32).toString('hex') } });
   ids.webchatKey = channel.publicKey;

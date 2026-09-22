@@ -6,6 +6,13 @@ import { StatusChip, type StatusTone } from '@/components/ui/status-chip';
 import { teamNames, type Team } from '@/lib/api/teams';
 import type { Availability, User } from '@/lib/api/users';
 import { formatDateTime } from '@/lib/format';
+import { UserAccess } from './user-access';
+
+/** Who the viewer may manage (Tech Admin: every role; CS Lead: CS Execs), and who they are. */
+export interface Viewer {
+  id: string;
+  manageable: readonly Role[];
+}
 
 const ROLE_TONE: Record<Role, StatusTone> = { PLATFORM_TECH_ADMIN: 'accent', CS_LEAD: 'good', CS_EXEC: 'muted' };
 const AVAILABILITY: Record<Availability, { state: PresenceState; label: string }> = {
@@ -14,7 +21,7 @@ const AVAILABILITY: Record<Availability, { state: PresenceState; label: string }
   OFFLINE: { state: 'off_shift', label: 'offline' },
 };
 
-function columns(teams: Team[], timeZone: string): Column<User>[] {
+function columns(teams: Team[], timeZone: string, viewer: Viewer): Column<User>[] {
   return [
     { key: 'name', header: 'Name', cell: (u) => <CellTitle title={u.name} caption={u.email} /> },
     { key: 'role', header: 'Role', cell: (u) => <StatusChip tone={ROLE_TONE[u.role]}>{ROLE_LABELS[u.role]}</StatusChip> },
@@ -30,19 +37,34 @@ function columns(teams: Team[], timeZone: string): Column<User>[] {
       cell: (u) => <StatusChip tone={u.status === 'ACTIVE' ? 'good' : 'muted'}>{u.status === 'ACTIVE' ? 'active' : 'disabled'}</StatusChip>,
     },
     { key: 'login', header: 'Last sign-in', cell: (u) => <span className="mono-sm">{u.lastLoginAt ? formatDateTime(u.lastLoginAt, timeZone) : 'never'}</span> },
+    {
+      key: 'access',
+      header: 'Sign-in',
+      cell: (u) => (
+        <UserAccess
+          userId={u.id}
+          name={u.name}
+          invite={u.invite.status}
+          mfaEnabled={u.mfaEnabled}
+          active={u.status === 'ACTIVE'}
+          canManage={viewer.manageable.includes(u.role)}
+          isSelf={u.id === viewer.id}
+        />
+      ),
+    },
   ];
 }
 
 /** People in this deployment (GET /v1/users). */
-export function UsersTable({ users, teams, timeZone }: { users: User[]; teams: Team[]; timeZone: string }) {
+export function UsersTable({ users, teams, timeZone, viewer }: { users: User[]; teams: Team[]; timeZone: string; viewer: Viewer }) {
   return (
     <DataTable
       label="People"
-      columns={columns(teams, timeZone)}
+      columns={columns(teams, timeZone, viewer)}
       rows={users}
       rowKey={(u) => u.id}
-      template="minmax(0,1.4fr) 148px minmax(0,1fr) 108px 84px 116px"
-      empty={<EmptyState title="No users yet">Create the first CS Lead or CS Exec account.</EmptyState>}
+      template="minmax(0,1.3fr) 140px minmax(0,1fr) 100px 80px 112px minmax(150px,0.9fr)"
+      empty={<EmptyState title="No users yet">Invite the first CS Lead or CS Exec.</EmptyState>}
     />
   );
 }

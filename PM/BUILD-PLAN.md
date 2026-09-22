@@ -111,7 +111,7 @@ Phases are vertical slices: each includes persistence, authorization, API, UI wh
 - Tests: health endpoints e2e; worker heartbeat integration test.
 
 ### E1.5 Authentication & RBAC — COMPLETE — API RBAC + route-access test, web login/setup with Playwright role flows
-**T1.5.1 Local authentication** — email + password (argon2id/scrypt per ADR), server-side sessions (hashed token, HttpOnly SameSite cookie, rotation, expiry, revoke), login rate limiting, audit of security events.
+**T1.5.1 Local authentication** — email + password (argon2id/scrypt per ADR), server-side sessions (hashed token, HttpOnly SameSite cookie, rotation, expiry, revoke), login rate limiting, audit of security events. *(Replaced by Better Auth in E11.6 / ADR-025.)*
 **T1.5.2 First-run setup** — when no users exist, `/setup` in the web UI creates the first Platform Tech Admin using a one-time setup token printed to the API log / provided via env. No CLI.
 **T1.5.3 Permission model** (`packages/auth`) — explicit `Permission` catalogue; role → permission matrix for PLATFORM_TECH_ADMIN, CS_LEAD, CS_EXEC; `Principal` type; resource policies (conversation access by queue/team membership/assignment; agent-scoped lead access).
 **T1.5.4 Enforcement** — Nest guard + `@RequirePermission()` on every controller route; service-level `authorize(principal, action, resource)` for resource checks; default-deny test that enumerates every route and asserts a permission annotation.
@@ -353,6 +353,10 @@ Draft suggestions for the human (never auto-sent), rewrite shorter, insert into 
 ### E7.10 Workspace UI completion — COMPLETE
 Views all / assigned to me / waiting for human / AI active / priority / resolved; claim, take over, return, resolve, reopen, transfer; composer modes reply/note/tool action; context rail (customer, accounts via approved tools, AI summary, assignment, approved tools, recent actions, tags); pickup queue page.
 
+### E7.11 Team-scoped virtual-agent ownership — COMPLETE — ADR-026; agents owned by teams, leads manage their teams' agents only
+`agent_teams` + migration `0016_agent_team_ownership` (backfill from default-queue teams); scopes and owner rules in `@ocso/application` (`agents/access.ts`, `agents/owners.ts`) applied to agents, prompts, escalation rules, tool grants, analytics, quality, alerts, customers, conversations (`conversations.read_team` replaces `read_all`) and the realtime filter; `PUT /v1/agents/:id/owners` (Tech Admin `agents.assign_owner`, leads within their teams); web owning-team picker, Settings → Owning teams card, no-team empty state; demo seed with two leads.
+- Tests: application ownership + scope suites, API 404/owners/realtime suite, migration backfill, Ask OCSO tool scope, web unit (owner rules), agents e2e with a second lead.
+
 **P7 exit:** full AI → human → AI lifecycle through the UI.
 
 ---
@@ -448,6 +452,18 @@ Load script (web-chat channel, mock model with latency) measuring turn latency a
 | T11.4 | Operator docs: Compose runbook, AWS runbook, backup/restore, upgrades, provider/channel/MCP setup guides | COMPLETE — compose.md, aws.md, worker-scaling.md, resilience-testing.md, setup-guide.md |
 | T11.5 | Docs sync: update `docs/*` where implementation refined the spec (per build rule §24) | COMPLETE — implementation notes in docs/05, 07, 08, 09, 10, 15 |
 
+### E11.6 Authentication hardening on Better Auth (ADR-025) — COMPLETE — Better Auth 1.7.5 replaces the hand-built sessions; OCSO keeps authorization
+| ID | Task | Status |
+|---|---|---|
+| T11.6.1 | Better Auth server in `@ocso/application/auth-server` (Drizzle adapter on `users` + `auth_*` tables, OCSO scrypt, bearer, twoFactor, passkey, sso, OCSO policy plugin); mounted at `/api/auth` before body parsers; HTTP allowlist pinned by `auth-surface.test.ts` | COMPLETE |
+| T11.6.2 | Migrations 0014/0015: credential accounts from `password_hash`, lower-case emails, drop `sessions`; `login_attempts` kept | COMPLETE |
+| T11.6.3 | Guard on Better Auth sessions (Bearer from the BFF), idle + absolute expiry, "require MFA for roles", stream re-validation (realtime SSE, Ask OCSO) | COMPLETE — auth-sessions / auth-mfa int tests |
+| T11.6.4 | Invites (72 h link, resend, log-driver link hand-over), admin reset links, forgot/reset/change password, break-glass rule + `OCSO_RECOVERY_TOKEN` recovery | COMPLETE |
+| T11.6.5 | TOTP + backup codes, passkeys, SSO (OIDC + SAML) with domain-bound provisioning (link invited users; auto-provision opt-in) | COMPLETE — OIDC flow tested end to end against a local IdP; SAML and passkey ceremonies not e2e-tested (need a real IdP / virtual authenticator) |
+| T11.6.6 | Web: sign-in (password → code, passkey, SSO), forgot/reset/invite/recover pages, forced MFA enrolment, Account security, Settings → Sign-in security, Team invites | COMPLETE — auth-and-roles.spec.ts (invite, MFA, forgot password), proxy.spec.ts |
+| T11.6.7 | Rate limiting in the database keyed by the web tier's client address; audit of every auth event | COMPLETE |
+| T11.6.8 | Compose (keygen `better_auth_secret`, entrypoint, env), docs (15, setup guide, compose, aws) | COMPLETE — Terraform wiring of `BETTER_AUTH_SECRET` open (aws.md §10) |
+
 ---
 
 ## Required test coverage (from the build brief)
@@ -507,3 +523,4 @@ Load script (web-chat channel, mock model with latency) measuring turn latency a
 | 2026-09-22 | Status sync: foundation, runtime, providers, MCP manager, alerts, internal agent backend, human tools/confirmation, copilot backend, customer claims landed with tests; UI screens, telemetry/analytics, Compose, Terraform and scaling adapter in progress. |
 | 2026-09-22 | Status sync after UI screens, scaling adapter, retention, claims, webhooks, resilience tests and operator docs landed. |
 | 2026-09-22 | All screens landed; full e2e (63 tests), integration (270+) and unit (890) suites green; chaos test passes on the final build. |
+| 2026-09-22 | E7.11 team-scoped virtual-agent ownership (ADR-026): agents owned by teams; lead scope for agents, conversations, analytics, quality and alerts; Tech Admin owner reassignment. |

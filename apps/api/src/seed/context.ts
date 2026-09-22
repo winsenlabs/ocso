@@ -65,7 +65,8 @@ export function createSeedContext(database: Database, config: SeedConfig): SeedC
     log: (line) => console.log(`seed: ${line}`),
     services: {
       settings: new SettingsService(db),
-      users: new UserService(db),
+      // The demo's people get the documented demo password (an operator tool, not the invite flow).
+      users: new UserService(db, { allowInitialPasswords: true }),
       teams: new TeamService(db),
       queues: new QueueService(db),
       providers: new ProviderService({ db, secrets, registry }),

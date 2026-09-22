@@ -11,7 +11,7 @@ import {
   formatTime,
   initials,
 } from '../../lib/format';
-import { safeNextPath, sessionCookieOptions } from '../../lib/session-cookie';
+import { SECURE_SESSION_COOKIE, SESSION_COOKIE, isAuthCookie, safeNextPath, sessionCookieValue } from '../../lib/session-cookie';
 
 describe('format', () => {
   it('formats durations the way the design writes them', () => {
@@ -60,10 +60,14 @@ describe('session cookie', () => {
     expect(safeNextPath(undefined)).toBe('/');
   });
 
-  it('is httpOnly, lax, path=/ and expires with the API session', () => {
-    const now = new Date('2026-09-22T10:00:00Z');
-    const opts = sessionCookieOptions('2026-09-22T12:00:00Z', now);
-    expect(opts).toMatchObject({ httpOnly: true, sameSite: 'lax', path: '/', maxAge: 7200 });
-    expect(sessionCookieOptions('2026-09-22T09:00:00Z', now).maxAge).toBe(0);
+  it('reads the Better Auth session cookie (secure variant first) and keeps auth pages out of post-login redirects', () => {
+    const jar: Record<string, string> = { [SESSION_COOKIE]: 'plain.sig', [SECURE_SESSION_COOKIE]: 'secure.sig' };
+    expect(sessionCookieValue((n) => jar[n])).toBe('secure.sig');
+    expect(sessionCookieValue((n) => (n === SESSION_COOKIE ? 'plain.sig' : undefined))).toBe('plain.sig');
+    expect(sessionCookieValue(() => undefined)).toBeNull();
+    expect(isAuthCookie('__Secure-ocso.two_factor')).toBe(true);
+    expect(isAuthCookie('ocso_theme')).toBe(false);
+    for (const page of ['/invite?token=x', '/reset-password?token=x', '/mfa-setup', '/forgot-password', '/recover']) expect(safeNextPath(page)).toBe('/');
+    expect(safeNextPath('/inviter')).toBe('/inviter');
   });
 });

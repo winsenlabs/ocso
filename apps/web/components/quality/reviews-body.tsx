@@ -56,7 +56,8 @@ function queueColumns(zone: string, rubric: RubricView): Column<ConversationSumm
 export async function ReviewsBody({ searchParams }: { searchParams: SearchParams }) {
   const [session, params] = await Promise.all([requireSession(), searchParams]);
   if (!hasPermission(session, Permission.REVIEWS_MANAGE)) return <NotPermitted role={session.roleLabel} />;
-  const seesAll = hasPermission(session, Permission.CONVERSATIONS_READ_ALL);
+  // Team oversight (ADR-026): resolved conversations of the lead's teams' agents and queues.
+  const seesAll = hasPermission(session, Permission.CONVERSATIONS_READ_TEAM);
   const [reviews, rubric, resolved] = await Promise.all([listReviews({ limit: 200 }), loadRubric(), seesAll ? loadInbox({ view: 'resolved', limit: 100 }) : Promise.resolve(null)]);
   const reviewed = new Set(reviews.map((r) => r.conversationId));
   const toReview = resolved ? resolved.items.filter((c) => !reviewed.has(c.id)) : [];
@@ -95,7 +96,7 @@ export async function ReviewsBody({ searchParams }: { searchParams: SearchParams
               />
             </>
           ) : (
-            <EmptyState title="Review queue needs full conversation access">Only roles that can read every conversation get the queue of resolved conversations to review.</EmptyState>
+            <EmptyState title="Review queue needs team conversation access">Only CS Leads get the queue of resolved conversations of their teams' agents to review.</EmptyState>
           )}
         </div>
         <div className="rail">

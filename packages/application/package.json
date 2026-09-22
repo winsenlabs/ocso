@@ -8,6 +8,11 @@
       "@ocso/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./auth-server": {
+      "@ocso/source": "./src/identity/auth/index.ts",
+      "types": "./dist/identity/auth/index.d.ts",
+      "default": "./dist/identity/auth/index.js"
     }
   },
   "files": [
@@ -31,7 +36,12 @@
     "@ocso/mcp": "workspace:*",
     "@ocso/model-providers": "workspace:*",
     "@ocso/alerts": "workspace:*",
-    "@ocso/deployment": "workspace:*"
+    "@ocso/email": "workspace:*",
+    "@ocso/deployment": "workspace:*",
+    "better-auth": "catalog:",
+    "@better-auth/passkey": "catalog:",
+    "@better-auth/sso": "catalog:",
+    "@better-auth/core": "catalog:"
   },
   "devDependencies": {
     "@ocso/db": "workspace:*"

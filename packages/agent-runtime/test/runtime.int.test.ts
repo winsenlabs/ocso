@@ -60,7 +60,7 @@ describe('turn execution', () => {
     const { processor } = h.processor('w-inv');
     await processor.handle(turnMessage(conversationId));
     const prompts = new PromptService(h.t.db);
-    const draft = await prompts.draft(h.agentId);
+    const draft = await prompts.draft(h.lead.principal!, h.agentId);
     await prompts.saveDraft(h.lead, h.agentId, { ...draft.components, behavior: 'Be even more concise.' });
     const version = await prompts.createVersionFromDraft(h.lead, h.agentId, { reason: 'shorter replies' });
     await prompts.activate(h.lead, h.agentId, version.id);

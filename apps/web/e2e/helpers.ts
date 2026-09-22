@@ -9,8 +9,8 @@ export interface Account {
 export async function login(page: Page, account: Account, landing = '/'): Promise<void> {
   if (!page.url().includes('/login')) await page.goto('/login');
   await page.getByLabel('Work email').fill(account.email);
-  await page.getByLabel('Password').fill(account.password);
-  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByLabel('Password', { exact: true }).fill(account.password);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.waitForURL((url) => url.pathname === landing);
   await expect(primaryNav(page)).toBeVisible();
 }
@@ -18,6 +18,8 @@ export async function login(page: Page, account: Account, landing = '/'): Promis
 export async function logout(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Sign out' }).click();
   await page.waitForURL((url) => url.pathname === '/login');
+  // The URL changes before the sign-in page replaces the previous one.
+  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
 }
 
 export function primaryNav(page: Page) {
@@ -51,15 +53,39 @@ export async function settled(page: Page): Promise<void> {
   await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
 }
 
+/**
+ * Invite a user from Team & roles, then accept the invite as them (ADR-025).
+ * The e2e API runs the log email driver, so the dialog shows the set-password
+ * link once; the invitee opens it in a separate browser context.
+ */
 export async function createUser(page: Page, user: Account & { role?: string; team?: string }): Promise<void> {
   await page.getByRole('button', { name: 'New user' }).click();
   const dialog = page.getByRole('dialog', { name: 'New user' });
   await dialog.getByLabel('Full name').fill(user.name);
   await dialog.getByLabel('Work email').fill(user.email);
   if (user.role) await dialog.getByLabel('Role').selectOption(user.role);
-  await dialog.getByLabel('Initial password').fill(user.password);
   if (user.team) await dialog.getByLabel(user.team).check();
-  await dialog.getByRole('button', { name: 'Create user' }).click();
+  await dialog.getByRole('button', { name: 'Send invite' }).click();
+  const link = await dialog.getByLabel(/Set-password link/).inputValue();
+  await dialog.getByRole('button', { name: 'Done' }).click();
   await expect(dialog).toBeHidden();
+  await acceptInvite(page, link, user.password);
   await expect(page.getByRole('table', { name: 'People' }).getByText(user.email)).toBeVisible();
+}
+
+/** Open an invite (or password-reset) link as the invitee and choose their password. */
+export async function acceptInvite(page: Page, link: string, password: string, button = 'Set password and continue'): Promise<void> {
+  const browser = page.context().browser();
+  if (!browser) throw new Error('acceptInvite needs a browser-backed page');
+  const invitee = await browser.newContext();
+  try {
+    const other = await invitee.newPage();
+    await other.goto(link);
+    await other.getByLabel('New password', { exact: true }).fill(password);
+    await other.getByLabel('Confirm password').fill(password);
+    await other.getByRole('button', { name: button }).click();
+    await other.waitForURL((url) => url.pathname === '/login');
+  } finally {
+    await invitee.close();
+  }
 }

@@ -22,7 +22,7 @@ const LIVE_DEFINITION =
 export async function SlaBody() {
   const session = await requireSession();
   if (!hasPermission(session, Permission.QUEUES_READ)) return <NotPermitted role={session.roleLabel} />;
-  const seesAll = hasPermission(session, Permission.CONVERSATIONS_READ_ALL);
+  const seesAll = hasPermission(session, Permission.CONVERSATIONS_READ_TEAM);
   const seesAnalytics = hasPermission(session, Permission.ANALYTICS_BUSINESS_READ);
   const [policies, queues, inbox, analytics] = await Promise.all([
     listSlaPolicies(),

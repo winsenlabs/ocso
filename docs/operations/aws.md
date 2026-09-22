@@ -19,6 +19,10 @@ and the same application code as Docker Compose. Only configuration changes: `QU
 ```
 
 Browsers only ever talk to `web`. The API's `/v1/*` control plane is not routed by the ALB (ADR-020).
+Better Auth's `/api/auth/*` (ADR-025) must stay on the **web** target group (the default rule, no
+change needed): the web app forwards it to the API and sets the client address used for sign-in rate
+limits from its trusted proxy hop (`OCSO_TRUSTED_PROXY_HOPS=1` behind the ALB). Routing `/api/auth/*`
+straight to the api target group would let browsers choose that address themselves.
 
 ## 1. What Terraform creates
 
@@ -170,6 +174,7 @@ terraform apply -var image_tag=$TAG
 |---|---|---|
 | `DATABASE_URL` | api, worker, migrate | `postgres://ocso:<pw>@<rds-endpoint>:5432/ocso`, used with `DATABASE_SSL=true` |
 | `OCSO_SETUP_TOKEN` | api | Must be identical across API tasks |
+| `BETTER_AUTH_SECRET` | api | **Needed before the next AWS rollout (ADR-025; Terraform not yet updated).** ≥ 32 random characters, identical across API tasks; signs session cookies and encrypts authenticator secrets. The api refuses to start in production without it |
 
 - **Injection.** ECS injects these keys at task start (`valueFrom: <arn>:<key>::`) through the **app
   execution role**. That role may only `GetSecretValue` this one secret and decrypt with its CMK via
@@ -321,6 +326,11 @@ organization needs a regional RTO.
 
 ## 10. Known gaps and follow-ups
 
+0. **Authentication (ADR-025) is not yet in Terraform.** Add `BETTER_AUTH_SECRET` to the bootstrap
+   secret and the api task definition, `SESSION_COOKIE_SECURE=true` for the api, `OCSO_PUBLIC_URL` for
+   the web task, and keep `/api/auth/*` on the web target group (above). `OCSO_RECOVERY_TOKEN` is set
+   only for a break-glass recovery and removed afterwards.
+
 1. **Scaling metric math is unvalidated.** The worker's ECS deployment adapter now publishes the
    signals, applies runtime policies and toggles task protection (§7, worker-scaling.md). The
    `IF(workers > 0, demand / workers, demand)` expression still needs a GetMetricData check against real
@@ -337,3 +347,12 @@ organization needs a regional RTO.
 7. RDS enhanced monitoring is off: `monitoring_interval_sec` > 0 needs a monitoring role, which is not
    created.
 8. Single region, with no cross-region backups (§9).
+9. **Email is not wired in Terraform yet** (AWS work is on hold). api and worker refuse to start in
+   production without it (compose.md §9). Needed on both task definitions:
+   - plain environment: `EMAIL_DRIVER=resend`, `EMAIL_FROM` (on a domain verified in Resend),
+     optionally `EMAIL_REPLY_TO`;
+   - secret: `RESEND_API_KEY` injected from Secrets Manager (`valueFrom`), e.g. a new key in the
+     bootstrap JSON or its own secret readable by the app execution role only. Alternatively
+     `EMAIL_DRIVER=smtp` with `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER` and `SMTP_PASSWORD` as a secret
+     (SES SMTP credentials work);
+   - egress: HTTPS to `api.resend.com` (already allowed through NAT), or the SMTP port for `smtp`.

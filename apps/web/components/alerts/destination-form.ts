@@ -14,6 +14,8 @@ export interface ConfigField {
   hint?: string;
   options?: string[];
   optional?: boolean;
+  /** Shown (and sent) only while another field has this value, e.g. SMTP settings for `transport: smtp`. */
+  onlyWhen?: { field: string; value: string };
 }
 
 export interface KindSpec {
@@ -21,22 +23,28 @@ export interface KindSpec {
   fields: ConfigField[];
   /** null = this kind never takes a secret. */
   secret: { label: string; required: boolean } | null;
+  /** The secret applies only while this field has this value. */
+  secretOnlyWhen?: { field: string; value: string };
   receives: string;
 }
+
+const SMTP_ONLY = { field: 'transport', value: 'smtp' };
 
 export const DESTINATION_SPECS: Record<string, KindSpec> = {
   IN_APP: { label: 'In-app', fields: [], secret: null, receives: 'opened alerts, in the OCSO inbox' },
   EMAIL: {
-    label: 'Email (SMTP)',
+    label: 'Email',
     fields: [
-      { name: 'host', label: 'SMTP host', kind: 'text' },
-      { name: 'port', label: 'Port', kind: 'number', hint: '587 STARTTLS · 465 implicit TLS' },
-      { name: 'from', label: 'From address', kind: 'text' },
+      { name: 'transport', label: 'Send with', kind: 'select', options: ['deployment', 'smtp'], hint: "deployment = this server's email (EMAIL_DRIVER) · smtp = your own relay" },
       { name: 'to', label: 'Recipients', kind: 'list', hint: 'comma separated' },
-      { name: 'username', label: 'SMTP user', kind: 'text', optional: true, hint: 'defaults to the from address' },
-      { name: 'requireTLS', label: 'Require TLS', kind: 'boolean' },
+      { name: 'host', label: 'SMTP host', kind: 'text', onlyWhen: SMTP_ONLY },
+      { name: 'port', label: 'Port', kind: 'number', hint: '587 STARTTLS · 465 implicit TLS', onlyWhen: SMTP_ONLY },
+      { name: 'from', label: 'From address', kind: 'text', onlyWhen: SMTP_ONLY },
+      { name: 'username', label: 'SMTP user', kind: 'text', optional: true, hint: 'defaults to the from address', onlyWhen: SMTP_ONLY },
+      { name: 'requireTLS', label: 'Require TLS', kind: 'boolean', onlyWhen: SMTP_ONLY },
     ],
     secret: { label: 'SMTP password', required: false },
+    secretOnlyWhen: SMTP_ONLY,
     receives: 'opened, resolved and reminders',
   },
   SLACK: {
@@ -73,9 +81,25 @@ export function specOf(kind: string): KindSpec {
   return DESTINATION_SPECS[kind] ?? { label: kind, fields: [], secret: null, receives: '' };
 }
 
+/** A blank controlling field shows everything (legacy SMTP configs predate `transport`). */
+export function fieldVisible(field: ConfigField, text: Record<string, string>): boolean {
+  if (!field.onlyWhen) return true;
+  const value = text[field.onlyWhen.field] ?? '';
+  return value === '' || value === field.onlyWhen.value;
+}
+
+export function secretVisible(spec: KindSpec, text: Record<string, string>): boolean {
+  if (!spec.secret) return false;
+  if (!spec.secretOnlyWhen) return true;
+  const value = text[spec.secretOnlyWhen.field] ?? '';
+  return value === '' || value === spec.secretOnlyWhen.value;
+}
+
 /** Stored config → form strings. */
-export function configText(kind: string, config: Record<string, unknown> | null): Record<string, string> {
+export function configText(kind: string, stored: Record<string, unknown> | null): Record<string, string> {
   const out: Record<string, string> = {};
+  // Email destinations saved before `transport` existed are SMTP.
+  const config = kind === 'EMAIL' && stored && stored['transport'] === undefined && stored['host'] !== undefined ? { ...stored, transport: 'smtp' } : stored;
   for (const f of specOf(kind).fields) {
     const v = config?.[f.name];
     if (f.kind === 'list') out[f.name] = Array.isArray(v) ? v.join(', ') : '';
@@ -90,6 +114,7 @@ export function configText(kind: string, config: Record<string, unknown> | null)
 export function buildConfig(kind: string, text: Record<string, string>): Record<string, unknown> {
   const config: Record<string, unknown> = {};
   for (const f of specOf(kind).fields) {
+    if (!fieldVisible(f, text)) continue;
     const raw = (text[f.name] ?? '').trim();
     if (f.kind === 'boolean') {
       config[f.name] = raw !== 'false';
@@ -112,7 +137,7 @@ export function configSummary(kind: string, config: Record<string, unknown> | nu
   if (!config) return '—';
   switch (kind) {
     case 'EMAIL':
-      return `${Array.isArray(config['to']) ? config['to'].join(', ') : ''} via ${String(config['host'] ?? '')}`;
+      return `${Array.isArray(config['to']) ? config['to'].join(', ') : ''} via ${config['transport'] === 'deployment' || !config['host'] ? 'deployment email' : String(config['host'])}`;
     case 'WEBHOOK':
       return String(config['url'] ?? '');
     case 'SLACK':

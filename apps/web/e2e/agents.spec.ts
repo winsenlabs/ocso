@@ -8,19 +8,22 @@ import { login, logout, settled } from './helpers';
  * queue → a second agent), then a CS Lead creates an agent, takes it live,
  * edits a prompt component (the compiled prefix hash changes), creates and
  * activates a version, diffs and rolls back, and adds an escalation rule. A CS
- * Exec then sees the same agent read-only.
+ * Exec then sees the same agent read-only. Agents are owned by teams (ADR-026):
+ * a second lead in another team cannot see Maya until the Tech Admin makes
+ * that team a co-owner from the agent's Settings tab.
  */
 test.describe.configure({ mode: 'serial' });
 
 const LEAD = { name: 'Ada Lead', email: 'ag.lead@e2e.ocso.test', password: 'correct-horse-battery-aglead' };
 const EXEC = { name: 'Eli Exec', email: 'ag.exec@e2e.ocso.test', password: 'correct-horse-battery-agexec' };
+const LEAD2 = { name: 'Lou Lead', email: 'ag.lead2@e2e.ocso.test', password: 'correct-horse-battery-aglead2' };
 const NEW_LINE = '• Offer the reversal path before asking for a statement image.';
 
 let api: APIRequestContext;
-const tok = { admin: '', lead: '' };
-const ids = { profile: '', queue: '', agent: '' };
+const tok = { admin: '', lead: '', lead2: '' };
+const ids = { profile: '', queue: '', agent: '', cards: '', loans: '' };
 
-async function call<T = Record<string, unknown>>(method: 'GET' | 'POST', path: string, token: string | null, body?: unknown): Promise<T> {
+async function call<T = Record<string, unknown>>(method: 'GET' | 'POST' | 'PATCH', path: string, token: string | null, body?: unknown): Promise<T> {
   const res = await api.fetch(path, { method, headers: token ? { authorization: `Bearer ${token}` } : {}, ...(body !== undefined ? { data: body } : {}) });
   if (![200, 201, 204].includes(res.status())) throw new Error(`${method} ${path} → ${res.status()} ${await res.text()}`);
   return (res.status() === 204 ? {} : await res.json()) as T;
@@ -38,14 +41,23 @@ test.beforeAll(async ({ playwright }) => {
     await call('POST', '/v1/setup', null, { setupToken: E2E.setupToken, orgName: 'E2E Bank', adminName: ACCOUNTS.admin.name, adminEmail: ACCOUNTS.admin.email, adminPassword: ACCOUNTS.admin.password, timezone: 'Asia/Kolkata' });
   }
   tok.admin = await loginApi(ACCOUNTS.admin.email, ACCOUNTS.admin.password);
-  await call('POST', '/v1/users', tok.admin, { name: LEAD.name, email: LEAD.email, role: 'CS_LEAD', password: LEAD.password, teamIds: [], languages: [], maxConcurrent: 5 });
+  const lead = await call<{ id: string }>('POST', '/v1/users', tok.admin, { name: LEAD.name, email: LEAD.email, role: 'CS_LEAD', password: LEAD.password, teamIds: [], languages: [], maxConcurrent: 5 });
   tok.lead = await loginApi(LEAD.email, LEAD.password);
-  await call('POST', '/v1/users', tok.lead, { name: EXEC.name, email: EXEC.email, role: 'CS_EXEC', password: EXEC.password, teamIds: [], languages: [], maxConcurrent: 5 });
+  // Agents belong to teams: each lead creates a team and the Tech Admin puts them in it.
+  ids.cards = (await call<{ id: string }>('POST', '/v1/teams', tok.lead, { name: 'AG Cards' })).id;
+  await call('PATCH', `/v1/users/${lead.id}`, tok.admin, { teamIds: [ids.cards] });
+  const lead2 = await call<{ id: string }>('POST', '/v1/users', tok.admin, { name: LEAD2.name, email: LEAD2.email, role: 'CS_LEAD', password: LEAD2.password, teamIds: [], languages: [], maxConcurrent: 5 });
+  tok.lead2 = await loginApi(LEAD2.email, LEAD2.password);
+  ids.loans = (await call<{ id: string }>('POST', '/v1/teams', tok.lead2, { name: 'AG Loans' })).id;
+  await call('PATCH', `/v1/users/${lead2.id}`, tok.admin, { teamIds: [ids.loans] });
+  await call('POST', '/v1/users', tok.lead, { name: EXEC.name, email: EXEC.email, role: 'CS_EXEC', password: EXEC.password, teamIds: [ids.cards], languages: [], maxConcurrent: 5 });
   const provider = await call<{ id: string }>('POST', '/v1/model-providers', tok.admin, { kind: 'DEV_SCRIPTED', name: 'AG Scripted', settings: { latencyMs: 50, chunkDelayMs: 15 } });
   ids.profile = (await call<{ id: string }>('POST', '/v1/model-profiles', tok.admin, { name: 'ag-support', providerId: provider.id, model: 'scripted-1', retries: 0 })).id;
   ids.queue = (await call<{ id: string }>('POST', '/v1/queues', tok.lead, { name: 'AG Cards & EMI · Tier 2' })).id;
   // A second agent so the list and the comparison have more than one row.
-  await call('POST', '/v1/agents', tok.lead, { name: 'Riya', slug: 'riya-ag', purpose: 'collections', conversationType: 'COLLECTIONS', modelProfileId: ids.profile });
+  await call('POST', '/v1/agents', tok.lead, { name: 'Riya', slug: 'riya-ag', purpose: 'collections', conversationType: 'COLLECTIONS', modelProfileId: ids.profile, teamIds: [ids.cards] });
+  // Lou's own agent, in AG Loans.
+  await call('POST', '/v1/agents', tok.lead2, { name: 'Arjun', slug: 'arjun-ag', purpose: 'loan sales', conversationType: 'SALES', modelProfileId: ids.profile, teamIds: [ids.loans] });
 });
 
 test.afterAll(async () => {
@@ -58,8 +70,13 @@ test('a CS Lead creates a virtual agent and takes it live', async ({ page }) => 
   await expect(page.getByRole('heading', { name: 'Virtual agents', level: 1 })).toBeVisible();
   await expect(page.getByRole('table', { name: 'Virtual agents' }).getByText('Riya')).toBeVisible();
 
+  await expect(page.getByRole('table', { name: 'Virtual agents' }).getByText('Arjun')).toHaveCount(0);
+
   await page.getByRole('button', { name: 'New agent' }).click();
   const dialog = page.getByRole('dialog', { name: 'New virtual agent' });
+  // Ada is only in AG Cards: that is the owning team.
+  await expect(dialog.getByRole('group', { name: 'Owning team' }).getByRole('checkbox')).toHaveCount(1);
+  await expect(dialog.getByRole('checkbox', { name: 'AG Cards' })).toBeChecked();
   await dialog.getByLabel('Name').fill('Maya');
   await dialog.getByLabel('Purpose').fill('Customer Support');
   await dialog.getByLabel('Model profile').selectOption({ label: 'ag-support' });
@@ -72,6 +89,7 @@ test('a CS Lead creates a virtual agent and takes it live', async ({ page }) => 
   await expect(header(page).locator('.presence')).toHaveText('draft');
   await expect(header(page)).toContainText('v1');
   await expect(header(page)).toContainText('ag-support');
+  await expect(header(page)).toContainText('AG Cards');
 
   await header(page).getByRole('button', { name: 'Go live' }).click();
   await page.getByRole('dialog', { name: 'Take Maya live' }).getByRole('button', { name: 'Go live' }).click();
@@ -237,5 +255,41 @@ test('a CS Exec reads the agent without edit controls', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Save settings' })).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Business hours' })).toContainText('08:00–23:00');
   await expect(page.getByRole('button', { name: 'Save business hours' })).toHaveCount(0);
+  await logout(page);
+});
+
+test('a lead in another team cannot see Maya until the Tech Admin makes their team a co-owner', async ({ page }) => {
+  await login(page, LEAD2);
+  await page.goto('/agents');
+  const list = page.getByRole('table', { name: 'Virtual agents' });
+  await expect(list.getByText('Arjun')).toBeVisible();
+  await expect(list.getByText('Maya')).toHaveCount(0);
+  await expect(list.getByText('Riya')).toHaveCount(0);
+  await page.goto(`/agents/${ids.agent}`);
+  await expect(page.getByRole('heading', { name: 'Agent not found' })).toBeVisible();
+  await page.goto(`/agents/${ids.agent}?tab=prompt`);
+  await expect(page.getByRole('heading', { name: 'Agent not found' })).toBeVisible();
+  await logout(page);
+
+  await login(page, ACCOUNTS.admin);
+  await page.goto(`/agents/${ids.agent}?tab=settings`);
+  const owners = page.getByRole('form', { name: 'Owning teams' });
+  await expect(owners.getByRole('checkbox', { name: 'AG Cards' })).toBeChecked();
+  await owners.getByRole('checkbox', { name: 'AG Loans' }).check();
+  await owners.getByRole('button', { name: 'Save owning teams' }).click();
+  await expect(owners).toContainText('Owning teams saved');
+  await expect(header(page)).toContainText('AG Cards · AG Loans');
+  // Governance only: the Tech Admin cannot edit the agent's business settings.
+  await expect(page.getByRole('button', { name: 'Save settings' })).toHaveCount(0);
+  await logout(page);
+
+  await login(page, LEAD2);
+  await page.goto('/agents');
+  await expect(page.getByRole('table', { name: 'Virtual agents' }).getByText('Maya')).toBeVisible();
+  await page.goto(`/agents/${ids.agent}?tab=settings`);
+  const leadOwners = page.getByRole('form', { name: 'Owning teams' });
+  // Lou may change AG Loans (his team), not AG Cards.
+  await expect(leadOwners.getByRole('checkbox', { name: /AG Cards/ })).toBeDisabled();
+  await expect(leadOwners.getByRole('checkbox', { name: 'AG Loans' })).toBeEnabled();
   await logout(page);
 });

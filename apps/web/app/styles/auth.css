@@ -1,0 +1,24 @@
+/* Sign-in extras and Account security (ADR-025). Uses the design tokens from base.css. */
+.auth-card .btn.wide{width:100%;padding:9px 12px;font-size:13px;justify-content:center}
+.auth-alt{display:grid;gap:8px;margin-top:14px}
+.auth-divider{display:flex;align-items:center;gap:10px;margin:16px 0 2px;font-family:var(--font-mono);font-size:10.5px;color:var(--ink-4);text-transform:uppercase;letter-spacing:.06em}
+.auth-divider::before,.auth-divider::after{content:"";flex:1;height:1px;background:var(--border)}
+.auth-links{display:flex;justify-content:space-between;gap:10px;margin-top:10px;font-size:12px}
+.auth-links a,.auth-link{color:var(--accent-2);text-decoration:none}
+.auth-links a:hover,.auth-link:hover{text-decoration:underline}
+.auth-code input{font-family:var(--font-mono);letter-spacing:.2em;font-size:16px}
+.totp-setup{display:grid;grid-template-columns:168px minmax(0,1fr);gap:16px;align-items:start}
+.totp-qr{width:168px;height:168px;background:#fff;border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px;box-sizing:border-box}
+.totp-qr img{width:100%;height:100%;image-rendering:pixelated;display:block}
+.totp-key{font-family:var(--font-mono);font-size:12px;word-break:break-all;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px}
+.backup-codes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 14px;font-family:var(--font-mono);font-size:13px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin:0;list-style:none}
+.sec-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.sec-card{display:grid;gap:12px;align-content:start}
+.sec-row{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)}
+.sec-row:last-child{border-bottom:0}
+.sec-row .sec-main{display:grid;gap:2px;min-width:0}
+.sec-row .sec-main b{font-weight:500;font-size:13px}
+.sec-actions{display:flex;gap:8px;flex-wrap:wrap}
+.invite-link{display:grid;gap:6px}
+.invite-link input{font-family:var(--font-mono);font-size:12px;width:100%;box-sizing:border-box;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;color:var(--ink)}
+@media (max-width:900px){.sec-grid{grid-template-columns:1fr}.totp-setup{grid-template-columns:1fr}}

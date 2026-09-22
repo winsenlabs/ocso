@@ -16,9 +16,10 @@ export const AuditQuery = z.object({
 });
 export type AuditQuery = z.infer<typeof AuditQuery>;
 
-/** Read-only audit log (docs/15 §7). Rows are immutable by database trigger. */
-export async function queryAudit(db: Db, q: AuditQuery) {
+/** Read-only audit log (docs/15 §7). Rows are immutable by database trigger. `scope` limits what the reader may see (see audit-scope.ts). */
+export async function queryAudit(db: Db, q: AuditQuery, scope: SQL | null = null) {
   const filters: SQL[] = [];
+  if (scope) filters.push(scope);
   if (q.targetType) filters.push(eq(auditEvents.targetType, q.targetType));
   if (q.targetId) filters.push(eq(auditEvents.targetId, q.targetId));
   if (q.actorId) filters.push(eq(auditEvents.actorId, q.actorId));

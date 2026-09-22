@@ -5,6 +5,7 @@ import { evaluationResults, evaluationRuns, promptVersions, users, uuidv7, virtu
 import { BUSINESS_COMPONENT_KEYS, type BusinessComponentKey } from '@ocso/prompt-compiler';
 import type { QueueAdapter } from '@ocso/queue';
 import { z } from 'zod';
+import { assertAgentManageable, assertAgentReadable, readableAgentFilter } from '../agents/access.js';
 import { PromptService } from '../agents/prompt-versions.js';
 import { recordAudit } from '../audit/audit.js';
 import type { ActorContext } from '../shared/context.js';
@@ -43,7 +44,11 @@ export type EvaluationRunView = Omit<EvaluationRunRow, 'createdAt' | 'completedA
 export const EVALUATION_SUMMARY_DEFINITION =
   "Replay without side effects: for each case, the candidate prompt answers the same customer turn with the same history; tools are never executed (intended calls are recorded). changed = the set of intended (non-built-in) tool calls differs from the baseline turn's first step, or handoff behavior differs, or — when the candidate calls no tool — the normalized reply text differs from the baseline reply. Flags: handoff_requested, handoff_differs, tool_call_differs, empty_reply, error (the model call failed).";
 
-/** Replay evaluation runs of a candidate prompt (design/02 Versions tab). The run itself is executed by the worker (topic evaluation.run). */
+/**
+ * Replay evaluation runs of a candidate prompt (design/02 Versions tab). The
+ * run itself is executed by the worker (topic evaluation.run). Runs are
+ * started for, and read through, agents the lead's teams own (ADR-026).
+ */
 export class EvaluationRunService {
   constructor(
     private readonly db: Db,
@@ -52,9 +57,10 @@ export class EvaluationRunService {
 
   async create(actor: ActorContext, input: EvaluationRunInput): Promise<EvaluationRunView> {
     assertCan(actor.principal!, Permission.EVALUATIONS_RUN);
+    await assertAgentManageable(this.db, actor.principal!, input.agentId);
     const [agent] = await this.db.select().from(virtualAgents).where(eq(virtualAgents.id, input.agentId));
     if (!agent) throw notFound('agent', input.agentId);
-    const candidate = await this.candidate(agent.id, agent.activePromptVersionId, input);
+    const candidate = await this.candidate(actor.principal!, agent.id, agent.activePromptVersionId, input);
     const id = uuidv7();
     await this.db.transaction(async (tx) => {
       await tx.insert(evaluationRuns).values({
@@ -78,12 +84,13 @@ export class EvaluationRunService {
 
   async list(principal: Principal, q: EvaluationRunQuery): Promise<EvaluationRunView[]> {
     assertCan(principal, Permission.EVALUATIONS_RUN);
+    if (q.agentId) await assertAgentReadable(this.db, principal, q.agentId);
     const rows = await this.db
       .select({ r: evaluationRuns, createdByName: users.name, baselineVersion: promptVersions.version })
       .from(evaluationRuns)
       .leftJoin(users, eq(users.id, evaluationRuns.createdBy))
       .leftJoin(promptVersions, eq(promptVersions.id, evaluationRuns.baselineVersionId))
-      .where(q.agentId ? eq(evaluationRuns.agentId, q.agentId) : undefined)
+      .where(and(readableAgentFilter(principal, evaluationRuns.agentId), q.agentId ? eq(evaluationRuns.agentId, q.agentId) : undefined))
       .orderBy(desc(evaluationRuns.createdAt))
       .limit(q.limit);
     return rows.map(({ r, createdByName, baselineVersion }) => view(r, createdByName, baselineVersion));
@@ -96,7 +103,7 @@ export class EvaluationRunService {
       .from(evaluationRuns)
       .leftJoin(users, eq(users.id, evaluationRuns.createdBy))
       .leftJoin(promptVersions, eq(promptVersions.id, evaluationRuns.baselineVersionId))
-      .where(eq(evaluationRuns.id, id));
+      .where(and(eq(evaluationRuns.id, id), readableAgentFilter(principal, evaluationRuns.agentId)));
     if (!row) throw notFound('evaluation_run', id);
     return view(row.r, row.createdByName, row.baselineVersion);
   }
@@ -114,10 +121,10 @@ export class EvaluationRunService {
   }
 
   /** Full candidate component set: the draft, or explicit overrides on top of the active version. */
-  private async candidate(agentId: string, activeVersionId: string | null, input: EvaluationRunInput): Promise<Record<BusinessComponentKey, string>> {
+  private async candidate(principal: Principal, agentId: string, activeVersionId: string | null, input: EvaluationRunInput): Promise<Record<BusinessComponentKey, string>> {
     let base: Partial<Record<BusinessComponentKey, string>> = {};
     if (input.source === 'DRAFT') {
-      base = (await new PromptService(this.db).draft(agentId)).components;
+      base = (await new PromptService(this.db).draft(principal, agentId)).components;
     } else if (activeVersionId) {
       const [v] = await this.db.select({ components: promptVersions.components }).from(promptVersions).where(eq(promptVersions.id, activeVersionId));
       base = (v?.components ?? {}) as Partial<Record<BusinessComponentKey, string>>;

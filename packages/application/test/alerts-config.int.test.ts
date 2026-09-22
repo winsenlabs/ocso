@@ -6,6 +6,7 @@ import { alertDeliveries, alertRules, alerts, notificationDestinations, uuidv7, 
 import { createDefaultDeliveryRegistry, verifySignature, type FetchFn } from '@ocso/alerts';
 import type { Principal } from '@ocso/auth';
 import { MemoryQueue } from '@ocso/queue';
+import { createTeam, ownAgents } from './support/ownership.js';
 import { InMemorySecretRows, LocalSecretStore, parseMasterKey } from '@ocso/secrets';
 import {
   AlertDeliveryService,
@@ -34,7 +35,9 @@ const fetchFake: FetchFn = async (input, init) => {
 const registry = createDefaultDeliveryRegistry({ fetch: fetchFake });
 
 const ctx = (principal: Principal | null): ActorContext => ({ principal, correlationId: 'test' });
-const principal = (role: Principal['role']): Principal => ({ userId: uuidv7(), role, displayName: role, teamIds: [], via: 'UI' });
+// The lead's team owns Maya, so the lead may target her in agent-scoped rules (ADR-026).
+const TEAM = uuidv7();
+const principal = (role: Principal['role']): Principal => ({ userId: uuidv7(), role, displayName: role, teamIds: role === 'CS_LEAD' ? [TEAM] : [], via: 'UI' });
 const admin = principal('PLATFORM_TECH_ADMIN');
 const lead = principal('CS_LEAD');
 const exec = principal('CS_EXEC');
@@ -47,6 +50,7 @@ beforeAll(async () => {
   }
   agentId = uuidv7();
   await t.db.insert(virtualAgents).values({ id: agentId, name: 'Maya', slug: 'maya', conversationType: 'SUPPORT' });
+  await ownAgents(t.db, await createTeam(t.db, TEAM), agentId);
 });
 afterAll(async () => {
   await t?.drop();

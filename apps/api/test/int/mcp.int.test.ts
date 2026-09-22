@@ -31,6 +31,7 @@ let authServer: TestAuthServer;
 let rs: DemoServer;
 const tokens: Record<'admin' | 'lead' | 'exec', string> = { admin: '', lead: '', exec: '' };
 const agentId = '0192f0c1-0000-7000-8000-00000000a001';
+const teamId = '0192f0c1-0000-7000-8000-00000000a0f1';
 let connectionId: string;
 
 const bearer = (who: keyof typeof tokens) => ({ authorization: `Bearer ${tokens[who]}` });
@@ -52,6 +53,10 @@ beforeAll(async () => {
     tokens[who] = await h.loginAs(`${who}@ocso.test`, password);
   }
   await h.db.pool.query(`INSERT INTO virtual_agents (id, name, slug, conversation_type) VALUES ($1, 'Maya', 'maya', 'SUPPORT')`, [agentId]);
+  // Lead and exec are in the team that owns Maya (ADR-026).
+  await h.db.pool.query(`INSERT INTO teams (id, name) VALUES ($1, 'Cards')`, [teamId]);
+  await h.db.pool.query(`INSERT INTO agent_teams (agent_id, team_id) VALUES ($1, $2)`, [agentId, teamId]);
+  await h.db.pool.query(`INSERT INTO team_members (team_id, user_id) SELECT $1, id FROM users WHERE email IN ('lead@ocso.test', 'exec@ocso.test')`, [teamId]);
   await h.http().patch('/v1/settings/deployment').set(bearer('admin')).send({ egressAllowedInternalHosts: ['127.0.0.1'] }).expect(200);
   const { startTestAuthServer, startDemo } = await loadMcpTestHelpers();
   authServer = await startTestAuthServer({ expectedResource: () => rs.url });

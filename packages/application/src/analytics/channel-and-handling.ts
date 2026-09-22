@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import type { DbOrTx } from '@ocso/db';
-import { agentClause, at, cohortWhere, int, num, ratio, type AnalyticsWindow } from './values.js';
+import { windowAgents, at, cohortWhere, int, num, ratio, type AnalyticsWindow } from './values.js';
 
 export interface ChannelBreakdown {
   channelId: string | null;
@@ -36,7 +36,7 @@ export async function channelBreakdown(db: DbOrTx, w: AnalyticsWindow): Promise<
     SELECT c.channel_id, avg(r.score)::float8 AS avg, count(*)::int AS n
       FROM csat_responses r
       JOIN conversations c ON c.id = r.conversation_id
-     WHERE ${agentClause(sql`r.agent_id`, w.agentId)} AND r.received_at >= ${at(w.from)} AND r.received_at < ${at(w.to)}
+     WHERE ${windowAgents(sql`r.agent_id`, w)} AND r.received_at >= ${at(w.from)} AND r.received_at < ${at(w.to)}
      GROUP BY c.channel_id`);
   const csatBy = new Map(csat.rows.map((r) => [r.channel_id ?? 'none', r]));
   return volume.rows.map((r) => {

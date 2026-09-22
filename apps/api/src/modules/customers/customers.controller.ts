@@ -32,6 +32,6 @@ export class CustomersController {
   @HttpCode(204)
   @RequirePermission(Permission.CUSTOMERS_MANAGE)
   async update(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Body({ schema: CustomerPatch }) body: CustomerPatch) {
-    await this.customers.update(actor, id, body);
+    await this.customers.update(actor, id, body, await this.access.policy());
   }
 }

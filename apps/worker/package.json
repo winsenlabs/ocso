@@ -31,6 +31,7 @@
     "@ocso/secrets": "workspace:*",
     "@ocso/tools": "workspace:*",
     "@ocso/alerts": "workspace:*",
+    "@ocso/email": "workspace:*",
     "@nestjs/common": "catalog:",
     "@nestjs/core": "catalog:",
     "reflect-metadata": "catalog:",

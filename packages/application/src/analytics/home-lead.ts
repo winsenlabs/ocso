@@ -1,5 +1,7 @@
 import { sql } from 'drizzle-orm';
+import type { Principal } from '@ocso/auth';
 import type { Db } from '@ocso/db';
+import { readableAgentsSql } from '../agents/access.js';
 import { agentSummaries } from './agent-summaries.js';
 import { csatStats, type CsatStat } from './agent-side-metrics.js';
 import { conversationKpis } from './conversation-kpis.js';
@@ -53,23 +55,29 @@ export interface LeadHome {
 export const SPIKE_MIN_POINTS = 0.05;
 export const SPIKE_MIN_CONVERSATIONS = 20;
 
-/** CS Lead home (design/06 lead): 7-day tiles, agent cards, queues, decisions, escalation reasons. Counts and labels only. */
-export async function leadHome(db: Db, now: Date, timezone: string, days = 7): Promise<LeadHome> {
-  const w = windowOf(null, days, now, timezone);
+/**
+ * CS Lead home (design/06 lead): 7-day tiles, agent cards, queues, decisions,
+ * escalation reasons — all over the agents the lead's teams own (ADR-026).
+ * Counts and labels only.
+ */
+export async function leadHome(db: Db, principal: Principal, now: Date, timezone: string, days = 7): Promise<LeadHome> {
+  const scope = readableAgentsSql(principal);
+  const w = windowOf(null, days, now, timezone, scope);
   const [kpis, prevKpis, csat, summaries, reasons, corrections, queues, agents, alerts] = await Promise.all([
     conversationKpis(db, w, now),
     conversationKpis(db, previousWindow(w), now),
     csatStats(db, w),
     agentSummaries(db, days),
     escalationReasons(db, w, 6),
-    correctionOpportunities(db, null, 200),
-    new QueueAnalyticsService(db, () => now).compute(days),
+    correctionOpportunities(db, null, 200, scope),
+    new QueueAnalyticsService(db, () => now).compute(principal, days),
     db.execute<{ id: string; name: string; conversation_type: string; status: string; version: number | null; channels: Array<{ kind: string; name: string }> | null }>(sql`
       SELECT a.id, a.name, a.conversation_type, a.status, pv.version,
              (SELECT json_agg(json_build_object('kind', ch.kind, 'name', ch.name) ORDER BY ch.name)
                 FROM agent_channels ac JOIN channels ch ON ch.id = ac.channel_id WHERE ac.agent_id = a.id) AS channels
         FROM virtual_agents a
         LEFT JOIN prompt_versions pv ON pv.id = a.active_prompt_version_id
+       ${scope ? sql`WHERE a.id IN (${scope})` : sql``}
        ORDER BY a.name`),
     db.execute<{ agent_id: string; n: number }>(sql`
       SELECT context ->> 'agentId' AS agent_id, count(*)::int AS n FROM alerts

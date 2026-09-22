@@ -1,8 +1,9 @@
-import { and, desc, eq, lt, type SQL } from 'drizzle-orm';
+import { and, desc, eq, lt, sql, type SQL } from 'drizzle-orm';
 import { Permission, assertCan, type Principal } from '@ocso/auth';
 import { displayId, notFound } from '@ocso/domain';
 import { conversationReviews, conversations, customers, users, uuidv7, virtualAgents, type Db } from '@ocso/db';
 import { z } from 'zod';
+import { assertAgentReadable, manageableAgentsSql, readableAgentFilter } from '../agents/access.js';
 import { recordAudit } from '../audit/audit.js';
 import type { ActorContext } from '../shared/context.js';
 
@@ -68,7 +69,11 @@ export function rubricScore(rubric: Record<RubricCriterion, number>): number {
   return Math.round((values.reduce((s, v) => s + v, 0) / values.length) * 100) / 100;
 }
 
-/** Conversation reviews by CS Leads (design/02 "Latest reviewed conversations"). */
+/**
+ * Conversation reviews by CS Leads (design/02 "Latest reviewed conversations").
+ * A lead reviews and reads reviews of the agents their teams own (ADR-026);
+ * other conversations and agents are not found.
+ */
 export class ReviewService {
   constructor(private readonly db: Db) {}
 
@@ -81,7 +86,10 @@ export class ReviewService {
     assertCan(principal, Permission.REVIEWS_MANAGE);
     const id = uuidv7();
     await this.db.transaction(async (tx) => {
-      const [conv] = await tx.select({ agentId: conversations.agentId }).from(conversations).where(eq(conversations.id, input.conversationId));
+      const [conv] = await tx
+        .select({ agentId: conversations.agentId })
+        .from(conversations)
+        .where(and(eq(conversations.id, input.conversationId), sql`${conversations.agentId} IN (${manageableAgentsSql(principal)})`));
       if (!conv) throw notFound('conversation', input.conversationId);
       const score = rubricScore(input.rubric);
       await tx.insert(conversationReviews).values({
@@ -108,7 +116,9 @@ export class ReviewService {
 
   async list(principal: Principal, q: ReviewQuery): Promise<ReviewView[]> {
     assertCan(principal, Permission.REVIEWS_MANAGE);
+    if (q.agentId) await assertAgentReadable(this.db, principal, q.agentId);
     const where = and(
+      readableAgentFilter(principal, conversationReviews.agentId),
       q.agentId ? eq(conversationReviews.agentId, q.agentId) : undefined,
       q.conversationId ? eq(conversationReviews.conversationId, q.conversationId) : undefined,
       q.before ? lt(conversationReviews.createdAt, new Date(q.before)) : undefined,

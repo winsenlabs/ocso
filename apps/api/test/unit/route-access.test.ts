@@ -59,10 +59,12 @@ const PUBLIC_ROUTES = [
   'POST /public/webchat/:publicKey/csat', // visitor token required in the handler
   'POST /public/webchat/:publicKey/messages', // visitor token required in the handler
   'POST /public/webchat/:publicKey/session',
-  'POST /v1/auth/login',
+  'POST /v1/auth/login', // JSON sign-in for API clients: Better Auth's /sign-in/email in-process (same rate limits, throttling, 2FA refusal)
   'GET /v1/setup/status',
   'POST /v1/setup', // one-time setup token, refused once a user exists
+  'POST /v1/setup/recover', // break-glass: only while OCSO_RECOVERY_TOKEN is set, each value works once (ADR-025)
 ];
+// Better Auth's /api/auth/* endpoints are not Nest routes: test/unit/auth-surface.test.ts pins which answer over HTTP.
 
 const METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'ALL', 'OPTIONS', 'HEAD', 'SEARCH'];
 

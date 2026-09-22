@@ -6,8 +6,8 @@ import { api } from './client';
 /**
  * Customers (docs/03 Customer / CustomerIdentity; apps/api customers.controller.ts,
  * packages/application customers/customers.ts). Identities are masked by the API
- * in lists and detail; CS Execs only see customers they have a permitted
- * conversation with, leads see all.
+ * in lists and detail; everyone sees only customers they have a visible
+ * conversation with (a lead: their teams' agents and queues, ADR-026).
  */
 
 const State = z.enum(CONTROL_STATES as [ControlState, ...ControlState[]]);

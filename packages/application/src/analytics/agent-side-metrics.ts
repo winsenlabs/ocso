@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import type { DbOrTx } from '@ocso/db';
-import { agentClause, at, cohortWhere, int, num, ratio, type AnalyticsWindow } from './values.js';
+import { windowAgents, at, cohortWhere, int, num, ratio, type AnalyticsWindow } from './values.js';
 
 export interface CsatStat {
   average: number | null;
@@ -45,7 +45,7 @@ export async function csatStats(db: DbOrTx, w: AnalyticsWindow): Promise<Grouped
            (avg(r.score) FILTER (WHERE NOT r.handled_by_human))::float8 AS ai,
            (avg(r.score) FILTER (WHERE r.handled_by_human))::float8 AS human
       FROM csat_responses r
-     WHERE ${agentClause(sql`r.agent_id`, w.agentId)} AND r.received_at >= ${at(w.from)} AND r.received_at < ${at(w.to)}
+     WHERE ${windowAgents(sql`r.agent_id`, w)} AND r.received_at >= ${at(w.from)} AND r.received_at < ${at(w.to)}
      GROUP BY GROUPING SETS ((r.agent_id), ())`);
   return split(rows, (r) => ({ average: num(r?.avg), responses: int(r?.n), aiHandledAverage: num(r?.ai), humanHandledAverage: num(r?.human) }));
 }
@@ -59,7 +59,7 @@ export async function costStats(db: DbOrTx, w: AnalyticsWindow): Promise<Grouped
            sum(u.cached_input_tokens)::float8 AS cached,
            (sum(u.input_tokens) FILTER (WHERE u.cached_input_tokens IS NOT NULL))::float8 AS reported_input
       FROM usage_events u
-     WHERE ${agentClause(sql`u.agent_id`, w.agentId)} AND u.occurred_at >= ${at(w.from)} AND u.occurred_at < ${at(w.to)}
+     WHERE ${windowAgents(sql`u.agent_id`, w)} AND u.occurred_at >= ${at(w.from)} AND u.occurred_at < ${at(w.to)}
      GROUP BY GROUPING SETS ((u.agent_id), ())`);
   return split(rows, (r) => {
     const currencies = r?.currencies ?? [];

@@ -1,0 +1,34 @@
+# HTTPS with automatic Let's Encrypt certificates (Caddy) in front of the web app.
+#
+#   docker compose -f compose.yaml -f infra/compose/tls.yaml up -d --build
+#
+# Set in .env: OCSO_DOMAIN (DNS A/AAAA record pointing at this host),
+# OCSO_PUBLIC_URL=https://<OCSO_DOMAIN>,
+# OCSO_HTTP_BIND=127.0.0.1 (the web port stays off the public interface — Docker's
+# published ports bypass host firewalls like ufw) and OCSO_TRUSTED_PROXY_HOPS=1
+# (Caddy appends the client address to X-Forwarded-For).
+services:
+  caddy:
+    image: caddy:2.11-alpine
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      OCSO_DOMAIN: ${OCSO_DOMAIN:?set OCSO_DOMAIN in .env}
+    volumes:
+      - ./infra/compose/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [default]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+volumes:
+  caddy_data: {}
+  caddy_config: {}

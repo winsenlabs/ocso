@@ -5,6 +5,7 @@ import { deploymentSettings, users, uuidv7, type Db } from '@ocso/db';
 import { z } from 'zod';
 import { seedDefaultAlertRules } from '../alerts/seed.js';
 import { recordAudit } from '../audit/audit.js';
+import { setPasswordCredential } from './credentials.js';
 import { hashPassword, passwordProblems } from './password.js';
 
 export const SetupInput = z.object({
@@ -18,8 +19,9 @@ export const SetupInput = z.object({
 export type SetupInput = z.infer<typeof SetupInput>;
 
 /**
- * First-run setup (ADR-010): while no user exists, the web /setup page creates
- * the first Platform Tech Admin, guarded by a one-time setup token. No CLI.
+ * First-run setup (ADR-010, ADR-025): while no user exists, the web /setup page
+ * creates the first Platform Tech Admin (a Better Auth user with a credential
+ * account), guarded by a one-time setup token. No CLI.
  */
 export class SetupService {
   constructor(
@@ -47,13 +49,9 @@ export class SetupService {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('ocso:setup'))`);
       const [row] = await tx.select({ n: sql<number>`count(*)::int` }).from(users);
       if ((row?.n ?? 0) > 0) throw new DomainError('conflict', 'setup_already_completed', 'Setup has already been completed');
-      await tx.insert(users).values({
-        id: userId,
-        email: input.adminEmail,
-        name: input.adminName,
-        role: 'PLATFORM_TECH_ADMIN',
-        passwordHash,
-      });
+      // Better Auth user + credential account (ADR-025); the address is the one the operator just typed.
+      await tx.insert(users).values({ id: userId, email: input.adminEmail.toLowerCase(), name: input.adminName, role: 'PLATFORM_TECH_ADMIN', emailVerified: true });
+      await setPasswordCredential(tx, userId, passwordHash);
       await tx
         .update(deploymentSettings)
         .set({ orgName: input.orgName, timezone: input.timezone, setupCompletedAt: new Date(), updatedBy: userId })

@@ -5,6 +5,7 @@ import { auditEvents, cacheGenerations, conversations, customers, handoffs, queu
 import type { Principal } from '@ocso/auth';
 import type { BusinessHoursInput } from '@ocso/domain';
 import { AgentPatch, AgentService, autoAssignUnclaimed, expireOffers, requestHandoff, systemActor, type ActorContext, type HandoffRequest } from '../src/index.js';
+import { createTeam } from './support/ownership.js';
 
 /**
  * Agent business hours at runtime (docs/01 §4, docs/09 §3): the AI answers
@@ -12,7 +13,9 @@ import { AgentPatch, AgentService, autoAssignUnclaimed, expireOffers, requestHan
  * to its queue, but offers and the pickup SLA clock start at the next opening.
  */
 
-const lead: Principal = { userId: '00000000-0000-7000-8000-00000000001a', role: 'CS_LEAD', displayName: 'Anjali Rao', teamIds: [], via: 'UI' };
+// The lead manages Maya through an owning team with no queue, so routing candidates are unchanged (ADR-026).
+const OWNERS = uuidv7();
+const lead: Principal = { userId: '00000000-0000-7000-8000-00000000001a', role: 'CS_LEAD', displayName: 'Anjali Rao', teamIds: [OWNERS], via: 'UI' };
 const leadCtx: ActorContext = { principal: lead, correlationId: 'hours-test' };
 const EXEC_A = '00000000-0000-7000-8000-0000000000e1';
 const EXEC_B = '00000000-0000-7000-8000-0000000000e2';
@@ -67,7 +70,8 @@ beforeAll(async () => {
     { id: pickupQueue, name: 'Cards · pickup', mode: 'OPEN_PICKUP', autoAssignAfterSeconds: 120, slaPolicyId: slaId },
   ]);
   await t.db.insert(queueTeams).values([{ queueId: autoQueue, teamId }, { queueId: pickupQueue, teamId }]);
-  const agent = await new AgentService(t.db).create(leadCtx, { name: 'Maya', purpose: 'support', conversationType: 'SUPPORT', description: 'Cards and EMI questions', defaultQueueId: autoQueue, businessHours: HOURS });
+  await createTeam(t.db, OWNERS, 'Maya owners');
+  const agent = await new AgentService(t.db).create(leadCtx, { name: 'Maya', purpose: 'support', conversationType: 'SUPPORT', description: 'Cards and EMI questions', defaultQueueId: autoQueue, businessHours: HOURS, teamIds: [OWNERS] });
   agentId = agent.id;
   await t.db.update(virtualAgents).set({ status: 'LIVE' }).where(eq(virtualAgents.id, agentId));
 });

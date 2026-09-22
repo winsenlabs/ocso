@@ -42,6 +42,10 @@ catalog:
   "@opentelemetry/resources": 2.11.0
   "@opentelemetry/semantic-conventions": 1.43.0
   import-in-the-middle: 3.5.1
+  better-auth: 1.7.5
+  "@better-auth/passkey": 1.7.5
+  "@better-auth/sso": 1.7.5
+  "@better-auth/core": 1.7.5
 
 allowBuilds:
   esbuild: true

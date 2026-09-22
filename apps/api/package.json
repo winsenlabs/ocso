@@ -54,8 +54,10 @@
     "@ocso/tools": "workspace:*",
     "@ocso/prompt-compiler": "workspace:*",
     "@ocso/alerts": "workspace:*",
+    "@ocso/email": "workspace:*",
     "@ocso/internal-agent": "workspace:*",
-    "ai": "^7.0.109"
+    "ai": "^7.0.109",
+    "better-auth": "catalog:"
   },
   "devDependencies": {
     "@nestjs/testing": "catalog:",

@@ -35,9 +35,9 @@ export async function runDemoSeed(ctx: SeedContext): Promise<SeedOutcome> {
     const queues = await seedRouting(ctx, people.lead, people.teamIds);
     const profiles = await seedModels(ctx, people.admin);
     await ctx.services.settings.updateDeployment(people.admin, { internalAgentProfileId: profiles.supportFast });
-    const agents = await seedAgents(ctx, people.lead, { profiles, queues });
+    const agents = await seedAgents(ctx, people.leads, { profiles, queues, teams: people.teamIds });
     const webchat = await seedWebChat(ctx, people.admin, agents.maya);
-    await publishAgents(ctx, people.lead, agents, webchat.id);
+    await publishAgents(ctx, people.leads, agents, webchat.id);
     const mcp = await seedMcp(ctx, people.admin, people.lead, agents.maya);
     const alerts = await seedDefaultAlertRules(ctx.db, ctx.correlationId);
     ctx.log(`default alert rules: ${alerts.created.length} created, ${alerts.existing} already present`);

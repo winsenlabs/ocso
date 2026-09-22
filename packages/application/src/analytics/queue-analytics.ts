@@ -1,6 +1,7 @@
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import { Permission, assertCan, type Principal } from '@ocso/auth';
 import type { Db } from '@ocso/db';
+import { queuesServedBy, readableAgentsSql } from '../agents/access.js';
 import { QueueService } from '../routing/queues.js';
 import { DEFINITIONS } from './definitions.js';
 import { at, cohortWhere, int, num, windowOf } from './values.js';
@@ -31,7 +32,13 @@ export function queueState(q: { waiting: number; onShift: number; breaches: numb
   return 'ok';
 }
 
-/** Per-queue workload and staffing (design/06 lead Queues table). */
+/**
+ * Per-queue workload and staffing (design/06 lead Queues table). For a
+ * principal scoped to their teams' agents (ADR-026) the rows are the queues
+ * their teams serve or their agents route to, and the window metrics count
+ * only their agents' conversations; the live columns (waiting, on shift) are
+ * the queue's own.
+ */
 export class QueueAnalyticsService {
   constructor(
     private readonly db: Db,
@@ -40,14 +47,15 @@ export class QueueAnalyticsService {
 
   async list(principal: Principal, days = 7): Promise<{ window: { from: string; to: string; days: number }; queues: QueueAnalyticsRow[]; definitions: Record<string, string> }> {
     assertCan(principal, Permission.ANALYTICS_BUSINESS_READ);
-    return this.compute(days);
+    return this.compute(principal, days);
   }
 
   /** Same as list() without the permission check, for composed read models (home). */
-  async compute(days = 7) {
+  async compute(principal: Principal, days = 7) {
     const now = this.now();
-    const w = windowOf(null, days, now, 'UTC');
-    const [queues, waits, breaches] = await Promise.all([
+    const scope = readableAgentsSql(principal);
+    const w = windowOf(null, days, now, 'UTC', scope);
+    const [queues, waits, breaches, relevant] = await Promise.all([
       new QueueService(this.db).list(),
       this.db.execute<{ queue_id: string; avg_wait: number | null; n: number }>(sql`
         SELECT h.queue_id, avg(extract(epoch FROM h.accepted_at - h.requested_at))::float8 AS avg_wait, count(*)::int AS n
@@ -62,12 +70,13 @@ export class QueueAnalyticsService {
            AND ((c.control_state IN ('ESCALATION_REQUESTED', 'WAITING_FOR_HUMAN') AND c.sla_due_at < ${at(now)})
                 OR c.first_human_response_at > c.sla_due_at)
          GROUP BY c.queue_id`),
+      scope ? this.relevantQueues(principal, scope, w.from) : Promise.resolve(null),
     ]);
     const waitBy = new Map(waits.rows.map((r) => [r.queue_id, r]));
     const breachBy = new Map(breaches.rows.map((r) => [r.queue_id, int(r.n)]));
     return {
       window: { from: w.from.toISOString(), to: w.to.toISOString(), days },
-      queues: queues.map((q): QueueAnalyticsRow => {
+      queues: queues.filter((q) => !relevant || relevant.has(q.id)).map((q): QueueAnalyticsRow => {
         const wait = waitBy.get(q.id);
         const avg = num(wait?.avg_wait);
         return {
@@ -87,5 +96,21 @@ export class QueueAnalyticsService {
       }),
       definitions: { avgWaitSeconds: DEFINITIONS.queueAvgWait, state: DEFINITIONS.queueState, slaBreachesInWindow: DEFINITIONS.slaBreaches },
     };
+  }
+
+  /**
+   * Queues served by the principal's teams, or that their agents route to:
+   * default queue, escalation rule target, or the queue of one of their
+   * agents' conversations that is open now or opened inside the window.
+   */
+  private async relevantQueues(principal: Principal, scope: SQL, from: Date): Promise<Set<string>> {
+    const { rows } = await this.db.execute<{ id: string }>(sql`
+      SELECT q.id FROM queues q
+       WHERE q.id IN (${queuesServedBy(principal.teamIds)})
+          OR q.id IN (SELECT default_queue_id FROM virtual_agents WHERE id IN (${scope}))
+          OR q.id IN (SELECT target_queue_id FROM escalation_rules WHERE agent_id IN (${scope}))
+          OR q.id IN (SELECT queue_id FROM conversations
+                       WHERE agent_id IN (${scope}) AND (control_state <> 'RESOLVED' OR opened_at >= ${at(from)}))`);
+    return new Set(rows.map((r) => r.id));
   }
 }
