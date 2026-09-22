@@ -337,3 +337,18 @@ Autonomous customer-facing AI output is permitted **only** in `AI_ACTIVE`. `AI_R
   - Expiry = 2 × turn timeout + 2 min, refreshed while turns keep running.
   - Failures are logged (rate-limited) and never affect a turn.
 - **Still open.** The metric-math expression is unverified against real CloudWatch data (validate with GetMetricData). The protection toggle's API throttling behaviour under heavy churn is unmeasured.
+
+---
+
+## ADR-024 — OCSO turn cache: per-scope generation counters + per-worker hot cache
+
+**Status:** ACCEPTED (2026-09-22) — recorded after implementation.
+
+**Decision.** Derived context (agent prefix: prompt components + tool catalog; customer context; rolling summary; recent history) is cached in each worker's in-memory LRU (`HotContextCache`), keyed by conversation. Validity is decided by monotonic generation counters in `cache_generations`, one row per scope (`agent:<id>`, `customer:<id>`, `channel:<id>`, `profile:<id>`, `policy`, `global`). Any change that affects a scope bumps its counter in the same transaction as the change (prompt activation, tool grants, MCP approval/drift, customer edits, channel/profile changes); a turn reads the counters for its scopes (one query) and treats any mismatch as COLD. Turns record HOT/COLD in `turns.cache_layer`; context hashes are stored per turn.
+
+**Why.** docs/05 §4–5 require OCSO-side turn caching with correct invalidation. Counters in Postgres keep every worker consistent without a shared cache service (build rule: Postgres is the durable truth), cost one indexed read per turn, and survive worker restarts (a new worker is simply COLD).
+
+**Alternatives.** Redis/ElastiCache shared cache (another stateful dependency for Compose and AWS); TTL-only expiry (serves stale prompts after activation); pub/sub invalidation only (lost messages leave stale caches — kept as a latency optimisation via `cache.invalidated` events, not for correctness).
+
+**Consequences.** Anything that changes prompt-relevant state must bump the right scope; tests cover prompt activation (runtime.int.test.ts HOT/COLD). Hot cache memory is bounded per worker (LRU size).
+
