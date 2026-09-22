@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared/base.css" />
+<link rel="stylesheet" href="shared/one.css" />
+<link rel="stylesheet" href="shared/charts.css" />
+<link rel="stylesheet" href="shared/mock.css" />
+<link rel="stylesheet" href="shared/ocso.css" />
+<style>
+.ws{display:grid;grid-template-columns:336px minmax(0,1fr) 316px;height:100vh;min-height:0;overflow:hidden}
+.ws>section{min-width:0;min-height:0}
+.inbox{border-right:1px solid var(--border);background:var(--surface);display:grid;grid-template-rows:auto auto minmax(0,1fr)}
+.inbox .ih{padding:12px 14px 10px;border-bottom:1px solid var(--border);display:grid;gap:9px}
+.inbox .filters{display:flex;gap:5px;flex-wrap:wrap;padding:9px 12px;border-bottom:1px solid var(--border);background:var(--bg-2)}
+.inbox .filters .fchip{font-size:11px;padding:3px 9px}
+.inbox .list{overflow-y:auto}
+.center{display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;background:var(--bg);min-height:0}
+.center>*{min-width:0}
+.takeover{flex-wrap:wrap}.takeover .tt,.takeover .ts{min-width:0}
+.comp .box>*,.comp .modes>*,.comp .brow>*{min-width:0}
+.tlwrap{min-height:240px}
+.center .chead{padding:11px 20px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.center .ban{padding:10px 20px;background:var(--surface);border-bottom:1px solid var(--border)}
+.center .tlwrap{overflow-y:auto;padding:18px 20px 22px}
+.rail2{border-left:1px solid var(--border);background:var(--surface-2);overflow-y:auto;padding:14px;display:grid;gap:12px;align-content:start}
+.rcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 13px;display:grid;gap:9px;align-content:start}
+.rcard>h3{margin:0;font-family:var(--font-mono);font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--ink-4);display:flex;align-items:center;gap:8px}
+.rcard>h3 .sp{flex:1}
+.rkv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:5px 12px;font-size:12px}
+.rkv .k{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-4)}
+.rkv .v{color:var(--ink);min-width:0;overflow-wrap:anywhere}
+.tool-opt{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 9px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);cursor:pointer}
+.tool-opt:hover{border-color:var(--border-2);background:var(--surface-2)}
+.tool-opt .tn{font-family:var(--font-mono);font-size:11.5px;color:var(--ink);font-weight:600}
+.tool-opt .td{font-size:11.5px;color:var(--ink-3);margin-top:1px;display:block}
+.risk{font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;padding:1px 6px;border-radius:4px;flex:none}
+.risk.r{background:var(--bg-3);color:var(--ink-3)}.risk.w{background:var(--warn-soft);color:var(--warn)}.risk.s{background:var(--danger-soft);color:var(--danger)}
+.att{display:inline-flex;align-items:center;gap:8px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 9px;font-size:12px;color:var(--ink-2);margin-top:8px}
+.att .thumb{width:30px;height:38px;border-radius:3px;background:var(--bg-3);border:1px solid var(--border);display:grid;place-items:center;font-family:var(--font-mono);font-size:8px;color:var(--ink-4)}
+.locked{display:flex;align-items:center;gap:10px;padding:13px 20px;border-top:1px solid var(--border);background:var(--bg-2);font-size:12.5px;color:var(--ink-3)}
+@media (max-width:1500px){.ws{grid-template-columns:300px minmax(0,1fr) 300px}}
+@media (max-width:1240px){.ws{grid-template-columns:280px minmax(0,1fr)}.rail2{display:none}}
+@media (max-width:1100px){
+  .ws{grid-template-columns:minmax(0,1fr);height:auto;overflow:visible}
+  .inbox{border-right:none;border-bottom:1px solid var(--border);grid-template-rows:auto auto auto}
+  .inbox .list{max-height:320px}
+  .center{grid-template-rows:auto auto auto auto}
+  .center .tlwrap{overflow:visible}
+  .main{height:auto !important;overflow:visible !important}
+  .sidebar{height:auto;position:relative}
+}
+</style>
+<title>Conversation workspace — OCSO</title>
+</helmet>
+
+<div class="state-sw" role="tablist" aria-label="Control state">
+  <button class="{{ s_ai }}" onClick="{{ go_ai }}">AI active</button>
+  <button class="{{ s_wait }}" onClick="{{ go_wait }}">Waiting</button>
+  <button class="{{ s_human }}" onClick="{{ go_human }}">Human active</button>
+  <button class="{{ s_ret }}" onClick="{{ go_ret }}">Returning</button>
+  <button class="{{ s_res }}" onClick="{{ go_res }}">Resolved</button>
+</div>
+
+<div class="app" data-screen-label="01 · CS Exec conversation workspace">
+  <dc-import name="OCSONav" role="exec" active="conv" hint-size="240px,100vh"></dc-import>
+
+  <main class="main" style="padding:0;height:100vh;overflow:hidden">
+    <div class="ws">
+
+      <!-- ─── Inbox ─── -->
+      <section class="inbox">
+        <div class="ih">
+          <div class="rowsplit">
+            <h1 style="margin:0;font-size:15px;font-weight:600;letter-spacing:-0.01em">Conversations</h1>
+            <span class="count-badge" style="margin:0">312</span>
+            <span class="sp"></span>
+            <button class="btn tiny ghost">Sort</button>
+          </div>
+          <div class="topbar-search" style="max-width:none;padding:5px 10px;font-size:12px">
+            <span>Search customer, number, or ticket</span><span class="topbar-search-shortcut">⌘K</span>
+          </div>
+        </div>
+        <div class="filters">
+          <button class="fchip">All <span class="fchip-count">312</span></button>
+          <button class="fchip active">Assigned to me <span class="fchip-count">7</span></button>
+          <button class="fchip">Waiting for human <span class="fchip-count">4</span></button>
+          <button class="fchip">AI active <span class="fchip-count">286</span></button>
+          <button class="fchip">Priority <span class="fchip-count">3</span></button>
+          <button class="fchip">Resolved</button>
+        </div>
+        <div class="list">
+          <button class="crow on">
+            <span class="prio p1"></span>
+            <span>
+              <span class="l1"><span class="nm">Priya Deshmukh</span><span class="ph">+91 98•••41208</span><span class="tm">09:52</span></span>
+              <span class="l2"><span class="ch-mark wa">WA</span><span class="ag">Maya · support</span><span class="schip muted" style="margin-left:auto">P1</span></span>
+              <span class="sn">Two EMI debits this month on my card ending 4417 — I need one reversed today.</span>
+              <span class="l3"><span class="cstate {{ stateCls }}"><span class="dot"></span>{{ stateLabel }}</span><span class="sla risk"><span class="sbar"><i style="width:78%"></i></span>04:12 to SLA</span></span>
+            </span>
+          </button>
+          <button class="crow">
+            <span class="prio p3"></span>
+            <span>
+              <span class="l1"><span class="nm">Rakesh Iyer</span><span class="ph">web · sess 8f2a</span><span class="tm">09:50</span></span>
+              <span class="l2"><span class="ch-mark">WB</span><span class="ag">Arjun · sales</span></span>
+              <span class="sn">Comparing the 2.9% and 3.4% personal loan slabs for a ₹6L top-up.</span>
+              <span class="l3"><span class="cstate ai"><span class="dot"></span>AI active</span><span class="sla"><span class="sbar"><i style="width:22%"></i></span>—</span></span>
+            </span>
+          </button>
+          <button class="crow">
+            <span class="prio p2"></span>
+            <span>
+              <span class="l1"><span class="nm">Farida Sheikh</span><span class="ph">+91 90•••77315</span><span class="tm">09:47</span></span>
+              <span class="l2"><span class="ch-mark vo">VO</span><span class="ag">Riya · collections</span><span class="schip warn" style="margin-left:auto">hardship</span></span>
+              <span class="sn">Asked for a payment plan after a job loss. Riya requested human review.</span>
+              <span class="l3"><span class="cstate wait"><span class="dot"></span>Waiting for human</span><span class="sla breach"><span class="sbar"><i style="width:100%"></i></span>breached 01:38</span></span>
+            </span>
+          </button>
+          <button class="crow">
+            <span class="prio p3"></span>
+            <span>
+              <span class="l1"><span class="nm">Arvind Nair</span><span class="ph">app · cif 44120</span><span class="tm">09:44</span></span>
+              <span class="l2"><span class="ch-mark">AP</span><span class="ag">Maya · support</span></span>
+              <span class="sn">Card replacement dispatched — asked for the courier reference again.</span>
+              <span class="l3"><span class="cstate human"><span class="dot"></span>You · human</span><span class="sla"><span class="sbar"><i style="width:40%"></i></span>12:05</span></span>
+            </span>
+          </button>
+          <button class="crow">
+            <span class="prio p3"></span>
+            <span>
+              <span class="l1"><span class="nm">Sneha Kulkarni</span><span class="ph">+91 99•••10884</span><span class="tm">09:41</span></span>
+              <span class="l2"><span class="ch-mark wa">WA</span><span class="ag">Maya · support</span></span>
+              <span class="sn">Statement for March re-sent as PDF. Confirmed received.</span>
+              <span class="l3"><span class="cstate returning"><span class="dot"></span>Returning to AI</span><span class="sla"><span class="sbar"><i style="width:15%"></i></span>—</span></span>
+            </span>
+          </button>
+          <button class="crow">
+            <span class="prio p3"></span>
+            <span>
+              <span class="l1"><span class="nm">Mohit Bansal</span><span class="ph">ig · @mohitb</span><span class="tm">09:32</span></span>
+              <span class="l2"><span class="ch-mark ig">IG</span><span class="ag">Arjun · sales</span></span>
+              <span class="sn">Asked whether the cashback card waives the joining fee. Quoted policy and closed.</span>
+              <span class="l3"><span class="cstate resolved"><span class="dot"></span>Resolved</span><span class="sla">held 06:20</span></span>
+            </span>
+          </button>
+          <button class="crow">
+            <span class="prio p3"></span>
+            <span>
+              <span class="l1"><span class="nm">Deepa Raman</span><span class="ph">email · deepa@…</span><span class="tm">09:18</span></span>
+              <span class="l2"><span class="ch-mark">EM</span><span class="ag">Maya · support</span></span>
+              <span class="sn">Address change request — document verification pending with ops.</span>
+              <span class="l3"><span class="cstate ai"><span class="dot"></span>AI active</span><span class="sla"><span class="sbar"><i style="width:55%"></i></span>1d 04h</span></span>
+            </span>
+          </button>
+          <div class="stream-foot">7 of 312 · assigned to me</div>
+        </div>
+      </section>
+
+      <!-- ─── Conversation ─── -->
+      <section class="center">
+        <div class="chead">
+          <div style="display:flex;align-items:center;gap:9px;min-width:0">
+            <span class="avatar sm indigo">PD</span>
+            <span style="min-width:0">
+              <span style="display:flex;align-items:center;gap:8px"><b style="font-size:13.5px;letter-spacing:-0.01em">Priya Deshmukh</b><span class="schip muted">P1</span><span class="mono-sm">CIF 88214</span></span>
+              <span class="mono-sm" style="display:block">+91 98•••41208 · WhatsApp · conv_9f41ac · opened 09:41</span>
+            </span>
+          </div>
+          <span class="sp" style="flex:1"></span>
+          <span class="cstate {{ stateCls }}"><span class="dot"></span>{{ stateLabel }}</span>
+          <button class="btn tiny ghost">Transfer</button>
+          <button class="btn tiny ghost">History</button>
+          <button class="btn tiny ghost">⋯</button>
+        </div>
+
+        <div class="ban">
+          <sc-if value="{{ isAi }}" hint-placeholder-val="{{ false }}">
+            <div class="takeover ret">
+              <span class="cstate ai"><span class="dot"></span>AI active</span>
+              <span class="tt">Maya is handling this conversation</span>
+              <span class="ts">no human action needed · 3 turns · 0 escalation signals</span>
+              <span class="sp" style="flex:1"></span>
+              <button class="btn tiny" onClick="{{ go_human }}">Take over</button>
+              <button class="btn tiny ghost">Watch</button>
+            </div>
+          </sc-if>
+          <sc-if value="{{ isWait }}" hint-placeholder-val="{{ false }}">
+            <div class="takeover wait">
+              <span class="cstate wait"><span class="dot"></span>Waiting for human</span>
+              <span class="tt">Maya asked for a human · sensitive refund above authority</span>
+              <span class="ts">open pickup · waiting 2m 14s · 4 in queue · SLA 15:00</span>
+              <span class="sp" style="flex:1"></span>
+              <button class="btn tiny accent" onClick="{{ go_human }}">Claim conversation</button>
+              <button class="btn tiny ghost">Skip</button>
+            </div>
+          </sc-if>
+          <sc-if value="{{ isHuman }}" hint-placeholder-val="{{ true }}">
+            <div class="takeover">
+              <span class="cstate human"><span class="dot"></span>Human active</span>
+              <span class="tt">You are now handling this conversation.</span>
+              <span class="ts">Maya is attached and will not reply to the customer until you return control.</span>
+              <span class="sp" style="flex:1"></span>
+              <button class="btn tiny" onClick="{{ go_ret }}">Return to AI</button>
+              <button class="btn tiny" onClick="{{ go_res }}">Resolve</button>
+            </div>
+          </sc-if>
+          <sc-if value="{{ isRet }}" hint-placeholder-val="{{ false }}">
+            <div class="takeover ret">
+              <span class="cstate returning"><span class="dot"></span>Returning to AI</span>
+              <span class="tt">Maya resumes on the next customer message</span>
+              <span class="ts">handover summary + 1 internal note passed to the agent · you stay watching for 30m</span>
+              <span class="sp" style="flex:1"></span>
+              <button class="btn tiny" onClick="{{ go_human }}">Cancel return</button>
+              <button class="btn tiny ghost">Edit summary</button>
+            </div>
+          </sc-if>
+          <sc-if value="{{ isRes }}" hint-placeholder-val="{{ false }}">
+            <div class="takeover resolved">
+              <span class="cstate resolved"><span class="dot"></span>Resolved</span>
+              <span class="tt">Resolved by Nikhil Menon · duplicate debit reversed</span>
+              <span class="ts">handled 31m · first response 1m 12s · control returned to Maya · CSAT requested</span>
+              <span class="sp" style="flex:1"></span>
+              <button class="btn tiny" onClick="{{ go_human }}">Reopen</button>
+              <button class="btn tiny ghost">Send to review</button>
+            </div>
+          </sc-if>
+        </div>
+
+        <div class="tlwrap">
+          <div class="tl">
+            <div class="sysev"><span class="s">conversation opened · whatsapp · maya v14 · model support-primary · 09:41:06</span></div>
+
+            <div class="ev cust">
+              <span class="who">PD</span>
+              <span class="bd">
+                <span class="hd"><span class="a">Priya Deshmukh</span><span class="r">customer</span><span class="t">09:41</span></span>
+                <span class="tx"><p>Hi, my EMI for the washing machine got debited twice this month. Card ending 4417. I have attached the statement. Please reverse one of them, my rent payment is due.</p></span>
+                <span class="att"><span class="thumb">JPG</span><span><b style="color:var(--ink);font-weight:500">statement-mar.jpg</b><br /><span class="mono-sm">184 KB · image part</span></span></span>
+              </span>
+            </div>
+
+            <div class="ev ai">
+              <span class="who">MA</span>
+              <span class="bd">
+                <span class="hd"><span class="a">Maya</span><span class="r">virtual agent · support</span><span class="t">09:41</span></span>
+                <span class="tx"><p>Thanks Priya, I can see the statement. Let me check the two debits on the card ending 4417 right away — one moment.</p></span>
+              </span>
+            </div>
+
+            <div class="toolev">
+              <span></span>
+              <span class="bd">
+                <span class="th"><span class="okdot"></span><span class="nmx">crm.get_customer_accounts</span><span>· meridian-crm · read-only · 412 ms · ok</span></span>
+                <span class="kvs"><span>cif <b>88214</b></span><span>segment <b>Priority</b></span><span>cards <b>1 active</b></span><span>emi plans <b>2</b></span></span>
+              </span>
+            </div>
+
+            <div class="toolev">
+              <span></span>
+              <span class="bd">
+                <span class="th"><span class="okdot"></span><span class="nmx">cards.list_transactions</span><span>· core-cards · read-only · 690 ms · ok</span></span>
+                <span class="kvs"><span>window <b>01–18 Mar</b></span><span>rows <b>34</b></span><span>duplicate pair <b>found</b></span><span>amount <b>₹12,480 ×2</b></span></span>
+              </span>
+            </div>
+
+            <div class="ev ai">
+              <span class="who">MA</span>
+              <span class="bd">
+                <span class="hd"><span class="a">Maya</span><span class="r">virtual agent · support</span><span class="t">09:44</span></span>
+                <span class="tx"><p>You are right — EMI instalment 4 of 9 was authorised twice on 14 March, ₹12,480 each, both settled. The second one is a duplicate authorisation from the merchant terminal.</p><p>A reversal of ₹12,480 needs an approval from our cards team because it is above the limit I can action myself. I am raising it now and a colleague will confirm here shortly.</p></span>
+              </span>
+            </div>
+
+            <div class="toolev">
+              <span></span>
+              <span class="bd">
+                <span class="th"><span class="okdot d"></span><span class="nmx">payments.reverse_transaction</span><span>· core-cards · sensitive write · blocked by policy</span></span>
+                <span class="kvs"><span>reason <b>above agent authority (₹5,000)</b></span><span>requires <b>human confirmation</b></span><span>txn <b>TXN-8841-2290</b></span></span>
+              </span>
+            </div>
+
+            <sc-if value="{{ showEsc }}" hint-placeholder-val="{{ true }}">
+              <div class="sysev hi"><span class="s">escalation requested · reason: sensitive refund above authority · priority raised to P1 · 09:52:14</span></div>
+              <div class="sysev"><span class="s">routed to queue “Cards &amp; EMI · Tier 2” · mode OPEN_PICKUP · 4 waiting · sla 15:00</span></div>
+            </sc-if>
+
+            <sc-if value="{{ showHuman }}" hint-placeholder-val="{{ true }}">
+              <div class="sysev"><span class="s">claimed by Nikhil Menon · control HUMAN_ACTIVE · maya remains attached · 09:54:02</span></div>
+
+              <div class="ev note">
+                <span class="who">NM</span>
+                <span class="bd">
+                  <span class="hd"><span class="a">Nikhil Menon</span><span class="r">internal note · not sent to customer</span><span class="t">09:54</span></span>
+                  <span class="tx">Duplicate terminal auth confirmed against the merchant batch file. Reversing the later of the two. Merchant is Croma Kalyani Nagar — same MID has two similar cases this week, flagging to disputes.</span>
+                </span>
+              </div>
+
+              <div class="ev hum">
+                <span class="who">NM</span>
+                <span class="bd">
+                  <span class="hd"><span class="a">Nikhil Menon</span><span class="r">human · cs exec</span><span class="t">09:56</span></span>
+                  <span class="tx"><p>Hello Priya, Nikhil here from the cards team. I have confirmed the duplicate and I am reversing ₹12,480 back to your card now. It will show on your statement within 3 working days, and your EMI schedule stays unchanged.</p></span>
+                </span>
+              </div>
+
+              <div class="toolev">
+                <span></span>
+                <span class="bd">
+                  <span class="th"><span class="okdot"></span><span class="nmx">payments.reverse_transaction</span><span>· core-cards · sensitive write · confirmed by Nikhil Menon · 1.8 s · ok</span></span>
+                  <span class="kvs"><span>txn <b>TXN-8841-2290</b></span><span>amount <b>₹12,480</b></span><span>ref <b>RVSL-5521904</b></span><span>audit <b>aud_71c4</b></span></span>
+                </span>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ showRet }}" hint-placeholder-val="{{ false }}">
+              <div class="sysev"><span class="s">control returning to AI · handover summary written · maya resumes on next customer turn · 10:02:41</span></div>
+            </sc-if>
+
+            <sc-if value="{{ showResolved }}" hint-placeholder-val="{{ false }}">
+              <div class="ev cust">
+                <span class="who">PD</span>
+                <span class="bd">
+                  <span class="hd"><span class="a">Priya Deshmukh</span><span class="r">customer</span><span class="t">10:11</span></span>
+                  <span class="tx"><p>Got the SMS, thank you so much. That was quick.</p></span>
+                </span>
+              </div>
+              <div class="ev ai">
+                <span class="who">MA</span>
+                <span class="bd">
+                  <span class="hd"><span class="a">Maya</span><span class="r">virtual agent · support</span><span class="t">10:12</span></span>
+                  <span class="tx"><p>Glad that is sorted, Priya. Your reversal reference is RVSL-5521904 and instalment 5 of 9 will debit on 14 April as scheduled. Anything else I can help with?</p></span>
+                </span>
+              </div>
+              <div class="sysev"><span class="s">resolved · disposition: duplicate debit reversed · csat requested · handled 31m · 10:14:20</span></div>
+            </sc-if>
+
+            <sc-if value="{{ isAi }}" hint-placeholder-val="{{ false }}">
+              <div class="sysev"><span class="s">maya is drafting · awaiting approval routing</span></div>
+            </sc-if>
+          </div>
+        </div>
+
+        <sc-if value="{{ canReply }}" hint-placeholder-val="{{ true }}">
+          <div class="comp {{ compCls }}">
+            <div class="modes">
+              <button class="fchip {{ m_reply }}" onClick="{{ go_reply }}">Reply to customer</button>
+              <button class="fchip {{ m_note }}" onClick="{{ go_note }}">Internal note</button>
+              <button class="fchip {{ m_tool }}" onClick="{{ go_tool }}">Tool action</button>
+              <span class="sp" style="flex:1"></span>
+              <span class="mono-sm">whatsapp · text, image, document, location</span>
+            </div>
+
+            <sc-if value="{{ isReply }}" hint-placeholder-val="{{ true }}">
+              <div class="copilot">
+                <div class="ch2"><span>Maya · suggested reply</span><span class="mono-sm" style="text-transform:none;letter-spacing:0">based on 2 similar cases · policy CRD-114</span><span class="sp" style="flex:1"></span><span class="schip accent">draft</span></div>
+                <div class="cb">“I have confirmed the duplicate authorisation and reversed ₹12,480 to your card. It will reflect within 3 working days and your EMI schedule is unchanged. Reference RVSL-5521904.”</div>
+                <div class="rowsplit"><button class="btn tiny">Insert</button><button class="btn tiny ghost">Rewrite shorter</button><button class="btn tiny ghost">Dismiss</button><span class="sp"></span><span class="mono-sm">not sent until you send it</span></div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ isTool }}" hint-placeholder-val="{{ false }}">
+              <div class="confirm" style="margin-bottom:8px">
+                <span class="cl">confirm sensitive action</span>
+                <span class="cx"><b>payments.reverse_transaction</b> · reverse ₹12,480 on TXN-8841-2290 to card •4417. Irreversible once settled. Attributed to you and written to the audit log.</span>
+                <span class="rowsplit"><button class="btn tiny accent">Confirm and run</button><button class="btn tiny ghost">Cancel</button><span class="sp"></span><span class="mono-sm">policy: 2-step for &gt; ₹5,000</span></span>
+              </div>
+            </sc-if>
+
+            <div class="box">
+              <textarea placeholder="{{ placeholder }}" rows="2"></textarea>
+              <div class="brow">
+                <button class="iconbtn" title="Attach">+</button>
+                <button class="iconbtn" title="Template">≡</button>
+                <button class="iconbtn" title="Emoji">☺</button>
+                <span class="mono-sm">{{ compHint }}</span>
+                <span class="sp" style="flex:1"></span>
+                <button class="btn tiny ghost">Save draft</button>
+                <button class="btn {{ sendCls }}">{{ sendLabel }}</button>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ locked }}" hint-placeholder-val="{{ false }}">
+          <div class="locked">
+            <span class="okdot m"></span><span>{{ lockedText }}</span>
+            <span class="sp" style="flex:1"></span>
+            <button class="btn tiny" onClick="{{ go_human }}">{{ lockedAction }}</button>
+          </div>
+        </sc-if>
+      </section>
+
+      <!-- ─── Context rail ─── -->
+      <aside class="rail2">
+        <div class="rcard">
+          <h3>Customer<span class="sp"></span><a class="mono-sm" href="#">open →</a></h3>
+          <div class="rowsplit" style="gap:9px">
+            <span class="avatar indigo">PD</span>
+            <span><b style="font-size:13px">Priya Deshmukh</b><br /><span class="mono-sm">CIF 88214 · Priority · since 2019</span></span>
+          </div>
+          <div class="rkv">
+            <span class="k">phone</span><span class="v">+91 98•••41208</span>
+            <span class="k">language</span><span class="v">English · Marathi</span>
+            <span class="k">risk</span><span class="v">Low · KYC verified</span>
+            <span class="k">csat</span><span class="v">4.6 avg · 9 conversations</span>
+          </div>
+        </div>
+
+        <div class="rcard">
+          <h3>Accounts</h3>
+          <div class="rkv">
+            <span class="k">card</span><span class="v">Meridian Signature •4417</span>
+            <span class="k">limit</span><span class="v">₹4,50,000 · ₹1,12,400 used</span>
+            <span class="k">emi plan</span><span class="v">Washing machine · 4 of 9 · ₹12,480/mo</span>
+            <span class="k">next due</span><span class="v">14 Apr · autopay on</span>
+            <span class="k">disputes</span><span class="v">1 open · TXN-8841-2290</span>
+          </div>
+        </div>
+
+        <div class="rcard">
+          <h3>AI summary<span class="sp"></span><span class="mono-sm">maya · 09:52</span></h3>
+          <div style="font-size:12.5px;line-height:1.55;color:var(--ink-2);text-wrap:pretty">Duplicate EMI authorisation of ₹12,480 on 14 Mar confirmed against the card ledger. Customer needs one leg reversed today for cash-flow reasons. Reversal exceeds agent authority, so a human confirmation is required. No policy exception needed.</div>
+          <div class="rowsplit"><span class="mono-sm">rolling summary · v3</span><span class="sp"></span><button class="btn tiny ghost">Full trace</button></div>
+        </div>
+
+        <div class="rcard">
+          <h3>Assignment</h3>
+          <div class="rkv">
+            <span class="k">agent</span><span class="v">Maya — Customer Support</span>
+            <span class="k">prompt</span><span class="v">v14 · live since 12 Mar</span>
+            <span class="k">model</span><span class="v">support-primary · Bedrock</span>
+            <span class="k">queue</span><span class="v">Cards &amp; EMI · Tier 2</span>
+            <span class="k">handoff</span><span class="v">Open pickup · claimed 09:54</span>
+            <span class="k">handling</span><span class="v">Nikhil Menon (you)</span>
+          </div>
+          <div class="rowsplit"><span class="cstate returning"><span class="dot"></span>maya attached</span><span class="sp"></span><button class="btn tiny ghost">Reassign</button></div>
+        </div>
+
+        <div class="rcard">
+          <h3>Approved tools<span class="sp"></span><span class="mono-sm">4 of 11</span></h3>
+          <div class="tool-opt"><span><span class="tn">cards.list_transactions</span><span class="td">Read the card ledger</span></span><span class="risk r">read</span></div>
+          <div class="tool-opt"><span><span class="tn">statements.send_pdf</span><span class="td">Send a statement on this channel</span></span><span class="risk r">read</span></div>
+          <div class="tool-opt"><span><span class="tn">disputes.raise_case</span><span class="td">Open a chargeback case</span></span><span class="risk w">write</span></div>
+          <div class="tool-opt"><span><span class="tn">payments.reverse_transaction</span><span class="td">Reverse a settled debit</span></span><span class="risk s">2-step</span></div>
+          <div class="mono-sm">7 tools hidden — not authorised for your role on this queue</div>
+        </div>
+
+        <div class="rcard">
+          <h3>Recent actions</h3>
+          <div class="vstep">
+            <span><span class="vs-dot active">✓</span><span class="vs-line"></span></span>
+            <span class="vs-body"><span class="vs-title" style="font-size:12.5px">Claimed conversation</span><span class="vs-sub" style="font-size:11.5px;display:block">Nikhil Menon · open pickup</span><span class="vs-ts">09:54:02</span></span>
+            <span><span class="vs-dot">✓</span><span class="vs-line"></span></span>
+            <span class="vs-body"><span class="vs-title" style="font-size:12.5px">Internal note added</span><span class="vs-sub" style="font-size:11.5px;display:block">merchant MID flagged</span><span class="vs-ts">09:54:40</span></span>
+            <span><span class="vs-dot">✓</span><span class="vs-line"></span></span>
+            <span class="vs-body"><span class="vs-title" style="font-size:12.5px">Reversal confirmed</span><span class="vs-sub" style="font-size:11.5px;display:block">₹12,480 · aud_71c4</span><span class="vs-ts">09:57:11</span></span>
+            <span><span class="vs-dot pending">4</span></span>
+            <span class="vs-body"><span class="vs-title" style="font-size:12.5px">Return to AI</span><span class="vs-sub" style="font-size:11.5px;display:block">pending</span></span>
+          </div>
+        </div>
+
+        <div class="rcard">
+          <h3>Tags</h3>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
+            <span class="chip accent">duplicate-debit</span><span class="chip">emi</span><span class="chip">merchant-terminal</span><span class="chip">refund</span><button class="btn tiny ghost">+ tag</button>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = { mode: 'human', comp: 'reply' };
+  renderVals() {
+    const m = this.state.mode, c = this.state.comp;
+    const set = (k, v) => () => this.setState({ [k]: v });
+    const noteMode = c === 'note';
+    const chip = {
+      ai: ['ai', 'AI active'], wait: ['wait', 'Waiting for human'], human: ['human', 'You · human'],
+      ret: ['returning', 'Returning to AI'], res: ['resolved', 'Resolved']
+    }[m];
+    return {
+      s_ai: m === 'ai' ? 'active' : '', s_wait: m === 'wait' ? 'active' : '', s_human: m === 'human' ? 'active' : '',
+      s_ret: m === 'ret' ? 'active' : '', s_res: m === 'res' ? 'active' : '',
+      go_ai: set('mode', 'ai'), go_wait: set('mode', 'wait'), go_human: set('mode', 'human'),
+      go_ret: set('mode', 'ret'), go_res: set('mode', 'res'),
+      stateCls: chip[0], stateLabel: chip[1],
+      isAi: m === 'ai', isWait: m === 'wait', isHuman: m === 'human', isRet: m === 'ret', isRes: m === 'res',
+      showEsc: m !== 'ai', showHuman: m === 'human' || m === 'ret' || m === 'res',
+      showRet: m === 'ret' || m === 'res', showResolved: m === 'res',
+      canReply: m === 'human', locked: m !== 'human',
+      lockedText: {
+        ai: 'Maya owns this conversation. Take over to reply as a human.',
+        wait: 'Claim this conversation to reply. Anyone in Cards & EMI · Tier 2 can pick it up.',
+        ret: 'Control is going back to Maya. Cancel the return to keep replying.',
+        res: 'Resolved 10:14. Reopen to reply again.'
+      }[m],
+      lockedAction: { ai: 'Take over', wait: 'Claim', ret: 'Cancel return', res: 'Reopen' }[m],
+      m_reply: c === 'reply' ? 'active' : '', m_note: noteMode ? 'active' : '', m_tool: c === 'tool' ? 'active' : '',
+      go_reply: set('comp', 'reply'), go_note: set('comp', 'note'), go_tool: set('comp', 'tool'),
+      isReply: c === 'reply', isTool: c === 'tool',
+      compCls: noteMode ? 'noteon' : '',
+      placeholder: noteMode ? 'Internal note — never sent to the customer' : (c === 'tool' ? 'Message to send with the tool result (optional)' : 'Reply to Priya on WhatsApp'),
+      compHint: noteMode ? 'visible to CS Lead and CS Exec only' : 'shift + enter for a new line',
+      sendCls: noteMode ? 'tiny primary' : 'tiny accent',
+      sendLabel: noteMode ? 'Add note' : 'Send reply'
+    };
+  }
+}
+</script>
+</body>
+</html>
