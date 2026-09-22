@@ -10,9 +10,12 @@ import { AuthModule } from './modules/auth/auth.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 import { SettingsModule } from './modules/settings/settings.module.js';
 import { UsersModule } from './modules/users/users.module.js';
+import { ModelsModule } from './modules/models/models.module.js';
+import { McpModule } from './modules/mcp/mcp.module.js';
+import { AlertsModule } from './modules/alerts/alerts.module.js';
 
 /** Feature modules are registered here; each owns one domain area (build rule §2). */
-export const FEATURE_MODULES = [HealthModule, AuthModule, UsersModule, SettingsModule];
+export const FEATURE_MODULES = [HealthModule, AuthModule, UsersModule, SettingsModule, ModelsModule, McpModule, AlertsModule];
 
 @Module({
   imports: [

@@ -1,0 +1,29 @@
+{
+  "name": "@ocso/alerts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Alert delivery adapters (in-app, email, Slack, Teams, webhook, PagerDuty) and pure rule-evaluation helpers.",
+  "exports": {
+    ".": {
+      "@ocso/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@ocso/domain": "workspace:*",
+    "nodemailer": "10.0.10",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "8.0.2"
+  }
+}

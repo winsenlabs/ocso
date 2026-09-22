@@ -143,6 +143,12 @@ importers:
       '@nestjs/platform-express':
         specifier: 'catalog:'
         version: 12.0.4(@nestjs/common@12.0.4(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.0.4)
+      '@ocso/agent-runtime':
+        specifier: workspace:*
+        version: link:../../packages/agent-runtime
+      '@ocso/alerts':
+        specifier: workspace:*
+        version: link:../../packages/alerts
       '@ocso/application':
         specifier: workspace:*
         version: link:../../packages/application
@@ -155,6 +161,9 @@ importers:
       '@ocso/bootstrap':
         specifier: workspace:*
         version: link:../../packages/bootstrap
+      '@ocso/channels':
+        specifier: workspace:*
+        version: link:../../packages/channels
       '@ocso/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -167,15 +176,27 @@ importers:
       '@ocso/events':
         specifier: workspace:*
         version: link:../../packages/events
+      '@ocso/mcp':
+        specifier: workspace:*
+        version: link:../../packages/mcp
+      '@ocso/model-providers':
+        specifier: workspace:*
+        version: link:../../packages/model-providers
       '@ocso/observability':
         specifier: workspace:*
         version: link:../../packages/observability
+      '@ocso/prompt-compiler':
+        specifier: workspace:*
+        version: link:../../packages/prompt-compiler
       '@ocso/queue':
         specifier: workspace:*
         version: link:../../packages/queue
       '@ocso/secrets':
         specifier: workspace:*
         version: link:../../packages/secrets
+      '@ocso/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
       '@opentelemetry/api':
         specifier: 'catalog:'
         version: 1.9.1
@@ -296,6 +317,133 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
+  apps/worker:
+    dependencies:
+      '@nestjs/common':
+        specifier: 'catalog:'
+        version: 12.0.4(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/core':
+        specifier: 'catalog:'
+        version: 12.0.4(@nestjs/common@12.0.4(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/platform-express@12.0.4)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@ocso/agent-runtime':
+        specifier: workspace:*
+        version: link:../../packages/agent-runtime
+      '@ocso/alerts':
+        specifier: workspace:*
+        version: link:../../packages/alerts
+      '@ocso/application':
+        specifier: workspace:*
+        version: link:../../packages/application
+      '@ocso/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
+      '@ocso/blob':
+        specifier: workspace:*
+        version: link:../../packages/blob
+      '@ocso/bootstrap':
+        specifier: workspace:*
+        version: link:../../packages/bootstrap
+      '@ocso/channels':
+        specifier: workspace:*
+        version: link:../../packages/channels
+      '@ocso/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@ocso/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@ocso/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+      '@ocso/events':
+        specifier: workspace:*
+        version: link:../../packages/events
+      '@ocso/mcp':
+        specifier: workspace:*
+        version: link:../../packages/mcp
+      '@ocso/model-providers':
+        specifier: workspace:*
+        version: link:../../packages/model-providers
+      '@ocso/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
+      '@ocso/prompt-compiler':
+        specifier: workspace:*
+        version: link:../../packages/prompt-compiler
+      '@ocso/queue':
+        specifier: workspace:*
+        version: link:../../packages/queue
+      '@ocso/secrets':
+        specifier: workspace:*
+        version: link:../../packages/secrets
+      '@ocso/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
+      '@opentelemetry/api':
+        specifier: 'catalog:'
+        version: 1.9.1
+      '@opentelemetry/auto-instrumentations-node':
+        specifier: 'catalog:'
+        version: 0.80.0(@opentelemetry/api@1.9.1)(@opentelemetry/core@2.11.0(@opentelemetry/api@1.9.1))
+      '@opentelemetry/exporter-logs-otlp-proto':
+        specifier: 'catalog:'
+        version: 0.222.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/exporter-metrics-otlp-proto':
+        specifier: 'catalog:'
+        version: 0.222.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/exporter-trace-otlp-proto':
+        specifier: 'catalog:'
+        version: 0.222.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources':
+        specifier: 'catalog:'
+        version: 2.11.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-logs':
+        specifier: 'catalog:'
+        version: 0.222.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-metrics':
+        specifier: 'catalog:'
+        version: 2.11.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-node':
+        specifier: 'catalog:'
+        version: 0.222.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/semantic-conventions':
+        specifier: 'catalog:'
+        version: 1.43.0
+      drizzle-orm:
+        specifier: 'catalog:'
+        version: 0.45.3(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(pg@8.23.0)
+      import-in-the-middle:
+        specifier: 'catalog:'
+        version: 3.5.1
+      nestjs-pino:
+        specifier: 'catalog:'
+        version: 5.2.0(@nestjs/common@12.0.4(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.0.4)(pino-http@11.0.0)(pino@10.3.1)(rxjs@7.8.2)
+      pg:
+        specifier: 'catalog:'
+        version: 8.23.0
+      pino:
+        specifier: 'catalog:'
+        version: 10.3.1
+      pino-http:
+        specifier: 'catalog:'
+        version: 11.0.0
+      reflect-metadata:
+        specifier: 'catalog:'
+        version: 0.2.2
+      rxjs:
+        specifier: 'catalog:'
+        version: 7.8.2
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.5
+    devDependencies:
+      '@nestjs/testing':
+        specifier: 'catalog:'
+        version: 12.0.4(@nestjs/common@12.0.4(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.0.4)(@nestjs/platform-express@12.0.4)
+      '@types/pg':
+        specifier: 'catalog:'
+        version: 8.23.1
+
   examples/mcp-bank-demo:
     dependencies:
       '@modelcontextprotocol/express':
@@ -366,8 +514,27 @@ importers:
         specifier: 'catalog:'
         version: 4.6.5
 
+  packages/alerts:
+    dependencies:
+      '@ocso/domain':
+        specifier: workspace:*
+        version: link:../domain
+      nodemailer:
+        specifier: 10.0.10
+        version: 10.0.10
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.5
+    devDependencies:
+      '@types/nodemailer':
+        specifier: 8.0.2
+        version: 8.0.2
+
   packages/application:
     dependencies:
+      '@ocso/alerts':
+        specifier: workspace:*
+        version: link:../alerts
       '@ocso/auth':
         specifier: workspace:*
         version: link:../auth
@@ -380,6 +547,12 @@ importers:
       '@ocso/events':
         specifier: workspace:*
         version: link:../events
+      '@ocso/mcp':
+        specifier: workspace:*
+        version: link:../mcp
+      '@ocso/model-providers':
+        specifier: workspace:*
+        version: link:../model-providers
       '@ocso/prompt-compiler':
         specifier: workspace:*
         version: link:../prompt-compiler
@@ -422,21 +595,45 @@ importers:
       '@aws-sdk/client-sqs':
         specifier: 'catalog:'
         version: 3.1137.0
+      '@ocso/agent-runtime':
+        specifier: workspace:*
+        version: link:../agent-runtime
+      '@ocso/alerts':
+        specifier: workspace:*
+        version: link:../alerts
+      '@ocso/application':
+        specifier: workspace:*
+        version: link:../application
       '@ocso/blob':
         specifier: workspace:*
         version: link:../blob
+      '@ocso/channels':
+        specifier: workspace:*
+        version: link:../channels
       '@ocso/config':
         specifier: workspace:*
         version: link:../config
       '@ocso/db':
         specifier: workspace:*
         version: link:../db
+      '@ocso/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@ocso/mcp':
+        specifier: workspace:*
+        version: link:../mcp
+      '@ocso/model-providers':
+        specifier: workspace:*
+        version: link:../model-providers
       '@ocso/queue':
         specifier: workspace:*
         version: link:../queue
       '@ocso/secrets':
         specifier: workspace:*
         version: link:../secrets
+      '@ocso/tools':
+        specifier: workspace:*
+        version: link:../tools
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.3(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(pg@8.23.0)
@@ -2361,6 +2558,9 @@ packages:
   '@types/node@26.6.2':
     resolution: {integrity: sha512-X1P21scMv4zGKLYqjdGjaKa7COa0RKVYYZZN/NfvLQ1JegxFhdhpZG/Lyn8AXx6CDUavKAd11v6BvfpkDByK8g==}
 
+  '@types/nodemailer@8.0.2':
+    resolution: {integrity: sha512-c7M5ox8p0nEOfbJ2E9Qcmt8/QCu/VzsiAhzBiZbvky2PhKZDHpKB3sQHBM5MEZNkCfBOaS6S9//AGPRTNB7IaA==}
+
   '@types/pg-pool@2.0.7':
     resolution: {integrity: sha512-U4CwmGVQcbEuqpyju8/ptOKg6gEC+Tqsvj2xS9o1g71bUh8twxnC6ZL5rZKCsGN0iyH0CwgUyc9VR5owNQF9Ng==}
 
@@ -3345,6 +3545,10 @@ packages:
   node-fetch@3.3.2:
     resolution: {integrity: sha512-dRB78srN/l6gqWulah9SrxeYnxeddIG30+GOqK/9OlLVyLg3HPnr6SqOWTWOXKRwC2eGYCkZ59NNuSgvSrpgOA==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
+
+  nodemailer@10.0.10:
+    resolution: {integrity: sha512-He9XskOFms62SyAKkLu8CcGcYHAo+BSHSsORI8s4PJH8qZgZY4L4lDfvyN0twvmbpyG+eGrxpyBlskj9d9rJ8A==}
+    engines: {node: '>=20.0.0'}
 
   object-assign@4.1.1:
     resolution: {integrity: sha512-rJgTQnkUnH1sFw8yT6VSU3zD3sWmu6sZhIseY8VX+GRu3P6F7Fu+JNDoXfklElbLJSnc3FUQHVe4cU5hj+BcUg==}
@@ -5721,6 +5925,10 @@ snapshots:
     dependencies:
       undici-types: 8.9.0
 
+  '@types/nodemailer@8.0.2':
+    dependencies:
+      '@types/node': 26.6.2
+
   '@types/pg-pool@2.0.7':
     dependencies:
       '@types/pg': 8.23.1
@@ -6593,6 +6801,8 @@ snapshots:
       data-uri-to-buffer: 4.0.1
       fetch-blob: 3.2.0
       formdata-polyfill: 4.0.10
+
+  nodemailer@10.0.10: {}
 
   object-assign@4.1.1: {}
 

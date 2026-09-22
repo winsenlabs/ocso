@@ -26,6 +26,14 @@
     "@ocso/secrets": "workspace:*",
     "@aws-sdk/client-secrets-manager": "catalog:",
     "@aws-sdk/client-sqs": "catalog:",
-    "drizzle-orm": "catalog:"
+    "drizzle-orm": "catalog:",
+    "@ocso/mcp": "workspace:*",
+    "@ocso/model-providers": "workspace:*",
+    "@ocso/channels": "workspace:*",
+    "@ocso/agent-runtime": "workspace:*",
+    "@ocso/tools": "workspace:*",
+    "@ocso/application": "workspace:*",
+    "@ocso/domain": "workspace:*",
+    "@ocso/alerts": "workspace:*"
   }
 }

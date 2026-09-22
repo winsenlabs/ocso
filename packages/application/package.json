@@ -27,7 +27,10 @@
     "zod": "catalog:",
     "@ocso/queue": "workspace:*",
     "@ocso/prompt-compiler": "workspace:*",
-    "@ocso/secrets": "workspace:*"
+    "@ocso/secrets": "workspace:*",
+    "@ocso/mcp": "workspace:*",
+    "@ocso/model-providers": "workspace:*",
+    "@ocso/alerts": "workspace:*"
   },
   "devDependencies": {
     "@ocso/db": "workspace:*"
