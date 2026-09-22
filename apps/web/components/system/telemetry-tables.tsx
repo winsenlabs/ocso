@@ -3,6 +3,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import type { LatencySeries, ProviderHealth, TokenUsage } from '@/lib/api/telemetry';
 import { formatCompact, formatDateTime, formatLatency, formatNumber, formatPercent } from '@/lib/format';
 import { cacheLabel, formatMoney } from './system-meta';
+import { percentileRows, purposeLabel } from './telemetry-meta';
 
 const cache = (v: number | null) => (v === null ? 'n/r' : formatCompact(v));
 
@@ -24,6 +25,69 @@ export function ProfileUsageTable({ usage }: { usage: TokenUsage }) {
         { key: 'cw', header: 'Cache write', cell: (p) => <span className="mono">{cache(p.cacheWriteTokens)}</span> },
         { key: 'hit', header: 'Cached', cell: (p) => <span className="mono">{p.cachedInputShare === null ? 'n/r' : formatPercent(p.cachedInputShare, 0)}</span> },
         { key: 'cost', header: 'Cost', cell: (p) => <span className="mono">{formatMoney(p.costMicros, p.currency)}</span> },
+      ]}
+    />
+  );
+}
+
+/** Usage by request purpose today (customer turns, summaries, copilot, …): tokens, prompt-cache reads/writes, cache hit and cost. */
+export function PurposeUsageTable({ usage }: { usage: TokenUsage }) {
+  return (
+    <DataTable
+      label="Usage by request purpose"
+      template="minmax(0,1.3fr) 70px 78px 78px 78px 78px 72px 90px"
+      rows={usage.byPurpose}
+      rowKey={(p) => p.purpose}
+      empty={<EmptyState title="No model requests today">Usage per request purpose appears with the first request.</EmptyState>}
+      columns={[
+        {
+          key: 'purpose',
+          header: 'Purpose',
+          cell: (p) => (
+            <>
+              <b style={{ fontSize: 12.5 }}>{purposeLabel(p.purpose).label}</b>
+              <span className="mono-sm" style={{ display: 'block' }}>
+                {purposeLabel(p.purpose).hint}
+              </span>
+            </>
+          ),
+        },
+        { key: 'req', header: 'Requests', cell: (p) => <span className="mono">{formatNumber(p.requests)}</span> },
+        { key: 'in', header: 'Input', cell: (p) => <span className="mono">{formatCompact(p.inputTokens)}</span> },
+        { key: 'out', header: 'Output', cell: (p) => <span className="mono">{formatCompact(p.outputTokens)}</span> },
+        { key: 'cr', header: 'Cache read', cell: (p) => <span className="mono">{cache(p.cacheReadTokens)}</span> },
+        { key: 'cw', header: 'Cache write', cell: (p) => <span className="mono">{cache(p.cacheWriteTokens)}</span> },
+        { key: 'hit', header: 'Cache hit', cell: (p) => <span className="mono">{p.cachedInputShare === null ? 'n/r' : formatPercent(p.cachedInputShare, 0)}</span> },
+        { key: 'cost', header: 'Cost', cell: (p) => <span className="mono">{formatMoney(p.costMicros, p.currency)}</span> },
+      ]}
+    />
+  );
+}
+
+/** p50 and p95 over the whole selected window (computed once over every row, never averaged from minutes). */
+export function PercentilesTable({ series }: { series: LatencySeries }) {
+  return (
+    <DataTable
+      label="Latency percentiles"
+      template="minmax(0,1.4fr) 84px 84px 90px"
+      rows={percentileRows(series.window)}
+      rowKey={(r) => r.key}
+      columns={[
+        {
+          key: 'metric',
+          header: 'Metric',
+          cell: (r) => (
+            <>
+              <b style={{ fontSize: 12.5 }}>{r.metric}</b>
+              <span className="mono-sm" style={{ display: 'block' }}>
+                {r.source}
+              </span>
+            </>
+          ),
+        },
+        { key: 'p50', header: 'p50', cell: (r) => <span className="mono">{formatLatency(r.p50)}</span> },
+        { key: 'p95', header: 'p95', cell: (r) => <span className="mono">{formatLatency(r.p95)}</span> },
+        { key: 'n', header: 'Samples', cell: (r) => <span className="mono">{formatNumber(r.samples)}</span> },
       ]}
     />
   );

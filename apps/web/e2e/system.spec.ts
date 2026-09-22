@@ -68,6 +68,10 @@ test('Tech Admin sees the control center built from real (empty) telemetry', asy
   await settled(page);
   await expect(page.getByRole('link', { name: 'Last 3h' })).toHaveAttribute('aria-current', 'true');
   await expect(page.getByRole('heading', { name: 'Usage by provider' })).toBeVisible();
+  await expect(page.getByRole('table', { name: 'Latency percentiles' })).toContainText('Time to first token');
+  await expect(page.locator('.tile').filter({ hasText: 'turn latency p50 · p95 · 3h' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Usage by request purpose · today' })).toBeVisible();
+  await expect(page.getByText('not reported by the telemetry API yet')).toHaveCount(0);
 });
 
 test('Tech Admin changes a worker setting; it persists, and an invalid value shows the API error inline', async ({ page }) => {

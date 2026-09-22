@@ -2,13 +2,22 @@ import { KeyValue } from '@/components/ui/key-value';
 import { ChartCard } from '@/components/ui/rail-card';
 import { optionName } from '../data/options';
 import type { AgentPageData } from '../detail/load';
+import { hoursRows, timeZoneOptions } from '../lib/business-hours';
 import { CONVERSATION_TYPE_LABELS, MID_TURN_LABELS } from '../lib/labels';
+import { BusinessHoursForm } from './business-hours-form';
 import { SettingsForm } from './settings-form';
 
-/** Settings tab: identity, model profiles (primary / summarizer / copilot) and runtime limits. */
+/** Settings tab: identity, model profiles (primary / summarizer / copilot), runtime limits and human business hours. */
 export function SettingsTab({ data }: { data: AgentPageData }) {
   const { agent, options, can } = data;
-  if (can.manage) return <SettingsForm key={agent.updatedAt} agent={agent} profiles={options.profiles ?? []} />;
+  if (can.manage) {
+    return (
+      <div style={{ display: 'grid', gap: 18 }}>
+        <SettingsForm key={agent.updatedAt} agent={agent} profiles={options.profiles ?? []} />
+        <BusinessHoursForm agentId={agent.id} hours={agent.businessHours} timeZones={timeZoneOptions(agent.businessHours.timezone, Intl.supportedValuesOf('timeZone'))} />
+      </div>
+    );
+  }
   const profile = (id: string | null) => (id ? (optionName(options.profiles, id) ?? 'assigned') : 'none');
   const media = [agent.multimodal.imageInput && 'images', agent.multimodal.documentInput && 'documents', agent.multimodal.audioInput && 'audio'].filter(Boolean).join(', ');
   return (
@@ -34,6 +43,9 @@ export function SettingsTab({ data }: { data: AgentPageData }) {
             { k: 'media', v: `${media || 'text only'} · up to ${agent.multimodal.maxMediaPerTurn} per turn` },
           ]}
         />
+      </ChartCard>
+      <ChartCard title="Business hours">
+        <KeyValue items={[{ k: 'AI', v: '24×7' }, ...hoursRows(agent.businessHours), { k: 'time zone', v: <span className="mono-sm">{agent.businessHours.timezone}</span> }]} />
       </ChartCard>
     </div>
   );

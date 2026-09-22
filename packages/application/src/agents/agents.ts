@@ -1,7 +1,7 @@
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import { Permission, assertCan } from '@ocso/auth';
-import { conflict, notFound, validation } from '@ocso/domain';
-import { agentChannels, modelProfiles, promptVersions, virtualAgents, uuidv7, type Db } from '@ocso/db';
+import { BusinessHoursSchema, WEEKDAYS, conflict, isAlwaysOpen, notFound, validation, type BusinessHoursInput } from '@ocso/domain';
+import { agentChannels, conversations, handoffs, modelProfiles, promptVersions, virtualAgents, uuidv7, type Db } from '@ocso/db';
 import { z } from 'zod';
 import { recordAudit } from '../audit/audit.js';
 import { bumpGeneration } from '../cache/generations.js';
@@ -17,12 +17,12 @@ const Multimodal = z.object({
   maxMediaPerTurn: z.number().int().min(0).max(20),
 });
 
-export const AgentInput = z.object({
+const AgentFields = z.object({
   name: z.string().trim().min(1).max(80),
   slug: z.string().regex(/^[a-z0-9][a-z0-9-]{1,62}$/).optional(),
-  purpose: z.string().trim().max(200).default(''),
+  purpose: z.string().trim().max(200),
   conversationType: z.enum(['SUPPORT', 'SALES', 'COLLECTIONS', 'ONBOARDING', 'CUSTOM']),
-  description: z.string().max(2_000).default(''),
+  description: z.string().max(2_000),
   modelProfileId: z.uuid().nullable().optional(),
   summarizerProfileId: z.uuid().nullable().optional(),
   copilotProfileId: z.uuid().nullable().optional(),
@@ -32,9 +32,13 @@ export const AgentInput = z.object({
   maxToolSteps: z.number().int().min(1).max(20).optional(),
   copilotEnabled: z.boolean().optional(),
   channelIds: z.array(z.uuid()).optional(),
+  /** When humans take handoffs (IANA zone + per-day HH:MM spans); `humanHours: {}` = humans 24×7. The AI answers 24×7. */
+  businessHours: BusinessHoursSchema.optional(),
 });
+export const AgentInput = AgentFields.extend({ purpose: AgentFields.shape.purpose.default(''), description: AgentFields.shape.description.default('') });
 export type AgentInput = z.infer<typeof AgentInput>;
-export const AgentPatch = AgentInput.partial();
+/** No defaults: zod 4 applies `.default()` inside `.partial()`, which would blank fields a patch leaves out. */
+export const AgentPatch = AgentFields.partial();
 export type AgentPatch = z.infer<typeof AgentPatch>;
 
 export type AgentRow = typeof virtualAgents.$inferSelect;
@@ -77,6 +81,7 @@ export class AgentService {
           ...(input.multimodal ? { multimodal: input.multimodal } : {}),
           ...(input.midTurnPolicy ? { midTurnPolicy: input.midTurnPolicy } : {}),
           ...(input.maxToolSteps ? { maxToolSteps: input.maxToolSteps } : {}),
+          ...(input.businessHours ? { businessHours: input.businessHours } : {}),
           createdBy: actor.principal!.userId,
         })
         .returning();
@@ -110,8 +115,17 @@ export class AgentService {
         await tx.delete(agentChannels).where(eq(agentChannels.agentId, id));
         if (channelIds.length) await tx.insert(agentChannels).values(channelIds.map((channelId) => ({ agentId: id, channelId })));
       }
-      await recordAudit(tx, actor, { action: 'agent.update', targetType: 'agent', targetId: id, summary: `Updated ${before.name}`, before, after: patch });
+      const hours = patch.businessHours ? ` · business hours ${describeHours(patch.businessHours)}` : '';
+      await recordAudit(tx, actor, { action: 'agent.update', targetType: 'agent', targetId: id, summary: `Updated ${before.name}${hours}`, before, after: patch });
       await bumpGeneration(tx, actor.correlationId, `agent:${id}`, 'agent_config_changed');
+      if (patch.businessHours) {
+        // Waiting AUTO_ASSIGN handoffs held for the old next opening are re-evaluated on the next auto-assign sweep.
+        const waiting = tx.select({ id: conversations.id }).from(conversations).where(and(eq(conversations.agentId, id), eq(conversations.controlState, 'WAITING_FOR_HUMAN')));
+        await tx
+          .update(handoffs)
+          .set({ autoAssignAt: null })
+          .where(and(eq(handoffs.status, 'WAITING'), eq(handoffs.mode, 'AUTO_ASSIGN'), inArray(handoffs.conversationId, waiting)));
+      }
       return after!;
     });
   }
@@ -139,6 +153,13 @@ export class AgentService {
       return after!;
     });
   }
+}
+
+/** Audit summary: "humans 24×7" or "mon 08:00–23:00, … (Asia/Kolkata)". */
+export function describeHours(hours: BusinessHoursInput): string {
+  if (isAlwaysOpen(hours)) return 'humans 24×7';
+  const days = WEEKDAYS.filter((d) => hours.humanHours[d]).map((d) => `${d} ${hours.humanHours[d]![0]}–${hours.humanHours[d]![1]}`);
+  return `${days.join(', ')} (${hours.timezone})`;
 }
 
 function slugify(name: string, id: string): string {

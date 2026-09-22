@@ -5,7 +5,9 @@ import { traceUrl } from './trace-links.js';
 
 export interface LatencyPoint {
   minute: string;
+  turnP50Ms: number | null;
   turnP95Ms: number | null;
+  ttftP50Ms: number | null;
   ttftP95Ms: number | null;
   turns: number;
   requests: number;
@@ -33,8 +35,19 @@ export interface SlowTurn {
   startedAt: string;
 }
 
+/** Percentiles over the whole window (not an average of per-minute percentiles). */
+export interface LatencyWindow {
+  turns: number;
+  turnP50Ms: number | null;
+  turnP95Ms: number | null;
+  ttftRequests: number;
+  ttftP50Ms: number | null;
+  ttftP95Ms: number | null;
+}
+
 export interface LatencySeries {
   minutes: number;
+  window: LatencyWindow;
   points: LatencyPoint[];
   markers: LatencyMarker[];
   slowestTurns: SlowTurn[];
@@ -43,25 +56,28 @@ export interface LatencySeries {
 }
 
 /**
- * Per-minute p95 turn latency and TTFT for the last `minutes` minutes with
+ * Per-minute p50/p95 turn latency and TTFT for the last `minutes` minutes with
  * provider incident markers (design/03 latency chart). Turns via
  * turns_status_idx, model requests via usage_events_time_idx. Returns ids and
  * timings only — never conversation content.
  */
 export async function latencySeries(db: DbOrTx, now: Date, minutes: number, traceUrlTemplate: string | null): Promise<LatencySeries> {
   const from = new Date(now.getTime() - minutes * 60_000);
-  const [points, fallbackMarkers, errorMarkers, slow] = await Promise.all([
-    db.execute<{ m: Date; turn_p95: number | null; ttft_p95: number | null; turns: number; requests: number; errors: number; fallbacks: number }>(sql`
+  const [points, fallbackMarkers, errorMarkers, slow, whole] = await Promise.all([
+    db.execute<{ m: Date; turn_p50: number | null; turn_p95: number | null; ttft_p50: number | null; ttft_p95: number | null; turns: number; requests: number; errors: number; fallbacks: number }>(sql`
       WITH mins AS (
         SELECT generate_series(date_trunc('minute', ${at(from)}) + interval '1 minute', date_trunc('minute', ${at(now)}), interval '1 minute') AS m
       ),
       t AS (
-        SELECT date_trunc('minute', started_at) AS m, percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms) AS p95, count(*)::int AS n
+        SELECT date_trunc('minute', started_at) AS m,
+               percentile_cont(0.5) WITHIN GROUP (ORDER BY latency_ms) AS p50,
+               percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms) AS p95, count(*)::int AS n
           FROM turns WHERE status = 'COMPLETED' AND started_at >= ${at(from)} AND started_at <= ${at(now)}
          GROUP BY 1
       ),
       u AS (
         SELECT date_trunc('minute', occurred_at) AS m,
+               percentile_cont(0.5) WITHIN GROUP (ORDER BY ttft_ms) FILTER (WHERE purpose = 'TURN' AND status = 'OK') AS ttft50,
                percentile_cont(0.95) WITHIN GROUP (ORDER BY ttft_ms) FILTER (WHERE purpose = 'TURN' AND status = 'OK') AS ttft,
                count(*)::int AS requests,
                count(*) FILTER (WHERE status = 'ERROR')::int AS errors,
@@ -69,7 +85,7 @@ export async function latencySeries(db: DbOrTx, now: Date, minutes: number, trac
           FROM usage_events WHERE occurred_at >= ${at(from)} AND occurred_at <= ${at(now)}
          GROUP BY 1
       )
-      SELECT mins.m, t.p95 AS turn_p95, u.ttft AS ttft_p95, coalesce(t.n, 0) AS turns,
+      SELECT mins.m, t.p50 AS turn_p50, t.p95 AS turn_p95, u.ttft50 AS ttft_p50, u.ttft AS ttft_p95, coalesce(t.n, 0) AS turns,
              coalesce(u.requests, 0) AS requests, coalesce(u.errors, 0) AS errors, coalesce(u.fallbacks, 0) AS fallbacks
         FROM mins LEFT JOIN t ON t.m = mins.m LEFT JOIN u ON u.m = mins.m
        ORDER BY mins.m`),
@@ -88,12 +104,33 @@ export async function latencySeries(db: DbOrTx, now: Date, minutes: number, trac
       SELECT id, latency_ms, ttft_ms, model, trace_id, started_at
         FROM turns WHERE status = 'COMPLETED' AND started_at >= ${at(from)} AND started_at <= ${at(now)} AND latency_ms IS NOT NULL
        ORDER BY latency_ms DESC LIMIT 5`),
+    db.execute<{ turns: number; turn_p50: number | null; turn_p95: number | null; ttft_n: number; ttft_p50: number | null; ttft_p95: number | null }>(sql`
+      SELECT t.turns, t.turn_p50, t.turn_p95, u.ttft_n, u.ttft_p50, u.ttft_p95
+        FROM (SELECT count(*)::int AS turns,
+                     percentile_cont(0.5) WITHIN GROUP (ORDER BY latency_ms) AS turn_p50,
+                     percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms) AS turn_p95
+                FROM turns WHERE status = 'COMPLETED' AND started_at >= ${at(from)} AND started_at <= ${at(now)}) t,
+             (SELECT count(ttft_ms)::int AS ttft_n,
+                     percentile_cont(0.5) WITHIN GROUP (ORDER BY ttft_ms) AS ttft_p50,
+                     percentile_cont(0.95) WITHIN GROUP (ORDER BY ttft_ms) AS ttft_p95
+                FROM usage_events WHERE purpose = 'TURN' AND status = 'OK' AND occurred_at >= ${at(from)} AND occurred_at <= ${at(now)}) u`),
   ]);
+  const w = whole.rows[0];
   return {
     minutes,
+    window: {
+      turns: int(w?.turns),
+      turnP50Ms: rounded(w?.turn_p50),
+      turnP95Ms: rounded(w?.turn_p95),
+      ttftRequests: int(w?.ttft_n),
+      ttftP50Ms: rounded(w?.ttft_p50),
+      ttftP95Ms: rounded(w?.ttft_p95),
+    },
     points: points.rows.map((r) => ({
       minute: iso(r.m)!,
+      turnP50Ms: rounded(r.turn_p50),
       turnP95Ms: rounded(r.turn_p95),
+      ttftP50Ms: rounded(r.ttft_p50),
       ttftP95Ms: rounded(r.ttft_p95),
       turns: int(r.turns),
       requests: int(r.requests),
@@ -115,8 +152,11 @@ export async function latencySeries(db: DbOrTx, now: Date, minutes: number, trac
     })),
     traceUrlTemplate,
     definitions: {
+      turnP50Ms: 'p50 (median, continuous) of turns.latency_ms for COMPLETED turns started in the minute.',
       turnP95Ms: 'p95 of turns.latency_ms for COMPLETED turns started in the minute.',
+      ttftP50Ms: 'p50 (median, continuous) of usage_events.ttft_ms for successful TURN requests in the minute.',
       ttftP95Ms: 'p95 of usage_events.ttft_ms for successful TURN requests in the minute.',
+      window: 'turnP50Ms/turnP95Ms and ttftP50Ms/ttftP95Ms computed once over every row in the whole window (never averaged from per-minute values); turns = COMPLETED turns, ttftRequests = successful TURN requests reporting ttft_ms.',
       fallback: 'Minutes with usage_events whose fallback_from_provider_id is set (primary provider failed; request served by a fallback target).',
       provider_errors: 'Minutes with usage_events in status ERROR, per provider, with the most common error category.',
     },

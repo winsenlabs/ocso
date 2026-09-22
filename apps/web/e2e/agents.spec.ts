@@ -181,6 +181,34 @@ test('adds an escalation rule', async ({ page }) => {
   await logout(page);
 });
 
+test('sets human business hours; an invalid span shows the API error inline', async ({ page }) => {
+  await login(page, LEAD);
+  await page.goto(`/agents/${ids.agent}?tab=settings`);
+  await expect(header(page)).toContainText('AI 24×7 · humans 24×7');
+  const form = page.getByRole('form', { name: 'Business hours' });
+  await form.getByLabel('Humans available 24×7').uncheck();
+  await form.getByLabel('Time zone').selectOption('Asia/Kolkata');
+  const days = form.getByRole('group', { name: 'Human hours by day' });
+  await days.getByLabel('Monday', { exact: true }).check();
+  await days.getByLabel('Monday opens').fill('18:00');
+  await days.getByLabel('Monday closes').fill('09:00');
+  await form.getByRole('button', { name: 'Save business hours' }).click();
+  // Validated by the API (open < close), shown next to the day.
+  await expect(form.locator('#bh-mon-err')).toHaveText('Opening time must be before closing time');
+  await expect(days.getByLabel('Monday opens')).toHaveAttribute('aria-invalid', 'true');
+
+  await days.getByLabel('Monday opens').fill('08:00');
+  await days.getByLabel('Monday closes').fill('23:00');
+  await days.getByLabel('Tuesday', { exact: true }).check();
+  await form.getByRole('button', { name: 'Save business hours' }).click();
+  await expect(form).toContainText('Business hours saved');
+  await expect(form.locator('#bh-mon-err')).toHaveCount(0);
+  await expect(header(page)).toContainText('humans varies by day (2 days, Asia/Kolkata)');
+  await page.reload();
+  await expect(page.getByRole('form', { name: 'Business hours' }).getByLabel('Monday closes')).toHaveValue('23:00');
+  await logout(page);
+});
+
 test('a CS Exec reads the agent without edit controls', async ({ page }) => {
   await login(page, EXEC);
   await page.goto(`/agents/${ids.agent}`);
@@ -207,5 +235,7 @@ test('a CS Exec reads the agent without edit controls', async ({ page }) => {
   await tab(page, 'Settings').click();
   await expect(page.getByRole('region', { name: 'Models and runtime' })).toContainText('ag-support');
   await expect(page.getByRole('button', { name: 'Save settings' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Business hours' })).toContainText('08:00–23:00');
+  await expect(page.getByRole('button', { name: 'Save business hours' })).toHaveCount(0);
   await logout(page);
 });

@@ -29,7 +29,11 @@ export async function expireOffers(db: Db, now = new Date()): Promise<number> {
   return expired.length;
 }
 
-/** OPEN_PICKUP queues with auto-assign-after: offer unclaimed conversations once the delay passes. */
+/**
+ * OPEN_PICKUP queues with auto-assign-after: offer unclaimed conversations once
+ * the delay passes. AUTO_ASSIGN handoffs are retried every tick unless their
+ * auto-assign time is still ahead (requested outside human business hours).
+ */
 export async function autoAssignUnclaimed(db: Db, now = new Date()): Promise<number> {
   const due = await db
     .select({ id: handoffs.id, conversationId: handoffs.conversationId, queueId: handoffs.queueId, declined: handoffs.declinedUserIds })
@@ -39,7 +43,7 @@ export async function autoAssignUnclaimed(db: Db, now = new Date()): Promise<num
       and(
         eq(handoffs.status, 'WAITING'),
         isNotNull(handoffs.queueId),
-        sql`(${handoffs.autoAssignAt} <= ${now} OR (${handoffs.mode} = 'AUTO_ASSIGN'))`,
+        sql`(${handoffs.autoAssignAt} <= ${now} OR (${handoffs.mode} = 'AUTO_ASSIGN' AND ${handoffs.autoAssignAt} IS NULL))`,
         eq(conversations.controlState, 'WAITING_FOR_HUMAN'),
         sql`${conversations.assignedUserId} IS NULL`,
       ),

@@ -76,3 +76,11 @@
 .agent-fieldset{border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin:0;display:grid;gap:12px;min-width:0}
 .agent-fieldset>legend{font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.07em;color:var(--ink-4);padding:0 4px}
 .fld textarea{resize:vertical}
+/* Business hours editor (Settings tab) */
+.hours-grid{display:grid;gap:6px}
+.hours-row{display:grid;grid-template-columns:130px 112px auto 112px minmax(0,1fr);gap:8px;align-items:center;min-height:32px}
+.hours-row input[type="time"]{width:100%;box-sizing:border-box;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;font:inherit;font-size:12.5px;color:var(--ink);outline:none}
+.hours-row input[type="time"]:focus{border-color:var(--accent-2);box-shadow:0 0 0 3px var(--accent-ring)}
+.hours-row input[type="time"][aria-invalid="true"]{border-color:color-mix(in oklab,var(--danger) 55%,var(--border))}
+.hours-row .closed{grid-column:2 / span 3;color:var(--ink-4)}
+@media (max-width:700px){.hours-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.hours-row .toggle-row{grid-column:1 / -1}.hours-row>span[aria-hidden]{display:none}.hours-row .closed{grid-column:1 / -1}}

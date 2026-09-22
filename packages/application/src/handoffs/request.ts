@@ -1,9 +1,10 @@
-import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
-import { raisePriority, type HandoffMode, type HandoffTrigger, type Priority } from '@ocso/domain';
+import { and, desc, eq, inArray, isNull, lt, or } from 'drizzle-orm';
+import { formatOpening, raisePriority, type HandoffMode, type HandoffTrigger, type Priority } from '@ocso/domain';
 import { assignments, conversations, customers, escalationRules, handoffs, users, virtualAgents, uuidv7, type DbOrTx } from '@ocso/db';
 import { emitEvent } from '../events/outbox.js';
 import type { ActorContext } from '../shared/context.js';
 import { applyControl } from '../conversations/control.js';
+import { humanAvailability } from './business-hours.js';
 import { loadQueue, pickAssignee, slaDueFor, resolutionDueFor } from './routing.js';
 
 export interface HandoffRequest {
@@ -29,6 +30,10 @@ export interface HandoffOutcome {
  * Escalation → routing (docs/09 §3, docs/01 §6): AI_ACTIVE → ESCALATION_REQUESTED
  * → WAITING_FOR_HUMAN in one transaction, then an immediate auto-assign offer
  * when the queue (or rule) says AUTO_ASSIGN. Caller owns the transaction.
+ *
+ * Outside the agent's human business hours the conversation still routes to
+ * its queue (visible for pickup), but the pickup SLA clock and auto-assign
+ * offers start at the next opening.
  */
 export async function requestHandoff(tx: DbOrTx, actor: ActorContext, conversationId: string, req: HandoffRequest, now: Date): Promise<HandoffOutcome> {
   const [conv] = await tx.select().from(conversations).where(eq(conversations.id, conversationId)).for('update');
@@ -48,6 +53,7 @@ export async function requestHandoff(tx: DbOrTx, actor: ActorContext, conversati
   const mode: HandoffMode = rule?.mode ?? queue?.mode ?? 'OPEN_PICKUP';
   const priority = raisePriority(conv.priority, req.priority ?? rule?.priority ?? conv.priority);
   const transitionActor = req.requestedBy.type === 'CUSTOMER' ? 'SYSTEM' : req.requestedBy.type;
+  const humans = humanAvailability(agent?.businessHours, now);
 
   await applyControl(tx, conversationId, {
     command: 'REQUEST_ESCALATION',
@@ -74,29 +80,37 @@ export async function requestHandoff(tx: DbOrTx, actor: ActorContext, conversati
     agentSummary: req.agentSummary ?? null,
     requestedAt: now,
     routedAt: now,
-    autoAssignAt: mode === 'OPEN_PICKUP' && queue?.autoAssignAfterSeconds ? new Date(now.getTime() + queue.autoAssignAfterSeconds * 1000) : null,
+    // Auto-assign (and pickup-then-auto-assign) never offers before humans are available.
+    autoAssignAt:
+      mode === 'OPEN_PICKUP' && queue?.autoAssignAfterSeconds
+        ? new Date(humans.opensAt.getTime() + queue.autoAssignAfterSeconds * 1000)
+        : mode === 'AUTO_ASSIGN' && !humans.open
+          ? humans.opensAt
+          : null,
   });
-  const slaDueAt = await slaDueFor(tx, queue, priority, now);
+  const slaDueAt = await slaDueFor(tx, queue, priority, humans.opensAt);
   // The resolution clock runs from opening; routing to a queue with a policy (re)sets its deadline.
   const resolutionDue = queue ? await resolutionDueFor(tx, queue, conv.type, conv.openedAt) : conv.resolutionDueAt;
   await applyControl(tx, conversationId, {
     command: 'ROUTE_TO_QUEUE',
     actor,
     transitionActor: 'SYSTEM',
-    description: `routed to queue “${queue?.name ?? 'unassigned'}” · mode ${mode}`,
+    description: `routed to queue “${queue?.name ?? 'unassigned'}” · mode ${mode}${humans.open ? '' : ` · outside human hours, team available ${formatOpening(humans.opensAt, agent!.businessHours.timezone)}`}`,
     patch: { queueId: queue?.id ?? null, waitingSince: now, slaDueAt, resolutionDueAt: resolutionDue },
     now,
   });
   await emitEvent(tx, actor, 'handoff.requested', { handoffId, trigger: req.trigger, reason: req.reasonText, priority }, { conversationId, agentId: conv.agentId });
 
   let offeredTo: string | null = null;
-  if (mode === 'AUTO_ASSIGN' && queue) offeredTo = await offerToNextExec(tx, actor, conversationId, handoffId, queue.id, [], now);
+  if (mode === 'AUTO_ASSIGN' && queue && humans.open) offeredTo = await offerToNextExec(tx, actor, conversationId, handoffId, queue.id, [], now);
   return { handoffId, queueId: queue?.id ?? null, mode, offeredTo, alreadyOpen: false };
 }
 
 /**
  * Offer a waiting conversation to the best eligible exec (AUTO_ASSIGN). The
  * exec must accept within the queue's accept timeout or it is re-offered.
+ * Outside the agent's human business hours no offer is made; the handoff's
+ * auto-assign time moves to the next opening (autoAssignUnclaimed resumes then).
  */
 export async function offerToNextExec(
   tx: DbOrTx,
@@ -110,11 +124,20 @@ export async function offerToNextExec(
   const queue = await loadQueue(tx, queueId);
   if (!queue) return null;
   const [conv] = await tx
-    .select({ c: conversations, language: customers.language, owner: customers.accountOwnerUserId })
+    .select({ c: conversations, language: customers.language, owner: customers.accountOwnerUserId, hours: virtualAgents.businessHours })
     .from(conversations)
     .innerJoin(customers, eq(customers.id, conversations.customerId))
+    .leftJoin(virtualAgents, eq(virtualAgents.id, conversations.agentId))
     .where(eq(conversations.id, conversationId));
   if (!conv || conv.c.controlState !== 'WAITING_FOR_HUMAN') return null;
+  const humans = humanAvailability(conv.hours, now);
+  if (!humans.open) {
+    await tx
+      .update(handoffs)
+      .set({ autoAssignAt: humans.opensAt })
+      .where(and(eq(handoffs.id, handoffId), or(isNull(handoffs.autoAssignAt), lt(handoffs.autoAssignAt, humans.opensAt))));
+    return null;
+  }
   const pick = await pickAssignee(tx, queue, { preferredLanguage: conv.language, accountOwnerUserId: conv.owner, exclude });
   if (!pick) return null;
   await tx.update(conversations).set({ assignedUserId: pick.userId, updatedAt: now }).where(eq(conversations.id, conversationId));

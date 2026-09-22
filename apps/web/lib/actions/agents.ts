@@ -4,6 +4,7 @@ import { refresh } from 'next/cache';
 import { Permission } from '@ocso/auth';
 import { z } from 'zod';
 import { COMPONENT_KEYS, CONVERSATION_TYPES, ESCALATION_TRIGGERS, PRIORITIES, RULE_OPS } from '@/components/agents/data/agent-schemas';
+import { hoursIssues, type BusinessHours, type HoursIssues } from '@/components/agents/lib/business-hours';
 import { api } from '../api/client';
 import { describeApiError } from '../api/errors';
 import { getSession } from '../session';
@@ -71,6 +72,24 @@ export async function updateAgentAction(id: string, patch: Partial<AgentFieldsIn
     await api.patch(agentPath(i.id), i.patch, z.object({ id: z.string() }));
     return null;
   });
+}
+
+/** Shape only: time zone, HH:MM and open < close are validated by the API so its messages drive the inline errors. */
+const HoursBody = z.object({
+  timezone: z.string().trim().min(1, 'Choose a time zone').max(64),
+  humanHours: z.record(z.string().max(3), z.tuple([z.string().max(5), z.string().max(5)])),
+});
+export type HoursActionResult = { ok: true; data: null } | { ok: false; message: string; fields: HoursIssues };
+
+/** Agent business hours: when humans take handoffs (`humanHours: {}` = humans 24×7; the AI answers 24×7). */
+export async function updateBusinessHoursAction(id: string, hours: BusinessHours): Promise<HoursActionResult> {
+  const result = await run(Permission.AGENTS_MANAGE, 'change business hours', z.object({ id: Id, hours: HoursBody }), { id, hours }, async (i) => {
+    await api.patch(agentPath(i.id), { businessHours: i.hours }, z.object({ id: z.string() }));
+    return null;
+  });
+  if (result.ok) return result;
+  const { fields, other } = hoursIssues(result.message.replace(/(^|; )hours\./g, '$1businessHours.'));
+  return { ok: false, message: other.join('; '), fields };
 }
 
 export async function setAgentStatusAction(id: string, status: 'LIVE' | 'PAUSED'): Promise<ActionResult> {

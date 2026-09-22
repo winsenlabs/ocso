@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq, gt } from 'drizzle-orm';
-import { isDomainError, type ControlState } from '@ocso/domain';
+import { isDomainError, type BusinessHoursLike, type ControlState } from '@ocso/domain';
 import { channels, conversations, interactions, turns, virtualAgents, uuidv7, type Db } from '@ocso/db';
 import { applyControl, emitEvent, publishEphemeral, systemActor } from '@ocso/application';
 import type { HandlerResult, QueueAdapter, QueueMessage } from '@ocso/queue';
@@ -13,6 +13,7 @@ import type { AgentToolCatalog } from '../tools/catalog.js';
 import type { ToolRunner } from '../tools/runner.js';
 import type { MediaMaterializer } from '../delivery/media.js';
 import { runAgentLoop, type LoopResult } from './agent-loop.js';
+import { handoffMessage } from './handoff-message.js';
 import { TurnSupersededError, TurnWriter, type TurnIdentity } from './persist.js';
 
 export interface TurnProcessorDeps {
@@ -29,7 +30,7 @@ export interface TurnProcessorDeps {
   summarizeAfter: number;
 }
 
-export const DEFAULT_HANDOFF_MESSAGE = "I've asked a colleague to help with this. They'll reply here shortly.";
+export { DEFAULT_HANDOFF_MESSAGE, handoffMessage } from './handoff-message.js';
 const MAX_DRAIN_ITERATIONS = 8;
 
 type RunOutcome = 'processed' | 'nothing' | 'skipped';
@@ -170,7 +171,7 @@ export class TurnProcessor {
             onStatus: (status) => void publishEphemeral(db, correlationId, 'agent.status', { turnId, status }, { conversationId }).catch(() => {}),
           },
         );
-        await this.finish(writer, ident, ctx, result, started, turn);
+        await this.finish(writer, ident, ctx, result, started, turn, agent.businessHours);
       });
       await this.maybeSummarize(conversationId);
       return 'processed';
@@ -192,7 +193,7 @@ export class TurnProcessor {
       await writer.fail(ident, 'FAILED', { category, message: (err as Error).message });
       if (attempt >= 2 && (category.startsWith('provider') || category === 'timeout' || category === 'policy_denied')) {
         // Model persistently unavailable: route to humans instead of leaving the customer waiting.
-        await this.handoffOnOutage(writer, ident, category);
+        await this.handoffOnOutage(writer, ident, category, agent.businessHours);
         return 'processed';
       }
       throw err;
@@ -202,9 +203,18 @@ export class TurnProcessor {
     }
   }
 
-  private async finish(writer: TurnWriter, ident: TurnIdentity, ctx: Parameters<TurnWriter['complete']>[1], result: LoopResult, started: number, turn: { committed: boolean }): Promise<void> {
+  private async finish(
+    writer: TurnWriter,
+    ident: TurnIdentity,
+    ctx: Parameters<TurnWriter['complete']>[1],
+    result: LoopResult,
+    started: number,
+    turn: { committed: boolean },
+    hours: BusinessHoursLike,
+  ): Promise<void> {
     const handoff = this.handoffIntent(result);
-    const text = result.finalText ?? (handoff ? DEFAULT_HANDOFF_MESSAGE : null);
+    // Outside human business hours the handoff reply says when the team is next available.
+    const text = handoff ? handoffMessage(result.finalText, hours, new Date()) : result.finalText;
     if (text) {
       turn.committed = true;
       await writer.agentMessage(ident, text);
@@ -243,9 +253,9 @@ export class TurnProcessor {
     return null;
   }
 
-  private async handoffOnOutage(writer: TurnWriter, ident: TurnIdentity, category: string): Promise<void> {
+  private async handoffOnOutage(writer: TurnWriter, ident: TurnIdentity, category: string, hours: BusinessHoursLike): Promise<void> {
     try {
-      await writer.agentMessage(ident, DEFAULT_HANDOFF_MESSAGE);
+      await writer.agentMessage(ident, handoffMessage(null, hours, new Date()));
     } catch {
       // Best effort; the handoff below still routes the conversation to humans.
     }

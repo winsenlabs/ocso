@@ -5,5 +5,6 @@ export * from './conversation/types.js';
 export * from './interaction/parts.js';
 export * from './interaction/interaction.js';
 export * from './routing/assignment-strategy.js';
+export * from './routing/business-hours.js';
 export * from './sla/sla.js';
 export * from './model/messages.js';

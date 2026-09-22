@@ -66,9 +66,14 @@ const OverviewSchema = z.object({
 });
 export type TelemetryOverview = z.infer<typeof OverviewSchema>;
 
+/** Percentiles computed once over the whole window (not averaged from minutes). */
+const LatencyWindowSchema = z.object({ turns: n, turnP50Ms: nn, turnP95Ms: nn, ttftRequests: n, ttftP50Ms: nn, ttftP95Ms: nn });
+export type LatencyWindow = z.infer<typeof LatencyWindowSchema>;
+
 const LatencySchema = z.object({
   minutes: n,
-  points: z.array(z.object({ minute: z.string(), turnP95Ms: nn, ttftP95Ms: nn, turns: n, requests: n, errors: n, fallbacks: n })),
+  window: LatencyWindowSchema,
+  points: z.array(z.object({ minute: z.string(), turnP50Ms: nn, turnP95Ms: nn, ttftP50Ms: nn, ttftP95Ms: nn, turns: n, requests: n, errors: n, fallbacks: n })),
   markers: z.array(
     z.object({
       minute: z.string(),
@@ -100,11 +105,16 @@ const Totals = z.object({
 });
 export type TokenTotals = z.infer<typeof Totals>;
 
+const PurposeUsageSchema = Totals.extend({ purpose: z.string(), tokenShare: nn });
+export type PurposeUsage = z.infer<typeof PurposeUsageSchema>;
+
 const UsageSchema = z.object({
   from: z.string(),
   to: z.string(),
   totals: Totals,
   byProfile: z.array(Totals.extend({ profileId: z.string().nullable(), profileName: z.string().nullable(), tokenShare: nn })),
+  /** usage_events grouped by purpose (TURN, SUMMARY, COPILOT, INTERNAL_AGENT, CLASSIFIER, EVALUATION, TEST). */
+  byPurpose: z.array(PurposeUsageSchema),
   definitions: Defs,
 });
 export type TokenUsage = z.infer<typeof UsageSchema>;

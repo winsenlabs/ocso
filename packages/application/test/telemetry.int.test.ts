@@ -259,12 +259,51 @@ describe('latency, usage, workers, providers, mcp, changes', () => {
     expect(s.slowestTurns.find((x) => x.traceId === TRACE)!.traceUrl).toBe(`http://localhost:16686/trace/${TRACE}`);
   });
 
+  it('reports p50 beside p95 for turn latency and TTFT, per minute and over the whole window', async () => {
+    const s = await service.latency(admin, 60);
+    // Completed turns in the hour: 1000, 2000, 3000, 4000 (the FAILED one is excluded).
+    // p50 = 2000 + 0.5 × 1000; p95 = 3000 + 0.85 × 1000.
+    // TURN+OK TTFT: 100..800, 900, 1000 → p50 position 4.5 → 500 + 0.5 × 100; p95 → 955.
+    expect(s.window).toEqual({ turns: 4, turnP50Ms: 2500, turnP95Ms: 3850, ttftRequests: 10, ttftP50Ms: 550, ttftP95Ms: 955 });
+    // The incident minute: TURN+OK TTFT 900 and 1000 (errors report none) → p50 950, p95 995.
+    const incident = s.points.find((p) => p.minute === minuteStart(5).toISOString())!;
+    expect(incident).toMatchObject({ ttftP50Ms: 950, ttftP95Ms: 995, turnP50Ms: null, turnP95Ms: null });
+    // A minute with exactly one completed turn: p50 = p95 = the value.
+    const oneTurn = s.points.find((p) => p.turns === 1 && p.turnP95Ms === 4000)!;
+    expect(oneTurn.turnP50Ms).toBe(4000);
+    for (const key of ['turnP50Ms', 'turnP95Ms', 'ttftP50Ms', 'ttftP95Ms', 'window']) expect(s.definitions[key]).toBeTruthy();
+  });
+
+  it('returns an empty window without inventing percentiles', async () => {
+    const quiet = new SystemOverviewService(t.db, {}, () => new Date('2026-01-01T00:00:00.000Z'));
+    const s = await quiet.latency(admin, 5);
+    expect(s.window).toEqual({ turns: 0, turnP50Ms: null, turnP95Ms: null, ttftRequests: 0, ttftP50Ms: null, ttftP95Ms: null });
+    expect(s.points.every((p) => p.turnP50Ms === null && p.ttftP50Ms === null)).toBe(true);
+    const u = await quiet.usage(admin);
+    expect(u.byPurpose).toEqual([]);
+  });
+
   it('reports token and cache usage today by profile', async () => {
     const u = await service.usage(admin);
     expect(u.totals).toMatchObject({ requests: 13, inputTokens: 10_500, outputTokens: 600, cacheReadTokens: 6400, costMicros: 120, currency: 'USD' });
     const primary = u.byProfile.find((p) => p.profileName === 'support-primary')!;
     expect(primary.tokenShare).toBeCloseTo(10_500 / 11_100, 6);
     expect(u.byProfile[0]!.profileName).toBe('support-primary');
+  });
+
+  it('breaks today’s usage down by request purpose in a fixed order', async () => {
+    const u = await service.usage(admin);
+    expect(u.byPurpose.map((p) => p.purpose)).toEqual(['TURN', 'SUMMARY']);
+    const [turn, summary] = u.byPurpose;
+    // TURN: 8 cached successes, 2 errors, 2 fallbacks (Anthropic reports no cache reads).
+    expect(turn).toMatchObject({ requests: 12, inputTokens: 10_000, outputTokens: 500, cacheReadTokens: 6400, cacheWriteTokens: null, costMicros: 120, currency: 'USD' });
+    expect(turn!.cachedInputShare).toBeCloseTo(6400 / 8000, 6);
+    expect(turn!.tokenShare).toBeCloseTo(10_500 / 11_100, 6);
+    // SUMMARY: reports cache reads (0) but has no price.
+    expect(summary).toMatchObject({ requests: 1, inputTokens: 500, outputTokens: 100, cacheReadTokens: 0, cachedInputShare: 0, costMicros: null, currency: null });
+    // Purposes partition the totals.
+    expect(u.byPurpose.reduce((s, p) => s + p.requests, 0)).toBe(u.totals.requests);
+    expect(u.definitions['byPurpose']).toContain('purpose');
   });
 
   it('lists workers with utilization, stale detection and lease accounting', async () => {
