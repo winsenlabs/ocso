@@ -66,3 +66,32 @@ describe('team membership', () => {
     await h.http().post(`/v1/teams/${ids['cards']}/members`).set({ authorization: `Bearer ${exec}` }).send({ userId: ids['exec'] }).expect(403);
   });
 });
+
+describe('team detail and rename', () => {
+  it('lists members with role, availability and when they joined (users.read)', async () => {
+    const res = await h.http().get(`/v1/teams/${ids['loans']}`).set(as('lead')).expect(200);
+    expect(res.body).toMatchObject({ id: ids['loans'], name: 'Loans', description: null, memberCount: 2 });
+    expect(Number.isNaN(Date.parse(res.body.createdAt))).toBe(false);
+    const members = res.body.members as Array<{ userId: string; name: string; email: string; role: string; status: string; availability: string; addedAt: string }>;
+    expect(members.map((m) => m.userId).sort()).toEqual([ids['lead'], ids['lead2']].sort());
+    expect(members.find((m) => m.userId === ids['lead2'])).toMatchObject({ name: 'lead2', email: 'lead2@ocso.test', role: 'CS_LEAD', status: 'ACTIVE' });
+    expect(members.every((m) => !Number.isNaN(Date.parse(m.addedAt)))).toBe(true);
+    await h.http().get(`/v1/teams/${ids['loans']}`).set(as('admin')).expect(200);
+    const exec = await h.loginAs('exec@ocso.test', PASSWORD);
+    await h.http().get(`/v1/teams/${ids['loans']}`).set({ authorization: `Bearer ${exec}` }).expect(403);
+    await h.http().get('/v1/teams/00000000-0000-7000-8000-000000000000').set(as('lead')).expect(404);
+  });
+
+  it('a lead renames only teams they belong to; names stay unique', async () => {
+    const lone = (await h.http().post('/v1/teams').set(as('lead2')).send({ name: 'Collections' }).expect(201)).body.id as string;
+    await h.http().patch(`/v1/teams/${lone}`).set(as('lead')).send({ name: 'Mine now' }).expect(403);
+    await h.http().patch(`/v1/teams/${lone}`).set(as('lead2')).send({ name: 'loans' }).expect(409);
+    await h.http().patch(`/v1/teams/${lone}`).set(as('lead2')).send({ name: 'Collections · Tier 2', description: 'Late payers' }).expect(200);
+    const team = await h.http().get(`/v1/teams/${lone}`).set(as('lead2')).expect(200);
+    expect(team.body).toMatchObject({ name: 'Collections · Tier 2', description: 'Late payers' });
+    // Tech Admin lacks teams.manage (team create/rename is a CS Lead concern); memberships are theirs to manage.
+    await h.http().patch(`/v1/teams/${lone}`).set(as('admin')).send({ name: 'Admin rename' }).expect(403);
+    const { rows } = await h.db.pool.query(`SELECT count(*)::int AS n FROM audit_events WHERE action = 'team.update'`);
+    expect(rows[0].n).toBe(1);
+  });
+});

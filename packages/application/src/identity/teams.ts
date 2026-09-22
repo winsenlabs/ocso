@@ -1,4 +1,4 @@
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import { Permission, Role, assertCan, can } from '@ocso/auth';
 import { conflict, forbidden, notFound } from '@ocso/domain';
 import { teamMembers, teams, users, uuidv7, type Db, type DbOrTx } from '@ocso/db';
@@ -19,6 +19,22 @@ export interface TeamView {
   memberCount: number;
 }
 
+/** A member of a team as the team page shows them: who, their role, and since when. */
+export interface TeamMemberView {
+  userId: string;
+  name: string;
+  email: string;
+  role: Role;
+  status: 'ACTIVE' | 'DISABLED';
+  availability: 'AVAILABLE' | 'AWAY' | 'OFFLINE';
+  addedAt: string;
+}
+
+export interface TeamDetail extends TeamView {
+  createdAt: string;
+  members: TeamMemberView[];
+}
+
 export class TeamService {
   constructor(private readonly db: Db) {}
 
@@ -33,6 +49,27 @@ export class TeamService {
       .from(teams)
       .orderBy(asc(teams.name));
     return rows;
+  }
+
+  /** One team with its members (users.read: the same people GET /v1/users already lists, plus when they joined). */
+  async get(actor: ActorContext, id: string): Promise<TeamDetail> {
+    assertCan(actor.principal!, Permission.USERS_READ);
+    const [team] = await this.db.select().from(teams).where(eq(teams.id, id));
+    if (!team) throw notFound('team', id);
+    const members = await this.db
+      .select({ userId: users.id, name: users.name, email: users.email, role: users.role, status: users.status, availability: users.availability, addedAt: teamMembers.createdAt })
+      .from(teamMembers)
+      .innerJoin(users, eq(users.id, teamMembers.userId))
+      .where(eq(teamMembers.teamId, id))
+      .orderBy(asc(users.name));
+    return {
+      id: team.id,
+      name: team.name,
+      description: team.description,
+      memberCount: members.length,
+      createdAt: team.createdAt.toISOString(),
+      members: members.map((m) => ({ ...m, addedAt: m.addedAt.toISOString() })),
+    };
   }
 
   /** The creating CS Lead joins the team: team ownership of agents (ADR-026) needs a member to manage them. */
@@ -85,11 +122,17 @@ export class TeamService {
     return { team, user };
   }
 
+  /** Rename / describe. A CS Lead changes only teams they belong to (the same rule as memberships). */
   async update(actor: ActorContext, id: string, input: TeamInput): Promise<void> {
-    assertCan(actor.principal!, Permission.TEAMS_MANAGE);
+    const principal = actor.principal!;
+    assertCan(principal, Permission.TEAMS_MANAGE);
     await this.db.transaction(async (tx) => {
       const [before] = await tx.select().from(teams).where(eq(teams.id, id));
       if (!before) throw notFound('team', id);
+      const [membership] = await tx.select({ teamId: teamMembers.teamId }).from(teamMembers).where(and(eq(teamMembers.teamId, id), eq(teamMembers.userId, principal.userId)));
+      if (!membership) throw forbidden(Permission.TEAMS_MANAGE, 'CS Leads manage only the teams they belong to');
+      const clash = await tx.select({ id: teams.id }).from(teams).where(and(sql`lower(${teams.name}) = lower(${input.name})`, ne(teams.id, id)));
+      if (clash.length) throw conflict('team_exists', 'A team with this name already exists');
       await tx.update(teams).set({ name: input.name, description: input.description, updatedAt: new Date() }).where(eq(teams.id, id));
       await recordAudit(tx, actor, { action: 'team.update', targetType: 'team', targetId: id, summary: `Updated team ${input.name}`, before, after: input });
     });

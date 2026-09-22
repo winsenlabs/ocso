@@ -70,6 +70,13 @@ export class UsersController {
     return this.teams.list();
   }
 
+  /** One team with its members, roles and join dates (the team drawer on the Team page). */
+  @Get('teams/:id')
+  @RequirePermission(Permission.USERS_READ)
+  getTeam(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string) {
+    return this.teams.get(actor, id);
+  }
+
   @Post('teams')
   @RequirePermission(Permission.TEAMS_MANAGE)
   createTeam(@Actor() actor: ActorContext, @Body({ schema: TeamInput }) body: TeamInput) {
@@ -91,6 +98,7 @@ export class UsersController {
     await this.teams.removeMember(actor, id, userId);
   }
 
+  /** Rename / describe: CS Leads, on teams they belong to (enforced in TeamService). */
   @Patch('teams/:id')
   @RequirePermission(Permission.TEAMS_MANAGE)
   async updateTeam(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string, @Body({ schema: TeamInput }) body: TeamInput) {

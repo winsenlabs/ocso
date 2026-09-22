@@ -69,6 +69,11 @@ export function sendPasswordReset(userId: string): Promise<LinkResult> {
   return api.post(`/v1/users/${encodeURIComponent(userId)}/password-reset`, {}, LinkResult);
 }
 
+/** PATCH /v1/users/:id { teamIds } — replaces the user's teams (a CS Lead may change only their own teams, for CS Execs). */
+export function updateUserTeams(userId: string, teamIds: string[]): Promise<void> {
+  return api.command('PATCH', `/v1/users/${encodeURIComponent(userId)}`, { teamIds });
+}
+
 export function setMyAvailability(availability: Availability): Promise<void> {
   return api.command('PUT', '/v1/me/availability', { availability });
 }
