@@ -1,0 +1,15 @@
+# Provider plugins and local state never go into git.
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfplan
+# Real variable files may hold account ids and emails; commit only the example.
+*.tfvars
+*.tfvars.json
+!terraform.tfvars.example
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json

@@ -1,0 +1,68 @@
+# Copy to terraform.tfvars (git-ignored) and adjust. See docs/operations/aws.md.
+
+environment         = "prod"
+aws_region          = "ap-south-1"
+public_hostname     = "support.meridianbank.in"
+acm_certificate_arn = "arn:aws:acm:ap-south-1:123456789012:certificate/00000000-0000-0000-0000-000000000000"
+# route53_zone_id   = "Z0123456789ABCDEFGHIJ" # optional: creates the alias record
+
+# Immutable release tag pushed to all four ECR repositories.
+image_tag        = "2026.09.22-1"
+cpu_architecture = "X86_64" # ARM64 if you build linux/arm64 images (cheaper Graviton)
+
+# First apply: false (creates everything but the ECS services). Run the
+# migrate task, then apply again with true.
+deploy_services = false
+
+az_count           = 2
+single_nat_gateway = false
+
+api    = { cpu = 1024, memory = 2048, desired_count = 2 }
+web    = { cpu = 512, memory = 1024, desired_count = 2 }
+worker = { cpu = 1024, memory = 2048, use_spot = false, spot_ratio = 1 }
+
+# Initial values only; OCSO's Tech Admin settings own them at runtime.
+worker_scaling = {
+  min_capacity             = 2
+  max_capacity             = 10
+  conversations_per_worker = 10
+  target_utilization       = 0.75
+  scale_out_cooldown       = 60
+  scale_in_cooldown        = 180
+  queue_age_threshold      = 30
+  # metric_namespace       = "OCSO/ocso-prod" # default: OCSO/<name>-<environment>
+}
+
+db = {
+  engine_version          = "18"
+  parameter_group_family  = "postgres18"
+  instance_class          = "db.r7g.large"
+  allocated_storage       = 100
+  max_allocated_storage   = 1000
+  multi_az                = true
+  backup_retention_days   = 14
+  deletion_protection     = true
+  performance_insights    = true
+  apply_immediately       = false
+  skip_final_snapshot     = false
+  backup_window           = "20:30-21:30"
+  maintenance_window      = "sun:21:30-sun:22:30"
+  ca_cert_identifier      = "rds-ca-rsa2048-g1"
+  auto_minor_upgrade      = true
+  monitoring_interval_sec = 0
+}
+
+# Bump (2, 3, …) to rotate the DB password, signing key and setup token together.
+bootstrap_secret_version = 1
+
+otel_collector = {
+  enabled             = false
+  image               = "otel/opentelemetry-collector-contrib:0.161.0"
+  traces_sample_ratio = 0.05
+}
+
+alarm_email_addresses = ["platform-oncall@meridianbank.in"]
+
+tags = {
+  "cost-center" = "customer-service"
+}
