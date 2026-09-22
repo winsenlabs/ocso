@@ -3,6 +3,7 @@ import { eq, sql } from 'drizzle-orm';
 import { DomainError, validation } from '@ocso/domain';
 import { deploymentSettings, users, uuidv7, type Db } from '@ocso/db';
 import { z } from 'zod';
+import { seedDefaultAlertRules } from '../alerts/seed.js';
 import { recordAudit } from '../audit/audit.js';
 import { hashPassword, passwordProblems } from './password.js';
 
@@ -63,6 +64,8 @@ export class SetupService {
         summary: `First-run setup completed for ${input.orgName}; first Tech Admin ${input.adminEmail}`,
       });
     });
+    // Default alert rules ship with every deployment (docs/11 §6); admins disable rather than delete them.
+    await seedDefaultAlertRules(this.db, correlationId);
     return { userId };
   }
 }

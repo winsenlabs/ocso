@@ -1,9 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { DeliveryService, MediaMaterializer, SummaryService, TurnProcessor } from '@ocso/agent-runtime';
-import type { WorkerSettings } from '@ocso/application';
+import { AlertDeliveryService, isAlertDeliveryRetryable, type AlertDeliverJob, type WorkerSettings } from '@ocso/application';
 import type { Logger } from '@ocso/observability';
 import { ocsoMetrics } from '@ocso/observability';
-import type { HandlerResult, QueueAdapter, QueueSubscription } from '@ocso/queue';
+import { backoffSeconds, type HandlerResult, type QueueAdapter, type QueueSubscription } from '@ocso/queue';
+import { ALERT_DELIVERY_ATTEMPTS } from '../alerts/alerts.module.js';
 import { LOGGER, QUEUE } from '../infrastructure/tokens.js';
 
 /**
@@ -22,6 +23,7 @@ export class ConsumersService {
     @Inject(DeliveryService) private readonly delivery: DeliveryService,
     @Inject(MediaMaterializer) private readonly media: MediaMaterializer,
     @Inject(SummaryService) private readonly summaries: SummaryService,
+    @Inject(AlertDeliveryService) private readonly alertDelivery: AlertDeliveryService,
     @Inject(LOGGER) private readonly logger: Logger,
   ) {}
 
@@ -41,6 +43,15 @@ export class ConsumersService {
         await this.summaries.summarize(m.payload.conversationId, m.id);
         return { kind: 'ack' };
       }), { concurrency: 4, visibilityTimeoutSeconds: 120, maxAttempts: 3 }),
+      this.queue.consume<AlertDeliverJob>('alert.deliver', async (m) => this.measure('alert.deliver', async () => {
+        try {
+          await this.alertDelivery.deliver(m.payload.deliveryId);
+          return { kind: 'ack' };
+        } catch (err) {
+          if (isAlertDeliveryRetryable(err)) return { kind: 'retry', delaySeconds: backoffSeconds(m.attempt, 5), reason: 'alert delivery' };
+          throw err;
+        }
+      }), { concurrency: 4, visibilityTimeoutSeconds: 60, maxAttempts: ALERT_DELIVERY_ATTEMPTS + 1 }),
     );
   }
 

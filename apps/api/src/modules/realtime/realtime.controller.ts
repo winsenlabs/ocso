@@ -57,6 +57,8 @@ class AccessCache {
     if (ALERT_TYPES.has(event.type)) {
       const kind = (event.payload as { kind?: string }).kind;
       if (kind === 'TECHNICAL') return can(this.principal, Permission.ALERTS_TECHNICAL_READ);
+      if (kind === 'BUSINESS') return can(this.principal, Permission.ALERTS_BUSINESS_READ);
+      // updated/resolved carry only the id; clients refetch through the audience-scoped GET.
       return can(this.principal, Permission.ALERTS_BUSINESS_READ) || can(this.principal, Permission.ALERTS_TECHNICAL_READ);
     }
     if (!event.conversationId) return event.type === 'config.changed' || event.type === 'cache.invalidated' ? can(this.principal, Permission.SYSTEM_READ) || can(this.principal, Permission.AGENTS_MANAGE) : false;

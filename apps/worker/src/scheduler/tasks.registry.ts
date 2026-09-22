@@ -1,6 +1,7 @@
-import { McpConnectionService } from '@ocso/application';
+import { McpConnectionService, type AlertDeliveryService, type AlertEngine } from '@ocso/application';
 import type { WorkerEnv } from '@ocso/config';
 import type { Db } from '@ocso/db';
+import type { QueueAdapter } from '@ocso/queue';
 import type { SecretStore } from '@ocso/secrets';
 import type { ScheduledTask } from './scheduler.service.js';
 
@@ -8,6 +9,9 @@ export interface SubsystemDeps {
   db: Db;
   env: WorkerEnv;
   secrets: SecretStore;
+  queue: QueueAdapter;
+  alerts: AlertEngine;
+  alertDelivery: AlertDeliveryService;
 }
 
 /**
@@ -19,5 +23,8 @@ export function subsystemTasks(deps: SubsystemDeps): ScheduledTask[] {
   return [
     // Also purges expired OAuth sign-ins; per-connection intervals are honoured inside.
     { name: 'mcp-health-checks', everySeconds: 10, run: () => mcp.runDueHealthChecks() },
+    { name: 'alert-evaluation', everySeconds: 30, run: () => deps.alerts.evaluate() },
+    // Deliveries whose publish failed (crash between commit and publish) are re-queued.
+    { name: 'alert-redispatch', everySeconds: 120, run: () => deps.alertDelivery.redispatchPending(deps.queue) },
   ];
 }
