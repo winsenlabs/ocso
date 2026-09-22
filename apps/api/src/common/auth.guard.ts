@@ -32,6 +32,9 @@ export class AuthGuard implements CanActivate {
     if (rule.kind === 'permission' && !can(principal, rule.permission)) {
       throw forbidden(rule.permission, `role ${principal.role} lacks ${rule.permission}`);
     }
+    if (rule.kind === 'anyPermission' && !rule.permissions.some((p) => can(principal, p))) {
+      throw forbidden(rule.permissions.join('|'), `role ${principal.role} lacks ${rule.permissions.join(' or ')}`);
+    }
     return true;
   }
 }

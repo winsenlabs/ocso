@@ -47,6 +47,12 @@ describe('API authentication & RBAC', () => {
     const denied = await h.http().patch('/v1/settings/workers').set('authorization', `Bearer ${execToken}`).send({ minWarmWorkers: 3 }).expect(403);
     expect(denied.body.error.category).toBe('authorization');
     await h.http().get('/v1/users').set('authorization', `Bearer ${execToken}`).expect(403);
+    // Only user managers may create users; a CS Lead may create CS Execs but not leads or admins.
+    await h.http().post('/v1/users').set('authorization', `Bearer ${execToken}`).send({ email: 'x@ocso.test', name: 'X', role: 'CS_EXEC', password: 'another password 1234' }).expect(403);
+    await h.http().post('/v1/users').set('authorization', `Bearer ${adminToken}`).send({ email: 'lead@ocso.test', name: 'Lead', role: 'CS_LEAD', password: 'lead password 12345' }).expect(201);
+    const leadToken = await h.loginAs('lead@ocso.test', 'lead password 12345');
+    await h.http().post('/v1/users').set('authorization', `Bearer ${leadToken}`).send({ email: 'exec2@ocso.test', name: 'Exec Two', role: 'CS_EXEC', password: 'exec two password 1234' }).expect(201);
+    await h.http().post('/v1/users').set('authorization', `Bearer ${leadToken}`).send({ email: 'admin2@ocso.test', name: 'Admin Two', role: 'PLATFORM_TECH_ADMIN', password: 'admin two password 1234' }).expect(403);
   });
 
   it('validates bodies and merged worker settings', async () => {

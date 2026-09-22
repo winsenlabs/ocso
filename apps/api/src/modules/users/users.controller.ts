@@ -2,7 +2,7 @@ import { Body, Controller, Get, Inject, Param, Patch, Post, Put } from '@nestjs/
 import { Permission } from '@ocso/auth';
 import { CreateUserInput, TeamInput, TeamService, UpdateUserInput, UserService, type ActorContext } from '@ocso/application';
 import { z } from 'zod';
-import { Actor, Authenticated, RequirePermission } from '../../common/decorators.js';
+import { Actor, Authenticated, RequirePermission, RequireAnyPermission } from '../../common/decorators.js';
 
 const Availability = z.object({ availability: z.enum(['AVAILABLE', 'AWAY', 'OFFLINE']) });
 type Availability = z.infer<typeof Availability>;
@@ -22,13 +22,13 @@ export class UsersController {
 
   /** Permission is resolved in the service: Tech Admin → any role, CS Lead → CS Execs only. */
   @Post('users')
-  @RequirePermission(Permission.USERS_READ)
+  @RequireAnyPermission(Permission.USERS_MANAGE, Permission.USERS_MANAGE_EXECS)
   create(@Actor() actor: ActorContext, @Body({ schema: CreateUserInput }) body: CreateUserInput) {
     return this.users.create(actor, body);
   }
 
   @Patch('users/:id')
-  @RequirePermission(Permission.USERS_READ)
+  @RequireAnyPermission(Permission.USERS_MANAGE, Permission.USERS_MANAGE_EXECS)
   update(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string, @Body({ schema: UpdateUserInput }) body: UpdateUserInput) {
     return this.users.update(actor, id, body);
   }
