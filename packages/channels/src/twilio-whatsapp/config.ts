@@ -6,6 +6,8 @@ import { toWhatsAppAddress } from './identity.js';
 /** Twilio WhatsApp channel settings (non-secret, admin-editable). PM/research/06. */
 
 export const TWILIO_DEFAULT_API_BASE_URL = 'https://api.twilio.com';
+/** Content API (message templates, PM/research/10 §1). */
+export const TWILIO_DEFAULT_CONTENT_API_BASE_URL = 'https://content.twilio.com';
 export const TWILIO_SECRET_KEYS = ['authToken', 'apiKeySecret'] as const;
 
 const sid = (prefix: string, what: string) =>
@@ -44,6 +46,12 @@ export const TwilioWhatsAppSettings = z
       .transform((value) => value.replace(/\/+$/, ''))
       .default(TWILIO_DEFAULT_API_BASE_URL)
       .meta({ title: 'API base URL', description: 'Override only for tests or an egress proxy.' }),
+    contentApiBaseUrl: z
+      .url()
+      .refine(isSecureOrLocal, 'must use https (http is allowed for localhost only)')
+      .transform((value) => value.replace(/\/+$/, ''))
+      .default(TWILIO_DEFAULT_CONTENT_API_BASE_URL)
+      .meta({ title: 'Content API base URL', description: 'WhatsApp templates (Content API). Override only for tests or an egress proxy.' }),
     mediaLinkTtlSeconds: z.number().int().min(60).max(86_400).default(900),
     requestTimeoutMs: z.number().int().min(1_000).max(120_000).default(15_000),
     mediaDownloadTimeoutMs: z.number().int().min(1_000).max(300_000).default(60_000),

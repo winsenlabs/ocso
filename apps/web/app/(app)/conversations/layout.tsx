@@ -1,6 +1,7 @@
 import { Suspense, type ReactNode } from 'react';
 import { InboxFallback, InboxPane } from '@/components/workspace/workspace-frame';
 import '../../styles/workspace.css';
+import '../../styles/templates.css';
 
 /**
  * CS workspace (design/01): inbox · conversation · customer rail. The inbox

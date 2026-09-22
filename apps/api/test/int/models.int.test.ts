@@ -104,6 +104,8 @@ describe('model profiles API', () => {
     const created = await h.http().post('/v1/model-profiles').set(auth(admin)).send(body).expect(201);
     profileId = created.body.id;
     expect(created.body).toMatchObject({ name: 'support-primary', providerName: 'Scripted', configVersion: 1, policy: { ok: true } });
+    // DEV_SCRIPTED is never priced; the Anthropic fallback gets the catalog price.
+    expect(created.body.prices).toEqual([expect.objectContaining({ providerKind: 'ANTHROPIC', model: 'claude-haiku-4-5', status: 'added', origin: 'catalog' })]);
     const bad = await h.http().post('/v1/model-profiles').set(auth(admin)).send({ ...body, name: 'Support' }).expect(400);
     expect(bad.body.error.category).toBe('validation');
   });
@@ -167,7 +169,11 @@ describe('model administration RBAC', () => {
       .expect(201);
     await h.http().patch(`/v1/model-pricing/${created.body.id}`).set(auth(admin)).send({ outputPerMTokMicros: 4_000_000 }).expect(200);
     const list = await h.http().get('/v1/model-pricing').set(auth(admin)).expect(200);
-    expect(list.body).toEqual([expect.objectContaining({ modelPattern: 'claude-haiku-4-*', outputPerMTokMicros: 4_000_000, currency: 'USD' })]);
+    // The profile's Anthropic fallback was priced from the model catalog when the profile was saved (ADR-027).
+    expect(list.body).toEqual([
+      expect.objectContaining({ modelPattern: 'claude-haiku-4-*', outputPerMTokMicros: 4_000_000, currency: 'USD', origin: 'manual' }),
+      expect.objectContaining({ modelPattern: 'claude-haiku-4-5', currency: 'USD', origin: 'catalog', catalogSource: 'models.dev' }),
+    ]);
     await h.http().delete(`/v1/model-pricing/${created.body.id}`).set(auth(admin)).expect(204);
   });
 

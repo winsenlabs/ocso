@@ -23,6 +23,8 @@ export interface ProviderHealthCard {
   cacheReadShare: number | null;
   costTodayMicros: number | null;
   currency: string | null;
+  /** Successful requests today without a price row (their cost is unknown). */
+  unpricedRequestsToday: number;
   profiles: Array<{ id: string; name: string; role: 'PRIMARY' | 'FALLBACK'; cachePolicy: string }>;
   /** Observed, not assumed: whether this provider's responses reported cache reads today. */
   cacheSupport: 'REPORTED' | 'NOT_REPORTED' | 'NO_TRAFFIC';
@@ -47,13 +49,14 @@ export async function providerHealth(db: DbOrTx, now: Date, dayStart: Date): Pro
         FROM usage_events u
        WHERE u.provider_id IN (SELECT id FROM model_providers) AND u.occurred_at >= ${at(hourAgo)} AND u.occurred_at <= ${at(now)}
        GROUP BY u.provider_id`),
-    db.execute<{ provider_id: string; tokens: number; cached: number | null; reported_input: number | null; cost: number | null; currencies: string[] | null; n: number }>(sql`
+    db.execute<{ provider_id: string; tokens: number; cached: number | null; reported_input: number | null; cost: number | null; currencies: string[] | null; n: number; unpriced: number }>(sql`
       SELECT u.provider_id, count(*)::int AS n,
              coalesce(sum(u.input_tokens + u.output_tokens), 0)::float8 AS tokens,
              sum(u.cached_input_tokens)::float8 AS cached,
              (sum(u.input_tokens) FILTER (WHERE u.cached_input_tokens IS NOT NULL))::float8 AS reported_input,
              sum(u.cost_micros)::float8 AS cost,
-             array_agg(DISTINCT u.currency) FILTER (WHERE u.currency IS NOT NULL) AS currencies
+             array_agg(DISTINCT u.currency) FILTER (WHERE u.currency IS NOT NULL) AS currencies,
+             count(*) FILTER (WHERE u.status = 'OK' AND u.cost_micros IS NULL AND u.input_tokens + u.output_tokens > 0)::int AS unpriced
         FROM usage_events u
        WHERE u.provider_id IN (SELECT id FROM model_providers) AND u.occurred_at >= ${at(dayStart)} AND u.occurred_at <= ${at(now)}
        GROUP BY u.provider_id`),
@@ -89,6 +92,7 @@ export async function providerHealth(db: DbOrTx, now: Date, dayStart: Date): Pro
       cacheReadShare: cached !== null && reported ? cached / reported : null,
       costTodayMicros: num(d?.cost),
       currency: currencies.length === 0 ? null : currencies.length === 1 ? currencies[0]! : 'MIXED',
+      unpricedRequestsToday: int(d?.unpriced),
       profiles: profiles.rows.flatMap((pr): ProviderHealthCard['profiles'] => {
         if (pr.provider_id === p.id) return [{ id: pr.id, name: pr.name, role: 'PRIMARY', cachePolicy: pr.cache_policy }];
         if ((pr.fallback_provider_ids ?? []).includes(p.id)) return [{ id: pr.id, name: pr.name, role: 'FALLBACK', cachePolicy: pr.cache_policy }];

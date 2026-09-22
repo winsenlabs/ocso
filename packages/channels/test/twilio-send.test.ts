@@ -98,7 +98,7 @@ describe('Twilio send — 24-hour window and Content Templates', () => {
   it('sends a Content Template by ContentSid + ContentVariables outside the window', async () => {
     const { adapter, calls } = setup();
     const template = { contentSid: 'HXb5b62575e6e4ff6129ad7c8efe1f983e', variables: { '1': 'Priya', '2': '₹4,200' } };
-    expect(await adapter.sendTemplate(stale, template, twConfig())).toMatchObject({ ok: true });
+    expect(await adapter.sendContentTemplate(stale, template, twConfig())).toMatchObject({ ok: true });
     expect(form(calls[0])).toEqual({
       To: 'whatsapp:+919812341208',
       From: SENDER,
@@ -112,7 +112,7 @@ describe('Twilio send — 24-hour window and Content Templates', () => {
   it('invalid templates are typed errors / failures', async () => {
     const { adapter, calls } = setup();
     expect(() => adapter.renderTemplate({ contentSid: 'payment_reminder' })).toThrowError(expect.objectContaining({ category: 'validation', code: 'invalid_twilio_template' }));
-    expect(await adapter.sendTemplate(stale, { contentSid: 'HX1' }, twConfig())).toMatchObject({ ok: false, errorCode: 'invalid_template' });
+    expect(await adapter.sendContentTemplate(stale, { contentSid: 'HX1' }, twConfig())).toMatchObject({ ok: false, errorCode: 'invalid_template' });
     expect(calls).toHaveLength(0);
   });
 

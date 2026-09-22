@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Patch, Post } from '@nestjs/common';
 import { Permission } from '@ocso/auth';
-import { PricingInput, PricingPatch, PricingService, type ActorContext } from '@ocso/application';
+import { CatalogPriceInput, PricingInput, PricingPatch, PricingService, type ActorContext } from '@ocso/application';
 import { z } from 'zod';
 import { Actor, RequirePermission } from '../../common/decorators.js';
 
@@ -13,6 +13,20 @@ export class ModelPricingController {
   @RequirePermission(Permission.PRICING_MANAGE)
   list(@Actor() actor: ActorContext) {
     return this.pricing.list(actor);
+  }
+
+  /** Models in use (profiles, last 30 days of usage) that no row prices, with the catalog's offer. */
+  @Get('missing')
+  @RequirePermission(Permission.PRICING_MANAGE)
+  missing(@Actor() actor: ActorContext) {
+    return this.pricing.missing(actor);
+  }
+
+  /** Add the model catalog's price for one model as a catalog-origin row. */
+  @Post('from-catalog')
+  @RequirePermission(Permission.PRICING_MANAGE)
+  fromCatalog(@Actor() actor: ActorContext, @Body({ schema: CatalogPriceInput }) body: CatalogPriceInput) {
+    return this.pricing.addFromCatalog(actor, body);
   }
 
   @Post()

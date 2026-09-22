@@ -102,6 +102,8 @@ const Totals = z.object({
   cachedInputShare: nn,
   costMicros: nn,
   currency: z.string().nullable(),
+  /** Successful requests without a price row: their cost is unknown ("no price"), not zero. */
+  unpricedRequests: n.default(0),
 });
 export type TokenTotals = z.infer<typeof Totals>;
 
@@ -188,6 +190,7 @@ export const ProviderHealthSchema = z.object({
   cacheReadShare: nn,
   costTodayMicros: nn,
   currency: z.string().nullable(),
+  unpricedRequestsToday: n.default(0),
   profiles: z.array(z.object({ id: z.string(), name: z.string(), role: z.enum(['PRIMARY', 'FALLBACK']), cachePolicy: z.string() })),
   cacheSupport: z.enum(['REPORTED', 'NOT_REPORTED', 'NO_TRAFFIC']),
 });

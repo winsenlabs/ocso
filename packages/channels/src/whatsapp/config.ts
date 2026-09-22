@@ -21,8 +21,11 @@ function isSecureOrLocal(value: string): boolean {
 export const WhatsAppSettings = z.object({
   /** Default sending number; inbound `metadata.phone_number_id` overrides per conversation. */
   phoneNumberId: metaId,
-  /** WABA id. When set, webhook entries for other WABAs are ignored. */
-  businessAccountId: metaId.optional(),
+  /** WABA id. Required for message templates; when set, webhook entries for other WABAs are ignored. */
+  businessAccountId: metaId.optional().meta({
+    title: 'WhatsApp Business Account id',
+    description: 'WhatsApp Manager → Account tools → WABA id. Required to list, create and track message templates (needed to reach customers after 24 hours).',
+  }),
   graphApiVersion: z
     .string()
     .regex(/^v\d{1,3}\.\d{1,2}$/, 'must look like v26.0')

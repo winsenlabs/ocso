@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { AlertBanner } from '@/components/ui/alert-banner';
 import { Modal } from '@/components/ui/modal';
 import { deletePricingAction, savePricingAction } from '@/lib/actions/models';
+import type { CatalogPrice } from '@/lib/api/model-catalog';
 import type { Pricing, ProviderKind, ProviderKindView } from '@/lib/api/models';
 import { ConfirmAction } from '../confirm-action';
 import { decimalFromMicros, microsFromDecimal } from '../models/money';
@@ -18,17 +19,30 @@ const PRICE_FIELDS = [
 ] as const;
 type PriceKey = (typeof PRICE_FIELDS)[number]['key'];
 
-/** Add / edit a price row (POST, PATCH /v1/model-pricing). Amounts are per 1M tokens in the row's currency. */
-export function PricingDialog({ kinds, row, closeHref }: { kinds: ProviderKindView[]; row: Pricing | null; closeHref: string }) {
+interface Props {
+  kinds: ProviderKindView[];
+  row: Pricing | null;
+  closeHref: string;
+  /** New row opened from "no price": the model to price, and the catalog's offer when it has one. */
+  initial?: { kind: ProviderKind; model: string; suggestion: CatalogPrice | null } | undefined;
+}
+
+/**
+ * Add / edit a price row (POST, PATCH /v1/model-pricing). Amounts are per 1M
+ * tokens in the row's currency. Editing a catalog row overrides it (manual).
+ */
+export function PricingDialog({ kinds, row, closeHref, initial }: Props) {
   const close = useCloseTo(closeHref);
-  const [kind, setKind] = useState<ProviderKind>(row?.providerKind ?? kinds[0]?.kind ?? 'OPENAI');
-  const [pattern, setPattern] = useState(row?.modelPattern ?? '');
-  const [currency, setCurrency] = useState(row?.currency ?? 'USD');
+  const offer = row ? null : (initial?.suggestion ?? null);
+  const source = row ?? offer;
+  const [kind, setKind] = useState<ProviderKind>(row?.providerKind ?? initial?.kind ?? kinds[0]?.kind ?? 'OPENAI');
+  const [pattern, setPattern] = useState(row?.modelPattern ?? initial?.model ?? '');
+  const [currency, setCurrency] = useState(row?.currency ?? offer?.currency ?? 'USD');
   const [prices, setPrices] = useState<Record<PriceKey, string>>({
-    input: row ? decimalFromMicros(row.inputPerMTokMicros) : '',
-    output: row ? decimalFromMicros(row.outputPerMTokMicros) : '',
-    cacheRead: decimalFromMicros(row?.cachedInputPerMTokMicros ?? null),
-    cacheWrite: decimalFromMicros(row?.cacheWritePerMTokMicros ?? null),
+    input: source ? decimalFromMicros(source.inputPerMTokMicros) : '',
+    output: source ? decimalFromMicros(source.outputPerMTokMicros) : '',
+    cacheRead: decimalFromMicros(source?.cachedInputPerMTokMicros ?? null),
+    cacheWrite: decimalFromMicros(source?.cacheWritePerMTokMicros ?? null),
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);
@@ -99,6 +113,19 @@ export function PricingDialog({ kinds, row, closeHref }: { kinds: ProviderKindVi
         {message ? (
           <AlertBanner tone="error" style={{ margin: 0 }}>
             {message}
+          </AlertBanner>
+        ) : null}
+        {row?.origin === 'catalog' ? (
+          <AlertBanner tone="info" style={{ margin: 0 }}>
+            From the {row.catalogSource ?? 'model'} catalog and kept current by catalog refreshes. Saving an edit makes it a manual price that refreshes never change.
+          </AlertBanner>
+        ) : offer ? (
+          <AlertBanner tone="info" style={{ margin: 0 }}>
+            Pre-filled from {offer.source} (fetched {offer.fetchedAt.slice(0, 10)}). Saving stores it as your manual price; “Use catalog price” in the list keeps it following the catalog instead.
+          </AlertBanner>
+        ) : initial ? (
+          <AlertBanner tone="warn" style={{ margin: 0 }}>
+            The model catalogs have no price for {initial.model}. Enter the provider’s published rates per 1M tokens.
           </AlertBanner>
         ) : null}
         <div className="fld-row">

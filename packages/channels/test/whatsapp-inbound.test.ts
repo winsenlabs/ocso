@@ -282,7 +282,9 @@ describe('WhatsApp batching and idempotency', () => {
     expect(envelope.messages.map((m) => m.externalMessageId)).toEqual(['wamid.MULTI.A1', 'wamid.MULTI.B1', 'wamid.MULTI.C1']);
     expect(envelope.messages.map((m) => m.channelAccountId)).toEqual([PHONE_NUMBER_ID, PHONE_NUMBER_ID, '109999999999999']);
     expect(envelope.statuses).toEqual([expect.objectContaining({ externalMessageId: 'wamid.OUT.1', status: 'DELIVERED' })]);
-    expect(envelope.ignored).toBe(1); // message_template_status_update
+    // The message_template_status_update change is a template review result, not an ignored entry.
+    expect(envelope.templateUpdates).toEqual([{ templateId: '12345', name: 'payment_reminder', language: 'en_US', status: 'APPROVED', reason: null, occurredAt: NOW }]);
+    expect(envelope.ignored).toBe(0);
   });
 
   it('a redelivered webhook yields the same idempotency key (wamid)', () => {
@@ -303,7 +305,7 @@ describe('WhatsApp batching and idempotency', () => {
     raw.entry[0].changes[0].value.messages[0] = { type: 'text' }; // no id
     const envelope = adapter.parseInbound(postRequest(Buffer.from(JSON.stringify(raw))), config);
     expect(envelope.messages.map((m) => m.externalMessageId)).toEqual(['wamid.MULTI.B1', 'wamid.MULTI.C1']);
-    expect(envelope.ignored).toBe(2);
+    expect(envelope.ignored).toBe(1);
   });
 
   it('non-WhatsApp objects are ignored, invalid JSON is a typed validation error', () => {

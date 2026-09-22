@@ -3,6 +3,8 @@ import { createGoogleVertexAnthropic } from '@ai-sdk/google-vertex/anthropic';
 import { validation } from '@ocso/domain';
 import { z } from 'zod';
 import { createAiSdkAdapter } from '../../core/adapter.js';
+import { listContext } from '../../discovery/context.js';
+import { listVertexModels } from '../../discovery/vertex.js';
 import {
   commonSettingsShape,
   parseProviderConfig,
@@ -13,7 +15,7 @@ import {
 import { anthropicCachePlan } from '../shared/cache-plans.js';
 import { claudeCapabilities, geminiCapabilities, isClaudeModel } from '../shared/model-families.js';
 import { fetchOption } from '../shared/sdk-helpers.js';
-import { createServiceAccountTokenProvider, parseServiceAccountKey } from './service-account.js';
+import { createAdcTokenProvider, createServiceAccountTokenProvider, parseServiceAccountKey } from './service-account.js';
 
 /**
  * Google Vertex AI. Gemini via `createGoogleVertex` with IMPLICIT caching
@@ -95,7 +97,7 @@ export const vertexProvider: ProviderDefinition<VertexSettings, VertexCredential
       ...(token ? { generateAuthToken: token } : {}),
       ...fetchOption(deps),
     });
-    return createAiSdkAdapter({
+    const adapter = createAiSdkAdapter({
       kind: 'VERTEX',
       providerId: config.id,
       region: location,
@@ -107,5 +109,11 @@ export const vertexProvider: ProviderDefinition<VertexSettings, VertexCredential
       healthModel: settings.healthModel ?? null,
       secrets: [...secretValues(config), ...auth.secrets],
     });
+    const project = auth.project;
+    const listToken = token ?? createAdcTokenProvider();
+    return {
+      ...adapter,
+      listModels: (options) => listVertexModels(listContext(config, deps, options, auth.secrets), { project, location, token: listToken }),
+    };
   },
 };

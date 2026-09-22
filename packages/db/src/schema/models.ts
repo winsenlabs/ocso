@@ -62,7 +62,22 @@ export const modelProfiles = pgTable(
   (t) => [uniqueIndex('model_profiles_name_uq').on(t.name)],
 );
 
-/** Tech-Admin-maintained price table for cost metadata (micro-units per 1M tokens). */
+/** Long-context price tier of a pricing row (micro-units per 1M tokens). */
+export interface PriceTierColumn {
+  /** Applies when the request's input tokens exceed this many. */
+  aboveInputTokens: number;
+  inputPerMTokMicros: number;
+  outputPerMTokMicros: number;
+  cachedInputPerMTokMicros: number | null;
+  cacheWritePerMTokMicros: number | null;
+}
+
+/**
+ * Price table for cost metadata (micro-units per 1M tokens), the costing
+ * source of truth (ADR-027). `origin = 'catalog'` rows were pre-filled from
+ * the open-source model catalog (source + fetch date) and follow catalog
+ * refreshes; `manual` rows are the Tech Admin's and are never overwritten.
+ */
 export const modelPricing = pgTable('model_pricing', {
   id: id(),
   providerKind: text().$type<ProviderKindColumn>().notNull(),
@@ -72,8 +87,34 @@ export const modelPricing = pgTable('model_pricing', {
   cachedInputPerMTokMicros: bigint({ mode: 'number' }),
   cacheWritePerMTokMicros: bigint({ mode: 'number' }),
   outputPerMTokMicros: bigint({ mode: 'number' }).notNull(),
+  /** Long-context tiers (e.g. > 272K input tokens), highest applicable tier wins. */
+  tiers: jsonb().$type<PriceTierColumn[]>(),
+  origin: text().$type<'catalog' | 'manual'>().notNull().default('manual'),
+  /** Catalog rows: `models.dev` | `litellm`, the catalog's provider and model keys, and when OCSO fetched that catalog. */
+  catalogSource: text(),
+  catalogProvider: text(),
+  catalogModelId: text(),
+  catalogFetchedAt: ts('catalog_fetched_at'),
   effectiveFrom: ts('effective_from').notNull().defaultNow(),
   createdAt: createdAt(),
+  updatedAt: ts('updated_at'),
+});
+
+/**
+ * Latest normalized snapshot per open-source model catalog (ADR-027),
+ * refreshed daily by the worker leader and on demand. `entries` is the
+ * validated, normalized catalog (USD per 1M tokens).
+ */
+export const modelCatalogSnapshots = pgTable('model_catalog_snapshots', {
+  source: text().$type<'models.dev' | 'litellm'>().primaryKey(),
+  fetchedAt: ts('fetched_at').notNull(),
+  contentHash: text().notNull(),
+  entryCount: integer().notNull(),
+  entries: jsonb().$type<unknown[]>().notNull(),
+  /** Last attempt (success or failure) and its outcome, for the status panel. */
+  lastAttemptAt: ts('last_attempt_at').notNull(),
+  lastError: text(),
+  updatedAt: updatedAt(),
 });
 
 /** One row per model request (docs/03 UsageEvent, docs/05 §3). */

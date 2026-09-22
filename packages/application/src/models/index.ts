@@ -10,3 +10,15 @@ export type { ProfileFallbackView, ProfileRow, ProfileTargetView, ProfileView, P
 export { ProviderService, type ModelAdminDeps, type ProviderKindView } from './provider-service.js';
 export { ProfileService, type ProfileSaveResult, type ProfileServiceDeps } from './profile-service.js';
 export { PricingService, findPrice, loadPricing, type PricingRow } from './pricing-service.js';
+export { ModelListService, type AdapterLookup, type ConfiguredPrice, type ModelListServiceDeps, type ModelListView, type ModelOption } from './model-list-service.js';
+export { modelsWithoutPrice, type MissingPrice } from './pricing-missing.js';
+export {
+  ModelCatalogService,
+  CATALOG_REFRESH_INTERVAL_HOURS,
+  type CatalogRefreshResult,
+  type CatalogSourceView,
+  type CatalogStatusView,
+  type ModelCatalogServiceDeps,
+} from './catalog/catalog-service.js';
+export { allowlistedFetch, CATALOG_HOSTS, createCatalogFetch } from './catalog/catalog-fetch.js';
+export { baseModelFor, ensureCatalogPrices, syncCatalogPrices, type CatalogPriceSuggestion, type CatalogPriceSync, type PriceCheck } from './catalog/catalog-prices.js';

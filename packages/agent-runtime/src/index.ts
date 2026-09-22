@@ -11,6 +11,7 @@ export * from './context/context-builder.js';
 export * from './delivery/channel-runtime.js';
 export * from './delivery/delivery.js';
 export * from './delivery/media.js';
+export * from './delivery/template-provider.js';
 export * from './turn/agent-loop.js';
 export * from './turn/persist.js';
 export * from './turn/turn-processor.js';

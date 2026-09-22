@@ -1,6 +1,8 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { z } from 'zod';
 import { createAiSdkAdapter } from '../../core/adapter.js';
+import { listOpenAiModels } from '../../discovery/openai.js';
+import { listContext } from '../../discovery/context.js';
 import {
   commonSettingsShape,
   parseProviderConfig,
@@ -61,7 +63,7 @@ export const openAiProvider: ProviderDefinition<OpenAiSettings, OpenAiCredential
       ...(settings.project ? { project: settings.project } : {}),
       ...fetchOption(deps),
     });
-    return createAiSdkAdapter({
+    const adapter = createAiSdkAdapter({
       kind: 'OPENAI',
       providerId: config.id,
       region: config.region,
@@ -75,5 +77,9 @@ export const openAiProvider: ProviderDefinition<OpenAiSettings, OpenAiCredential
       healthProbe: { maxOutputTokens: 16 },
       secrets: secretValues(config),
     });
+    return {
+      ...adapter,
+      listModels: (options) => listOpenAiModels(listContext(config, deps, options), credentials.apiKey, settings),
+    };
   },
 };

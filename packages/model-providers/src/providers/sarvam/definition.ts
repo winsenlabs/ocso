@@ -3,6 +3,9 @@ import type { JSONObject } from '@ai-sdk/provider';
 import { z } from 'zod';
 import type { ModelCapabilities, ModelRequest } from '../../contract/types.js';
 import { createAiSdkAdapter } from '../../core/adapter.js';
+import { listContext } from '../../discovery/context.js';
+import { getJson, trimBase } from '../../discovery/http.js';
+import { parseOpenAiListing } from '../../discovery/openai.js';
 import type { ProviderOptionsPlan } from '../../core/spec.js';
 import {
   commonSettingsShape,
@@ -82,7 +85,7 @@ export const sarvamProvider: ProviderDefinition<SarvamSettings, SarvamCredential
       ...base,
       transformRequestBody: (body: Record<string, unknown>) => ({ ...body, reasoning_effort: null }),
     });
-    return createAiSdkAdapter({
+    const adapter = createAiSdkAdapter({
       kind: 'SARVAM',
       providerId: config.id,
       region: config.region,
@@ -98,5 +101,14 @@ export const sarvamProvider: ProviderDefinition<SarvamSettings, SarvamCredential
       healthProbe: { maxOutputTokens: 1, reasoning: 'none' },
       secrets: secretValues(config),
     });
+    return {
+      ...adapter,
+      // OpenAI-compatible `GET /models`; a 404 surfaces as model_listing_unsupported (catalog fallback).
+      listModels: async (options) => {
+        const ctx = listContext(config, deps, options);
+        const headers = { authorization: `Bearer ${credentials.apiKey}`, 'api-subscription-key': credentials.apiKey };
+        return parseOpenAiListing(ctx, await getJson(ctx, `${trimBase(settings.baseURL)}/models`, headers), () => true);
+      },
+    };
   },
 };

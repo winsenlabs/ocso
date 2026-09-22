@@ -26,3 +26,9 @@ export { sarvamProvider, type SarvamSettings } from './providers/sarvam/definiti
 export { devScriptedProvider, type DevScriptedSettings } from './providers/dev-scripted/definition.js';
 
 export { ProviderRegistry, createDefaultRegistry, PRODUCTION_PROVIDERS, type DefaultRegistryOptions } from './registry.js';
+
+// Model discovery (listings) and the open-source model catalog + pricing helpers (ADR-027).
+export { LISTING_UNSUPPORTED, MODEL_LIST_TIMEOUT_MS } from './discovery/http.js';
+export { isOpenAiChatModel, OPENAI_NON_CHAT } from './discovery/openai.js';
+export * from './catalog/index.js';
+export * from './pricing/price.js';

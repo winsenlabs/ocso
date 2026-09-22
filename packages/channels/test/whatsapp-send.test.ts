@@ -142,10 +142,10 @@ describe('WhatsApp templates', () => {
     components: [{ type: 'body', parameters: [{ type: 'text', text: '₹4,200' }] }],
   };
 
-  it('sendTemplate works outside the session window', async () => {
+  it('sendRawTemplate works outside the session window', async () => {
     const { adapter, calls } = setup();
     const stale = target({ lastInboundAt: new Date(NOW.getTime() - 72 * 3_600_000) });
-    expect(await adapter.sendTemplate(stale, template, waConfig())).toEqual({ ok: true, externalMessageId: 'wamid.OUT.123' });
+    expect(await adapter.sendRawTemplate(stale, template, waConfig())).toEqual({ ok: true, externalMessageId: 'wamid.OUT.123' });
     expect(calls[0]?.body).toEqual({
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
@@ -161,12 +161,12 @@ describe('WhatsApp templates', () => {
     expect(() => adapter.renderTemplate({ name: 'Bad Name!', language: 'english' })).toThrowError(
       expect.objectContaining({ category: 'validation', code: 'invalid_whatsapp_template' }),
     );
-    expect(await adapter.sendTemplate(target(), { name: '', language: 'en' }, waConfig())).toMatchObject({ ok: false, errorCode: 'invalid_template' });
+    expect(await adapter.sendRawTemplate(target(), { name: '', language: 'en' }, waConfig())).toMatchObject({ ok: false, errorCode: 'invalid_template' });
   });
 
   it('template errors from Meta are not retriable', async () => {
     const { adapter } = setup(() => graphError(400, 132001, 'Template name does not exist in the translation'));
-    expect(await adapter.sendTemplate(target(), template, waConfig())).toMatchObject({ ok: false, errorCode: 'template_error', retriable: false });
+    expect(await adapter.sendRawTemplate(target(), template, waConfig())).toMatchObject({ ok: false, errorCode: 'template_error', retriable: false });
   });
 });
 

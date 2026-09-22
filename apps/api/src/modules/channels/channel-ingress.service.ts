@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
-import { IngressService, type IngressResult } from '@ocso/application';
+import { IngressService, WhatsAppTemplateService, applyProviderTemplateUpdate, type IngressResult } from '@ocso/application';
 import { ChannelRuntime } from '@ocso/agent-runtime';
 import type { ChannelRegistry, InboundEnvelope, RawHttpRequest } from '@ocso/channels';
 import { notFound } from '@ocso/domain';
@@ -13,6 +13,7 @@ export interface IngressSummary {
   rejected: number;
   statuses: number;
   identityUpdates: number;
+  templateUpdates: number;
   results: IngressResult[];
 }
 
@@ -27,6 +28,7 @@ export class ChannelIngressService {
     @Inject(ChannelRuntime) private readonly runtime: ChannelRuntime,
     @Inject(IngressService) private readonly ingress: IngressService,
     @Inject(CHANNEL_REGISTRY) private readonly registry: ChannelRegistry,
+    @Inject(WhatsAppTemplateService) private readonly templates: WhatsAppTemplateService,
   ) {}
 
   async resolve(publicKey: string, kind: string) {
@@ -43,7 +45,12 @@ export class ChannelIngressService {
   }
 
   async process(channelId: string, envelope: InboundEnvelope, correlationId: string): Promise<IngressSummary> {
-    const summary: IngressSummary = { accepted: 0, duplicates: 0, rejected: 0, statuses: 0, identityUpdates: 0, results: [] };
+    const summary: IngressSummary = { accepted: 0, duplicates: 0, rejected: 0, statuses: 0, identityUpdates: 0, templateUpdates: 0, results: [] };
+    // Template review results pushed by the provider (Meta); the worker's poller covers the rest.
+    for (const update of envelope.templateUpdates ?? []) {
+      if (await applyProviderTemplateUpdate(this.db, channelId, update, { correlationId, now: update.occurredAt })) summary.templateUpdates++;
+    }
+    if (envelope.templateUpdates?.length) this.templates.invalidate(channelId);
     for (const update of envelope.identityUpdates ?? []) {
       if (await this.ingress.applyIdentityUpdate(update.identityKind, update.previousValue, update.currentValue)) summary.identityUpdates++;
     }

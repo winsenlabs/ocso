@@ -69,7 +69,7 @@ export const devScriptedProvider: ProviderDefinition<DevScriptedSettings, Record
       chunkDelayMs: settings.chunkDelayMs,
       simulateError: settings.simulateError,
     };
-    return createAiSdkAdapter({
+    const adapter = createAiSdkAdapter({
       kind: 'DEV_SCRIPTED',
       providerId: config.id,
       region: config.region,
@@ -81,5 +81,8 @@ export const devScriptedProvider: ProviderDefinition<DevScriptedSettings, Record
       healthModel: settings.healthModel ?? 'scripted-1',
       secrets: [],
     });
+    // Any id works; these are the conventional names the demo and tests use.
+    const scripted = (id: string) => ({ id, displayName: `Scripted model (${id})`, createdAt: null, ownedBy: 'ocso', kind: 'model' as const, input: ['text', 'image'] as const });
+    return { ...adapter, listModels: async () => [...new Set(['scripted-1', 'scripted-2', settings.healthModel ?? 'scripted-1'])].map(scripted) };
   },
 };

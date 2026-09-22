@@ -1,6 +1,6 @@
-import { and, desc, eq, isNull, max, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, max, ne, sql } from 'drizzle-orm';
 import { Permission, assertCan, can } from '@ocso/auth';
-import { forbidden, validation } from '@ocso/domain';
+import { conflict, forbidden, validation } from '@ocso/domain';
 import { assignments, conversationSummaries, conversations, handoffs, users, uuidv7, type Db, type DbOrTx } from '@ocso/db';
 import { z } from 'zod';
 import { emitEvent } from '../events/outbox.js';
@@ -21,6 +21,42 @@ export const ResolveInput = z.object({
 export const TransferInput = z.object({ queueId: z.uuid().optional(), userId: z.uuid().optional() }).refine((v) => v.queueId || v.userId, 'queueId or userId required');
 
 const nameOf = (actor: ActorContext) => actor.principal?.displayName ?? 'system';
+
+/**
+ * A staff member reopens a resolved conversation and holds it (REOPEN by a
+ * human → HUMAN_ACTIVE, assigned to them). Refused when the customer already
+ * has a newer open conversation with the same agent on the same channel.
+ * Runs in the caller's transaction (also used by reopen-and-send templates).
+ */
+export async function reopenAsHuman(tx: DbOrTx, actor: ActorContext, conversationId: string, now: Date): Promise<void> {
+  assertCan(actor.principal!, Permission.CONVERSATIONS_TAKE_OVER);
+  const conv = await lockConversation(tx, conversationId);
+  if (conv.controlState === 'RESOLVED') {
+    const [open] = await tx
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.customerId, conv.customerId),
+          eq(conversations.agentId, conv.agentId),
+          conv.channelId ? eq(conversations.channelId, conv.channelId) : isNull(conversations.channelId),
+          ne(conversations.controlState, 'RESOLVED'),
+        ),
+      )
+      .limit(1);
+    if (open) throw conflict('newer_conversation_open', 'The customer has a newer open conversation with this agent: continue there');
+  }
+  await applyControl(tx, conversationId, {
+    command: 'REOPEN',
+    actor,
+    transitionActor: 'HUMAN',
+    reopenedBy: 'HUMAN',
+    description: `reopened by ${nameOf(actor)}`,
+    patch: { assignedUserId: actor.principal!.userId },
+    now,
+  });
+  await tx.insert(assignments).values({ id: uuidv7(), conversationId, userId: actor.principal!.userId, kind: 'REOPEN', assignedAt: now });
+}
 
 /**
  * Human operations on a conversation (docs/09 §4, build rule §7). Every method
@@ -224,19 +260,7 @@ export class HumanControlService {
   }
 
   async reopen(actor: ActorContext, conversationId: string): Promise<void> {
-    assertCan(actor.principal!, Permission.CONVERSATIONS_TAKE_OVER);
-    await this.db.transaction(async (tx) => {
-      await applyControl(tx, conversationId, {
-        command: 'REOPEN',
-        actor,
-        transitionActor: 'HUMAN',
-        reopenedBy: 'HUMAN',
-        description: `reopened by ${nameOf(actor)}`,
-        patch: { assignedUserId: actor.principal!.userId },
-        now: this.now(),
-      });
-      await tx.insert(assignments).values({ id: uuidv7(), conversationId, userId: actor.principal!.userId, kind: 'REOPEN', assignedAt: this.now() });
-    });
+    await this.db.transaction((tx) => reopenAsHuman(tx, actor, conversationId, this.now()));
   }
 
   private async activateHandoff(tx: DbOrTx, actor: ActorContext, conversationId: string, kind: 'CLAIM' | 'TAKE_OVER' | null, now: Date): Promise<void> {

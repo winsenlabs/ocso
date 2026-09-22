@@ -8,6 +8,7 @@ import { emitEvent } from '../events/outbox.js';
 import type { ActorContext } from '../shared/context.js';
 import { lockConversation } from '../conversations/control.js';
 import { appendInteraction } from '../conversations/interaction-writer.js';
+import { conversationWindow, sessionWindowClosed, type SessionWindowHours } from '../conversations/session-window.js';
 import { verifyStaffMedia, type StoredMediaLookup } from './staff-attachments.js';
 
 export const HumanReplyInput = z.object({
@@ -19,8 +20,11 @@ export type HumanReplyInput = z.infer<typeof HumanReplyInput>;
 
 /**
  * A human reply to the customer (docs/09 §6 CS Exec "customer reply"). Allowed
- * only while HUMAN_ACTIVE and only for the handling human (or a lead). Delivery
- * happens asynchronously through the channel adapter.
+ * only while HUMAN_ACTIVE and only for the handling human (or a lead). On
+ * channels with a customer-service window (WhatsApp) a free-form reply after
+ * the window closed is refused with 409 `session_window_closed` before
+ * anything reaches the provider — send an approved template instead
+ * (template-message.ts). Delivery happens asynchronously through the adapter.
  */
 export async function sendHumanReply(
   db: Db,
@@ -28,7 +32,7 @@ export async function sendHumanReply(
   actor: ActorContext,
   conversationId: string,
   input: HumanReplyInput,
-  options: { media?: StoredMediaLookup | undefined } = {},
+  options: { media?: StoredMediaLookup | undefined; windowHours?: SessionWindowHours | undefined; now?: (() => Date) | undefined } = {},
 ): Promise<{ interactionId: string; seq: number; duplicate: boolean }> {
   const p = actor.principal!;
   assertCan(p, Permission.CONVERSATIONS_REPLY);
@@ -44,7 +48,9 @@ export async function sendHumanReply(
       sql`SELECT id, seq FROM interactions WHERE conversation_id = ${conversationId} AND idempotency_key = ${`human:${input.clientMessageId}`}`,
     );
     if (existing.rows[0]) return { interactionId: existing.rows[0].id, seq: existing.rows[0].seq, duplicate: true };
-    const now = new Date();
+    const now = options.now?.() ?? new Date();
+    const window = await conversationWindow(tx, conv, options.windowHours, now);
+    if (window && !window.open) throw sessionWindowClosed(window);
     const appended = await appendInteraction(
       tx,
       conversationId,

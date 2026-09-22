@@ -4,7 +4,8 @@ import { ProviderCard } from '@/components/ui/provider-card';
 import { SecHead } from '@/components/ui/sec-head';
 import type { ProviderHealth } from '@/lib/api/telemetry';
 import { formatCompact, formatLatency, formatPercent } from '@/lib/format';
-import { cacheLabel, formatMoney, providerChip } from './system-meta';
+import { formatCost } from './cost';
+import { cacheLabel, providerChip } from './system-meta';
 
 /** packages/model-providers PROVIDER_KINDS → the design's mono logo text. */
 const LOGO: Record<string, string> = {
@@ -72,7 +73,7 @@ export function ProviderHealthGrid({ providers, manageHref }: { providers: Provi
                   footer={
                     <div className="mono-sm">
                       {caption(p)}
-                      {p.costTodayMicros !== null ? ` · ${formatMoney(p.costTodayMicros, p.currency)} today` : ''}
+                      {p.costTodayMicros !== null || p.unpricedRequestsToday ? ` · ${formatCost(p.costTodayMicros, p.currency, p.unpricedRequestsToday)} today` : ''}
                       {p.fallbacksFrom1h ? ` · ${p.fallbacksFrom1h} fell back 1h` : ''}
                       {p.cacheSupport === 'NOT_REPORTED' ? ' · no cache metrics reported' : ''}
                       {p.lastError && p.status !== 'OK' ? ` · ${p.lastError}` : ''}

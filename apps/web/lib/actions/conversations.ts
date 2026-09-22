@@ -123,6 +123,30 @@ export async function sendReplyAction(conversationId: string, text: string, clie
   return run(() => api.post(`${path(conversationId)}/messages`, { clientMessageId: parsed.data.clientMessageId, parts }, z.object({ interactionId: z.string() })));
 }
 
+const TemplateSendInput = z.object({
+  templateId: z.string().trim().min(1).max(200),
+  language: z.string().trim().min(2).max(16),
+  variables: z.record(z.string().max(80), z.string().max(1_024)),
+  headerMediaUrl: z.string().trim().max(2_000).optional(),
+  clientMessageId: z.string().min(8).max(100),
+  reopen: z.boolean(),
+});
+export type TemplateSendInput = z.infer<typeof TemplateSendInput>;
+
+/**
+ * Send an approved WhatsApp template (POST …/template-message). The API
+ * checks approval, fills and validates every variable, and — with
+ * `reopen` — reopens a resolved conversation first.
+ */
+export async function sendTemplateAction(conversationId: string, input: TemplateSendInput): Promise<ActionResult> {
+  const parsed = TemplateSendInput.safeParse(input);
+  if (!Id.safeParse(conversationId).success) return invalid('Unknown conversation');
+  if (!parsed.success) return invalid(parsed.error.issues[0]?.message ?? 'Invalid template message');
+  const { headerMediaUrl, ...rest } = parsed.data;
+  const body = headerMediaUrl ? { ...rest, headerMediaUrl } : rest;
+  return run(() => api.post(`${path(conversationId)}/template-message`, body, z.object({ interactionId: z.string() }), { timeoutMs: 30_000 }));
+}
+
 export type ToolRunResult = { ok: true; status: 'SUCCEEDED' | 'FAILED'; detail: string | null } | { ok: false; message: string; code?: string };
 
 const RunInput = z.object({ toolId: z.uuid(), args: z.record(z.string(), z.unknown()), confirmed: z.boolean() });

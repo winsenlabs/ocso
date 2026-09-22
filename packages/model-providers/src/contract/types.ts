@@ -111,6 +111,37 @@ export interface AdapterDeps {
   fetch?: typeof fetch | undefined;
 }
 
+/** Input kinds a listed model accepts, only when the provider's own listing documents them. */
+export type ModelInputKind = 'text' | 'image' | 'pdf' | 'audio' | 'video';
+
+/**
+ * One model (or deployment / inference profile) a configured provider
+ * offers, as its own listing API reports it. `null`/absent = not reported;
+ * OCSO never invents these fields (prices and other metadata come from the
+ * model catalog, not from here).
+ */
+export interface ProviderModelInfo {
+  /** The id to put in a model profile (model id, inference profile id/ARN, deployment name). */
+  id: string;
+  displayName: string | null;
+  /** ISO timestamp, when the provider reports one. */
+  createdAt: string | null;
+  ownedBy: string | null;
+  /** What the id refers to at this provider. */
+  kind: 'model' | 'inference-profile' | 'deployment';
+  input?: readonly ModelInputKind[] | undefined;
+  contextWindow?: number | undefined;
+  maxOutputTokens?: number | undefined;
+  /** Provider lifecycle, when reported (e.g. Bedrock LEGACY, Vertex DEPRECATED). */
+  lifecycle?: 'ACTIVE' | 'LEGACY' | 'DEPRECATED' | undefined;
+  /** Underlying model name for deployments/profiles, when known (catalog lookups use it). */
+  baseModel?: string | undefined;
+}
+
+export interface ListModelsOptions {
+  abortSignal?: AbortSignal | undefined;
+}
+
 /** docs/06 §3 — one adapter instance is bound to one provider configuration. */
 export interface ModelProviderAdapter {
   readonly kind: ProviderKind;
@@ -120,6 +151,13 @@ export interface ModelProviderAdapter {
   stream(request: ModelRequest, model: string): AsyncIterable<ModelStreamEvent>;
   generate(request: ModelRequest, model: string): Promise<ModelResult>;
   health(model?: string): Promise<ProviderHealth>;
+  /**
+   * Models this configuration can call, from the provider's own listing API
+   * (or its configured deployments). Optional: absent = the provider has no
+   * listing. Throws DomainError (normalized, never carrying credentials);
+   * `model_listing_unsupported` means "no listing endpoint here".
+   */
+  listModels?(options?: ListModelsOptions): Promise<ProviderModelInfo[]>;
 }
 
 export type ModelError = DomainError;

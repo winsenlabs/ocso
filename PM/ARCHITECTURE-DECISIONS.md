@@ -412,3 +412,55 @@ Autonomous customer-facing AI output is permitted **only** in `AI_ACTIVE`. `AI_R
 **Alternatives.** Owner = a single team column on `virtual_agents` (no shared agents; reassignment becomes destructive). Per-user agent ACLs (does not survive people changes; teams already model the org). Deriving ownership from queues at read time (ambiguous for agents that route to several queues; a lead of a queue team could then edit prompts of agents they never owned).
 
 **Consequences.** A CS Lead in no team manages nothing: the web shows "Join or create a team to create agents". The lead who creates a team joins it; a lead adds and removes CS Execs (and leaves) only on teams they belong to, and creates new CS Execs only into those teams — the Tech Admin (`users.manage`) manages every membership, including adding other leads. Escalation rules are addressed through their own agent (`/agents/:agentId/escalation-rules/:ruleId` 404s for another agent's rule); platform-wide rules are read-only there. The audit log is team-scoped the same way (`audit.read_all` for the Tech Admin; otherwise events by teammates or on in-scope targets). Known gap: queue configuration remains shared (not team-owned).
+
+---
+
+## ADR-027 — Model discovery from the providers; prices from open-source model catalogs
+
+**Status:** ACCEPTED (2026-09-22). Product owner direction: "how will I select the model, will I see the available models, how are we doing price monitoring?", followed by "model lists come from the providers themselves; no hand-maintained price table in code".
+
+**Decision.**
+
+1. **Model lists come from the providers.** `ModelProviderAdapter.listModels()` is optional and is implemented for every kind:
+   - OpenAI and Anthropic: `GET /v1/models`.
+   - Bedrock: ListFoundationModels plus ListInferenceProfiles, SigV4 or bearer API key, on the configured region.
+   - Vertex: Model Garden publisher models for `google` and `anthropic`, using the configured service account or ADC.
+   - Foundry: the deployments configured in settings (an inference key cannot list deployments).
+   - Sarvam: its OpenAI-compatible `/models`, else the catalog.
+   - DEV_SCRIPTED: its conventional ids.
+
+   Listings use the adapter's credentials, fetch and deadline (15 s), through `CachedProviderAdapterSource`. `GET /v1/model-providers/:id/models` (providers.read) caches a listing per provider configuration for 10 minutes; `?refresh=true` needs providers.manage. A failed listing (bad key, outage) returns a typed `error` in a 200 body, never the key, so the picker can still take free text.
+2. **Prices and model metadata come from open-source catalogs, not from code.**
+   - **models.dev** (`https://models.dev/api.json`, MIT) is primary. **LiteLLM** `model_prices_and_context_window.json` (MIT) fills in models (or prices) models.dev lacks.
+   - The mapping from OCSO kind and model id to catalog keys is explicit per kind. Keys must match exactly: no family guessing, Bedrock region prefixes kept, Vertex dateless Claude ids mapped to models.dev's `@default`, Foundry uses the declared underlying model. When a mapping is ambiguous, the model is not priced.
+3. **Catalog refresh.**
+   - The worker leader checks hourly and downloads when a source is a day old (an hour after a failure). A Tech Admin can refresh on demand (`POST /v1/model-catalog/refresh`, pricing.manage or providers.manage).
+   - Downloads go through the SSRF guard (`@ocso/mcp` guarded fetch: public https only, DNS answers validated, 32 MB cap, 60 s deadline) plus a host allowlist (`models.dev`, `raw.githubusercontent.com`) checked on every redirect hop.
+   - Each document is validated with zod and normalized (USD per 1M tokens, tiers). The latest snapshot per source is stored in `model_catalog_snapshots` (source, fetched_at, content hash, entries).
+   - A document with too few models is rejected, and the previous snapshot is kept.
+   - A normalized **vendored snapshot** ships in `@ocso/model-providers/catalog/` as the offline fallback (regenerate with `scripts/refresh-model-catalog.mjs`). Requests never fail because a catalog is unreachable.
+4. **`model_pricing` stays the costing source of truth.**
+   - Saving a profile adds a row for each target that no row prices yet, when the catalog prices it: `origin: 'catalog'` plus `catalog_source`, `catalog_provider`, `catalog_model_id` and `catalog_fetched_at`. This is audited.
+   - A refresh moves catalog rows to the catalog's current price (effective now, audited as a system change).
+   - An admin edit turns a row `manual`, and refreshes never touch manual rows.
+   - Catalog rows match their exact model id only; manual rows keep the prefix rule.
+   - Long-context tiers are stored in `model_pricing.tiers` and applied per request, the highest tier whose input threshold the request exceeded.
+   - The usage recorder, telemetry and the budget alert share one selection and cost function (`selectPrice`, `usageCostMicros`).
+   - Usage without a price is counted (`unpricedRequests`) and shown as "no price", never zero. `GET /v1/model-pricing/missing` lists the models in use without a price, with the catalog's offer.
+5. **Budget alert.** `spend_budget_above` is TECHNICAL and optionally agent-scoped, with params `{ monthlyBudgetUsd, thresholdsPercent: [80, 100] }`.
+   - Spend is month-to-date for the calendar month in the deployment timezone, from usage_events × model_pricing.
+   - Each threshold fires once per month: month and budget are part of the fingerprint, and a threshold alert a person resolved does not reopen that month.
+   - Alerts resolve at month rollover.
+   - The body projects month-end spend at the month-to-date run rate. No rule is seeded.
+
+**Why.** Prices change often, and a price table in code goes stale silently. The two catalogs are maintained in the open, cover every provider OCSO ships, and matched the vendors' own pricing pages for every OpenAI and Anthropic model we cross-checked on 2026-09-22 (PM/research/09 §7). Keeping `model_pricing` as the source of truth leaves admins in control: negotiated rates are manual rows. Listing models from the provider shows what the configured credentials can actually call, including fine-tunes, deployments and inference profiles.
+
+**Alternatives.**
+- A hand-maintained price table in code (rejected by the product owner: stale on day one).
+- The Vercel AI Gateway model list or OpenRouter as data sources (rejected: hosted resellers whose published prices are their own, not the underlying provider's).
+- Scraping vendor pricing pages (brittle, and against most sites' terms).
+- `@aws-sdk/client-bedrock` for the control plane (aws4fetch, already used by the AI SDK Bedrock provider, is enough).
+
+**Consequences.** Migration `0017_model_catalog_and_pricing_origin` adds `model_catalog_snapshots` and the `model_pricing` columns `origin`, `catalog_*`, `tiers` and `updated_at`. Existing rows become `manual`. The API and worker make outbound https calls to models.dev and raw.githubusercontent.com. Air-gapped deployments keep working on the vendored snapshot and set `OCSO_MODEL_CATALOG_REFRESH=false`, which turns refresh off in the API and worker. Known approximations are listed in PM/research/09 §8: 1-hour cache writes are costed at the 5-minute rate, batch, fast mode and data-residency uplifts are not modeled, and the budget alert re-prices older unpriced usage at average input size. The Vertex and Bedrock listings are built to their documented shapes and still owe a live check.
+
+**Spec impact.** docs/06 (implementation notes), docs/11 (new alert condition), docs/operations/setup-guide.md §2 and §7, PM/research/09.

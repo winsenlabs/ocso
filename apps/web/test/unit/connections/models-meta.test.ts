@@ -49,7 +49,7 @@ describe('prompt caching per target (ADR-006)', () => {
 });
 
 describe('provider status', () => {
-  const stats = { requests: 0, errors: 0, errorRate: null, p95LatencyMs: null, p95TtftMs: null, inputTokens: 0, outputTokens: 0, cacheReadRatio: null, costMicros: null, currency: null };
+  const stats = { requests: 0, errors: 0, errorRate: null, p95LatencyMs: null, p95TtftMs: null, inputTokens: 0, outputTokens: 0, cacheReadRatio: null, costMicros: null, currency: null, unpricedRequests: 0 };
   it('maps health, availability and enablement', () => {
     expect(providerStatus({ enabled: true, available: true, status: 'OK' })).toEqual({ tone: 'good', label: 'connected' });
     expect(providerStatus({ enabled: true, available: true, status: 'UNTESTED' }).label).toBe('untested');

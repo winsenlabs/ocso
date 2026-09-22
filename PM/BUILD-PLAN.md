@@ -260,6 +260,16 @@ Derived cache of compiled stable prefix, effective tool schema set + hash, custo
 ### E4.6 Provider concurrency limits — COMPLETE — per-process semaphore per provider
 Per-provider max in-flight requests (Tech Admin); worker-local semaphore + deployment-wide budget; backpressure surfaced as capacity errors and queue delay, not failures.
 
+### E4.7 Model discovery, catalog prices and spend budget (ADR-027) — COMPLETE — Vertex/Bedrock listings built to documented shapes; live check owed
+- `listModels()` on the adapter contract for all kinds (OpenAI/Anthropic `/v1/models`, Bedrock foundation models + inference profiles, Vertex Model Garden, Foundry configured deployments, Sarvam `/models` with catalog fallback, DEV_SCRIPTED).
+- `GET /v1/model-providers/:id/models`: 10-minute cache, admin refresh, typed errors without keys, catalog metadata and prices.
+- Open-source catalogs as the price and metadata source (models.dev primary, LiteLLM fallback). Daily worker refresh through the SSRF guard plus a host allowlist; snapshots in `model_catalog_snapshots`; vendored offline snapshot plus `scripts/refresh-model-catalog.mjs`.
+- `model_pricing` origin `catalog` | `manual`, catalog source/date, long-context tiers. Profile save pre-fills catalog prices; refreshes move catalog rows (audited); admin edits become manual.
+- `GET /v1/model-pricing/missing` and `POST /v1/model-pricing/from-catalog`. Telemetry shows unpriced usage as "no price".
+- Alert condition `spend_budget_above` (TECHNICAL, agent-scoped): month-to-date spend in the deployment timezone, once per threshold per month, month-end projection, resolves at rollover.
+- Web: searchable model picker for the primary and each fallback, a post-save price review, and the pricing section with origin, source, catalog status and models without a price.
+- Tests: unit tests for listings, filters, normalization, mapping, costing and web mapping; integration tests for the API model list and pricing, catalog refresh and price sync, and the budget evaluator.
+
 **P4 exit:** changing a profile's provider requires no agent change; cache metrics visible per provider/profile.
 
 ---
@@ -384,7 +394,7 @@ Run a draft prompt version against selected historical customer turns (no side e
 ### E8.7 CS Exec operational indicators — COMPLETE — exec home from /v1/home
 Home + workspace: assigned, pickup queue, waiting time, SLA state, handoff status, workload.
 
-### E8.8 Alert engine — COMPLETE — engine, 17 conditions, alerts pages (e2e)
+### E8.8 Alert engine — COMPLETE — engine, 18 conditions (spend_budget_above via E4.7), alerts pages (e2e)
 Rules (technical/business, platform-wide or agent-specific, condition + window, severity, audience roles, destinations, dedupe window, auto-resolve); evaluator registry (workers below min, queue age, provider failure spike, MCP down, latency SLO, token/cost spike, auth failures, DB degraded, escalation spike, SLA breaches, repeated failure intent, agent quality signal, tool/business failures, conversion anomaly); leader-elected scheduler; lifecycle OPEN → ACKNOWLEDGED → RESOLVED; audit.
 - Tests (required): each evaluator; dedupe/window; auto-resolve; audience filtering.
 
@@ -524,3 +534,4 @@ Load script (web-chat channel, mock model with latency) measuring turn latency a
 | 2026-09-22 | Status sync after UI screens, scaling adapter, retention, claims, webhooks, resilience tests and operator docs landed. |
 | 2026-09-22 | All screens landed; full e2e (63 tests), integration (270+) and unit (890) suites green; chaos test passes on the final build. |
 | 2026-09-22 | E7.11 team-scoped virtual-agent ownership (ADR-026): agents owned by teams; lead scope for agents, conversations, analytics, quality and alerts; Tech Admin owner reassignment. |
+| 2026-09-22 | E4.7 model discovery, open-source catalog prices and the monthly spend budget alert (ADR-027, PM/research/09); migration 0017. |

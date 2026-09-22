@@ -74,6 +74,11 @@ const common = {
 
   OTEL_ENABLED: bool.default(false),
   OCSO_ENABLE_DEV_PROVIDERS: bool.default(false),
+  /**
+   * Download the open-source model catalogs (models.dev, LiteLLM) for prices and model metadata
+   * (ADR-027). false = air-gapped: the bundled snapshot is used and refresh is disabled.
+   */
+  OCSO_MODEL_CATALOG_REFRESH: bool.default(true),
   /** Public origin customers and providers reach (webhooks, widget, signed URLs). */
   OCSO_PUBLIC_URL: z.string().url().default('http://localhost:3000'),
 

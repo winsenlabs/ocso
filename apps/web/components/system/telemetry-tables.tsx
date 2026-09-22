@@ -2,7 +2,8 @@ import { DataTable } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import type { LatencySeries, ProviderHealth, TokenUsage } from '@/lib/api/telemetry';
 import { formatCompact, formatDateTime, formatLatency, formatNumber, formatPercent } from '@/lib/format';
-import { cacheLabel, formatMoney } from './system-meta';
+import { formatCost } from './cost';
+import { cacheLabel } from './system-meta';
 import { percentileRows, purposeLabel } from './telemetry-meta';
 
 const cache = (v: number | null) => (v === null ? 'n/r' : formatCompact(v));
@@ -24,7 +25,7 @@ export function ProfileUsageTable({ usage }: { usage: TokenUsage }) {
         { key: 'cr', header: 'Cache read', cell: (p) => <span className="mono">{cache(p.cacheReadTokens)}</span> },
         { key: 'cw', header: 'Cache write', cell: (p) => <span className="mono">{cache(p.cacheWriteTokens)}</span> },
         { key: 'hit', header: 'Cached', cell: (p) => <span className="mono">{p.cachedInputShare === null ? 'n/r' : formatPercent(p.cachedInputShare, 0)}</span> },
-        { key: 'cost', header: 'Cost', cell: (p) => <span className="mono">{formatMoney(p.costMicros, p.currency)}</span> },
+        { key: 'cost', header: 'Cost', cell: (p) => <span className="mono">{formatCost(p.costMicros, p.currency, p.unpricedRequests)}</span> },
       ]}
     />
   );
@@ -58,7 +59,7 @@ export function PurposeUsageTable({ usage }: { usage: TokenUsage }) {
         { key: 'cr', header: 'Cache read', cell: (p) => <span className="mono">{cache(p.cacheReadTokens)}</span> },
         { key: 'cw', header: 'Cache write', cell: (p) => <span className="mono">{cache(p.cacheWriteTokens)}</span> },
         { key: 'hit', header: 'Cache hit', cell: (p) => <span className="mono">{p.cachedInputShare === null ? 'n/r' : formatPercent(p.cachedInputShare, 0)}</span> },
-        { key: 'cost', header: 'Cost', cell: (p) => <span className="mono">{formatMoney(p.costMicros, p.currency)}</span> },
+        { key: 'cost', header: 'Cost', cell: (p) => <span className="mono">{formatCost(p.costMicros, p.currency, p.unpricedRequests)}</span> },
       ]}
     />
   );
@@ -120,7 +121,7 @@ export function ProviderUsageTable({ providers }: { providers: ProviderHealth[] 
         { key: 'req', header: 'Req · 1h', cell: (p) => <span className="mono">{formatNumber(p.requests1h)}</span> },
         { key: 'p95', header: 'p95 · 1h', cell: (p) => <span className="mono">{formatLatency(p.p95LatencyMs)}</span> },
         { key: 'err', header: 'Errors · 1h', cell: (p) => <span className="mono">{p.requests1h ? formatPercent(p.errorRate) : '—'}</span> },
-        { key: 'cost', header: 'Cost today', cell: (p) => <span className="mono">{formatMoney(p.costTodayMicros, p.currency)}</span> },
+        { key: 'cost', header: 'Cost today', cell: (p) => <span className="mono">{formatCost(p.costTodayMicros, p.currency, p.unpricedRequestsToday)}</span> },
       ]}
     />
   );

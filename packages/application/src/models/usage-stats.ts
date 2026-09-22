@@ -16,6 +16,8 @@ export interface ModelUsageStats {
   costMicros: number | null;
   /** Currency of `costMicros`; `MIXED` when prices span currencies. */
   currency: string | null;
+  /** Successful requests without a price row (cost unknown, not zero). */
+  unpricedRequests: number;
 }
 
 export const STATS_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -31,6 +33,7 @@ export const EMPTY_USAGE_STATS: ModelUsageStats = {
   cacheReadRatio: null,
   costMicros: null,
   currency: null,
+  unpricedRequests: 0,
 };
 
 const num = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
@@ -58,6 +61,7 @@ export async function modelUsageStats(
       cacheReportedInput: sql`sum(${u.inputTokens}) filter (where ${u.cachedInputTokens} is not null)`,
       costMicros: sql`sum(${u.costMicros})`,
       currencies: sql<string[] | null>`array_agg(distinct ${u.currency}) filter (where ${u.currency} is not null)`,
+      unpriced: sql`count(*) filter (where ${u.status} = 'OK' and ${u.costMicros} is null and ${u.inputTokens} + ${u.outputTokens} > 0)`.mapWith(Number),
     })
     .from(u)
     .where(and(gte(u.occurredAt, new Date(now.getTime() - STATS_WINDOW_MS)), inArray(key, [...ids])))
@@ -82,6 +86,7 @@ export async function modelUsageStats(
       cacheReadRatio: cached !== null && reportedInput ? cached / reportedInput : null,
       costMicros: num(r.costMicros),
       currency: currencies.length === 0 ? null : currencies.length === 1 ? currencies[0]! : 'MIXED',
+      unpricedRequests: r.unpriced,
     });
   }
   return stats;

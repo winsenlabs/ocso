@@ -17,6 +17,7 @@ import { controlView, type ControlView } from './lib/control';
 import { useConversationTags } from './lib/use-conversation-tags';
 import { useActionRunner } from './lib/use-action';
 import { useNow } from './lib/use-now';
+import { TemplateComposer } from './template-composer';
 import { TimelinePane, type StreamingTurn } from './timeline-pane';
 
 export interface ConversationClientProps {
@@ -145,9 +146,12 @@ export function ConversationClient(props: ConversationClientProps) {
             copilot={props.copilot}
             tools={props.tools.available}
             can={{ reply: perms.has(Permission.CONVERSATIONS_REPLY), note: perms.has(Permission.CONVERSATIONS_NOTE), runTools: perms.has(Permission.TOOLS_EXECUTE_HUMAN) }}
+            replyWindow={detail.whatsappWindow}
+            channelId={detail.channel?.id ?? null}
+            renderedAt={props.renderedAt}
           />
         ) : (
-          <Locked detail={detail} view={view} live={live} />
+          <Locked detail={detail} view={view} live={live} customerName={customerName} canReply={perms.has(Permission.CONVERSATIONS_REPLY)} />
         )}
       </section>
       <CustomerRail detail={detail} customer={props.customer} timeline={timeline} tools={props.tools} meId={me.id} timeZone={timeZone} tags={tags} canTag={canTag} />
@@ -161,9 +165,15 @@ export function ConversationClient(props: ConversationClientProps) {
   );
 }
 
-/** Locked composer (design/01): why this human cannot write, and the one action that changes that. */
-function Locked({ detail, view, live }: { detail: ConversationDetail; view: ControlView; live: string }) {
+/**
+ * Locked composer (design/01): why this human cannot write, and the one
+ * action that changes that. A resolved WhatsApp conversation can also be
+ * reopened by sending an approved template (reopen-and-send, docs/09 §4).
+ */
+function Locked({ detail, view, live, customerName, canReply }: { detail: ConversationDetail; view: ControlView; live: string; customerName: string; canReply: boolean }) {
   const { pending, error, run } = useActionRunner();
+  const [withTemplate, setWithTemplate] = useState(false);
+  const templateReopen = detail.controlState === 'RESOLVED' && detail.whatsappWindow !== null && detail.channel !== null && canReply && view.actions.includes('reopen');
   const agent = detail.agent.name;
   const cmd = (c: 'claim' | 'accept' | 'take-over' | 'cancel-return' | 'reopen', label: string) =>
     view.actions.includes(c) ? { label, onClick: () => void run(() => controlAction(detail.id, c)), disabled: pending } : null;
@@ -202,7 +212,24 @@ function Locked({ detail, view, live }: { detail: ConversationDetail; view: Cont
           <span>{error}</span>
         </div>
       ) : null}
-      <LockedBar text={live === 'closed' ? `${text} Live updates are off — reload to see changes.` : text} action={action} />
+      {withTemplate && detail.channel ? (
+        <div className="comp">
+          <div className="modes">
+            <b className="mono-sm">Reopen with a template</b>
+            <span className="sp" style={{ flex: 1 }} />
+            <button type="button" className="btn tiny ghost" onClick={() => setWithTemplate(false)}>
+              Cancel
+            </button>
+          </div>
+          <TemplateComposer conversationId={detail.id} channelId={detail.channel.id} customerName={customerName} reopen onSent={() => setWithTemplate(false)} />
+        </div>
+      ) : (
+        <LockedBar
+          text={live === 'closed' ? `${text} Live updates are off — reload to see changes.` : text}
+          action={action}
+          secondary={templateReopen ? { label: 'Reopen with a template', onClick: () => setWithTemplate(true), disabled: pending } : null}
+        />
+      )}
     </>
   );
 }

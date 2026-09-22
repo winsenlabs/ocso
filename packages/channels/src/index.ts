@@ -2,6 +2,7 @@ export * from './contract/types.js';
 export * from './contract/render-policy.js';
 export * from './contract/registry.js';
 export * from './common/errors.js';
+export { TemplateProviderError, normalizeTemplateCategory, type TemplateErrorReason } from './common/templates.js';
 export { chunkText } from './common/chunk.js';
 export { normalizeSha256 } from './common/crypto.js';
 export { baseMimeType, mediaKindForMime } from './common/mime.js';

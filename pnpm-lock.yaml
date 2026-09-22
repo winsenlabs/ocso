@@ -874,6 +874,12 @@ importers:
       ai:
         specifier: ^7.0.109
         version: 7.0.109(zod@4.6.5)
+      aws4fetch:
+        specifier: ^1.0.20
+        version: 1.0.20
+      google-auth-library:
+        specifier: ^10.9.1
+        version: 10.9.1
       zod:
         specifier: 'catalog:'
         version: 4.6.5

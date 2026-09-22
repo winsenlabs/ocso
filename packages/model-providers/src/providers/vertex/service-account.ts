@@ -106,3 +106,23 @@ export function createServiceAccountTokenProvider(
     return inflight;
   };
 }
+
+/**
+ * Application Default Credentials token source (APPLICATION_DEFAULT mode),
+ * for calls OCSO makes itself (the model listing). google-auth-library is
+ * imported lazily and caches/refreshes tokens; failures become a safe
+ * AUTHENTICATION error.
+ */
+export function createAdcTokenProvider(): () => Promise<string> {
+  let auth: Promise<{ getAccessToken(): Promise<string | null | undefined> }> | undefined;
+  return async () => {
+    try {
+      auth ??= import('google-auth-library').then((m) => new m.GoogleAuth({ scopes: [SCOPE] }));
+      const token = await (await auth).getAccessToken();
+      if (token) return token;
+    } catch {
+      // fall through to the safe error below
+    }
+    throw new DomainError(ErrorCategory.AUTHENTICATION, 'provider_credentials_unavailable', 'Google Application Default Credentials could not be obtained [VERTEX]');
+  };
+}

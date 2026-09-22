@@ -64,6 +64,16 @@ export class TwilioRestClient {
     return this.call(url, { method: 'GET' }, authorization);
   }
 
+  /** JSON body (the Content API; the 2010-04-01 API is form-encoded). */
+  postJson(url: string, body: unknown): Promise<TwilioResult> {
+    return this.call(url, { method: 'POST', body: JSON.stringify(body), headers: { 'content-type': 'application/json' } });
+  }
+
+  /** DELETE; a 204 answers `{ kind: 'ok', body: {} }`. */
+  delete(url: string): Promise<TwilioResult> {
+    return this.call(url, { method: 'DELETE' });
+  }
+
   private async call(
     url: string,
     init: { method: string; body?: string; headers?: Record<string, string> },

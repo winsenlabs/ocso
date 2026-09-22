@@ -8,6 +8,8 @@ export interface ConnectionsParams {
   dialog?: string | undefined;
   id?: string | undefined;
   kind?: string | undefined;
+  /** Model id to pre-fill (pricing dialog opened from "no price"). */
+  model?: string | undefined;
   connection?: string | undefined;
   step?: string | undefined;
   /** Webhook delivery status filter. */

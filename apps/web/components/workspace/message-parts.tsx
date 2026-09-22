@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
+import { TEMPLATE_MESSAGE_SCHEMA } from '@ocso/domain';
 import { Modal } from '@/components/ui/modal';
 import type { MessagePart } from '@/lib/api/conversations';
 import { fileBadge, formatBytes } from './lib/timeline';
@@ -110,6 +111,7 @@ function Part({ part, onZoom }: { part: MessagePart; onZoom: (z: { url: string; 
         </span>
       );
     case 'STRUCTURED':
+      if (part.schema === TEMPLATE_MESSAGE_SCHEMA) return <TemplateMessage text={part.fallbackText ?? ''} data={part.data} />;
       return part.fallbackText ? <p>{part.fallbackText}</p> : <span className="mono-sm">[{part.schema}]</span>;
     case 'TOOL_RESULT':
       return (
@@ -118,6 +120,21 @@ function Part({ part, onZoom }: { part: MessagePart; onZoom: (z: { url: string; 
         </span>
       );
   }
+}
+
+/** A sent WhatsApp template: the exact text the customer received, and which template it was. */
+function TemplateMessage({ text, data }: { text: string; data: Record<string, unknown> }) {
+  const facts = [data['name'], data['language'], typeof data['category'] === 'string' ? data['category'].toLowerCase() : null].filter((v): v is string => typeof v === 'string' && v.length > 0);
+  return (
+    <span className="tplmsg">
+      {text.split(/\n{2,}/).map((para, i) => (
+        <p key={i} style={{ whiteSpace: 'pre-wrap' }}>
+          {para}
+        </p>
+      ))}
+      <span className="mono-sm tpltag">WhatsApp template · {facts.join(' · ')}</span>
+    </span>
+  );
 }
 
 function meta(media: Media, kind: string): string {

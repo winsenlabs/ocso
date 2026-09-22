@@ -1,6 +1,8 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { z } from 'zod';
 import { createAiSdkAdapter } from '../../core/adapter.js';
+import { listAnthropicModels } from '../../discovery/anthropic.js';
+import { listContext } from '../../discovery/context.js';
 import {
   commonSettingsShape,
   parseProviderConfig,
@@ -46,7 +48,7 @@ export const anthropicProvider: ProviderDefinition<AnthropicSettings, AnthropicC
       ...(settings.baseURL ? { baseURL: settings.baseURL } : {}),
       ...fetchOption(deps),
     });
-    return createAiSdkAdapter({
+    const adapter = createAiSdkAdapter({
       kind: 'ANTHROPIC',
       providerId: config.id,
       region: config.region,
@@ -58,5 +60,13 @@ export const anthropicProvider: ProviderDefinition<AnthropicSettings, AnthropicC
       healthModel: settings.healthModel ?? DEFAULT_HEALTH_MODEL,
       secrets: secretValues(config),
     });
+    return {
+      ...adapter,
+      listModels: (options) =>
+        listAnthropicModels(listContext(config, deps, options), {
+          baseURL: settings.baseURL ?? 'https://api.anthropic.com/v1',
+          headers: { 'x-api-key': credentials.apiKey },
+        }),
+    };
   },
 };

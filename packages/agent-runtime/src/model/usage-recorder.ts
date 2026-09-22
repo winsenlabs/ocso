@@ -1,7 +1,7 @@
 import { desc } from 'drizzle-orm';
 import type { DomainError } from '@ocso/domain';
 import { modelPricing, modelProfiles, usageEvents, uuidv7, type Db } from '@ocso/db';
-import type { ModelResult, ModelTargetCandidate, NormalizedUsage } from '@ocso/model-providers';
+import { selectPrice, usageCostMicros, type ModelResult, type ModelTargetCandidate, type NormalizedUsage } from '@ocso/model-providers';
 import { currentTraceId, ocsoMetrics } from '@ocso/observability';
 
 export interface UsageContext {
@@ -75,20 +75,18 @@ export class UsageRecorder {
     return id;
   }
 
+  /**
+   * Cost from model_pricing (ADR-027 rule shared with telemetry and the
+   * budget alert): the row effective now that matches most specifically;
+   * long-context tiers apply when the request's input exceeded their
+   * threshold. No matching row → null ("no price"), never zero.
+   */
   private async cost(target: ModelTargetCandidate, usage: NormalizedUsage): Promise<{ micros: number; currency: string } | null> {
     if (!this.pricing || Date.now() - this.pricing.loadedAt > 300_000) {
       this.pricing = { rows: await this.db.select().from(modelPricing).orderBy(desc(modelPricing.effectiveFrom)), loadedAt: Date.now() };
     }
-    const price = this.pricing.rows.find(
-      (p) => p.providerKind === target.providerKind && (target.model === p.modelPattern || target.model.startsWith(p.modelPattern.replace(/\*$/, ''))),
-    );
+    const price = selectPrice(this.pricing.rows, target.providerKind, target.model, new Date());
     if (!price) return null;
-    const perToken = (micros: number | null | undefined, tokens: number | null) => ((micros ?? 0) * (tokens ?? 0)) / 1_000_000;
-    const micros =
-      perToken(price.inputPerMTokMicros, usage.uncachedInputTokens) +
-      perToken(price.cachedInputPerMTokMicros ?? price.inputPerMTokMicros, usage.cachedInputTokens) +
-      perToken(price.cacheWritePerMTokMicros ?? price.inputPerMTokMicros, usage.cacheWriteTokens) +
-      perToken(price.outputPerMTokMicros, usage.outputTokens);
-    return { micros: Math.round(micros), currency: price.currency };
+    return { micros: usageCostMicros(price, usage), currency: price.currency };
   }
 }

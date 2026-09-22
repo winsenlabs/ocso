@@ -1,8 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
-import { AlertDeliveryService, AlertEngine, CustomerClaimsIssuer, ScalingService, autoAssignUnclaimed, recordWorkerHealthSample, expireOffers, repairStuckEscalations, RetentionService, SettingsService } from '@ocso/application';
-import { cleanupExpiredLeases, expireToolConfirmations, lostWorkerTimeoutSeconds, reapLostWorkers, relayScheduledJobs, requestResolvedInsights, sweepStrandedTurns } from '@ocso/agent-runtime';
+import { AlertDeliveryService, AlertEngine, CustomerClaimsIssuer, ScalingService, autoAssignUnclaimed, recordWorkerHealthSample, expireOffers, pollPendingTemplates, repairStuckEscalations, RetentionService, SettingsService } from '@ocso/application';
+import { ChannelRuntime, cleanupExpiredLeases, expireToolConfirmations, lostWorkerTimeoutSeconds, reapLostWorkers, relayScheduledJobs, requestResolvedInsights, sweepStrandedTurns, templateProviderSource } from '@ocso/agent-runtime';
 import type { BlobStore } from '@ocso/blob';
 import type { WorkerEnv } from '@ocso/config';
 import { healthSamples, uuidv7, type Db } from '@ocso/db';
@@ -42,6 +42,7 @@ export class SchedulerService {
     @Inject(CustomerClaimsIssuer) claims: CustomerClaimsIssuer,
     @Inject(ScalingService) scaling: ScalingService,
     @Inject(BLOB_STORE) blobs: BlobStore,
+    @Inject(ChannelRuntime) channels: ChannelRuntime,
   ) {
     this.leader = new LeaderElection(env.DATABASE_URL, 'ocso:scheduler');
     this.tasks = [
@@ -57,6 +58,8 @@ export class SchedulerService {
       { name: 'worker-health-sample', everySeconds: 60, run: ({ db }) => recordWorkerHealthSample(db) },
       { name: 'request-insights', everySeconds: 30, run: ({ db, queue }) => requestResolvedInsights(db, queue) },
       { name: 'retention', everySeconds: 3600, run: ({ db }) => new RetentionService(db, blobs, (msg, err) => logger.warn({ err }, msg)).run() },
+      // WhatsApp templates in review: ask the provider, record + announce status changes (docs/07 §3).
+      { name: 'whatsapp-template-status', everySeconds: 180, run: ({ db, correlationId }) => pollPendingTemplates(db, templateProviderSource(channels), { correlationId }) },
       { name: 'purge-done-jobs', everySeconds: 3600, run: ({ db }) => db.execute(sql`DELETE FROM jobs WHERE status = 'done' AND completed_at < now() - interval '1 day'`) },
       ...subsystemTasks({ db, env, secrets, queue, alerts, alertDelivery, claims, scaling }),
     ];

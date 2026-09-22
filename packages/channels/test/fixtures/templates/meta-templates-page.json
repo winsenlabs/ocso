@@ -1,0 +1,185 @@
+{
+  "data": [
+    {
+      "id": "1387372356726668",
+      "name": "order_ready_pickup",
+      "language": "en_US",
+      "status": "APPROVED",
+      "category": "UTILITY",
+      "parameter_format": "POSITIONAL",
+      "rejected_reason": "NONE",
+      "quality_score": {
+        "score": "GREEN",
+        "date": 1758412800
+      },
+      "components": [
+        {
+          "type": "HEADER",
+          "format": "TEXT",
+          "text": "Order {{1}} is ready",
+          "example": {
+            "header_text": [
+              "A-10423"
+            ]
+          }
+        },
+        {
+          "type": "BODY",
+          "text": "Hi {{1}}, your order is ready for pickup at {{2}}. See you soon!",
+          "example": {
+            "body_text": [
+              [
+                "Priya",
+                "the front desk"
+              ]
+            ]
+          }
+        },
+        {
+          "type": "FOOTER",
+          "text": "Reply STOP to opt out"
+        },
+        {
+          "type": "BUTTONS",
+          "buttons": [
+            {
+              "type": "QUICK_REPLY",
+              "text": "On my way"
+            },
+            {
+              "type": "QUICK_REPLY",
+              "text": "Need more time"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "1625063511800527",
+      "name": "booking_confirmation",
+      "language": "en_US",
+      "status": "APPROVED",
+      "category": "UTILITY",
+      "parameter_format": "NAMED",
+      "rejected_reason": "NONE",
+      "quality_score": {
+        "score": "UNKNOWN",
+        "date": 1758412800
+      },
+      "components": [
+        {
+          "type": "HEADER",
+          "format": "IMAGE",
+          "example": {
+            "header_handle": [
+              "https://scontent.whatsapp.net/v/t61.29466-34/sample.jpg"
+            ]
+          }
+        },
+        {
+          "type": "BODY",
+          "text": "Thanks {{first_name}}! Your booking {{booking_ref}} is confirmed.",
+          "example": {
+            "body_text_named_params": [
+              {
+                "param_name": "first_name",
+                "example": "Pablo"
+              },
+              {
+                "param_name": "booking_ref",
+                "example": "BK-7781"
+              }
+            ]
+          }
+        },
+        {
+          "type": "BUTTONS",
+          "buttons": [
+            {
+              "type": "URL",
+              "text": "View booking",
+              "url": "https://example.com/bookings/{{1}}",
+              "example": [
+                "https://example.com/bookings/BK-7781"
+              ]
+            },
+            {
+              "type": "PHONE_NUMBER",
+              "text": "Call us",
+              "phone_number": "+15550051310"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "1166414785519855",
+      "name": "weekend_sale",
+      "language": "en",
+      "status": "REJECTED",
+      "category": "MARKETING",
+      "parameter_format": "POSITIONAL",
+      "rejected_reason": "INVALID_FORMAT",
+      "quality_score": {
+        "score": "UNKNOWN",
+        "date": 1758412800
+      },
+      "components": [
+        {
+          "type": "BODY",
+          "text": "{{1}} {{2}} off this weekend",
+          "example": {
+            "body_text": [
+              [
+                "Hi Sam",
+                "20%"
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "1304694804498707",
+      "name": "cart_reminder",
+      "language": "en",
+      "status": "PAUSED",
+      "category": "MARKETING",
+      "parameter_format": "POSITIONAL",
+      "rejected_reason": "NONE",
+      "quality_score": {
+        "score": "RED",
+        "date": 1758499200
+      },
+      "components": [
+        {
+          "type": "BODY",
+          "text": "You left {{1}} items in your cart. Complete your order today and get free delivery.",
+          "example": {
+            "body_text": [
+              [
+                "3"
+              ]
+            ]
+          }
+        },
+        {
+          "type": "BUTTONS",
+          "buttons": [
+            {
+              "type": "QUICK_REPLY",
+              "text": "Unsubscribe"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "paging": {
+    "cursors": {
+      "before": "QVFIUmxtbW9aT0hB",
+      "after": "QVFIUkZAhNEtwUXRJ"
+    },
+    "next": "https://graph.facebook.com/v26.0/102290129340398/message_templates?fields=id%2Cname%2Clanguage%2Cstatus%2Ccategory%2Ccomponents%2Cparameter_format%2Crejected_reason%2Cquality_score&limit=4&after=QVFIUkZAhNEtwUXRJ"
+  }
+}

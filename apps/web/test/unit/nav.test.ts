@@ -17,7 +17,7 @@ describe('buildNav (design/OCSONav.dc.html, derived from permissions)', () => {
     expect(labels('CS_LEAD')).toEqual(['Operations', 'Quality', 'Governance']);
     expect(items('CS_LEAD')).toEqual([
       'Home', 'Search',
-      'Conversations', 'Virtual agents', 'Queues', 'Customers',
+      'Conversations', 'Virtual agents', 'Queues', 'Customers', 'WhatsApp templates',
       'Analytics', 'Reviews', 'Prompt corrections', 'Escalation reasons',
       'Alerts', 'SLA policies', 'Team',
       'My connections', 'Settings',
@@ -28,6 +28,8 @@ describe('buildNav (design/OCSONav.dc.html, derived from permissions)', () => {
     expect(labels('PLATFORM_TECH_ADMIN')).toEqual(['Platform', 'Integrations', 'Oversight']);
     expect(items('PLATFORM_TECH_ADMIN')).not.toContain('Conversations');
     expect(items('PLATFORM_TECH_ADMIN')).toContain('Team & roles');
+    expect(items('PLATFORM_TECH_ADMIN')).toContain('WhatsApp templates');
+    expect(items('CS_EXEC')).not.toContain('WhatsApp templates');
   });
 
   it('drops items whose permission is missing and empty groups', () => {

@@ -8,3 +8,5 @@ export * from './routing/assignment-strategy.js';
 export * from './routing/business-hours.js';
 export * from './sla/sla.js';
 export * from './model/messages.js';
+export * from './conversation/session-window.js';
+export * from './templates/index.js';

@@ -1,6 +1,7 @@
 'use client';
 
 import { MAX_FALLBACKS, moveTarget, newTargetKey, type TargetRow } from '../models/profile-form';
+import { ModelCombobox } from './model-combobox';
 
 export interface ProviderOption {
   id: string;
@@ -16,7 +17,19 @@ export function providerOptionLabel(p: ProviderOption): string {
 }
 
 /** Ordered fallback targets (docs/06 §5): tried in order, only when the policy permits. */
-export function FallbackEditor({ rows, providers, onChange, error }: { rows: TargetRow[]; providers: ProviderOption[]; onChange: (rows: TargetRow[]) => void; error: string | undefined }) {
+export function FallbackEditor({
+  rows,
+  providers,
+  onChange,
+  canRefreshModels,
+  error,
+}: {
+  rows: TargetRow[];
+  providers: ProviderOption[];
+  onChange: (rows: TargetRow[]) => void;
+  canRefreshModels: boolean;
+  error: string | undefined;
+}) {
   const update = (i: number, patch: Partial<TargetRow>) => onChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   return (
     <fieldset className="conn-fieldset" aria-describedby={error ? 'pf-fallbacks-error' : undefined}>
@@ -36,10 +49,15 @@ export function FallbackEditor({ rows, providers, onChange, error }: { rows: Tar
               ))}
             </select>
           </div>
-          <div className="fld">
-            <label htmlFor={`pf-fb-m-${row.key}`}>Fallback {i + 1} model</label>
-            <input id={`pf-fb-m-${row.key}`} value={row.model} autoComplete="off" onChange={(e) => update(i, { model: e.target.value })} />
-          </div>
+          <ModelCombobox
+            id={`pf-fb-m-${row.key}`}
+            label={`Fallback ${i + 1} model`}
+            providerId={row.providerId}
+            providerLabel={providers.find((p) => p.id === row.providerId)?.name ?? 'the provider'}
+            value={row.model}
+            onChange={(model) => update(i, { model })}
+            canRefresh={canRefreshModels}
+          />
           <span className="fb-actions">
             <button type="button" className="icon-btn" aria-label={`Move fallback ${i + 1} up`} disabled={i === 0} onClick={() => onChange(moveTarget(rows, i, -1))}>
               ↑

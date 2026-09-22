@@ -8,6 +8,8 @@ import { bumpGeneration } from '../cache/generations.js';
 import { emitEvent } from '../events/outbox.js';
 import { nowOf, type ActorContext } from '../shared/context.js';
 import { authorize, authorizeAny, isForeignKeyViolation, isUniqueViolation } from './access.js';
+import { baseModelFor, ensureCatalogPrices, type PriceCheck, type PriceTarget } from './catalog/catalog-prices.js';
+import type { ModelCatalogService } from './catalog/catalog-service.js';
 import type { ProfileInput, ProfilePatch } from './inputs.js';
 import { capabilitiesOf, checkProfileTargets, type ProfilePolicyCheck } from './model-policy.js';
 import { agentsByProfile } from './references.js';
@@ -17,12 +19,16 @@ import { toProfileView, type ProfileRow, type ProfileView } from './views.js';
 export interface ProfileServiceDeps {
   db: Db;
   registry: ProviderRegistry;
+  /** When given, saving a profile pre-fills missing price rows from the model catalog (ADR-027). */
+  catalog?: ModelCatalogService | undefined;
   now?: (() => Date) | undefined;
 }
 
 /** A saved profile plus the policy check it passed (warnings for skipped fallbacks). */
 export interface ProfileSaveResult extends ProfileView {
   policy: ProfilePolicyCheck;
+  /** Price status of every target after the save (added = pre-filled from the catalog just now). */
+  prices: PriceCheck[];
 }
 
 type ProfileFields = Omit<ProfileRow, 'id' | 'configVersion' | 'createdAt' | 'updatedAt'>;
@@ -104,7 +110,7 @@ export class ProfileService {
       });
       await emitEvent(tx, actor, 'config.changed', { area: 'model_profile', entityId: id });
       return { row: row!, policy };
-    });
+    }, actor);
   }
 
   async update(actor: ActorContext, id: string, patch: ProfilePatch): Promise<ProfileSaveResult> {
@@ -133,7 +139,7 @@ export class ProfileService {
       await emitEvent(tx, actor, 'config.changed', { area: 'model_profile', entityId: id });
       await bumpGeneration(tx, actor.correlationId, `profile:${id}`, 'model_config_changed');
       return { row: row!, policy };
-    });
+    }, actor);
   }
 
   async delete(actor: ActorContext, id: string): Promise<void> {
@@ -176,7 +182,7 @@ export class ProfileService {
     return policy;
   }
 
-  private async save(write: (tx: DbOrTx) => Promise<{ row: ProfileRow; policy: ProfilePolicyCheck }>): Promise<ProfileSaveResult> {
+  private async save(write: (tx: DbOrTx) => Promise<{ row: ProfileRow; policy: ProfilePolicyCheck }>, actor?: ActorContext): Promise<ProfileSaveResult> {
     let saved: { row: ProfileRow; policy: ProfilePolicyCheck };
     try {
       saved = await this.deps.db.transaction(write);
@@ -185,7 +191,28 @@ export class ProfileService {
       throw error;
     }
     const [view] = await this.views([saved.row], true);
-    return { ...view!, policy: saved.policy };
+    return { ...view!, policy: saved.policy, prices: actor ? await this.prices(actor, saved.row) : [] };
+  }
+
+  /**
+   * Price every target from the catalog when no row prices it yet. Best
+   * effort after the commit: a catalog problem never fails the save; such
+   * targets are reported as missing.
+   */
+  private async prices(actor: ActorContext, row: ProfileRow): Promise<PriceCheck[]> {
+    const catalog = this.deps.catalog;
+    if (!catalog) return [];
+    const providers = new Map((await this.deps.db.select().from(modelProviders)).map((p) => [p.id, p]));
+    const targets: PriceTarget[] = [];
+    for (const t of [{ providerId: row.providerId, model: row.model }, ...row.fallbacks]) {
+      const p = providers.get(t.providerId);
+      if (p && p.kind !== 'DEV_SCRIPTED') targets.push({ providerKind: p.kind, model: t.model, baseModel: baseModelFor(p.kind, p.settings, t.model) });
+    }
+    try {
+      return await ensureCatalogPrices(this.deps.db, await catalog.catalog(), actor, targets, nowOf(this.deps));
+    } catch {
+      return targets.map((t) => ({ providerKind: t.providerKind, model: t.model, status: 'missing', origin: null, source: null, priceId: null }));
+    }
   }
 
   private async assertNameFree(tx: DbOrTx, name: string, exceptId: string | null): Promise<void> {

@@ -10,11 +10,15 @@ import { CHANNEL_REGISTRY, DB, ENV, QUEUE, SECRET_STORE } from '../../infrastruc
 import { ChannelIngressService } from './channel-ingress.service.js';
 import { ChannelsAdminController } from './channels-admin.controller.js';
 import { ChannelWebhookController } from './channel-webhook.controller.js';
+import { ChannelTemplatesController, WhatsAppTemplateChannelsController } from './channel-templates.controller.js';
+import { SESSION_WINDOW_HOURS, TEMPLATE_PROVIDERS } from './templates.providers.js';
+import { WhatsAppTemplateService } from '@ocso/application';
 
 @Global()
 @Module({
-  controllers: [ChannelsAdminController, ChannelWebhookController],
+  controllers: [ChannelsAdminController, ChannelWebhookController, ChannelTemplatesController, WhatsAppTemplateChannelsController],
   providers: [
+    ...TEMPLATE_PROVIDERS,
     ChannelIngressService,
     { provide: IngressService, inject: [DB, QUEUE], useFactory: (db: Db, queue: QueueAdapter) => new IngressService(db, queue, { reopenWindowHours: 72 }) },
     {
@@ -34,6 +38,6 @@ import { ChannelWebhookController } from './channel-webhook.controller.js';
         ),
     },
   ],
-  exports: [ChannelIngressService, ChannelRuntime, IngressService, ChannelService],
+  exports: [ChannelIngressService, ChannelRuntime, IngressService, ChannelService, WhatsAppTemplateService, SESSION_WINDOW_HOURS],
 })
 export class ChannelsModule {}

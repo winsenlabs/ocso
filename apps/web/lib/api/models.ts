@@ -61,6 +61,8 @@ const StatsSchema = z.object({
   cacheReadRatio: z.number().nullable(),
   costMicros: z.number().nullable(),
   currency: z.string().nullable(),
+  /** Successful requests without a price row (cost unknown, not zero). Absent on older API builds. */
+  unpricedRequests: z.number().default(0),
 });
 export type UsageStats = z.infer<typeof StatsSchema>;
 
@@ -172,8 +174,28 @@ export const PolicyCheckSchema = z.object({
 });
 export type PolicyCheck = z.infer<typeof PolicyCheckSchema>;
 
-const ProfileSaveSchema = ProfileSchema.extend({ policy: PolicyCheckSchema });
+/** Price status of each profile target after a save (ADR-027: missing prices are pre-filled from the model catalog). */
+export const PriceCheckSchema = z.object({
+  providerKind: Kind,
+  model: z.string(),
+  status: z.enum(['priced', 'added', 'missing']),
+  origin: z.enum(['catalog', 'manual']).nullable(),
+  source: z.string().nullable(),
+  priceId: z.string().nullable(),
+});
+export type PriceCheck = z.infer<typeof PriceCheckSchema>;
+
+const ProfileSaveSchema = ProfileSchema.extend({ policy: PolicyCheckSchema, prices: z.array(PriceCheckSchema).default([]) });
 export type ProfileSaveResult = z.infer<typeof ProfileSaveSchema>;
+
+export const PriceTierSchema = z.object({
+  aboveInputTokens: z.number(),
+  inputPerMTokMicros: z.number(),
+  outputPerMTokMicros: z.number(),
+  cachedInputPerMTokMicros: z.number().nullable(),
+  cacheWritePerMTokMicros: z.number().nullable(),
+});
+export type PriceTier = z.infer<typeof PriceTierSchema>;
 
 export const PricingSchema = z.object({
   id: z.string(),
@@ -185,6 +207,13 @@ export const PricingSchema = z.object({
   cacheWritePerMTokMicros: z.number().nullable(),
   outputPerMTokMicros: z.number(),
   effectiveFrom: z.string(),
+  /** catalog = pre-filled from the open-source model catalog and kept current by refreshes; manual = entered or edited by an admin. */
+  origin: z.enum(['catalog', 'manual']).default('manual'),
+  catalogSource: z.string().nullable().default(null),
+  catalogProvider: z.string().nullable().default(null),
+  catalogModelId: z.string().nullable().default(null),
+  catalogFetchedAt: z.string().nullable().default(null),
+  tiers: z.array(PriceTierSchema).nullable().default(null),
 });
 export type Pricing = z.infer<typeof PricingSchema>;
 

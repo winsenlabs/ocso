@@ -79,9 +79,15 @@ test('Tech Admin creates a profile with a fallback after the policy check, and s
   await expect(dialog.getByRole('button', { name: 'Create profile' })).toBeDisabled();
   await dialog.getByLabel('Profile name').fill('support-primary');
   await dialog.getByLabel('Provider', { exact: true }).selectOption({ label: 'Scripted · Scripted model (development only) · ap-south-1' });
-  await dialog.getByLabel('Model', { exact: true }).fill('scripted-1');
+  // The model picker lists what the provider offers (GET /v1/model-providers/:id/models).
+  const model = dialog.getByRole('combobox', { name: 'Model', exact: true });
+  await model.click();
+  await dialog.getByRole('listbox', { name: 'Scripted models' }).getByRole('option', { name: /^scripted-1/ }).click();
+  await expect(model).toHaveValue('scripted-1');
   await dialog.getByRole('button', { name: 'Add fallback' }).click();
   await dialog.getByLabel('Fallback 1 provider').selectOption({ label: 'OpenAI · OpenAI API · global' });
+  // OpenAI points at an unreachable endpoint: the listing error is shown and free text still works.
+  await expect(dialog.getByText(/Could not list OpenAI models/)).toBeVisible({ timeout: 30_000 });
   await dialog.getByLabel('Fallback 1 model').fill('gpt-5.5');
   await dialog.getByLabel('Cache TTL').selectOption('1h');
   await dialog.getByRole('checkbox', { name: 'Image input' }).check();
@@ -97,35 +103,47 @@ test('Tech Admin creates a profile with a fallback after the policy check, and s
 
   await dialog.getByRole('button', { name: 'Create profile' }).click();
   await expect(dialog).toBeHidden();
+  // Saving priced the OpenAI fallback from the model catalog (DEV_SCRIPTED is never priced).
+  const saved = page.getByRole('dialog', { name: 'Saved support-primary' });
+  await expect(saved.getByRole('listitem').filter({ hasText: 'gpt-5.5' })).toContainText('price added from models.dev');
+  await saved.getByRole('button', { name: 'Done' }).click();
+  await expect(saved).toBeHidden();
   const profiles = page.getByRole('table', { name: 'Logical model profiles' });
   await expect(profiles.getByRole('row', { name: /support-primary/ })).toContainText('OpenAI');
   await expect(profiles.getByRole('row', { name: /support-primary/ })).toContainText('prefix · 1h · explicit / key-based');
   await expect(card(page, 'OpenAI')).toContainText('fallback for support-primary');
 });
 
-test('Tech Admin adds and edits a model price', async ({ page }) => {
+test('Tech Admin adds a model price and overrides a catalog price', async ({ page }) => {
   await login(page, ACCOUNTS.admin);
   await page.goto('/connections?tab=providers');
+  const table = page.getByRole('table', { name: 'Model pricing' });
+  // The catalog row the profile save added: origin and source are shown.
+  await expect(table.getByRole('row', { name: /gpt-5\.5/ })).toContainText('catalog');
+  await expect(table.getByRole('row', { name: /gpt-5\.5/ })).toContainText('models.dev');
+  await expect(page.getByRole('region', { name: /Models in use without a price/ })).toContainText('Every model in use has a price');
+
   await page.getByRole('link', { name: 'Add price' }).click();
   let dialog = page.getByRole('dialog', { name: 'Add model price' });
   await dialog.getByLabel('Provider').selectOption({ label: 'OpenAI API' });
-  await dialog.getByLabel('Model', { exact: true }).fill('gpt-5.5');
+  await dialog.getByLabel('Model', { exact: true }).fill('gpt-private-ft');
   await dialog.getByLabel('Input per 1M tokens').fill('1.25');
   await dialog.getByLabel('Output per 1M tokens').fill('10');
   await dialog.getByLabel('Cache read per 1M tokens (optional)').fill('0.125');
   await dialog.getByRole('button', { name: 'Add price' }).click();
   await expect(dialog).toBeHidden();
-  const table = page.getByRole('table', { name: 'Model pricing' });
-  await expect(table.getByRole('row', { name: /gpt-5\.5/ })).toContainText('1.25 USD');
-  await expect(table.getByRole('row', { name: /gpt-5\.5/ })).toContainText('0.125 USD');
+  await expect(table.getByRole('row', { name: /gpt-private-ft/ })).toContainText('1.25 USD');
+  await expect(table.getByRole('row', { name: /gpt-private-ft/ })).toContainText('0.125 USD');
+  await expect(table.getByRole('row', { name: /gpt-private-ft/ })).toContainText('manual');
 
   await table.getByRole('link', { name: 'gpt-5.5' }).click();
   dialog = page.getByRole('dialog', { name: 'Edit price · gpt-5.5' });
-  await expect(dialog.getByLabel('Output per 1M tokens')).toHaveValue('10.00');
+  await expect(dialog).toContainText('Saving an edit makes it a manual price');
   await dialog.getByLabel('Output per 1M tokens').fill('12');
   await dialog.getByRole('button', { name: 'Save price' }).click();
   await expect(dialog).toBeHidden();
   await expect(table.getByRole('row', { name: /gpt-5\.5/ })).toContainText('12.00 USD');
+  await expect(table.getByRole('row', { name: /gpt-5\.5/ })).toContainText('manual');
 });
 
 test('Tech Admin adds the example MCP server: discover → authenticate → classify → approve → healthy', async ({ page }) => {

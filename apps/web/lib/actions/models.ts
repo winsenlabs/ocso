@@ -22,6 +22,7 @@ import {
   type ProfileSaveResult,
   type ProviderTestResult,
 } from '../api/models';
+import { addCatalogPrice, listProviderModels, refreshCatalog, type CatalogRefreshResult, type ModelList } from '../api/model-catalog';
 import { getSession } from '../session';
 
 /** Result of a connections-screen server action (called directly from client components). */
@@ -152,4 +153,30 @@ export async function deletePricingAction(id: string): Promise<ActionResult> {
     await deletePricing(pid);
     return null;
   });
+}
+
+/**
+ * Models a provider offers, for the profile dialog's model pickers. A listing
+ * failure (bad key, outage) is part of the result (`error`), not a failed action.
+ * `refresh` bypasses the API's ten-minute cache (providers.manage).
+ */
+export async function listProviderModelsAction(providerId: string, refresh = false): Promise<ActionResult<ModelList>> {
+  const Input = z.object({ providerId: Id, refresh: z.boolean() });
+  const permission = refresh ? Permission.PROVIDERS_MANAGE : Permission.PROVIDERS_READ;
+  return run(permission, refresh ? 'refresh model lists' : 'read model providers', Input, { providerId, refresh }, (i) => listProviderModels(i.providerId, i.refresh), false);
+}
+
+const CatalogPriceInput = z.object({ providerKind: z.enum(PROVIDER_KINDS), model: z.string().trim().min(1).max(200), providerId: Id.optional() });
+
+/** Add the model catalog's price for one model (a catalog-origin row the admin can override later). */
+export async function addCatalogPriceAction(input: z.input<typeof CatalogPriceInput>): Promise<ActionResult> {
+  return run(Permission.PRICING_MANAGE, 'change model pricing', CatalogPriceInput, input, async (body) => {
+    await addCatalogPrice(body.providerId ? { providerKind: body.providerKind, model: body.model, providerId: body.providerId } : { providerKind: body.providerKind, model: body.model });
+    return null;
+  });
+}
+
+/** Download models.dev and LiteLLM now; catalog-origin prices follow (audited). */
+export async function refreshCatalogAction(): Promise<ActionResult<CatalogRefreshResult>> {
+  return run(Permission.PRICING_MANAGE, 'refresh the model catalog', z.null(), null, () => refreshCatalog());
 }

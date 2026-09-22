@@ -92,6 +92,8 @@ export const ConversationDetailSchema = z.object({
   handover: z.object({ version: z.number(), text: z.string(), createdAt: z.string() }).nullable().default(null),
   resolvedBy: Ref.nullable().default(null),
   firstHumanResponseAt: z.string().nullable().default(null),
+  /** WhatsApp 24-hour customer-service window; null for channels without one (web chat). */
+  whatsappWindow: z.object({ open: z.boolean(), closesAt: z.string().nullable() }).nullable().default(null),
 });
 export type ConversationDetail = z.infer<typeof ConversationDetailSchema>;
 

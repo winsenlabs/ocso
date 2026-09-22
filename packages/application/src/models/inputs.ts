@@ -121,3 +121,12 @@ export const PricingPatch = z.object({
   effectiveFrom: z.iso.datetime({ offset: true }).optional(),
 });
 export type PricingPatch = z.infer<typeof PricingPatch>;
+
+/** "Use the catalog price" for one model (POST /v1/model-pricing/from-catalog). */
+export const CatalogPriceInput = z.object({
+  providerKind: z.enum(PROVIDER_KINDS),
+  model: z.string().trim().min(1).max(200),
+  /** The configured provider, for Foundry deployments (their underlying model comes from its settings). */
+  providerId: z.uuid().optional(),
+});
+export type CatalogPriceInput = z.infer<typeof CatalogPriceInput>;

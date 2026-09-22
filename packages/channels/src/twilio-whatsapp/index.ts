@@ -11,3 +11,5 @@ export { signatureUrlCandidates, twilioSignature, verifyTwilioSignature } from '
 export * from './template.js';
 export { TWILIO_MEDIA_SOURCE } from './inbound/content-parts.js';
 export { parseTwilioWebhook, type TwilioParseOptions } from './inbound/parse.js';
+export { normalizeContentItem, twilioTemplateStatus, whatsappApproval } from './templates/normalize.js';
+export { contentCreateBody } from './templates/draft.js';

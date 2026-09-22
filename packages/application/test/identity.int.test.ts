@@ -62,9 +62,10 @@ describe('user management', () => {
     const team = await new TeamService(t.db).create(ctx({ ...admin, role: 'CS_LEAD' }), { name: 'Cards & EMI', description: null });
     const lead = await users.create(ctx(admin), {
       email: 'anjali@meridian.test', name: 'Anjali Rao', role: 'CS_LEAD', password: 'lead password 1234',
-      teamIds: [], languages: [], skills: [], maxConcurrent: 8,
+      teamIds: [team.id], languages: [], skills: [], maxConcurrent: 8,
     });
-    const leadP: Principal = { userId: lead.id, role: 'CS_LEAD', displayName: lead.name, teamIds: [], via: 'UI' };
+    // A lead places new execs only in teams they belong to (ADR-026).
+    const leadP: Principal = { userId: lead.id, role: 'CS_LEAD', displayName: lead.name, teamIds: [team.id], via: 'UI' };
     const exec = await users.create(ctx(leadP), {
       email: 'nikhil@meridian.test', name: 'Nikhil Menon', role: 'CS_EXEC', password: 'exec password 1234',
       teamIds: [team.id], languages: ['en', 'mr'], skills: ['cards'], maxConcurrent: 8,

@@ -1,8 +1,12 @@
-import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Patch, Post, Query } from '@nestjs/common';
 import { Permission } from '@ocso/auth';
-import { ProviderInput, ProviderPatch, ProviderService, ProviderTestInput, type ActorContext } from '@ocso/application';
+import { ModelListService, ProviderInput, ProviderPatch, ProviderService, ProviderTestInput, type ActorContext } from '@ocso/application';
 import { z } from 'zod';
 import { Actor, RequirePermission } from '../../common/decorators.js';
+
+/** `?refresh=true` bypasses the ten-minute listing cache (providers.manage, checked in the service). */
+const ModelsQuery = z.object({ refresh: z.stringbool().default(false) });
+type ModelsQuery = z.infer<typeof ModelsQuery>;
 
 /** A test may be sent without a body; it then probes the configured/default model. */
 const TestBody = ProviderTestInput.optional();
@@ -11,7 +15,10 @@ type TestBody = z.infer<typeof TestBody>;
 /** Model providers (docs/06). Responses carry secret references, never credential values. */
 @Controller('v1/model-providers')
 export class ModelProvidersController {
-  constructor(@Inject(ProviderService) private readonly providers: ProviderService) {}
+  constructor(
+    @Inject(ProviderService) private readonly providers: ProviderService,
+    @Inject(ModelListService) private readonly models: ModelListService,
+  ) {}
 
   @Get()
   @RequirePermission(Permission.PROVIDERS_READ)
@@ -30,6 +37,16 @@ export class ModelProvidersController {
   @RequirePermission(Permission.PROVIDERS_READ)
   get(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string) {
     return this.providers.get(actor, id);
+  }
+
+  /**
+   * Models this provider offers (its own listing, or its configured deployments),
+   * with catalog metadata and prices. Listing failures come back as `error`.
+   */
+  @Get(':id/models')
+  @RequirePermission(Permission.PROVIDERS_READ)
+  listModels(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string, @Query({ schema: ModelsQuery }) q: ModelsQuery) {
+    return this.models.list(actor, id, { refresh: q.refresh });
   }
 
   @Post()

@@ -82,6 +82,21 @@ export class GraphClient {
     return this.call(this.endpoint(...segments), { method: 'GET' });
   }
 
+  /** GET with query parameters (template lists, single fields). */
+  getWithQuery(segments: readonly string[], query: Readonly<Record<string, string>>): Promise<GraphResult> {
+    return this.call(`${this.endpoint(...segments)}?${new URLSearchParams(query).toString()}`, { method: 'GET' });
+  }
+
+  /** A paging `next` URL Meta returned; refused unless it is on the configured Graph origin. */
+  getPage(url: string): Promise<GraphResult> {
+    if (!URL.canParse(url) || new URL(url).origin !== this.origin) return Promise.resolve({ kind: 'error', status: 400, error: { message: 'paging URL is not on the Graph API origin' } });
+    return this.call(url, { method: 'GET' });
+  }
+
+  deleteWithQuery(segments: readonly string[], query: Readonly<Record<string, string>>): Promise<GraphResult> {
+    return this.call(`${this.endpoint(...segments)}?${new URLSearchParams(query).toString()}`, { method: 'DELETE' });
+  }
+
   postJson(segments: readonly string[], body: unknown): Promise<GraphResult> {
     return this.call(this.endpoint(...segments), {
       method: 'POST',

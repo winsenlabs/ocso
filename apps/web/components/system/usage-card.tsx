@@ -3,7 +3,7 @@ import { HBarChart } from '@/components/ui/hbar-chart';
 import { MetricMatrix } from '@/components/ui/metric-matrix';
 import type { TokenUsage } from '@/lib/api/telemetry';
 import { formatCompact, formatNumber, formatPercent } from '@/lib/format';
-import { formatMoney } from './system-meta';
+import { formatCost } from './cost';
 
 /** Cache figures are null when no request reported them — shown as "—" (the foot says why), never zero. */
 const cacheValue = (v: number | null) => (v === null ? '—' : formatCompact(v));
@@ -50,7 +50,7 @@ export function UsageCard({ usage, title = 'Token usage and cache · today' }: {
       )}
       <div className="foot">
         <span className="mono-sm">
-          {t.costMicros === null ? 'cost not priced' : `≈ ${formatMoney(t.costMicros, t.currency)} today`}
+          {t.costMicros === null ? (t.unpricedRequests ? 'no price for today’s models' : 'cost not priced') : `≈ ${formatCost(t.costMicros, t.currency, t.unpricedRequests)} today`}
           {' · '}
           {t.cachedInputShare === null ? 'cache hit rate not reported yet' : `${formatPercent(t.cachedInputShare)} of input served from cache`}
           {t.reasoningTokens ? ` · ${formatCompact(t.reasoningTokens)} reasoning` : ''}

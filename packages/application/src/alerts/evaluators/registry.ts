@@ -11,6 +11,7 @@ import { providerErrorRateAbove } from './provider-error-rate-above.js';
 import { queueAgeAbove } from './queue-age-above.js';
 import { repeatedFailureTopic } from './repeated-failure-topic.js';
 import { slaBreachesAbove } from './sla-breaches-above.js';
+import { spendBudgetAbove } from './spend-budget-above.js';
 import { resolutionSlaBreachesAbove } from './resolution-sla-breaches-above.js';
 import { tokenSpike } from './token-spike.js';
 import { toolFailureRateAbove } from './tool-failure-rate-above.js';
@@ -46,6 +47,7 @@ export const BUILT_IN_EVALUATORS: readonly AlertEvaluator[] = [
   mcpUnhealthy,
   tokenSpike,
   costSpike,
+  spendBudgetAbove,
   authFailuresAbove,
   databaseDegraded,
   // Business

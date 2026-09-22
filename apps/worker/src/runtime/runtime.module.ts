@@ -114,6 +114,6 @@ export const HISTORY_WINDOW = 20;
       },
     },
   ],
-  exports: [WorkerRegistryService, CopilotService, CustomerClaimsIssuer, ConversationInsightsService, EvaluationService, HotContextCache, LeaseManager, ModelGateway, TurnProcessor, DeliveryService, MediaMaterializer, SummaryService, PROVIDER_SOURCE, TOOL_PROVIDERS],
+  exports: [WorkerRegistryService, ChannelRuntime, CopilotService, CustomerClaimsIssuer, ConversationInsightsService, EvaluationService, HotContextCache, LeaseManager, ModelGateway, TurnProcessor, DeliveryService, MediaMaterializer, SummaryService, PROVIDER_SOURCE, TOOL_PROVIDERS],
 })
 export class RuntimeModule {}

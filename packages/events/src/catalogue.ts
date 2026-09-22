@@ -44,6 +44,16 @@ export interface OcsoEventPayloads {
   'alert.updated': { alertId: string; status: 'OPEN' | 'ACKNOWLEDGED' | 'RESOLVED' };
   'alert.resolved': { alertId: string };
   'config.changed': { area: string; entityId: string | null };
+  /** A WhatsApp template's review result changed (poller or provider webhook); `submittedBy` gets an in-app notice. */
+  'whatsapp_template.status_changed': {
+    templateId: string;
+    channelId: string;
+    name: string;
+    language: string;
+    status: string;
+    previousStatus: string;
+    submittedBy: string | null;
+  };
   'cache.invalidated': { scope: string; key: string | null; reason: string };
   'worker.heartbeat': { workerId: string; activeLeases: number; capacity: number };
 }

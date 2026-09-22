@@ -1,9 +1,10 @@
-import type { DeliveryStatusUpdate, IdentityUpdate, InboundEnvelope, InboundMessage } from '../../contract/types.js';
+import type { DeliveryStatusUpdate, IdentityUpdate, InboundEnvelope, InboundMessage, TemplateStatusUpdate } from '../../contract/types.js';
 import { invalidInbound } from '../../common/errors.js';
 import { identityUpdateFromSystemMessage, identityUpdatesFromChange } from './identity-updates.js';
 import { normalizeMessage } from './messages.js';
 import { MessagesValue, WaMessageBase, WebhookEnvelope } from './schema.js';
 import { normalizeStatus } from './statuses.js';
+import { templateUpdateFromChange } from './template-updates.js';
 
 /**
  * Webhook envelope -> InboundEnvelope. Handles batched payloads (many
@@ -21,10 +22,11 @@ class EnvelopeBuilder {
   readonly messages: InboundMessage[] = [];
   readonly statuses: DeliveryStatusUpdate[] = [];
   readonly identityUpdates: IdentityUpdate[] = [];
+  readonly templateUpdates: TemplateStatusUpdate[] = [];
   ignored = 0;
 
   build(): InboundEnvelope {
-    return { messages: this.messages, statuses: this.statuses, identityUpdates: this.identityUpdates, ignored: this.ignored };
+    return { messages: this.messages, statuses: this.statuses, identityUpdates: this.identityUpdates, templateUpdates: this.templateUpdates, ignored: this.ignored };
   }
 }
 
@@ -64,9 +66,16 @@ function handleUserIdUpdateChange(value: unknown, out: EnvelopeBuilder, options:
   else out.ignored += 1;
 }
 
+function handleTemplateStatusChange(value: unknown, out: EnvelopeBuilder, options: ParseOptions): void {
+  const update = templateUpdateFromChange(value, options.now);
+  if (update) out.templateUpdates.push(update);
+  else out.ignored += 1;
+}
+
 const CHANGE_HANDLERS: ReadonlyMap<string, ChangeHandler> = new Map<string, ChangeHandler>([
   ['messages', handleMessagesChange],
   ['user_id_update', handleUserIdUpdateChange],
+  ['message_template_status_update', handleTemplateStatusChange],
 ]);
 
 function parseJson(rawBody: Buffer | null): unknown {

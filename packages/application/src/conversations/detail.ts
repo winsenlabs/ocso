@@ -1,5 +1,5 @@
 import { and, desc, eq, isNull } from 'drizzle-orm';
-import { displayId } from '@ocso/domain';
+import { displayId, sessionWindowState, type SessionWindowState } from '@ocso/domain';
 import {
   channels,
   conversationSummaries,
@@ -15,6 +15,7 @@ import {
   type Db,
 } from '@ocso/db';
 import { maskIdentity } from './masking.js';
+import { lastCustomerMessageAt, type SessionWindowHours } from './session-window.js';
 
 export interface ConversationDetail {
   id: string;
@@ -51,10 +52,20 @@ export interface ConversationDetail {
   handover: { version: number; text: string; createdAt: string } | null;
   resolvedBy: { id: string; name: string } | null;
   firstHumanResponseAt: string | null;
+  /**
+   * WhatsApp customer-service window (docs/07 §3): free-form replies only
+   * while open; afterwards an approved template. Null for channels without a
+   * window (web chat).
+   */
+  whatsappWindow: SessionWindowState | null;
 }
 
 /** Context rail data for the workspace (design/01 right rail). Caller checks access. */
-export async function loadConversationDetail(db: Db, conversationId: string): Promise<ConversationDetail | null> {
+export async function loadConversationDetail(
+  db: Db,
+  conversationId: string,
+  options: { windowHours?: SessionWindowHours | undefined; now?: Date | undefined } = {},
+): Promise<ConversationDetail | null> {
   const [row] = await db
     .select({ c: conversations, customer: customers, agent: virtualAgents, channel: channels, queue: queues, assignee: users })
     .from(conversations)
@@ -75,6 +86,8 @@ export async function loadConversationDetail(db: Db, conversationId: string): Pr
     agent.modelProfileId ? db.select({ id: modelProfiles.id, name: modelProfiles.name }).from(modelProfiles).where(eq(modelProfiles.id, agent.modelProfileId)) : Promise.resolve([]),
     c.resolvedBy ? db.select({ id: users.id, name: users.name }).from(users).where(eq(users.id, c.resolvedBy)) : Promise.resolve([]),
   ]);
+  const hours = channel && options.windowHours ? options.windowHours(channel) : null;
+  const whatsappWindow = channel && hours !== null ? sessionWindowState(hours, await lastCustomerMessageAt(db, customer.id, channel.id), options.now ?? new Date()) : null;
   return {
     id: c.id,
     displayId: displayId('conv', c.id),
@@ -117,5 +130,6 @@ export async function loadConversationDetail(db: Db, conversationId: string): Pr
     handover: handover ? { version: handover.version, text: handover.text, createdAt: handover.createdAt.toISOString() } : null,
     resolvedBy: resolver ?? null,
     firstHumanResponseAt: c.firstHumanResponseAt?.toISOString() ?? null,
+    whatsappWindow,
   };
 }

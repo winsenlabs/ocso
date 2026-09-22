@@ -1,4 +1,4 @@
-import type { InteractionPart, MediaRef } from '@ocso/domain';
+import type { InteractionPart, MediaRef, MessageTemplate, TemplateDraft } from '@ocso/domain';
 import { isDomainError } from '@ocso/domain';
 import type {
   ChannelAdapter,
@@ -14,9 +14,11 @@ import type {
   RawHttpRequest,
   RenderedOutbound,
   SendResult,
+  TemplateSendRequest,
   VerificationResult,
   WebhookAcknowledgement,
 } from '../contract/types.js';
+import { TemplateProviderError } from '../common/templates.js';
 import { TWILIO_WHATSAPP_CAPABILITIES } from './capabilities.js';
 import { resolveTwilioConfig, validateTwilioWhatsAppConfig, type ResolvedTwilioConfig } from './config.js';
 import { checkTwilioConnection } from './connection-check.js';
@@ -29,6 +31,7 @@ import { TwilioRestClient } from './rest-client.js';
 import { sendTwilioMessage } from './send.js';
 import { verifyTwilioSignature } from './signature.js';
 import { renderTwilioTemplate, type TwilioTemplateInput } from './template.js';
+import { TwilioTemplates } from './templates/api.js';
 
 /**
  * WhatsApp through Twilio Programmable Messaging (PM/research/06). Transport
@@ -105,8 +108,31 @@ export class TwilioWhatsAppChannelAdapter implements ChannelAdapter {
     return renderTwilioTemplate(template);
   }
 
-  /** Send an approved Content Template (ContentSid); allowed outside the 24-hour window. */
-  async sendTemplate(target: OutboundTarget, template: TwilioTemplateInput, config: ChannelRuntimeConfig): Promise<SendResult> {
+  /** Send an approved template chosen from listTemplates (Content SID + ContentVariables); allowed outside the 24-hour window. */
+  sendTemplate(target: OutboundTarget, request: TemplateSendRequest, config: ChannelRuntimeConfig): Promise<SendResult> {
+    return this.sendContentTemplate(target, { contentSid: request.templateId, variables: request.variables }, config);
+  }
+
+  /** Content templates with their WhatsApp approval (Content API, same credentials). */
+  async listTemplates(config: ChannelRuntimeConfig): Promise<MessageTemplate[]> {
+    return this.templates(config).list();
+  }
+
+  /** Create the content and submit it for WhatsApp approval. */
+  async createTemplate(config: ChannelRuntimeConfig, draft: TemplateDraft): Promise<MessageTemplate> {
+    return this.templates(config).create(draft);
+  }
+
+  async templateStatus(config: ChannelRuntimeConfig, templateId: string): Promise<MessageTemplate | null> {
+    return this.templates(config).status(templateId);
+  }
+
+  async deleteTemplate(config: ChannelRuntimeConfig, template: { id: string; name: string }): Promise<void> {
+    await this.templates(config).remove(template.id);
+  }
+
+  /** Send a Content Template by ContentSid (+ variables); allowed outside the 24-hour window. */
+  async sendContentTemplate(target: OutboundTarget, template: TwilioTemplateInput, config: ChannelRuntimeConfig): Promise<SendResult> {
     let rendered: RenderedOutbound;
     try {
       rendered = renderTwilioTemplate(template);
@@ -120,6 +146,12 @@ export class TwilioWhatsAppChannelAdapter implements ChannelAdapter {
     const resolved = this.tryResolve(config);
     if ('ok' in resolved) return { ok: false, checks: [{ name: 'Configuration', ok: false, detail: resolved.message }] };
     return checkTwilioConnection(resolved, this.deps.fetch);
+  }
+
+  private templates(config: ChannelRuntimeConfig): TwilioTemplates {
+    const resolved = this.tryResolve(config);
+    if ('ok' in resolved) throw new TemplateProviderError('not_configured', resolved.message);
+    return new TwilioTemplates(resolved, this.deps.fetch);
   }
 
   private tryResolve(config: ChannelRuntimeConfig): ResolvedTwilioConfig | SendFailure {

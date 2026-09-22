@@ -62,6 +62,8 @@ const NAV: readonly GroupDef[] = [
       { key: 'agents', label: 'Virtual agents', href: '/agents', requires: P.AGENTS_MANAGE },
       { key: 'queues', label: 'Queues', href: '/queues', requires: P.QUEUES_MANAGE },
       { key: 'customers', label: 'Customers', href: '/customers', requires: P.CUSTOMERS_READ },
+      // WhatsApp templates are business content (docs/07 §3); not in the OCSONav mockup, which predates them.
+      { key: 'whatsapp-templates', label: 'WhatsApp templates', href: '/whatsapp-templates', requires: P.WHATSAPP_TEMPLATES_MANAGE },
     ],
   },
   {
@@ -104,6 +106,7 @@ const NAV: readonly GroupDef[] = [
       { key: 'models', label: 'Models', href: '/connections?tab=providers', requires: P.PROVIDERS_READ },
       { key: 'connections', label: 'Connections', href: '/connections?tab=mcp', requires: P.MCP_READ },
       { key: 'channels', label: 'Channels', href: '/connections?tab=channels', requires: P.CHANNELS_READ },
+      { key: 'whatsapp-templates', label: 'WhatsApp templates', href: '/whatsapp-templates', requires: P.WHATSAPP_TEMPLATES_MANAGE },
       { key: 'secrets', label: 'Secrets', href: '/connections?tab=secrets', requires: P.SECRETS_MANAGE },
       { key: 'webhooks', label: 'Webhooks', href: '/connections?tab=webhooks', requires: P.WEBHOOKS_MANAGE },
     ],

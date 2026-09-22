@@ -1,4 +1,15 @@
-import { McpConnectionService, relayOutboxToWebhooks, type AlertDeliveryService, type AlertEngine, type CustomerClaimsIssuer, type ScalingService } from '@ocso/application';
+import { randomUUID } from 'node:crypto';
+import {
+  createCatalogFetch,
+  McpConnectionService,
+  ModelCatalogService,
+  relayOutboxToWebhooks,
+  systemActor,
+  type AlertDeliveryService,
+  type AlertEngine,
+  type CustomerClaimsIssuer,
+  type ScalingService,
+} from '@ocso/application';
 import type { WorkerEnv } from '@ocso/config';
 import type { Db } from '@ocso/db';
 import type { QueueAdapter } from '@ocso/queue';
@@ -34,5 +45,17 @@ export function subsystemTasks(deps: SubsystemDeps): ScheduledTask[] {
     // reconciled every 5 min here and immediately on config.changed (lifecycle service).
     ...(deps.scaling.publishesMetrics ? [{ name: 'scaling-metrics', everySeconds: 60, run: () => deps.scaling.publishMetrics() }] : []),
     { name: 'scaling-reconcile', everySeconds: 300, run: () => deps.scaling.reconcile('periodic') },
+    // Model catalog (ADR-027): hourly check, downloads when a source is a day old (an hour after a failure).
+    ...(deps.env.OCSO_MODEL_CATALOG_REFRESH ? [{ name: 'model-catalog-refresh', everySeconds: 3600, run: () => refreshModelCatalog(deps.db) }] : []),
   ];
+}
+
+/** One SSRF-guarded, allowlisted fetch per run; catalog-origin prices follow the refresh (audited as a system change). */
+async function refreshModelCatalog(db: Db) {
+  const egress = createCatalogFetch();
+  try {
+    return await new ModelCatalogService({ db, fetch: egress.fetch }).refreshIfStale(systemActor('model-catalog', randomUUID(), 'Model catalog refresh'));
+  } finally {
+    egress.close();
+  }
 }

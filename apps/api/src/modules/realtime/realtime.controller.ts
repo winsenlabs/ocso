@@ -11,7 +11,15 @@ import { DB, ENV } from '../../infrastructure/tokens.js';
 import { RealtimeAccess } from './realtime-access.js';
 import { RealtimeHub } from './realtime.hub.js';
 
-const StreamQuery = z.object({ conversationId: z.uuid().optional() });
+const StreamQuery = z.object({
+  conversationId: z.uuid().optional(),
+  /** Only these event types (comma list), filtered before access checks — cheap app-wide listeners. */
+  types: z
+    .string()
+    .max(2_000)
+    .optional()
+    .transform((v) => (v ? new Set(v.split(',').filter(Boolean)) : null)),
+});
 type StreamQuery = z.infer<typeof StreamQuery>;
 
 /**
@@ -35,7 +43,7 @@ export class RealtimeController {
   stream(@CurrentPrincipal() principal: Principal, @Query({ schema: StreamQuery }) q: StreamQuery, @SseSignal() signal: AbortSignal, @Req() req: OcsoRequest): Observable<MessageEvent> {
     const access = new RealtimeAccess(this.db, this.settings, principal);
     const events = this.hub
-      .stream((e) => (q.conversationId ? e.conversationId === q.conversationId : true))
+      .stream((e) => (q.conversationId ? e.conversationId === q.conversationId : true) && (q.types ? q.types.has(e.type) : true))
       .pipe(
         mergeMap((event) => from(access.allows(event)).pipe(mergeMap((ok) => (ok ? of(event) : [])))),
         map((event): MessageEvent => ({ type: event.type, id: event.id, data: event })),

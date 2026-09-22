@@ -120,6 +120,20 @@
       "when": 1790083401651,
       "tag": "0016_agent_team_ownership",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1790088146287,
+      "tag": "0017_model_catalog_and_pricing_origin",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790088393603,
+      "tag": "0018_whatsapp_templates",
+      "breakpoints": true
     }
   ]
 }

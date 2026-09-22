@@ -1,4 +1,4 @@
-import type { DeliveryStatus, InteractionPart, InteractionPartType, MediaRef } from '@ocso/domain';
+import type { DeliveryStatus, InteractionPart, InteractionPartType, MediaRef, MessageTemplate, TemplateDraft, TemplateStatus } from '@ocso/domain';
 
 /**
  * ChannelAdapter contract (docs/07 §2). Adapters own transport concerns only:
@@ -111,11 +111,23 @@ export interface IdentityUpdate {
   occurredAt: Date;
 }
 
+/** A provider-announced template review result (Meta `message_template_status_update`). */
+export interface TemplateStatusUpdate {
+  templateId: string;
+  name: string;
+  language: string;
+  status: TemplateStatus;
+  reason: string | null;
+  occurredAt: Date;
+}
+
 export interface InboundEnvelope {
   messages: InboundMessage[];
   statuses: DeliveryStatusUpdate[];
   /** Identifier changes announced by the provider (absent when the channel has none). */
   identityUpdates?: IdentityUpdate[] | undefined;
+  /** Template review results pushed by the provider (absent when it only offers polling). */
+  templateUpdates?: TemplateStatusUpdate[] | undefined;
   /** Count of payload entries intentionally ignored (unsupported events). */
   ignored: number;
 }
@@ -223,6 +235,31 @@ export interface ChannelAdapter {
   send(target: OutboundTarget, message: RenderedOutbound, config: ChannelRuntimeConfig, media: OutboundMediaResolver): Promise<SendResult>;
   /** Read-only check of the stored credentials against the provider; never sends a message. */
   checkConnection?(config: ChannelRuntimeConfig): Promise<ConnectionCheckResult>;
+
+  /* ── Message templates (WhatsApp; docs/07 §3). Optional: channels without a session window have none. ── */
+
+  /** Every template the provider holds for this channel, normalized; throws a typed TemplateProviderError. */
+  listTemplates?(config: ChannelRuntimeConfig): Promise<MessageTemplate[]>;
+  /** Send an approved template; allowed outside the customer-service window. */
+  sendTemplate?(target: OutboundTarget, request: TemplateSendRequest, config: ChannelRuntimeConfig, media: OutboundMediaResolver): Promise<SendResult>;
+  /** Create the template at the provider and submit it for WhatsApp approval (all or nothing). */
+  createTemplate?(config: ChannelRuntimeConfig, draft: TemplateDraft): Promise<MessageTemplate>;
+  /** Current review state of one template; null when the provider no longer has it. */
+  templateStatus?(config: ChannelRuntimeConfig, templateId: string): Promise<MessageTemplate | null>;
+  /** Delete a template at the provider. */
+  deleteTemplate?(config: ChannelRuntimeConfig, template: { id: string; name: string }): Promise<void>;
+}
+
+export interface TemplateSendRequest {
+  /** Provider id: Twilio Content SID or Meta template id. */
+  templateId: string;
+  language: string;
+  /** Values keyed by TemplateVariable.key. */
+  variables: Readonly<Record<string, string>>;
+  /** Header media link for templates whose media is chosen at send time (Meta). */
+  headerMediaUrl?: string | undefined;
+  /** The normalized definition (from listTemplates) the values were validated against. */
+  template: MessageTemplate;
 }
 
 /** Resolves an outbound media part to something the provider can fetch or upload. */

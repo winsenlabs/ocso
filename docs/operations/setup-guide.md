@@ -68,8 +68,44 @@ stored in the secret store; the model never sees them. **Test** makes a real cal
 **Model profiles** are the logical names agents use (`support-primary`, `summarizer`, …): primary provider
 and model, ordered fallbacks, retries, timeout, cache policy/TTL and required capabilities (image, file,
 audio input, tool calling). The dialog validates every target against the deployment policy (allowlist,
-residency, cross-provider/region fallback) before it can be saved. **Pricing** (per 1M tokens: input,
-output, cache read, cache write) drives the cost figures in telemetry.
+residency, cross-provider/region fallback) before it can be saved.
+
+**Choosing a model.** The Model field, and each fallback's model field, is a searchable list of what
+the chosen provider actually offers with the configured credentials:
+
+| Provider | Where the list comes from |
+|---|---|
+| OpenAI, Anthropic | `GET /v1/models` (chat models only for OpenAI) |
+| Bedrock | Foundation models, plus cross-region and application inference profiles, in the provider's region |
+| Vertex | Gemini and Claude models from Model Garden |
+| Foundry | The deployments you listed in the provider settings |
+| Sarvam | Its `/models` endpoint |
+
+- **What each entry shows.** Context window, input kinds and tool calling when known, and the price:
+  the configured price, or the catalog's offer.
+- **Free text still works.** You can type any id the list does not return, such as a fine-tune or a
+  brand-new model.
+- **Refresh.** Lists are cached for 10 minutes. Tech Admins get a **Refresh** button.
+- **Errors.** If the key is wrong or the provider is down, the field says so, and you can still type
+  the id.
+
+**Prices.** OCSO costs every model call from **Model pricing** (per 1M tokens: input, output, cache
+read, cache write, plus long-context tiers).
+
+- **Catalog prices on save.** When you save a profile, any model without a price gets one from the
+  open-source model catalog, if the catalog knows it. These rows are marked **catalog**, with their
+  source (models.dev or LiteLLM) and the date checked.
+  - Catalog rows follow the catalog. The worker refreshes it daily, and **Refresh catalog** refreshes
+    it on demand. Every change is audited.
+  - **Edit a price to override it.** The row becomes **manual**, and refreshes never change manual
+    rows again. Use this for negotiated rates, batch or regional pricing, and 1-hour cache-write rates.
+- **Missing prices.** After a save, the dialog lists any model with **no price**. Add one there, or
+  later from **Models in use without a price** under Model pricing, which also offers **Use catalog
+  price** when the catalog has one.
+- **Usage without a price is shown as "no price"** in telemetry, never as a zero cost.
+- **Offline deployments** use the catalog copy bundled with OCSO. Outbound https to `models.dev` and
+  `raw.githubusercontent.com` is needed only for refreshes. Set `OCSO_MODEL_CATALOG_REFRESH=false` on
+  the API and worker to turn refreshes off.
 
 ## 3. Channels (Tech Admin)
 
@@ -96,18 +132,19 @@ under the same phone identity, so a person is one customer whichever integration
   POST**, and as the **status callback URL**. Paste it exactly — no trailing slash: Twilio signs the exact URL
   and OCSO rejects any request whose `X-Twilio-Signature` does not match `OCSO_PUBLIC_URL` + that path. Press
   **Test connection** to check the credentials read-only (Twilio's account is fetched; no message is sent).
-  Outside WhatsApp's 24-hour customer window free-form replies are refused: the reply is marked failed with
-  `outside_session_window` (Twilio error 63016 is mapped the same way). Only approved templates may be sent
-  then — create them in Twilio's Content Template Builder and address them by **Content SID** (`HX…`) with
-  Content Variables (the adapter's `sendTemplate`); OCSO has no operator screen for sending templates yet.
-  Twilio caps a message body at 1,600 characters (OCSO splits longer replies) and sends one media item per
-  message.
+  Outside WhatsApp's 24-hour customer window only approved templates reach the customer (see **WhatsApp
+  templates** below); OCSO lists and sends them with these same credentials through Twilio's Content API
+  (`content.twilio.com`). Twilio caps a message body at 1,600 characters (OCSO splits longer replies) and
+  sends one media item per message.
 - **WhatsApp — Meta Cloud API.** In Meta: a WhatsApp Business account, a phone number, a system-user
-  access token with `whatsapp_business_messaging`, and the app secret. In OCSO: the phone number id
-  (and optionally the WABA id), the access token, the app secret and a verify token (**Generate** makes
-  one — copy it). After saving, copy the webhook URL shown (`<public URL>/channels/whatsapp/<key>/webhook`)
-  into Meta's webhook settings with the same verify token and subscribe to `messages`. OCSO verifies every
-  webhook signature with the app secret and ignores duplicates.
+  access token with `whatsapp_business_messaging` (sending) and `whatsapp_business_management`
+  (templates), and the app secret. In OCSO: the phone number id, the **WhatsApp Business Account id**
+  (WABA id — required for templates; without it the template list says so), the access token, the app
+  secret and a verify token (**Generate** makes one — copy it). After saving, copy the webhook URL shown
+  (`<public URL>/channels/whatsapp/<key>/webhook`) into Meta's webhook settings with the same verify token
+  and subscribe to `messages` and `message_template_status_update` (template review results arrive
+  immediately; otherwise OCSO polls every 3 minutes). OCSO verifies every webhook signature with the app
+  secret and ignores duplicates.
 - **Web chat.** Set the allowed origins (sites that may embed the widget; empty = any), branding (title,
   greeting, accent colour, theme, position) and, for signed-in customers, a host identity secret your site
   uses to sign `identify()` tokens (HS256). Paste the snippet shown after saving into your site:
@@ -115,6 +152,39 @@ under the same phone identity, so a person is one customer whichever integration
   `examples/webchat-host/` for identify().
 
 Choose the channel's default virtual agent (created in §5) and set it **Active**.
+
+### WhatsApp templates (CS Lead or Tech Admin)
+
+WhatsApp allows free-form replies only for 24 hours after the customer's last message. After that the
+business may only send a **template** WhatsApp approved in advance. Templates are business content, so
+CS Leads (for channels their teams' agents use) and Tech Admins manage them (`whatsapp_templates.manage`).
+
+- **Create in OCSO.** **WhatsApp templates** in the sidebar (Tech Admin: also **Templates** on a WhatsApp
+  channel card) → **New template**. Give a name (`payment_reminder`: lower-case, digits, underscores), a
+  language code (`en`, `en_US`, `hi`…) and a category:
+  - **Utility** — about something the customer already asked for or bought (payment due, case update).
+  - **Marketing** — anything promotional; customers can opt out and it is billed as marketing.
+  - **Authentication** — one-time codes only; WhatsApp fixes the text and adds a copy-code button.
+
+  Write the message with numbered variables `{{1}}`, `{{2}}` and an example value for each (reviewers see
+  the examples), optionally a text or media header (media: a public `https` sample link — Twilio only; for
+  Meta create media templates in WhatsApp Manager), a footer and either quick replies or call-to-action
+  buttons. The builder applies WhatsApp's review rules as you type (no variable at the start or end, none
+  side by side, enough words per variable, limits) and warns when a utility template reads as promotional.
+  **Submit for WhatsApp approval** creates the template at the provider (Twilio: a Content resource, then an
+  approval request; Meta: `message_templates`) and records who submitted it. Review usually takes minutes
+  and up to 24 hours: the worker checks templates in review every 3 minutes (Meta also pushes the result),
+  the templates page updates live, and the submitter gets an in-app notice with the result and, for a
+  rejection, the reason.
+- **Create at the provider.** Templates made in Twilio's Content Template Builder (submitted for WhatsApp
+  approval) or in WhatsApp Manager appear in OCSO too — the list is read from the provider (cached 5
+  minutes; **Refresh** re-reads it).
+- **Send.** Execs pick an approved template in the conversation composer (**Template**), fill every
+  variable and check the preview; see docs/09 §4. Only `APPROVED` templates can be sent; pending, rejected,
+  paused and disabled ones are listed with their status. Templates using components OCSO cannot send yet
+  (location headers, catalog/flow buttons, carousels) are shown but disabled.
+- **Delete** removes the template at the provider (Meta blocks an approved name for 30 days; Twilio
+  removes its Content resource).
 
 ## 4. MCP tool servers (Tech Admin)
 
@@ -172,7 +242,16 @@ Quality.
 
 - **Alerts** — default rules exist from setup. Tech Admins manage technical rules (workers, queue age,
   provider errors, latency, MCP health, token/cost spikes, …); CS Leads manage business rules (escalation
-  rate, SLA breaches, CSAT, tool failures, …). Destinations: in-app, email (the deployment sender by default,
+  rate, SLA breaches, CSAT, tool failures, …).
+- **Monthly model budget** (Tech Admin, not created by default). Add a technical rule with the
+  condition **Monthly model spend above budget** (`spend_budget_above`).
+  - **Params:** `monthlyBudgetUsd` (e.g. `2000`) and `thresholdsPercent` (default `[80, 100]`).
+    Optionally bind the rule to one virtual agent.
+  - **What it counts:** model spend so far this calendar month in the deployment timezone.
+  - **When it fires:** once per threshold per month. The alert shows spend, budget and the projected
+    month-end spend at the current rate, and names any models that ran without a price. Those are not
+    counted, so add their prices.
+  - **When it resolves:** when the month rolls over. Destinations: in-app, email (the deployment sender by default,
   or its own SMTP relay), Slack, Teams, signed webhook, PagerDuty — each with a **Test** button.
 - **Webhooks** (Tech Admin) — subscribe external systems to events such as `conversation.resolved` or
   `alert.opened`. The signing secret is shown once; verify `X-OCSO-Signature: t=<unix>,v1=<hex

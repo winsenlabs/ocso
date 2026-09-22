@@ -14,6 +14,8 @@ import { hasPermission, type Session } from '@/lib/session';
 import { connectionsHref, idParam, param } from '../url';
 import { ChannelDialog } from './channel-dialog';
 
+/** Kinds with WhatsApp message templates (the adapters implement the template methods). */
+const TEMPLATE_KINDS: ReadonlySet<string> = new Set(['TWILIO_WHATSAPP', 'WHATSAPP']);
 const CODE: Record<string, ChannelCode> = { TWILIO_WHATSAPP: 'WA', WHATSAPP: 'WA', WEBCHAT: 'WB', CUSTOM_APP: 'AP', VOICE: 'VO', SMS: 'SM' };
 const LABEL: Record<string, string> = {
   TWILIO_WHATSAPP: 'WhatsApp — Twilio',
@@ -61,6 +63,7 @@ type Params = Record<string, string | string[] | undefined>;
  */
 export async function ChannelsTab({ session, params }: { session: Session; params: Params }) {
   const canManage = hasPermission(session, Permission.CHANNELS_MANAGE);
+  const canTemplates = hasPermission(session, Permission.WHATSAPP_TEMPLATES_MANAGE);
   const [channels, kinds, agents, origin] = await Promise.all([
     listChannels(),
     listChannelKinds(),
@@ -108,6 +111,11 @@ export async function ChannelsTab({ session, params }: { session: Session; param
                       {canManage ? (
                         <Link className="btn tiny ghost" href={connectionsHref({ tab: 'channels', dialog: 'channel-edit', id: c.id })} scroll={false} aria-label={`Edit ${c.name}`}>
                           Edit
+                        </Link>
+                      ) : null}
+                      {canTemplates && TEMPLATE_KINDS.has(c.kind) ? (
+                        <Link className="btn tiny ghost" href={`/whatsapp-templates?channel=${encodeURIComponent(c.id)}`} aria-label={`WhatsApp templates of ${c.name}`}>
+                          Templates
                         </Link>
                       ) : null}
                       <span className="sp" />

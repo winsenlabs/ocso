@@ -2,6 +2,8 @@ import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { validation } from '@ocso/domain';
 import { z } from 'zod';
 import { createAiSdkAdapter } from '../../core/adapter.js';
+import { listBedrockModels, type BedrockAuth } from '../../discovery/bedrock.js';
+import { listContext } from '../../discovery/context.js';
 import {
   commonSettingsShape,
   parseProviderConfig,
@@ -54,13 +56,14 @@ export const bedrockProvider: ProviderDefinition<BedrockSettings, BedrockCredent
     const { settings, credentials } = parseProviderConfig(bedrockProvider, config);
     const region = settings.region ?? config.region;
     if (!region) throw validation('provider_settings_invalid', 'A Bedrock region is required', { issues: [{ path: 'region' }] });
+    const auth = bedrockAuthOptions(settings.authMode, credentials);
     const bedrock = createAmazonBedrock({
       region,
-      ...bedrockAuthOptions(settings.authMode, credentials),
+      ...auth,
       ...(settings.baseURL ? { baseURL: settings.baseURL } : {}),
       ...fetchOption(deps),
     });
-    return createAiSdkAdapter({
+    const adapter = createAiSdkAdapter({
       kind: 'BEDROCK',
       providerId: config.id,
       region,
@@ -81,5 +84,15 @@ export const bedrockProvider: ProviderDefinition<BedrockSettings, BedrockCredent
       healthModel: settings.healthModel ?? null,
       secrets: secretValues(config),
     });
+    return { ...adapter, listModels: (options) => listBedrockModels(listContext(config, deps, options), listAuth(auth), region) };
   },
 };
+
+/** Control-plane auth from the same options the runtime client uses (API key bearer, or SigV4). */
+function listAuth(auth: ReturnType<typeof bedrockAuthOptions>): BedrockAuth {
+  if (auth.apiKey) return { mode: 'API_KEY', apiKey: auth.apiKey };
+  const provider = auth.credentialProvider;
+  if (provider) return { mode: 'SIGV4', credentials: async () => await provider() };
+  const { accessKeyId = '', secretAccessKey = '', sessionToken } = auth;
+  return { mode: 'SIGV4', credentials: async () => ({ accessKeyId, secretAccessKey, sessionToken }) };
+}

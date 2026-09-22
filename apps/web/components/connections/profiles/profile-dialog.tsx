@@ -4,13 +4,16 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { AlertBanner } from '@/components/ui/alert-banner';
 import { Modal } from '@/components/ui/modal';
 import { deleteProfileAction, saveProfileAction, testProviderAction, validateProfileAction } from '@/lib/actions/models';
-import type { PolicyCheck, Profile } from '@/lib/api/models';
+import type { PolicyCheck, PriceCheck, Profile } from '@/lib/api/models';
 import { ConfirmAction } from '../confirm-action';
 import { initialProfileForm, toProfileInput, type ProfileFormState } from '../models/profile-form';
 import { useCloseTo } from '../routed-modal';
 import { FallbackEditor, providerOptionLabel, type ProviderOption } from './fallback-editor';
+import { ModelCombobox } from './model-combobox';
 import { PolicyPanel } from './policy-panel';
 import { CacheFields, CapabilityFields, GenerationFields, Input } from './profile-fields';
+import { needsPriceReview, SavedPrices } from './saved-prices';
+import { ModelListsProvider } from './use-provider-models';
 
 interface Props {
   providers: ProviderOption[];
@@ -18,6 +21,10 @@ interface Props {
   /** Error categories that may move to the next target (from @ocso/domain). */
   fallbackCategories: string[];
   canTest: boolean;
+  /** providers.manage: may refresh provider model lists past the API cache. */
+  canRefreshModels: boolean;
+  /** pricing.manage: may add a price for a model saved without one. */
+  canPricing: boolean;
   closeHref: string;
 }
 
@@ -28,7 +35,15 @@ const FORM_ID = 'profile-form';
  * re-validated against the deployment policy (POST /v1/model-profiles/validate);
  * Save stays disabled until the current form has passed that check.
  */
-export function ProfileDialog({ providers, profile, fallbackCategories, canTest, closeHref }: Props) {
+export function ProfileDialog(props: Props) {
+  return (
+    <ModelListsProvider>
+      <ProfileDialogBody {...props} />
+    </ModelListsProvider>
+  );
+}
+
+function ProfileDialogBody({ providers, profile, fallbackCategories, canTest, canRefreshModels, canPricing, closeHref }: Props) {
   const close = useCloseTo(closeHref);
   const [state, setState] = useState<ProfileFormState>(() => initialProfileForm(profile, providers[0]?.id ?? ''));
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -36,6 +51,7 @@ export function ProfileDialog({ providers, profile, fallbackCategories, canTest,
   const [checkError, setCheckError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [testNote, setTestNote] = useState<string | null>(null);
+  const [savedPrices, setSavedPrices] = useState<PriceCheck[] | null>(null);
   const [validating, startValidate] = useTransition();
   const [saving, startSave] = useTransition();
   const [testing, startTest] = useTransition();
@@ -76,8 +92,9 @@ export function ProfileDialog({ providers, profile, fallbackCategories, canTest,
     const input = converted.input;
     startSave(async () => {
       const r = await saveProfileAction(profile?.id ?? null, input);
-      if (r.ok) close();
-      else setMessage(r.message);
+      if (!r.ok) setMessage(r.message);
+      else if (needsPriceReview(r.data.prices)) setSavedPrices(r.data.prices);
+      else close();
     });
   }
 
@@ -94,6 +111,23 @@ export function ProfileDialog({ providers, profile, fallbackCategories, canTest,
 
   const shownErrors = converted.ok ? errors : { ...converted.errors, ...errors };
   const touchedErrors = (field: string) => (state.name || state.model ? shownErrors[field] : undefined);
+  if (savedPrices) {
+    return (
+      <Modal
+        title={`Saved ${state.name.trim()}`}
+        sub="model prices"
+        onClose={close}
+        maxWidth={620}
+        footer={
+          <button type="button" className="btn accent" onClick={close}>
+            Done
+          </button>
+        }
+      >
+        <SavedPrices prices={savedPrices} canPricing={canPricing} />
+      </Modal>
+    );
+  }
   return (
     <Modal
       title={profile ? `Edit ${profile.name}` : 'New logical model profile'}
@@ -164,9 +198,24 @@ export function ProfileDialog({ providers, profile, fallbackCategories, canTest,
               region {primary?.region ?? 'not set'} · data in {primary?.residencyZone ?? 'unspecified zone'}
             </span>
           </div>
-          <Input id="pf-model" label="Model" value={state.model} onChange={(v) => set('model', v)} error={touchedErrors('model')} hint="model id or deployment name at this provider" />
+          <ModelCombobox
+            id="pf-model"
+            label="Model"
+            providerId={state.providerId}
+            providerLabel={primary?.name ?? 'the provider'}
+            value={state.model}
+            onChange={(v) => set('model', v)}
+            canRefresh={canRefreshModels}
+            error={touchedErrors('model')}
+          />
         </div>
-        <FallbackEditor rows={state.fallbacks} providers={providers} onChange={(rows) => set('fallbacks', rows)} error={touchedErrors('fallbacks')} />
+        <FallbackEditor
+          rows={state.fallbacks}
+          providers={providers}
+          onChange={(rows) => set('fallbacks', rows)}
+          canRefreshModels={canRefreshModels}
+          error={touchedErrors('fallbacks')}
+        />
         <GenerationFields state={state} set={set} errors={shownErrors} />
         <CacheFields state={state} set={set} />
         <CapabilityFields state={state} set={set} />

@@ -33,6 +33,11 @@ export class RealtimeAccess {
               can(this.principal, Permission.ALERTS_BUSINESS_READ) || can(this.principal, Permission.ALERTS_TECHNICAL_READ);
       return readable && (await this.agentAllowed(event.agentId));
     }
+    if (event.type === 'whatsapp_template.status_changed') {
+      // The submitter's in-app notice; Tech Admins see every channel's review results. Others get config.changed.
+      const submittedBy = (event.payload as { submittedBy?: string | null }).submittedBy;
+      return submittedBy === this.principal.userId || can(this.principal, Permission.CHANNELS_MANAGE);
+    }
     if (!event.conversationId) {
       if (event.type !== 'config.changed' && event.type !== 'cache.invalidated') return false;
       if (!can(this.principal, Permission.SYSTEM_READ) && !can(this.principal, Permission.AGENTS_MANAGE)) return false;

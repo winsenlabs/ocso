@@ -1,7 +1,7 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createAzure } from '@ai-sdk/azure';
 import { validation } from '@ocso/domain';
-import type { ModelRequest } from '../../contract/types.js';
+import type { ModelRequest, ProviderModelInfo } from '../../contract/types.js';
 import { createAiSdkAdapter } from '../../core/adapter.js';
 import type { ProviderOptionsPlan } from '../../core/spec.js';
 import { parseProviderConfig, secretValues, type ProviderDefinition } from '../definition.js';
@@ -61,6 +61,22 @@ function clients(settings: FoundrySettings, creds: FoundryCredentials, fetchImpl
   };
 }
 
+/**
+ * Foundry "listing" = the deployments configured in the provider settings
+ * (listing deployments needs Azure control-plane access, which an inference
+ * key does not grant). `baseModel` is the declared underlying model.
+ */
+export function foundryDeployments(settings: FoundrySettings): ProviderModelInfo[] {
+  return Object.entries(settings.deployments).map(([name, d]) => ({
+    id: name,
+    displayName: d.model ? `${name} (${d.model})` : name,
+    createdAt: null,
+    ownedBy: d.modelFamily,
+    kind: 'deployment' as const,
+    ...(d.model ? { baseModel: d.model } : {}),
+  }));
+}
+
 export const foundryProvider: ProviderDefinition<FoundrySettings, FoundryCredentials> = {
   kind: 'FOUNDRY',
   label: 'Microsoft Foundry',
@@ -72,7 +88,7 @@ export const foundryProvider: ProviderDefinition<FoundrySettings, FoundryCredent
   create(config, deps) {
     const { settings, credentials } = parseProviderConfig(foundryProvider, config);
     const { azure, claude } = clients(settings, credentials, fetchOption(deps).fetch);
-    return createAiSdkAdapter({
+    const adapter = createAiSdkAdapter({
       kind: 'FOUNDRY',
       providerId: config.id,
       region: config.region,
@@ -91,5 +107,6 @@ export const foundryProvider: ProviderDefinition<FoundrySettings, FoundryCredent
       healthProbe: { maxOutputTokens: 16 },
       secrets: secretValues(config),
     });
+    return { ...adapter, listModels: async () => foundryDeployments(settings) };
   },
 };

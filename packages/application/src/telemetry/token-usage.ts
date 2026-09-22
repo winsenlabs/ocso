@@ -14,6 +14,8 @@ export interface TokenTotals {
   cachedInputShare: number | null;
   costMicros: number | null;
   currency: string | null;
+  /** Successful requests with tokens but no price row (their cost is unknown: "no price", never zero). */
+  unpricedRequests: number;
 }
 
 export interface ProfileUsage extends TokenTotals {
@@ -56,6 +58,7 @@ type Row = {
   reported_input: number | null;
   cost: number | null;
   currencies: string[] | null;
+  unpriced: number;
 };
 
 function totals(r: Row | undefined): TokenTotals {
@@ -72,6 +75,7 @@ function totals(r: Row | undefined): TokenTotals {
     cachedInputShare: cacheRead !== null && reportedInput ? cacheRead / reportedInput : null,
     costMicros: num(r?.cost),
     currency: currencies.length === 0 ? null : currencies.length === 1 ? currencies[0]! : 'MIXED',
+    unpricedRequests: int(r?.unpriced),
   };
 }
 
@@ -98,7 +102,8 @@ export async function tokenUsage(db: DbOrTx, from: Date, to: Date): Promise<Toke
            sum(u.reasoning_tokens)::float8 AS reasoning,
            (sum(u.input_tokens) FILTER (WHERE u.cached_input_tokens IS NOT NULL))::float8 AS reported_input,
            sum(u.cost_micros)::float8 AS cost,
-           array_agg(DISTINCT u.currency) FILTER (WHERE u.currency IS NOT NULL) AS currencies
+           array_agg(DISTINCT u.currency) FILTER (WHERE u.currency IS NOT NULL) AS currencies,
+           count(*) FILTER (WHERE u.status = 'OK' AND u.cost_micros IS NULL AND u.input_tokens + u.output_tokens > 0)::int AS unpriced
       FROM usage_events u
       LEFT JOIN model_profiles mp ON mp.id = u.profile_id
      WHERE u.occurred_at >= ${at(from)} AND u.occurred_at < ${at(to)}
@@ -130,6 +135,7 @@ export async function tokenUsage(db: DbOrTx, from: Date, to: Date): Promise<Toke
       tokenShare: '(input + output tokens) of the profile (or purpose) / (input + output tokens) of all requests in the window.',
       byPurpose: 'usage_events grouped by purpose (TURN = customer turns, SUMMARY, COPILOT, INTERNAL_AGENT, CLASSIFIER, EVALUATION, TEST); requests counts every attempt including errors and fallbacks; cache and cost columns follow the same rules as the totals.',
       costMicros: 'Sum of usage_events.cost_micros (priced from model_pricing at request time); requests without a price are not included.',
+      unpricedRequests: 'Successful requests recorded without a cost because no model_pricing row matched their model: shown as "no price", never as zero.',
     },
   };
 }

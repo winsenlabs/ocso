@@ -13,3 +13,5 @@ export * from './template.js';
 export * from './verification.js';
 export { parseWhatsAppWebhook, type ParseOptions as WhatsAppParseOptions } from './inbound/parse.js';
 export { STRUCTURED_SCHEMAS as WHATSAPP_STRUCTURED_SCHEMAS } from './inbound/structured-parts.js';
+export { normalizeMetaTemplate, metaTemplateStatus } from './templates/normalize.js';
+export { sendComponents as metaTemplateComponents, createTemplateBody as metaTemplateCreateBody } from './templates/components.js';

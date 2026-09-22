@@ -31,6 +31,8 @@ export async function GET(request: NextRequest): Promise<Response> {
 
   const upstreamUrl = new URL(`${apiBaseUrl()}/v1/realtime/stream`);
   if (parsed.data.conversationId) upstreamUrl.searchParams.set('conversationId', parsed.data.conversationId);
+  // The API filters by type too, so narrow listeners (e.g. template review notices) stay cheap.
+  if (parsed.data.types.length) upstreamUrl.searchParams.set('types', parsed.data.types.join(','));
 
   let upstream: Response;
   try {

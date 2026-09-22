@@ -10,14 +10,18 @@ import {
   ReturnToAiInput,
   SetTagsInput,
   TagSuggestionQuery,
+  TemplateMessageInput,
   TransferInput,
+  WhatsAppTemplateService,
   addNote,
   loadConversationDetail,
   loadTimeline,
   sendHumanReply,
+  sendTemplateMessage,
   setConversationTags,
   tagSuggestions,
   type ActorContext,
+  type SessionWindowHours,
 } from '@ocso/application';
 import { notFound } from '@ocso/domain';
 import type { Db } from '@ocso/db';
@@ -26,6 +30,7 @@ import type { BlobStore } from '@ocso/blob';
 import { z } from 'zod';
 import { Actor, CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
 import { BLOB_STORE, DB, QUEUE } from '../../infrastructure/tokens.js';
+import { SESSION_WINDOW_HOURS } from '../channels/templates.providers.js';
 import { ConversationAccessService } from './conversation-access.service.js';
 
 const Id = z.uuid();
@@ -45,6 +50,8 @@ export class ConversationsController {
     @Inject(InboxService) private readonly inbox: InboxService,
     @Inject(HumanControlService) private readonly control: HumanControlService,
     @Inject(ConversationAccessService) private readonly access: ConversationAccessService,
+    @Inject(WhatsAppTemplateService) private readonly templates: WhatsAppTemplateService,
+    @Inject(SESSION_WINDOW_HOURS) private readonly windowHours: SessionWindowHours,
   ) {}
 
   @Get()
@@ -64,7 +71,7 @@ export class ConversationsController {
   @RequirePermission(Permission.CONVERSATIONS_READ)
   async detail(@CurrentPrincipal() principal: Principal, @Param('id', { schema: Id }) id: string) {
     await this.access.assert(principal, id);
-    const detail = await loadConversationDetail(this.db, id);
+    const detail = await loadConversationDetail(this.db, id, { windowHours: this.windowHours });
     if (!detail) throw notFound('conversation', id);
     return detail;
   }
@@ -166,6 +173,18 @@ export class ConversationsController {
   @RequirePermission(Permission.CONVERSATIONS_REPLY)
   async reply(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Body({ schema: HumanReplyInput }) body: HumanReplyInput) {
     await this.access.assert(actor.principal!, id);
-    return sendHumanReply(this.db, this.queue, actor, id, body, { media: this.blobs });
+    return sendHumanReply(this.db, this.queue, actor, id, body, { media: this.blobs, windowHours: this.windowHours });
+  }
+
+  /**
+   * Send an approved WhatsApp template (the only way to reach the customer
+   * after the 24-hour window; allowed inside it too). `reopen: true` reopens a
+   * resolved conversation and sends in one step.
+   */
+  @Post(':id/template-message')
+  @RequirePermission(Permission.CONVERSATIONS_REPLY)
+  async templateMessage(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Body({ schema: TemplateMessageInput }) body: TemplateMessageInput) {
+    await this.access.assert(actor.principal!, id);
+    return sendTemplateMessage(this.db, this.queue, actor, id, body, { templates: this.templates });
   }
 }
