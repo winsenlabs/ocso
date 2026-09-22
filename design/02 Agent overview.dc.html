@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared/base.css" />
+<link rel="stylesheet" href="shared/one.css" />
+<link rel="stylesheet" href="shared/charts.css" />
+<link rel="stylesheet" href="shared/mock.css" />
+<link rel="stylesheet" href="shared/ocso.css" />
+<style>
+.ahead{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:16px;align-items:start;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;margin-bottom:16px}
+.ahead .facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:9px 18px;margin-top:11px}
+.ahead .facts .k{font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-4)}
+.ahead .facts .v{font-size:12.5px;color:var(--ink);font-weight:500;margin-top:1px}
+.ahead .facts .v a{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
+.agent-portrait{width:52px;height:52px;border-radius:14px;background:var(--tone-indigo);color:#fff;display:grid;place-items:center;font-size:18px;font-weight:600;font-family:var(--font-mono);flex:none}
+.prompt-grid{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px}
+@media (max-width:1240px){.prompt-grid{grid-template-columns:minmax(0,1fr)}}
+.dt-agent .dt-head,.dt-agent .dt-row{grid-template-columns:minmax(0,1.4fr) 88px minmax(0,1fr) 80px 92px 72px}
+.dt-rev .dt-head,.dt-rev .dt-row{grid-template-columns:minmax(0,1.6fr) 110px 96px 84px 80px}
+.dt-tool .dt-head,.dt-tool .dt-row{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) 78px 74px 80px 70px}
+.dt-chan .dt-head,.dt-chan .dt-row{grid-template-columns:minmax(0,1fr) 92px 88px 96px 88px 78px}
+</style>
+<title>Maya — Customer Support — OCSO</title>
+</helmet>
+
+<div class="app" data-screen-label="02 · CS Lead virtual agent overview">
+  <dc-import name="OCSONav" role="lead" active="agents" hint-size="240px,100vh"></dc-import>
+
+  <main class="main" style="padding:22px 26px 60px">
+    <div class="topbar" style="margin-bottom:16px">
+      <div class="topbar-search"><span>Search agents, prompts, conversations</span><span class="topbar-search-shortcut">⌘K</span></div>
+      <span class="topbar-spacer"></span>
+      <button class="topbar-btn">Maya <span class="mono-sm">▾</span></button>
+      <button class="topbar-btn">Last 7 days</button>
+      <button class="topbar-btn">Alerts <span class="sb-badge" style="background:var(--warn-soft);color:var(--warn)">3</span></button>
+      <button class="btn tiny accent">Ask OCSO</button>
+    </div>
+
+    <a class="back" href="index.dc.html">← Virtual agents</a>
+
+    <div class="ahead">
+      <span class="agent-portrait">MA</span>
+      <div>
+        <div class="rowsplit">
+          <h1 style="margin:0;font-size:20px;font-weight:600;letter-spacing:-0.02em">Maya — Customer Support</h1>
+          <span class="presence working"><span class="dot"></span>live</span>
+          <span class="schip muted">SUPPORT</span>
+          <span class="mono-sm">agt_maya_cs · created 04 Jan 2026</span>
+        </div>
+        <p style="margin:5px 0 0;font-size:13px;color:var(--ink-2);max-width:700px;text-wrap:pretty">Handles card, EMI and statement questions for retail customers on WhatsApp and web chat. Resolves end to end where policy allows, escalates refunds above ₹5,000 and any hardship or dispute language to the Cards &amp; EMI queue.</p>
+        <div class="facts">
+          <div><div class="k">channels</div><div class="v">WhatsApp · Web · App · Email</div></div>
+          <div><div class="k">model profile</div><div class="v"><a href="04 Connections and models.dc.html">support-primary</a></div></div>
+          <div><div class="k">prompt version</div><div class="v">v14 · live 12 Mar</div></div>
+          <div><div class="k">queue / team</div><div class="v">Cards &amp; EMI · Tier 2</div></div>
+          <div><div class="k">business hours</div><div class="v">24×7 · human 08–23 IST</div></div>
+          <div><div class="k">tools</div><div class="v">11 enabled · 3 connections</div></div>
+        </div>
+      </div>
+      <div style="display:grid;gap:6px;justify-items:end">
+        <div style="display:flex;gap:6px"><button class="btn tiny">Pause agent</button><button class="btn tiny accent">Create new version</button></div>
+        <span class="mono-sm">changes are versioned and attributable</span>
+        <div class="alert warn" style="margin:8px 0 0;max-width:270px"><span><b>3 open alerts</b><span class="a-body" style="display:block">escalation rate above 18% for 2 days · tool failure on disputes.raise_case</span></span></div>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="{{ t_overview }}" onClick="{{ go_overview }}">Overview</button>
+      <button class="{{ t_prompt }}" onClick="{{ go_prompt }}">Prompt</button>
+      <button class="{{ t_tools }}" onClick="{{ go_tools }}">Tools</button>
+      <button class="{{ t_channels }}" onClick="{{ go_channels }}">Channels</button>
+      <button class="{{ t_routing }}" onClick="{{ go_routing }}">Routing</button>
+      <button class="{{ t_escalation }}" onClick="{{ go_escalation }}">Escalation</button>
+      <button class="{{ t_analytics }}" onClick="{{ go_analytics }}">Analytics</button>
+      <button class="{{ t_versions }}" onClick="{{ go_versions }}">Versions</button>
+      <span class="sp"></span>
+      <button>Duplicate agent</button>
+    </div>
+
+    <!-- ══ OVERVIEW ══ -->
+    <sc-if value="{{ isOverview }}" hint-placeholder-val="{{ true }}">
+      <div class="tiles" style="grid-template-columns:repeat(auto-fit,minmax(142px,1fr))">
+        <div class="tile"><div class="v">4,812 <span class="delta">+6.2%</span></div><div class="k">conversations</div></div>
+        <div class="tile"><div class="v">81.4% <span class="delta">−1.8</span></div><div class="k">ai containment</div></div>
+        <div class="tile warn"><div class="v">18.6% <span class="delta">+1.8</span></div><div class="k">escalation rate</div></div>
+        <div class="tile"><div class="v">88.1%</div><div class="k">resolution rate</div></div>
+        <div class="tile"><div class="v">4.2s</div><div class="k">first response</div></div>
+        <div class="tile warn"><div class="v">14</div><div class="k">sla breaches</div></div>
+        <div class="tile"><div class="v">2.1%</div><div class="k">tool failure rate</div></div>
+        <div class="tile"><div class="v">4.41 <span class="delta">of 5</span></div><div class="k">csat · 1,204 responses</div></div>
+      </div>
+
+      <div class="row2" style="margin-bottom:14px">
+        <div class="ch">
+          <div class="t"><h3>Containment and escalation · 14 days</h3><span class="lg"><i style="background:var(--ink)"></i>contained</span><span class="lg"><i style="background:var(--warn)"></i>escalated</span><a class="mono-sm" style="margin-left:auto" href="#">analytics →</a></div>
+          <svg viewBox="0 0 300 96" preserveAspectRatio="none" style="height:96px">
+            <line x1="0" y1="24" x2="300" y2="24" stroke="var(--border)" stroke-dasharray="2 4"></line>
+            <line x1="0" y1="56" x2="300" y2="56" stroke="var(--border)" stroke-dasharray="2 4"></line>
+            <polyline fill="none" stroke="var(--ink)" stroke-width="2" points="0,26 23,24 46,27 69,23 92,25 115,28 138,26 161,30 184,33 207,31 230,36 253,38 276,37 300,40"></polyline>
+            <polyline fill="none" stroke="var(--warn)" stroke-width="2" points="0,78 23,80 46,77 69,79 92,78 115,75 138,76 161,72 184,69 207,70 230,66 253,63 276,64 300,61"></polyline>
+            <line x1="207" y1="0" x2="207" y2="96" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="3 3"></line>
+          </svg>
+          <div class="ax"><span>05 Mar</span><span style="color:var(--accent)">v14 shipped · 12 Mar</span><span>19 Mar</span></div>
+          <div class="foot"><span class="mono-sm">escalation up 1.8pt since v14 · concentrated in EMI refunds</span></div>
+        </div>
+        <div class="ch">
+          <div class="t"><h3>Top escalation reasons</h3><span class="mono-sm">896 handoffs</span></div>
+          <div class="hb">
+            <span>Refund above authority</span><span class="bar"><i class="w" style="width:88%"></i></span><span class="n">312</span>
+            <span>Hardship / job loss language</span><span class="bar"><i class="w" style="width:52%"></i></span><span class="n">184</span>
+            <span>Dispute raised by customer</span><span class="bar"><i style="width:41%"></i></span><span class="n">146</span>
+            <span>Repeated tool failure</span><span class="bar"><i class="d" style="width:28%"></i></span><span class="n">99</span>
+            <span>Customer asked for a human</span><span class="bar"><i style="width:24%"></i></span><span class="n">86</span>
+            <span>Low confidence on policy</span><span class="bar"><i style="width:19%"></i></span><span class="n">69</span>
+          </div>
+          <div class="foot"><span class="mono-sm">2 reasons are policy-driven and expected · 1 is a tool defect</span></div>
+        </div>
+      </div>
+
+      <div class="g g3" style="margin-bottom:14px">
+        <div class="ch">
+          <div class="t"><h3>Common failure topics</h3></div>
+          <div class="hb" style="grid-template-columns:minmax(90px,1fr) minmax(0,1.6fr) 44px">
+            <span>Duplicate debit</span><span class="bar"><i class="w" style="width:74%"></i></span><span class="n">74</span>
+            <span>EMI foreclosure</span><span class="bar"><i class="w" style="width:61%"></i></span><span class="n">61</span>
+            <span>Reward points</span><span class="bar"><i style="width:34%"></i></span><span class="n">34</span>
+            <span>Address proof</span><span class="bar"><i style="width:22%"></i></span><span class="n">22</span>
+          </div>
+          <div class="foot"><span class="mono-sm">unresolved after 3 AI turns</span></div>
+        </div>
+        <div class="ch">
+          <div class="t"><h3>Knowledge gaps</h3><span class="schip warn">4 new</span></div>
+          <div style="display:grid;gap:7px;font-size:12.5px;color:var(--ink-2)">
+            <div class="rowsplit"><span>Foreclosure charge table for 2026 EMI plans</span><span class="sp"></span><span class="mono-sm">28 asks</span></div>
+            <div class="rowsplit"><span>Merchant terminal duplicate-auth policy</span><span class="sp"></span><span class="mono-sm">19 asks</span></div>
+            <div class="rowsplit"><span>Reward points expiry after card upgrade</span><span class="sp"></span><span class="mono-sm">12 asks</span></div>
+            <div class="rowsplit"><span>Marathi wording for dispute disclosures</span><span class="sp"></span><span class="mono-sm">7 asks</span></div>
+          </div>
+          <div class="foot"><button class="btn tiny">Send to knowledge owner</button></div>
+        </div>
+        <div class="ch">
+          <div class="t"><h3>Prompt correction opportunities</h3><span class="schip accent">6</span></div>
+          <div style="display:grid;gap:8px">
+            <div style="display:grid;gap:2px"><span style="font-size:12.5px;color:var(--ink);font-weight:500">Offer the reversal path before asking for the statement</span><span class="mono-sm">observed in 41 conversations · component: Behavior</span></div>
+            <div style="display:grid;gap:2px"><span style="font-size:12.5px;color:var(--ink);font-weight:500">Stop promising a 24h resolution on disputes</span><span class="mono-sm">observed in 22 conversations · component: Policies</span></div>
+            <div style="display:grid;gap:2px"><span style="font-size:12.5px;color:var(--ink);font-weight:500">Escalate hardship wording on the first mention</span><span class="mono-sm">observed in 18 conversations · component: Escalation Rules</span></div>
+          </div>
+          <div class="foot"><button class="btn tiny accent" onClick="{{ go_prompt }}">Open prompt editor</button></div>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div>
+          <div class="sec-head"><h2>Latest reviewed conversations</h2><span class="count">18 this week</span><div class="sec-head-actions"><button class="btn tiny ghost">Review queue</button></div></div>
+          <div class="dtable dt-rev">
+            <div class="dt-head"><span>Conversation</span><span>Reviewer</span><span>Outcome</span><span>Control</span><span>Score</span></div>
+            <div class="dt-row"><span><b style="font-size:12.5px">Priya Deshmukh · duplicate EMI debit</b><span class="mono-sm" style="display:block">conv_9f41ac · whatsapp · 31m</span></span><span class="mono-sm">A. Rao</span><span><span class="schip good">good handoff</span></span><span><span class="cstate resolved"><span class="dot"></span>resolved</span></span><span class="mono">4.6</span></div>
+            <div class="dt-row"><span><b style="font-size:12.5px">Farida Sheikh · hardship plan</b><span class="mono-sm" style="display:block">conv_8c02b1 · voice · 18m</span></span><span class="mono-sm">A. Rao</span><span><span class="schip warn">late escalation</span></span><span><span class="cstate wait"><span class="dot"></span>waiting</span></span><span class="mono">2.8</span></div>
+            <div class="dt-row"><span><b style="font-size:12.5px">Arvind Nair · replacement card</b><span class="mono-sm" style="display:block">conv_7a91de · app · 9m</span></span><span class="mono-sm">S. Kapoor</span><span><span class="schip good">contained</span></span><span><span class="cstate resolved"><span class="dot"></span>resolved</span></span><span class="mono">4.9</span></div>
+            <div class="dt-row"><span><b style="font-size:12.5px">Deepa Raman · address change</b><span class="mono-sm" style="display:block">conv_6b17f4 · email · 1d 04h</span></span><span class="mono-sm">S. Kapoor</span><span><span class="schip muted">policy limit</span></span><span><span class="cstate ai"><span class="dot"></span>ai active</span></span><span class="mono">3.9</span></div>
+            <div class="dt-row"><span><b style="font-size:12.5px">Mohit Bansal · fee waiver claim</b><span class="mono-sm" style="display:block">conv_5d80aa · instagram · 4m</span></span><span class="mono-sm">A. Rao</span><span><span class="schip danger">wrong policy quoted</span></span><span><span class="cstate resolved"><span class="dot"></span>resolved</span></span><span class="mono">2.1</span></div>
+          </div>
+        </div>
+        <div>
+          <div class="sec-head"><h2>Alerts for this agent</h2><span class="count">3 open</span></div>
+          <div class="ch" style="gap:12px">
+            <div class="alert warn" style="margin:0"><span><b>Escalation rate 18.6% for 2 days</b><span class="a-body" style="display:block">threshold 15% · opened 18 Mar 07:00 · audience CS Lead</span></span></div>
+            <div class="alert error" style="margin:0"><span><b>disputes.raise_case failing 6.4%</b><span class="a-body" style="display:block">meridian-crm connection · 99 tool errors in 24h · shared with Tech Admin</span></span></div>
+            <div class="alert" style="margin:0"><span><b>CSAT dip on Instagram DM</b><span class="a-body" style="display:block">3.6 avg over 41 responses · below 4.0 floor</span></span></div>
+            <div class="rowsplit"><button class="btn tiny">Acknowledge all</button><button class="btn tiny ghost">Alert rules</button></div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ══ PROMPT ══ -->
+    <sc-if value="{{ isPrompt }}" hint-placeholder-val="{{ false }}">
+      <div class="prompt-grid">
+        <div>
+          <div class="sec-head"><h2>Prompt components</h2><span class="desc">compiled in order · stable content first so the provider cache keeps the prefix</span><div class="sec-head-actions"><button class="btn tiny ghost">Diff v13 → v14</button><button class="btn tiny">Preview compiled</button></div></div>
+
+          <div class="pcomp">
+            <div class="ph2"><span class="ix">01</span><span class="nm">Runtime contract</span><span class="lock">owned by platform · read only</span><span class="sp" style="flex:1"></span><span class="mono-sm">412 tokens</span></div>
+            <div class="pb">Injected by OCSO. Defines turn structure, tool-call protocol, refusal handling, and the rule that internal notes, tool traces and policy metadata are never rendered to a customer channel.</div>
+          </div>
+
+          <div class="pcomp">
+            <div class="ph2"><span class="ix">02</span><span class="nm">Identity</span><span class="lock">cs lead</span><span class="sp" style="flex:1"></span><span class="mono-sm">88 tokens</span><button class="btn tiny ghost">Edit</button></div>
+            <div class="pb">You are Maya, a customer support colleague at Meridian Bank. You are warm, brief and exact. You never claim to be human, and you say “I” only about things you actually did in this conversation.</div>
+          </div>
+
+          <div class="pcomp">
+            <div class="ph2"><span class="ix">03</span><span class="nm">Objective</span><span class="lock">cs lead</span><span class="sp" style="flex:1"></span><span class="mono-sm">96 tokens</span><button class="btn tiny ghost">Edit</button></div>
+            <div class="pb">Resolve the customer's card, EMI and statement question in this conversation wherever policy allows. Prefer a completed action over an explanation. If you cannot complete it, say what you have done, what remains, and who will do it.</div>
+          </div>
+
+          <div class="pcomp edited">
+            <div class="ph2"><span class="ix">04</span><span class="nm">Behavior</span><span class="lock">cs lead</span><span class="sp" style="flex:1"></span><span class="schip accent">edited · unsaved</span><span class="mono-sm">254 tokens</span><button class="btn tiny ghost">Revert</button></div>
+            <div class="pb">• Open with the customer's own words, not a greeting template.
+• Ask for at most one identifier at a time.
+• When a duplicate debit is described, check the ledger first and offer the reversal path before asking for a statement image.
+• Give amounts in ₹ with the instalment number.
+• Never speculate about merchant behaviour.
+• Match the customer's language; Marathi and Hindi replies use the approved disclosure wording.</div>
+          </div>
+
+          <div class="pcomp">
+            <div class="ph2"><span class="ix">05</span><span class="nm">Policies and compliance</span><span class="lock">cs lead · legal review</span><span class="sp" style="flex:1"></span><span class="mono-sm">318 tokens</span><button class="btn tiny ghost">Edit</button></div>
+            <div class="pb">• Do not state a resolution time for disputes; use “we will confirm in writing”.
+• No fee waiver may be promised; quote the published schedule (CRD-114).
+• Never read out a full card number or CVV, and never accept one on any channel.
+• Hardship language triggers the hardship disclosure before any payment request.</div>
+          </div>
+
+          <div class="pcomp">
+            <div class="ph2"><span class="ix">06</span><span class="nm">Tool instructions</span><span class="lock">cs lead · tech admin for schemas</span><span class="sp" style="flex:1"></span><span class="mono-sm">406 tokens</span><button class="btn tiny ghost">Edit</button></div>
+            <div class="pb">• Read the ledger before discussing any amount.
+• payments.reverse_transaction is limited to ₹5,000 and requires a human confirmation above it — raise a handoff instead of retrying.
+• After two failures of the same tool, stop, tell the customer plainly, and escalate.
+• Never expose tool names, arguments or errors to the customer.</div>
+          </div>
+
+          <div class="pcomp">
+            <div class="ph2"><span class="ix">07</span><span class="nm">Escalation rules</span><span class="lock">cs lead</span><span class="sp" style="flex:1"></span><span class="mono-sm">212 tokens</span><button class="btn tiny ghost">Edit</button></div>
+            <div class="pb">Hand off to Cards &amp; EMI · Tier 2 when: refund above ₹5,000 · hardship, job loss or bereavement language on first mention · customer asks for a human · dispute or ombudsman mentioned · two consecutive tool failures · abusive language. Summarise for the human in three lines: what happened, what you did, what they need to decide.</div>
+          </div>
+
+          <div class="pcomp">
+            <div class="ph2"><span class="ix">08</span><span class="nm">Channel constraints</span><span class="lock">cs lead</span><span class="sp" style="flex:1"></span><span class="mono-sm">164 tokens</span><button class="btn tiny ghost">Edit</button></div>
+            <div class="pb">WhatsApp: under 700 characters, no markdown, one question per message, documents as PDF only. Voice: short sentences, spell references, no links. Instagram DM: no account data at all — move the customer to WhatsApp or app chat first.</div>
+          </div>
+
+          <div class="rowsplit" style="margin-top:14px">
+            <button class="btn accent">Create version v15</button>
+            <button class="btn">Run against 40 replay cases</button>
+            <button class="btn ghost">Discard changes</button>
+            <span class="sp"></span>
+            <span class="mono-sm">1 component edited · compiled 1,950 tokens · prefix hash changes</span>
+          </div>
+        </div>
+
+        <aside style="display:grid;gap:14px;align-content:start">
+          <div class="ch" style="gap:8px">
+            <div class="t"><h3>Live version</h3><span class="schip good">v14</span></div>
+            <div class="kv" style="grid-template-columns:minmax(80px,96px) minmax(0,1fr)">
+              <span class="k">author</span><span>Anjali Rao</span>
+              <span class="k">activated</span><span>12 Mar 11:20</span>
+              <span class="k">hash</span><span class="mono-sm">pc_4f81…a20c</span>
+              <span class="k">cache</span><span>prefix shared · 91% read</span>
+              <span class="k">reason</span><span>Duplicate-debit path shortened</span>
+            </div>
+          </div>
+          <div class="ch" style="padding:0;gap:0;overflow:hidden">
+            <div style="padding:12px 14px;border-bottom:1px solid var(--border)"><div class="t"><h3>Version history</h3><a class="mono-sm" style="margin-left:auto" href="#" onClick="{{ go_versions }}">all →</a></div></div>
+            <div class="vrow live"><span class="vdot"></span><span class="vid">v14</span><span>Duplicate-debit path shortened</span><span class="vwho">A. Rao</span><span class="mono-sm">12 Mar</span></div>
+            <div class="vrow"><span class="vdot"></span><span class="vid">v13</span><span>Hardship disclosure wording</span><span class="vwho">A. Rao</span><span class="mono-sm">28 Feb</span></div>
+            <div class="vrow"><span class="vdot"></span><span class="vid">v12</span><span>Instagram data restriction</span><span class="vwho">S. Kapoor</span><span class="mono-sm">19 Feb</span></div>
+            <div class="vrow"><span class="vdot"></span><span class="vid">v11</span><span>Tool retry limit set to 2</span><span class="vwho">T. Shetty</span><span class="mono-sm">11 Feb</span></div>
+          </div>
+          <div class="ch" style="gap:9px">
+            <div class="t"><h3>Correction from a conversation</h3></div>
+            <div style="font-size:12.5px;color:var(--ink-2);line-height:1.55">Anjali flagged <b style="color:var(--ink)">conv_9f41ac</b> at turn 4: Maya asked for a statement image she did not need.</div>
+            <div class="kv" style="grid-template-columns:minmax(80px,90px) minmax(0,1fr)">
+              <span class="k">observed</span><span>Asked for a document already on file</span>
+              <span class="k">desired</span><span>Check ledger, then offer reversal</span>
+              <span class="k">component</span><span>Behavior</span>
+              <span class="k">status</span><span><span class="schip accent">staged in v15</span></span>
+            </div>
+            <button class="btn tiny">Open source turn</button>
+          </div>
+        </aside>
+      </div>
+    </sc-if>
+
+    <!-- ══ TOOLS ══ -->
+    <sc-if value="{{ isTools }}" hint-placeholder-val="{{ false }}">
+      <div class="sec-head"><h2>Enabled tools</h2><span class="count">11 of 34 discovered</span><span class="desc">resolved from agent policy, shared connections and the acting user's scope</span><div class="sec-head-actions"><button class="btn tiny">Add tool</button></div></div>
+      <div class="dtable dt-tool">
+        <div class="dt-head"><span>Tool</span><span>Connection</span><span>Side effect</span><span>Calls 7d</span><span>Fail rate</span><span>p95</span></div>
+        <div class="dt-row"><span class="mono" style="font-size:12px">cards.list_transactions</span><span class="mono-sm">core-cards</span><span><span class="risk r">read</span></span><span class="mono">4,120</span><span class="mono">0.1%</span><span class="mono">690ms</span></div>
+        <div class="dt-row"><span class="mono" style="font-size:12px">crm.get_customer_accounts</span><span class="mono-sm">meridian-crm</span><span><span class="risk r">read</span></span><span class="mono">4,804</span><span class="mono">0.3%</span><span class="mono">412ms</span></div>
+        <div class="dt-row"><span class="mono" style="font-size:12px">statements.send_pdf</span><span class="mono-sm">core-cards</span><span><span class="risk r">read</span></span><span class="mono">812</span><span class="mono">0.4%</span><span class="mono">1.2s</span></div>
+        <div class="dt-row"><span class="mono" style="font-size:12px">emi.get_schedule</span><span class="mono-sm">core-cards</span><span><span class="risk r">read</span></span><span class="mono">1,904</span><span class="mono">0.2%</span><span class="mono">540ms</span></div>
+        <div class="dt-row"><span class="mono" style="font-size:12px">disputes.raise_case</span><span class="mono-sm">meridian-crm</span><span><span class="risk w">write</span></span><span class="mono">146</span><span class="mono" style="color:var(--danger);font-weight:600">6.4%</span><span class="mono">2.8s</span></div>
+        <div class="dt-row"><span class="mono" style="font-size:12px">payments.reverse_transaction</span><span class="mono-sm">core-cards</span><span><span class="risk s">2-step</span></span><span class="mono">312</span><span class="mono">0.6%</span><span class="mono">1.8s</span></div>
+        <div class="dt-row"><span class="mono" style="font-size:12px">address.update_request</span><span class="mono-sm">meridian-crm</span><span><span class="risk w">write</span></span><span class="mono">204</span><span class="mono">1.1%</span><span class="mono">900ms</span></div>
+        <div class="dt-row"><span class="mono" style="font-size:12px">knowledge.search_policy</span><span class="mono-sm">kb-internal</span><span><span class="risk r">read</span></span><span class="mono">3,388</span><span class="mono">0.0%</span><span class="mono">240ms</span></div>
+      </div>
+      <div class="alert error" style="margin-top:14px"><span><b>disputes.raise_case is failing 6.4% of calls</b><span class="a-body" style="display:block">All failures are 409 conflicts from meridian-crm when a case already exists for the transaction. Tech Admin has an open incident; the agent escalates after 2 failures as configured.</span></span></div>
+    </sc-if>
+
+    <!-- ══ CHANNELS ══ -->
+    <sc-if value="{{ isChannels }}" hint-placeholder-val="{{ false }}">
+      <div class="sec-head"><h2>Channels</h2><span class="desc">what the customer can send, and what Maya may render back</span></div>
+      <div class="dtable dt-chan">
+        <div class="dt-head"><span>Channel</span><span>Status</span><span>Volume 7d</span><span>Containment</span><span>CSAT</span><span>Media</span></div>
+        <div class="dt-row"><span style="display:flex;align-items:center;gap:8px"><span class="ch-mark wa">WA</span>WhatsApp Business</span><span><span class="schip good">live</span></span><span class="mono">3,104</span><span class="mono">84.1%</span><span class="mono">4.5</span><span class="mono-sm">text, image, doc, location</span></div>
+        <div class="dt-row"><span style="display:flex;align-items:center;gap:8px"><span class="ch-mark">WB</span>Web chat</span><span><span class="schip good">live</span></span><span class="mono">988</span><span class="mono">79.2%</span><span class="mono">4.4</span><span class="mono-sm">text, image, doc</span></div>
+        <div class="dt-row"><span style="display:flex;align-items:center;gap:8px"><span class="ch-mark">AP</span>Mobile app chat</span><span><span class="schip good">live</span></span><span class="mono">512</span><span class="mono">81.0%</span><span class="mono">4.6</span><span class="mono-sm">text, image, structured</span></div>
+        <div class="dt-row"><span style="display:flex;align-items:center;gap:8px"><span class="ch-mark">EM</span>Email</span><span><span class="schip good">live</span></span><span class="mono">168</span><span class="mono">62.5%</span><span class="mono">4.0</span><span class="mono-sm">text, doc</span></div>
+        <div class="dt-row"><span style="display:flex;align-items:center;gap:8px"><span class="ch-mark ig">IG</span>Instagram DM</span><span><span class="schip warn">restricted</span></span><span class="mono">41</span><span class="mono">44.0%</span><span class="mono" style="color:var(--warn);font-weight:600">3.6</span><span class="mono-sm">text only · no account data</span></div>
+        <div class="dt-row"><span style="display:flex;align-items:center;gap:8px"><span class="ch-mark">SM</span>SMS</span><span><span class="schip muted">notify only</span></span><span class="mono">—</span><span class="mono">—</span><span class="mono">—</span><span class="mono-sm">outbound templates</span></div>
+        <div class="dt-row"><span style="display:flex;align-items:center;gap:8px"><span class="ch-mark vo">VO</span>Voice</span><span><span class="schip muted">not assigned</span></span><span class="mono">—</span><span class="mono">—</span><span class="mono">—</span><span class="mono-sm">assigned to Riya</span></div>
+      </div>
+    </sc-if>
+
+    <!-- ══ ROUTING ══ -->
+    <sc-if value="{{ isRouting }}" hint-placeholder-val="{{ false }}">
+      <div class="g g2">
+        <div class="ch">
+          <div class="t"><h3>Queue and assignment</h3></div>
+          <div class="kv">
+            <span class="k">default queue</span><span>Cards &amp; EMI · Tier 2 · 14 execs</span>
+            <span class="k">handoff mode</span><span>Open pickup, then auto-assign after 90s</span>
+            <span class="k">strategy</span><span>Least active workload, then language match</span>
+            <span class="k">skills</span><span>cards · emi · disputes</span>
+            <span class="k">languages</span><span>English, Marathi, Hindi</span>
+            <span class="k">account owner</span><span>Preferred for Priority segment</span>
+            <span class="k">after hours</span><span>Queue and promise a callback window</span>
+          </div>
+        </div>
+        <div class="ch">
+          <div class="t"><h3>SLA policy</h3><span class="schip warn">14 breaches 7d</span></div>
+          <div class="hb" style="grid-template-columns:minmax(120px,1fr) minmax(0,1.4fr) 68px">
+            <span>First human response</span><span class="bar"><i class="g" style="width:82%"></i></span><span class="n">15:00</span>
+            <span>P1 pickup</span><span class="bar"><i class="w" style="width:64%"></i></span><span class="n">05:00</span>
+            <span>Resolution · support</span><span class="bar"><i class="g" style="width:88%"></i></span><span class="n">4h</span>
+            <span>Resolution · dispute</span><span class="bar"><i class="w" style="width:71%"></i></span><span class="n">2d</span>
+          </div>
+          <div class="foot"><span class="mono-sm">bar shows attainment · target on the right</span></div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ══ ESCALATION ══ -->
+    <sc-if value="{{ isEscalation }}" hint-placeholder-val="{{ false }}">
+      <div class="sec-head"><h2>Escalation rules</h2><span class="count">7 active</span><div class="sec-head-actions"><button class="btn tiny">Add rule</button></div></div>
+      <div class="dtable dt-agent">
+        <div class="dt-head"><span>Trigger</span><span>Mode</span><span>Target</span><span>Priority</span><span>Fired 7d</span><span>State</span></div>
+        <div class="dt-row"><span>Refund amount above ₹5,000</span><span class="mono-sm">open pickup</span><span class="mono-sm">Cards &amp; EMI · Tier 2</span><span><span class="schip danger">P1</span></span><span class="mono">312</span><span><span class="schip good">on</span></span></div>
+        <div class="dt-row"><span>Hardship / job loss language</span><span class="mono-sm">auto-assign</span><span class="mono-sm">Hardship desk</span><span><span class="schip danger">P1</span></span><span class="mono">184</span><span><span class="schip good">on</span></span></div>
+        <div class="dt-row"><span>Dispute or ombudsman mentioned</span><span class="mono-sm">auto-assign</span><span class="mono-sm">Disputes</span><span><span class="schip warn">P2</span></span><span class="mono">146</span><span><span class="schip good">on</span></span></div>
+        <div class="dt-row"><span>Two consecutive tool failures</span><span class="mono-sm">open pickup</span><span class="mono-sm">Cards &amp; EMI · Tier 2</span><span><span class="schip warn">P2</span></span><span class="mono">99</span><span><span class="schip good">on</span></span></div>
+        <div class="dt-row"><span>Customer asks for a human</span><span class="mono-sm">open pickup</span><span class="mono-sm">Cards &amp; EMI · Tier 1</span><span><span class="schip muted">P3</span></span><span class="mono">86</span><span><span class="schip good">on</span></span></div>
+        <div class="dt-row"><span>Low policy confidence</span><span class="mono-sm">open pickup</span><span class="mono-sm">Cards &amp; EMI · Tier 2</span><span><span class="schip muted">P3</span></span><span class="mono">69</span><span><span class="schip good">on</span></span></div>
+        <div class="dt-row"><span>Abusive language</span><span class="mono-sm">auto-assign</span><span class="mono-sm">Team lead on shift</span><span><span class="schip warn">P2</span></span><span class="mono">12</span><span><span class="schip good">on</span></span></div>
+      </div>
+    </sc-if>
+
+    <!-- ══ ANALYTICS ══ -->
+    <sc-if value="{{ isAnalytics }}" hint-placeholder-val="{{ false }}">
+      <div class="g g2" style="margin-bottom:14px">
+        <div class="ch"><div class="t"><h3>Volume by channel · 14 days</h3></div>
+          <svg viewBox="0 0 300 90" preserveAspectRatio="none" style="height:90px">
+            <polyline fill="none" stroke="var(--ink)" stroke-width="2" points="0,30 25,28 50,34 75,26 100,30 125,24 150,27 175,22 200,26 225,20 250,24 275,18 300,22"></polyline>
+            <polyline fill="none" stroke="var(--accent)" stroke-width="2" points="0,58 25,60 50,56 75,57 100,54 125,55 150,52 175,54 200,50 225,52 250,48 275,50 300,47"></polyline>
+            <polyline fill="none" stroke="var(--ink-4)" stroke-width="2" points="0,76 25,77 50,75 75,76 100,74 125,75 150,73 175,74 200,72 225,73 250,71 275,72 300,70"></polyline>
+          </svg>
+          <div class="ax"><span>05 Mar</span><span>19 Mar</span></div>
+          <div class="foot"><span class="lg"><i style="background:var(--ink)"></i>whatsapp</span><span class="lg"><i style="background:var(--accent)"></i>web</span><span class="lg"><i style="background:var(--ink-4)"></i>app</span></div>
+        </div>
+        <div class="ch"><div class="t"><h3>Handling time distribution</h3></div>
+          <div class="hb" style="grid-template-columns:minmax(70px,1fr) minmax(0,2fr) 54px">
+            <span>&lt; 2 min</span><span class="bar"><i style="width:44%"></i></span><span class="n">2,118</span>
+            <span>2–10 min</span><span class="bar"><i style="width:62%"></i></span><span class="n">1,604</span>
+            <span>10–30 min</span><span class="bar"><i class="a" style="width:26%"></i></span><span class="n">702</span>
+            <span>&gt; 30 min</span><span class="bar"><i class="w" style="width:14%"></i></span><span class="n">388</span>
+          </div>
+          <div class="foot"><span class="mono-sm">human-handled median 11m 20s · AI median 1m 48s</span></div>
+        </div>
+      </div>
+      <div class="g g4">
+        <div class="ch"><div class="t"><h3>Containment</h3></div><div class="big">81.4%</div><div class="foot"><span class="mono-sm">target 85% · −1.8pt vs prior week</span></div></div>
+        <div class="ch"><div class="t"><h3>Time to resolution</h3></div><div class="big">3h 12m</div><div class="foot"><span class="mono-sm">median · support conversations</span></div></div>
+        <div class="ch"><div class="t"><h3>Reopen rate</h3></div><div class="big">4.1%</div><div class="foot"><span class="mono-sm">within 72h of resolve</span></div></div>
+        <div class="ch"><div class="t"><h3>Cost per conversation</h3></div><div class="big">₹4.80</div><div class="foot"><span class="mono-sm">model + tools · 91% cache read</span></div></div>
+      </div>
+    </sc-if>
+
+    <!-- ══ VERSIONS ══ -->
+    <sc-if value="{{ isVersions }}" hint-placeholder-val="{{ false }}">
+      <div class="sec-head"><h2>Versions</h2><span class="desc">every material change is immutable, attributable and reversible</span><div class="sec-head-actions"><button class="btn tiny accent">Create new version</button></div></div>
+      <div class="dtable">
+        <div class="vrow live"><span class="vdot"></span><span class="vid">v14</span><span><b style="font-weight:500">Duplicate-debit path shortened</b><span class="mono-sm" style="display:block">Behavior, Tool instructions · hash pc_4f81…a20c</span></span><span class="vwho">A. Rao</span><span class="mono-sm">12 Mar 11:20</span></div>
+        <div class="vrow"><span class="vdot"></span><span class="vid">v13</span><span><b style="font-weight:500">Hardship disclosure wording</b><span class="mono-sm" style="display:block">Policies · legal review attached</span></span><span class="vwho">A. Rao</span><span class="mono-sm">28 Feb 16:04</span></div>
+        <div class="vrow"><span class="vdot"></span><span class="vid">v12</span><span><b style="font-weight:500">Instagram data restriction</b><span class="mono-sm" style="display:block">Channel constraints · after CSAT dip</span></span><span class="vwho">S. Kapoor</span><span class="mono-sm">19 Feb 10:41</span></div>
+        <div class="vrow"><span class="vdot"></span><span class="vid">v11</span><span><b style="font-weight:500">Tool retry limit set to 2</b><span class="mono-sm" style="display:block">Tool instructions · requested by Tech Admin</span></span><span class="vwho">T. Shetty</span><span class="mono-sm">11 Feb 09:15</span></div>
+        <div class="vrow"><span class="vdot"></span><span class="vid">v10</span><span><b style="font-weight:500">Marathi reply support</b><span class="mono-sm" style="display:block">Identity, Behavior · 120 replay cases passed</span></span><span class="vwho">A. Rao</span><span class="mono-sm">02 Feb 13:50</span></div>
+      </div>
+      <div class="ch" style="margin-top:14px">
+        <div class="t"><h3>v13 → v14 evaluation</h3><span class="mono-sm">40 replay cases · run before activation</span></div>
+        <div class="mtx" style="grid-template-columns:repeat(4,minmax(0,1fr))">
+          <div><span class="n">38</span><span class="l">passed</span></div>
+          <div><span class="n">2</span><span class="l">changed answer</span></div>
+          <div><span class="n">0</span><span class="l">policy violations</span></div>
+          <div><span class="n">−1.2</span><span class="l">turns to resolve</span></div>
+        </div>
+      </div>
+    </sc-if>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = { tab: 'overview' };
+  renderVals() {
+    const t = this.state.tab;
+    const go = (v) => () => this.setState({ tab: v });
+    const tabs = ['overview', 'prompt', 'tools', 'channels', 'routing', 'escalation', 'analytics', 'versions'];
+    const out = {};
+    tabs.forEach(k => {
+      out['t_' + k] = t === k ? 'on' : '';
+      out['go_' + k] = go(k);
+      out['is' + k[0].toUpperCase() + k.slice(1)] = t === k;
+    });
+    return out;
+  }
+}
+</script>
+</body>
+</html>
