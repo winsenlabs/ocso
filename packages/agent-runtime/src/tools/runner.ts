@@ -103,6 +103,7 @@ export class ToolRunner {
       await this.db.transaction(async (tx) => {
         await tx.insert(toolCalls).values({
           ...base,
+          pendingArgs: (call.input ?? {}) as Record<string, unknown>,
           status: 'AWAITING_CONFIRMATION',
           confirmationReason: decision.reason,
           confirmationExpiresAt: new Date(Date.now() + CONFIRMATION_TTL_MS),

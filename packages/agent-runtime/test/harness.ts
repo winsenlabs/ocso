@@ -33,7 +33,7 @@ export interface RuntimeHarness {
   queueId: string;
   lead: ActorContext;
   processor(workerId: string, leaseSeconds?: number): { processor: TurnProcessor; leases: LeaseManager; hot: HotContextCache };
-  say(text: string, id?: string): Promise<string>;
+  say(text: string, id?: string, visitor?: string): Promise<string>;
 }
 
 export async function createRuntimeHarness(): Promise<RuntimeHarness> {
@@ -93,11 +93,11 @@ export async function createRuntimeHarness(): Promise<RuntimeHarness> {
       });
       return { processor, leases, hot };
     },
-    async say(text, id) {
+    async say(text, id, visitor = 'visitor-1') {
       const r = await ingress.receive(channelId, {
         externalMessageId: id ?? `m-${++counter}-${Date.now()}`,
         identityKind: 'webchat_visitor',
-        identityValue: 'visitor-1',
+        identityValue: visitor,
         alternateIdentities: [],
         profileName: 'Priya Deshmukh',
         receivedAt: new Date(),

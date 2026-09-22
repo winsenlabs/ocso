@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { autoAssignUnclaimed, expireOffers, repairStuckEscalations } from '@ocso/application';
-import { cleanupExpiredLeases, reapLostWorkers, relayScheduledJobs, sweepStrandedTurns } from '@ocso/agent-runtime';
+import { cleanupExpiredLeases, expireToolConfirmations, reapLostWorkers, relayScheduledJobs, sweepStrandedTurns } from '@ocso/agent-runtime';
 import type { WorkerEnv } from '@ocso/config';
 import { healthSamples, uuidv7, type Db } from '@ocso/db';
 import type { Logger } from '@ocso/observability';
@@ -41,6 +41,7 @@ export class SchedulerService {
       { name: 'expire-offers', everySeconds: 5, run: ({ db }) => expireOffers(db) },
       { name: 'auto-assign', everySeconds: 5, run: ({ db }) => autoAssignUnclaimed(db) },
       { name: 'repair-escalations', everySeconds: 30, run: ({ db }) => repairStuckEscalations(db) },
+      { name: 'expire-tool-confirmations', everySeconds: 30, run: ({ db }) => expireToolConfirmations(db) },
       { name: 'reap-lost-workers', everySeconds: 15, run: ({ db }) => reapLostWorkers(db, 45) },
       { name: 'cleanup-leases', everySeconds: 60, run: ({ db }) => cleanupExpiredLeases(db) },
       { name: 'relay-scheduled-jobs', everySeconds: 5, run: ({ db, queue }) => relayScheduledJobs(db, queue) },

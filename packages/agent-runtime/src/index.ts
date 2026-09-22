@@ -16,3 +16,4 @@ export * from './turn/persist.js';
 export * from './turn/turn-processor.js';
 export * from './jobs/summarize.js';
 export * from './jobs/sweeper.js';
+export * from './tools/human-tools.js';

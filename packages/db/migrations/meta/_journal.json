@@ -22,6 +22,13 @@
       "when": 1790070491048,
       "tag": "0002_internal_agent_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790070945006,
+      "tag": "0003_tool_call_pending_args",
+      "breakpoints": true
     }
   ]
 }

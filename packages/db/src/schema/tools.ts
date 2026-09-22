@@ -109,6 +109,8 @@ export const toolCalls = pgTable(
     modelToolCallId: text(),
     argsSanitized: jsonb().notNull(),
     argsHash: text().notNull(),
+    /** Exact arguments held only while AWAITING_CONFIRMATION; cleared on decision/expiry. */
+    pendingArgs: jsonb(),
     status: text()
       .$type<'REQUESTED' | 'AWAITING_CONFIRMATION' | 'DENIED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'EXPIRED'>()
       .notNull(),

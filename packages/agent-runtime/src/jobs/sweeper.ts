@@ -69,3 +69,11 @@ export async function relayScheduledJobs(db: Db, queue: QueueAdapter, limit = 10
   }
   return rows.length;
 }
+
+/** Sensitive tool calls not confirmed in time expire; their held arguments are cleared. */
+export async function expireToolConfirmations(db: Db): Promise<number> {
+  const { rowCount } = await db.execute(sql`
+    UPDATE tool_calls SET status = 'EXPIRED', pending_args = NULL, completed_at = now()
+     WHERE status = 'AWAITING_CONFIRMATION' AND confirmation_expires_at < now()`);
+  return rowCount ?? 0;
+}
