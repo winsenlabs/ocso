@@ -87,8 +87,9 @@ export class ConsumersService {
 
   /** (Re)subscribe the turn consumer when concurrency or timeout changes. */
   applyTurnSettings(settings: WorkerSettings): void {
+    // The visibility timeout is fixed per subscription, so a timeout change also resubscribes.
+    if (this.turnSub && this.turnConcurrency === settings.conversationsPerWorker && this.turnTimeoutSeconds === settings.turnTimeoutSeconds) return;
     this.turnTimeoutSeconds = settings.turnTimeoutSeconds;
-    if (this.turnSub && this.turnConcurrency === settings.conversationsPerWorker) return;
     const previous = this.turnSub;
     this.turnConcurrency = settings.conversationsPerWorker;
     this.turnSub = this.queue.consume<{ conversationId: string }>(
@@ -98,7 +99,7 @@ export class ConsumersService {
       { concurrency: settings.conversationsPerWorker, visibilityTimeoutSeconds: settings.turnTimeoutSeconds + 30, maxAttempts: 5, pollIntervalMs: 250 },
     );
     if (previous) void previous.stop();
-    this.logger.info({ concurrency: settings.conversationsPerWorker }, 'turn consumer configured');
+    this.logger.info({ concurrency: settings.conversationsPerWorker, turnTimeoutSeconds: settings.turnTimeoutSeconds }, 'turn consumer configured');
   }
 
   get inFlightTurns(): number {

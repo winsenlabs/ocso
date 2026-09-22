@@ -36,7 +36,13 @@ export async function sweepStrandedTurns(db: Db, queue: QueueAdapter, options: {
   return rows.map((r) => r.id);
 }
 
-/** Mark workers without a recent heartbeat as LOST and drop their leases (recovery). */
+/**
+ * Mark workers without a recent heartbeat as LOST, drop their leases and hand
+ * their in-flight Postgres-queue jobs back immediately instead of waiting for
+ * the visibility timeout (recovery, docs/10 §9). Fencing (ADR-008) keeps a
+ * worker that was only partitioned from committing afterwards. SQS messages
+ * reappear on their own visibility timeout.
+ */
 export async function reapLostWorkers(db: Db, heartbeatTimeoutSeconds: number): Promise<number> {
   const { rows } = await db.execute<{ id: string }>(sql`
     UPDATE workers SET status = 'LOST', stopped_at = now()
@@ -44,10 +50,17 @@ export async function reapLostWorkers(db: Db, heartbeatTimeoutSeconds: number): 
        AND heartbeat_at < now() - make_interval(secs => ${heartbeatTimeoutSeconds})
      RETURNING id`);
   if (rows.length) {
-    await db.delete(conversationLeases).where(inArray(conversationLeases.workerId, rows.map((r) => r.id)));
+    const ids = rows.map((r) => r.id);
+    await db.delete(conversationLeases).where(inArray(conversationLeases.workerId, ids));
+    await db.execute(sql`
+      UPDATE jobs SET status = 'queued', locked_by = NULL, locked_until = NULL, available_at = now()
+       WHERE status = 'running' AND locked_by IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`);
   }
   return rows.length;
 }
+
+/** A worker is lost after missing three heartbeats (never less than 15 s). */
+export const lostWorkerTimeoutSeconds = (heartbeatIntervalSeconds: number) => Math.max(15, heartbeatIntervalSeconds * 3);
 
 /** Expired idle leases carry no work; clean them so slot accounting stays accurate. */
 export async function cleanupExpiredLeases(db: Db): Promise<number> {

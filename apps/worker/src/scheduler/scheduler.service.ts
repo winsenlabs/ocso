@@ -1,8 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
-import { AlertDeliveryService, AlertEngine, CustomerClaimsIssuer, ScalingService, autoAssignUnclaimed, recordWorkerHealthSample, expireOffers, repairStuckEscalations, RetentionService } from '@ocso/application';
-import { cleanupExpiredLeases, expireToolConfirmations, reapLostWorkers, relayScheduledJobs, requestResolvedInsights, sweepStrandedTurns } from '@ocso/agent-runtime';
+import { AlertDeliveryService, AlertEngine, CustomerClaimsIssuer, ScalingService, autoAssignUnclaimed, recordWorkerHealthSample, expireOffers, repairStuckEscalations, RetentionService, SettingsService } from '@ocso/application';
+import { cleanupExpiredLeases, expireToolConfirmations, lostWorkerTimeoutSeconds, reapLostWorkers, relayScheduledJobs, requestResolvedInsights, sweepStrandedTurns } from '@ocso/agent-runtime';
 import type { BlobStore } from '@ocso/blob';
 import type { WorkerEnv } from '@ocso/config';
 import { healthSamples, uuidv7, type Db } from '@ocso/db';
@@ -50,7 +50,7 @@ export class SchedulerService {
       { name: 'auto-assign', everySeconds: 5, run: ({ db }) => autoAssignUnclaimed(db) },
       { name: 'repair-escalations', everySeconds: 30, run: ({ db }) => repairStuckEscalations(db) },
       { name: 'expire-tool-confirmations', everySeconds: 30, run: ({ db }) => expireToolConfirmations(db) },
-      { name: 'reap-lost-workers', everySeconds: 15, run: ({ db }) => reapLostWorkers(db, 45) },
+      { name: 'reap-lost-workers', everySeconds: 5, run: async ({ db }) => reapLostWorkers(db, lostWorkerTimeoutSeconds((await new SettingsService(db).workers()).heartbeatIntervalSeconds)) },
       { name: 'cleanup-leases', everySeconds: 60, run: ({ db }) => cleanupExpiredLeases(db) },
       { name: 'relay-scheduled-jobs', everySeconds: 5, run: ({ db, queue }) => relayScheduledJobs(db, queue) },
       { name: 'health-sample', everySeconds: 60, run: ({ db }) => sampleDatabaseHealth(db) },

@@ -41,6 +41,8 @@ type RunOutcome = 'processed' | 'nothing' | 'skipped';
  */
 export class TurnProcessor {
   private readonly active = new Map<string, { controller: AbortController; committed: boolean }>();
+  /** Conversations inside handle() in this process (including between drained turns). */
+  private readonly handling = new Set<string>();
 
   constructor(private readonly deps: TurnProcessorDeps) {}
 
@@ -59,8 +61,12 @@ export class TurnProcessor {
 
   async handle(message: QueueMessage<{ conversationId: string }>): Promise<HandlerResult> {
     const conversationId = message.payload.conversationId;
+    // This process is already draining the conversation and will pick up the new message;
+    // re-acquiring here would bump the lease and fence the turn in flight.
+    if (this.handling.has(conversationId)) return { kind: 'defer', delaySeconds: 2 };
     const lease = await this.deps.leases.acquire(conversationId);
     if (lease.kind === 'busy_elsewhere') return { kind: 'defer', delaySeconds: 2 };
+    this.handling.add(conversationId);
     try {
       for (let i = 0; i < MAX_DRAIN_ITERATIONS; i++) {
         await this.runOnce(conversationId, lease.leaseVersion, message.attempt);
@@ -73,6 +79,8 @@ export class TurnProcessor {
       await this.deps.leases.release(conversationId).catch(() => {});
       const retriable = isDomainError(err) ? err.retriable : true;
       return retriable ? { kind: 'retry', delaySeconds: Math.min(60, 2 ** message.attempt), reason: (err as Error).message } : { kind: 'dead', reason: (err as Error).message };
+    } finally {
+      this.handling.delete(conversationId);
     }
   }
 
@@ -175,7 +183,11 @@ export class TurnProcessor {
         await writer.fail(ident, 'CANCELLED', null);
         return 'processed';
       }
-      if (err instanceof LeaseLostError) throw err;
+      if (err instanceof LeaseLostError) {
+        // Fenced by a newer lease holder: close this turn's record (no customer-visible effect was committed).
+        await writer.fail(ident, 'SUPERSEDED', { category: 'lease_lost', message: 'Another worker took over the conversation' }).catch(() => {});
+        throw err;
+      }
       const category = isDomainError(err) ? err.category : 'internal';
       await writer.fail(ident, 'FAILED', { category, message: (err as Error).message });
       if (attempt >= 2 && (category.startsWith('provider') || category === 'timeout' || category === 'policy_denied')) {
