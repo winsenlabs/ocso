@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared/base.css" />
+<link rel="stylesheet" href="shared/one.css" />
+<link rel="stylesheet" href="shared/charts.css" />
+<link rel="stylesheet" href="shared/mock.css" />
+<link rel="stylesheet" href="shared/ocso.css" />
+<title>OCSO — UI mockups</title>
+</helmet>
+
+<main class="main" style="max-width:1120px;margin:0 auto;padding:44px 32px 80px">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:26px">
+    <svg viewBox="0 0 56 56" style="width:34px;height:34px;display:block"><rect width="56" height="56" rx="16" fill="var(--ink)"></rect><circle cx="28" cy="28" r="12" fill="none" stroke="var(--bg)" stroke-width="5"></circle><circle cx="28" cy="16" r="4.5" fill="var(--accent)" stroke="var(--ink)" stroke-width="2.5"></circle></svg>
+    <div>
+      <h1 style="margin:0;font-size:22px;font-weight:600;letter-spacing:-0.02em">OCSO — UI mockups</h1>
+      <p style="margin:2px 0 0;font-size:13px;color:var(--ink-3)">Open Customer Service Orchestrator · single-tenant, multi-user · three roles, three virtual agents. Demo deployment: Meridian Bank, ap-south-1.</p>
+    </div>
+  </div>
+
+  <div class="alert" style="margin-bottom:26px"><span><b>Every screen has a state switcher, bottom right.</b><span class="a-body" style="display:block">Conversation control states, system incidents, dialog flows and role variants are all switchable in place rather than duplicated as separate frames.</span></span></div>
+
+  <div class="map-grid">
+    <a class="map-card" href="01 Conversation workspace.dc.html">
+      <span class="map-cat">01 · cs exec</span>
+      <span class="map-title">Conversation workspace</span>
+      <span class="map-desc">Inbox, full interaction timeline, context rail and composer. States: AI active, waiting for human, human active, returning to AI, resolved.</span>
+      <span class="map-thumb">inbox · timeline · rail</span>
+    </a>
+    <a class="map-card" href="02 Agent overview.dc.html">
+      <span class="map-cat">02 · cs lead</span>
+      <span class="map-title">Virtual agent — Maya</span>
+      <span class="map-desc">Agent header, operating metrics, escalation reasons, knowledge gaps and a structured prompt editor with version history.</span>
+      <span class="map-thumb">8 tabs · prompt components</span>
+    </a>
+    <a class="map-card" href="03 System control center.dc.html">
+      <span class="map-cat">03 · tech admin</span>
+      <span class="map-title">System control center</span>
+      <span class="map-desc">Service status, latency and token telemetry, worker configuration and instances, provider health, MCP health. States: healthy, latency spike, scaling out.</span>
+      <span class="map-thumb">telemetry · workers · providers</span>
+    </a>
+    <a class="map-card" href="04 Connections and models.dc.html">
+      <span class="map-cat">04 · tech admin</span>
+      <span class="map-title">Connections &amp; models</span>
+      <span class="map-desc">Providers, logical model profiles, MCP connections, channels, secrets, webhooks. Includes the new-profile dialog and the six-step Add MCP server flow.</span>
+      <span class="map-thumb">5 tabs · 2 flows</span>
+    </a>
+    <a class="map-card" href="05 Internal agent.dc.html">
+      <span class="map-cat">05 · all roles</span>
+      <span class="map-title">Ask OCSO — internal agent</span>
+      <span class="map-desc">Role-aware drawer over any screen: cited answers, inline tables, linked cards, confirmation before sensitive actions, explicit RBAC refusals.</span>
+      <span class="map-thumb">drawer · 3 role variants</span>
+    </a>
+    <a class="map-card" href="06 Home.dc.html">
+      <span class="map-cat">06 · all roles</span>
+      <span class="map-title">Role home dashboards</span>
+      <span class="map-desc">What each role sees first: pickup queue and shift for CS Exec, agents and queues for CS Lead, capacity and incidents for Tech Admin.</span>
+      <span class="map-thumb">3 role variants</span>
+    </a>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="row2">
+    <div>
+      <div class="sec-head"><h2>Design language</h2><span class="desc">inherited from the Rho system</span></div>
+      <div class="ch" style="gap:12px">
+        <div class="kv">
+          <span class="k">neutrals</span><span>cool near-white chrome, four ink steps, hairline borders</span>
+          <span class="k">accent</span><span>single indigo — AI surfaces and active states only</span>
+          <span class="k">type</span><span>Inter for prose, JetBrains Mono for every identifier, timestamp and metric label</span>
+          <span class="k">status</span><span>amber warns, red breaks, green confirms, ink means a human owns it</span>
+          <span class="k">density</span><span>10–14px row padding, 12.5px body, tables over cards</span>
+          <span class="k">radius</span><span>10px cards, 6px controls, 999px chips</span>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="sec-head"><h2>Recurring components</h2></div>
+      <div class="ch" style="gap:10px">
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <span class="cstate ai"><span class="dot"></span>AI active</span>
+          <span class="cstate wait"><span class="dot"></span>Waiting for human</span>
+          <span class="cstate human"><span class="dot"></span>Human active</span>
+          <span class="cstate returning"><span class="dot"></span>Returning to AI</span>
+          <span class="cstate resolved"><span class="dot"></span>Resolved</span>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <span class="schip good">healthy</span><span class="schip warn">degraded</span><span class="schip danger">failing</span><span class="schip accent">draft</span><span class="schip muted">standby</span>
+          <span class="risk r">read</span><span class="risk w">write</span><span class="risk s">2-step</span>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <span class="ch-mark wa">WA</span><span class="ch-mark">WB</span><span class="ch-mark">AP</span><span class="ch-mark">EM</span><span class="ch-mark vo">VO</span><span class="ch-mark ig">IG</span>
+          <span class="sla risk"><span class="sbar"><i style="width:78%"></i></span>04:12 to SLA</span>
+          <span class="sla breach"><span class="sbar"><i style="width:100%"></i></span>breached 01:38</span>
+        </div>
+        <span class="mono-sm">plus: dense tables, metric tiles, activity timelines, prompt component cards, version rows, provider cards, MCP connection rows, side drawers, filter chips, stepper dialogs.</span>
+      </div>
+    </div>
+  </div>
+</main>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}"></script>
+</body>
+</html>
