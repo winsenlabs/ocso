@@ -6,3 +6,7 @@ This product includes software developed by Winsen Labs.
 The model catalog snapshot in packages/model-providers/catalog/ is derived from
 models.dev (MIT, Copyright (c) 2025 models.dev) and LiteLLM (MIT, Copyright (c)
 2023 Berri AI); see packages/model-providers/catalog/THIRD_PARTY_NOTICES.md.
+
+The web app bundles the Inter and JetBrains Mono typefaces (SIL Open Font
+License 1.1) from the @fontsource-variable/inter and
+@fontsource-variable/jetbrains-mono packages; their licenses ship in those packages.

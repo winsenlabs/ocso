@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter, JetBrains_Mono } from 'next/font/google';
+import localFont from 'next/font/local';
 import type { ReactNode } from 'react';
 // Design system, in the order the mockups load it (design/*.dc.html), then app additions.
 import './styles/base.css';
@@ -9,8 +9,15 @@ import './styles/mock.css';
 import './styles/ocso.css';
 import './styles/app.css';
 
-const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-inter', display: 'swap' });
-const mono = JetBrains_Mono({ subsets: ['latin'], weight: ['400', '500', '600'], variable: '--font-jetbrains-mono', display: 'swap' });
+// Self-hosted variable fonts (OFL-1.1, @fontsource-variable): builds need no network
+// access to Google Fonts and the running app makes no third-party font requests.
+const inter = localFont({ src: '../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2', weight: '100 900', variable: '--font-inter', display: 'swap' });
+const mono = localFont({
+  src: '../node_modules/@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2',
+  weight: '100 800',
+  variable: '--font-jetbrains-mono',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: { default: 'OCSO', template: '%s — OCSO' },
