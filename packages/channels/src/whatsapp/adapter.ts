@@ -3,6 +3,7 @@ import { isDomainError } from '@ocso/domain';
 import type {
   ChannelAdapter,
   ChannelAdapterDeps,
+  ChannelKindDescriptor,
   ChannelCapabilities,
   ChannelRuntimeConfig,
   FetchedMedia,
@@ -15,6 +16,7 @@ import type {
   VerificationResult,
 } from '../contract/types.js';
 import { WHATSAPP_CAPABILITIES } from './capabilities.js';
+import { WHATSAPP_DESCRIPTOR } from './descriptor.js';
 import { resolveWhatsAppConfig, secretValues, validateWhatsAppConfig, type ResolvedWhatsAppConfig } from './config.js';
 import { mapGraphFailure, sendFailure } from './errors.js';
 import { GraphClient, isSafePathSegment } from './graph-client.js';
@@ -48,6 +50,10 @@ export class WhatsAppChannelAdapter implements ChannelAdapter {
 
   validateConfig(settings: unknown, secrets: Readonly<Record<string, string>>): string[] {
     return validateWhatsAppConfig(settings, secrets);
+  }
+
+  describe(): ChannelKindDescriptor {
+    return WHATSAPP_DESCRIPTOR;
   }
 
   /** Only secrets are needed, so a settings problem never blocks Meta's handshake. */

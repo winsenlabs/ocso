@@ -3,6 +3,7 @@ import type { InteractionPart, MediaRef } from '@ocso/domain';
 import type {
   ChannelAdapter,
   ChannelAdapterDeps,
+  ChannelKindDescriptor,
   ChannelCapabilities,
   ChannelRuntimeConfig,
   FetchedMedia,
@@ -17,6 +18,7 @@ import type {
 import { ChannelMediaError } from '../common/errors.js';
 import { attachmentKeyPrefix } from './attachments.js';
 import { webChatCapabilities } from './capabilities.js';
+import { WEBCHAT_DESCRIPTOR } from './descriptor.js';
 import { resolveWebChatConfig, validateWebChatConfig, type ResolvedWebChatConfig } from './config.js';
 import { WebChatAuthError } from './errors.js';
 import { identifyRequest, WEBCHAT_IDENTITY, type WebChatIdentity } from './identity.js';
@@ -53,6 +55,10 @@ export class WebChatChannelAdapter implements ChannelAdapter {
 
   validateConfig(settings: unknown, secrets: Readonly<Record<string, string>>): string[] {
     return validateWebChatConfig(settings, secrets);
+  }
+
+  describe(): ChannelKindDescriptor {
+    return WEBCHAT_DESCRIPTOR;
   }
 
   verifyRequest(req: RawHttpRequest, config: ChannelRuntimeConfig): VerificationResult {

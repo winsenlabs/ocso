@@ -142,8 +142,34 @@ export interface ChannelAdapterDeps {
   now: () => Date;
 }
 
+/** A secret the admin enters (or OCSO generates) when configuring a channel; never returned by the API. */
+export interface ChannelSecretField {
+  key: string;
+  label: string;
+  required: boolean;
+  hint: string;
+  /** `server`: OCSO generates it when omitted (nobody needs to see it). `client`: the form may offer a generator, since the admin must copy it elsewhere. */
+  generate?: 'server' | 'client' | undefined;
+}
+
+/** What the "Add channel" form needs to know about a channel kind. */
+export interface ChannelKindDescriptor {
+  kind: ChannelKind;
+  label: string;
+  description: string;
+  /** JSON Schema (input shape) of the non-secret settings. */
+  settingsSchema: Record<string, unknown>;
+  secrets: ChannelSecretField[];
+  /** Provider calls OCSO at `/channels/<kind lower>/<publicKey>/webhook`. */
+  inboundWebhook: boolean;
+  /** Customers reach it through the embeddable widget (`/ocso-webchat.js`, `data-key=<publicKey>`). */
+  embeddable: boolean;
+}
+
 export interface ChannelAdapter {
   readonly kind: ChannelKind;
+  /** Form description for channel administration. */
+  describe?(): ChannelKindDescriptor;
   capabilities(config: ChannelRuntimeConfig): ChannelCapabilities;
   /** Validate admin-entered settings/secrets; returns human-readable problems. */
   validateConfig(settings: unknown, secrets: Readonly<Record<string, string>>): string[];

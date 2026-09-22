@@ -1,7 +1,8 @@
+import { randomBytes } from 'node:crypto';
 import { Body, Controller, Get, Inject, Param, Patch, Post } from '@nestjs/common';
 import { Permission } from '@ocso/auth';
 import { ChannelInput, ChannelPatch, ChannelService, type ActorContext } from '@ocso/application';
-import type { ChannelRegistry } from '@ocso/channels';
+import type { ChannelKind, ChannelRegistry } from '@ocso/channels';
 import { z } from 'zod';
 import { Actor, RequirePermission } from '../../common/decorators.js';
 import { CHANNEL_REGISTRY } from '../../infrastructure/tokens.js';
@@ -26,7 +27,7 @@ export class ChannelsAdminController {
   @Get('kinds')
   @RequirePermission(Permission.CHANNELS_READ)
   kinds() {
-    return this.registry.kinds().map((kind) => ({ kind }));
+    return this.registry.kinds().map((kind) => this.registry.get(kind).describe?.() ?? { kind });
   }
 
   @Get(':id')
@@ -38,7 +39,15 @@ export class ChannelsAdminController {
   @Post()
   @RequirePermission(Permission.CHANNELS_MANAGE)
   create(@Actor() actor: ActorContext, @Body({ schema: ChannelInput }) body: ChannelInput) {
-    return this.channels.create(actor, body);
+    return this.channels.create(actor, { ...body, secrets: this.withGeneratedSecrets(body.kind, body.secrets) });
+  }
+
+  /** Secrets nobody needs to copy anywhere (e.g. the visitor token key) are generated when left empty. */
+  private withGeneratedSecrets(kind: string, secrets: Record<string, string>): Record<string, string> {
+    if (!this.registry.has(kind as ChannelKind)) return secrets;
+    const fields = this.registry.get(kind as ChannelKind).describe?.().secrets ?? [];
+    const generated = Object.fromEntries(fields.filter((f) => f.generate === 'server' && !secrets[f.key]).map((f) => [f.key, randomBytes(32).toString('base64url')]));
+    return { ...generated, ...secrets };
   }
 
   @Patch(':id')
