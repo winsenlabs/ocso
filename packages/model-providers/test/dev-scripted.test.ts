@@ -82,6 +82,18 @@ describe('DEV_SCRIPTED provider (development only)', () => {
     });
   });
 
+  it('calls a tool by name with explicit arguments via the [[call:…]] test directive', async () => {
+    const exact = await finish(ask('please [[call:core_banking__get_balance {"accountId":"ACC-9"}]]'));
+    expect(exact.toolCalls[0]).toMatchObject({ toolName: 'core_banking__get_balance', input: { accountId: 'ACC-9' } });
+    const suffix = await finish(ask('[[call:list_transactions {"accountId":"A1","limit":3}]]'));
+    expect(suffix.toolCalls[0]).toMatchObject({ toolName: 'core_banking__list_transactions', input: { accountId: 'A1', limit: 3 } });
+    const planned = await finish(ask('[[call:get_balance]] for account 44556677'));
+    expect(planned.toolCalls[0]).toMatchObject({ toolName: 'core_banking__get_balance', input: { accountId: '44556677' } });
+    const missing = await finish(ask('[[call:delete_everything {}]]'));
+    expect(missing.toolCalls).toHaveLength(0);
+    expect(missing.text).toContain('No tool named delete_everything');
+  });
+
   it('summarizes tool results once they are in the conversation (no further tool calls)', async () => {
     const req = ask('What is my balance?');
     const result = await finish({

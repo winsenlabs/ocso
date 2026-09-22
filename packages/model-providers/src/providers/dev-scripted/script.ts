@@ -11,6 +11,8 @@ export type ScriptedTurn =
   | { kind: 'tool-call'; preface: string; toolName: string; input: Record<string, unknown> };
 
 const HANDOFF = /\bhuman\b|agent please/i;
+/** Test directive: `[[call:<tool name> {json args}]]` calls exactly that tool (exact or `__<name>` suffix match). */
+const CALL_DIRECTIVE = /\[\[call:([A-Za-z0-9_.\-]+)(?:\s+(\{[\s\S]*?\}))?\]\]/;
 
 /** Actions before lookups: "refund my last transaction" is a refund. */
 const INTENTS: ReadonlyArray<{ pattern: RegExp; toolStem: string; preface: string }> = [
@@ -87,7 +89,7 @@ function echo(text: string, attachments: number): string {
   return (
     `Thanks for reaching out! You said: "${said}".${files} ` +
     "(I'm OCSO's development scripted model: I can echo messages and demo tool calls — " +
-    'try asking about your balance, transactions, a refund, or ask for a human.)'
+    'try asking about your balance, transactions, a refund, or ask for a human; tests can force a tool with [[call:<tool> {json}]].)'
   );
 }
 
@@ -101,6 +103,20 @@ export function scriptReply(prompt: LanguageModelV4Prompt, tools: readonly Langu
   if (outcomes.length > 0) return { kind: 'text', text: summarize(outcomes) };
 
   const text = textOf(user);
+  const directive = CALL_DIRECTIVE.exec(text);
+  if (directive) {
+    const wanted = directive[1]!;
+    const tool = tools.find((t) => t.name === wanted) ?? tools.find((t) => t.name.endsWith(`__${wanted}`));
+    if (!tool) return { kind: 'text', text: `No tool named ${wanted} is available to me.` };
+    let input: Record<string, unknown> | null = null;
+    try {
+      const parsed: unknown = directive[2] ? JSON.parse(directive[2]) : null;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) input = parsed as Record<string, unknown>;
+    } catch {
+      input = null;
+    }
+    return { kind: 'tool-call', preface: `Calling ${humanize(tool.name)}.`, toolName: tool.name, input: input ?? plausibleArgs(tool.inputSchema, text) };
+  }
   if (HANDOFF.test(text)) {
     const handoff = tools.find((t) => t.name.endsWith('request_handoff'));
     if (handoff) {
