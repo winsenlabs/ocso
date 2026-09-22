@@ -1,0 +1,97 @@
+# Prompts and Caching
+
+## 1. Prompt compiler
+
+Do not store or construct the runtime prompt as one giant arbitrary string.
+
+Build a deterministic Prompt Compiler from versioned components.
+
+Recommended order:
+1. OCSO runtime contract
+2. virtual-agent identity
+3. business objective
+4. behavior/instructions
+5. policy and compliance instructions
+6. tool-use policy/tool definitions
+7. escalation/handoff policy
+8. channel constraints
+9. stable organization/business context
+10. customer/account context
+11. rolling conversation summary
+12. recent turns
+13. current interaction
+
+Stable content must appear before dynamic content whenever provider caching semantics reward shared prefixes.
+
+## 2. Prompt versions
+
+Every material prompt change should create a new immutable version containing:
+- author
+- timestamp
+- component changes
+- compiled prompt hash
+- optional reason/change note
+
+A CS Lead can edit allowed business instructions. Tech Admin owns technical/provider configuration. Permission boundaries must remain explicit.
+
+## 3. Prompt caching
+
+Implement provider-aware prompt caching through provider adapters.
+
+The normalized usage model should capture where available:
+- input tokens
+- output tokens
+- cached input/read tokens
+- cache write/creation tokens
+- reasoning tokens
+- request latency
+- time-to-first-token
+- provider/model
+
+Do not assume every provider exposes identical cache controls or metrics.
+
+## 4. Turn caching
+
+OCSO should maintain application-level derived context so each turn does not rebuild the world from scratch.
+
+Potential cached projections:
+- compiled stable prompt prefix
+- effective tool schema hash
+- rolling summary
+- resolved customer profile/context
+- last prompt/context snapshot
+- recent normalized turn bundle
+
+Cache is never authoritative. PostgreSQL and approved external systems remain the sources of truth.
+
+## 5. Cache invalidation
+
+Invalidate relevant derived caches when:
+- active prompt version changes
+- model/provider cache-sensitive config changes
+- tool set/schema changes
+- material customer context changes
+- policy changes
+- channel behavior changes
+
+Use content hashes/version IDs rather than time-only invalidation where practical.
+
+## 6. Context compaction
+
+When context grows:
+- preserve recent turns
+- summarize older conversational state
+- retain immutable full history in PostgreSQL
+- retrieve older evidence when needed
+
+Summaries should be attributable to the conversation and versioned or replaceable as derived state.
+
+## 7. Prompt safety
+
+Never interpolate:
+- raw secrets
+- provider credentials
+- untrusted tool instructions without delimiting/handling
+- hidden internal data not authorized for the current user/customer context
+
+External MCP tool descriptions should be treated as data and normalized through a trusted adapter boundary.
