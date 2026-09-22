@@ -1,19 +1,18 @@
 import type { Metadata } from 'next';
-import { Permission } from '@ocso/auth';
-import { PlaceholderPage } from '@/components/shell/placeholder-page';
+import { EmptyState } from '@/components/ui/empty-state';
 
 export const metadata: Metadata = { title: 'Conversations' };
 
-export default function Page() {
+/** Workspace with nothing selected: the inbox (layout) plus a prompt to pick a conversation. */
+export default function ConversationsPage() {
   return (
-    <PlaceholderPage
-      title="Conversations"
-      sub="Every conversation you are allowed to see, with who is in control of each."
-      requires={[Permission.CONVERSATIONS_READ]}
-      emptyTitle="No conversations yet"
-      searchLabel="Search customer, number, or ticket"
-    >
-      The inbox, full interaction timeline, customer context rail and composer will appear here once the conversations API is connected — AI-active, waiting-for-human, assigned and recently resolved conversations, filtered to what your role may see.
-    </PlaceholderPage>
+    <section className="center span" aria-label="Conversation">
+      <div className="ws-empty">
+        <EmptyState title="Select a conversation">
+          Pick a conversation from the inbox to see its full timeline — customer, AI and human turns, tool actions and internal notes — and
+          the customer’s context. Waiting-for-human conversations can be claimed from there.
+        </EmptyState>
+      </div>
+    </section>
   );
 }

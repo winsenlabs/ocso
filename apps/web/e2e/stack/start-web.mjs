@@ -11,17 +11,29 @@ const { E2E_API_PORT: apiPort, E2E_WEB_PORT: port } = process.env;
 if (!apiPort || !port) throw new Error('start-web: E2E_* env vars missing (run through playwright.config.ts)');
 const env = { ...process.env, API_URL: `http://localhost:${apiPort}` };
 
-const standalone = join(web, '.next/standalone/apps/web');
-if (process.env.E2E_REUSE_BUILD !== '1' || !existsSync(join(standalone, 'server.js'))) {
-  execFileSync(join(web, 'node_modules/.bin/next'), ['build'], { cwd: web, stdio: 'inherit', env });
+// E2E_WEB_DEV=1: serve with `next dev` instead (no production build — faster
+// local iteration, and it does not type-check unrelated routes).
+if (process.env.E2E_WEB_DEV === '1') {
+  const dev = spawn(join(web, 'node_modules/.bin/next'), ['dev', '--port', port, '--hostname', 'localhost'], { cwd: web, stdio: 'inherit', env });
+  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => dev.kill(signal));
+  dev.on('exit', (code, signal) => process.exit(code ?? (signal ? 1 : 0)));
+} else {
+  serveProductionBuild();
 }
-cpSync(join(web, '.next/static'), join(standalone, '.next/static'), { recursive: true });
-if (existsSync(join(web, 'public'))) cpSync(join(web, 'public'), join(standalone, 'public'), { recursive: true });
 
-const server = spawn(process.execPath, ['server.js'], {
-  cwd: standalone,
-  stdio: 'inherit',
-  env: { ...env, NODE_ENV: 'production', PORT: port, HOSTNAME: 'localhost' },
-});
-for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.kill(signal));
-server.on('exit', (code, signal) => process.exit(code ?? (signal ? 1 : 0)));
+function serveProductionBuild() {
+  const standalone = join(web, '.next/standalone/apps/web');
+  if (process.env.E2E_REUSE_BUILD !== '1' || !existsSync(join(standalone, 'server.js'))) {
+    execFileSync(join(web, 'node_modules/.bin/next'), ['build'], { cwd: web, stdio: 'inherit', env });
+  }
+  cpSync(join(web, '.next/static'), join(standalone, '.next/static'), { recursive: true });
+  if (existsSync(join(web, 'public'))) cpSync(join(web, 'public'), join(standalone, 'public'), { recursive: true });
+
+  const server = spawn(process.execPath, ['server.js'], {
+    cwd: standalone,
+    stdio: 'inherit',
+    env: { ...env, NODE_ENV: 'production', PORT: port, HOSTNAME: 'localhost' },
+  });
+  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.kill(signal));
+  server.on('exit', (code, signal) => process.exit(code ?? (signal ? 1 : 0)));
+}

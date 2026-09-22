@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { CellTitle, DataTable, type Column } from '@/components/ui/data-table';
 import { ControlState, controlStateKind, type ControlStateKind } from '@/components/ui/control-state';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -12,12 +13,21 @@ function slaLabel(sla: SlaView): string {
   return sla.level === 'breach' ? 'breached' : formatClock(sla.remainingSeconds);
 }
 
+/** Customer cell that opens the conversation in the workspace (design/01). */
+function customerLink(conversationId: string, name: string) {
+  return <Link href={`/conversations/${conversationId}`}>{name}</Link>;
+}
+
 const PICKUP_COLUMNS: Column<PickupRow>[] = [
-  { key: 'customer', header: 'Customer', cell: (r) => <CellTitle title={r.customerName} caption={r.customerRef} /> },
+  { key: 'customer', header: 'Customer', cell: (r) => <CellTitle title={customerLink(r.conversationId, r.customerName)} caption={r.customerRef} /> },
   { key: 'agent', header: 'Agent', cell: (r) => <span className="mono-sm">{r.agentName}</span> },
   { key: 'reason', header: 'Reason', cell: (r) => <span className="mono-sm">{r.reason}</span> },
   { key: 'waiting', header: 'Waiting', cell: (r) => <span className="mono">{formatClock(r.waitingSeconds)}</span> },
-  { key: 'sla', header: 'SLA', cell: (r) => <SlaTimer level={r.sla.level} progress={r.sla.progress} label={slaLabel(r.sla)} /> },
+  {
+    key: 'sla',
+    header: 'SLA',
+    cell: (r) => (r.sla ? <SlaTimer level={r.sla.level} progress={r.sla.progress} label={slaLabel(r.sla)} /> : <span className="mono-sm">no sla</span>),
+  },
 ];
 
 /** Pickup queue: conversations waiting for a human in the user's queues. */
@@ -53,7 +63,7 @@ const ASSIGNED_LABEL: Record<ControlStateKind, string> = {
 
 export function assignmentColumns(timeZone: string): Column<AssignmentRow>[] {
   return [
-    { key: 'customer', header: 'Customer', cell: (r) => <CellTitle title={r.customerName} caption={r.topic} /> },
+    { key: 'customer', header: 'Customer', cell: (r) => <CellTitle title={customerLink(r.conversationId, r.customerName)} caption={r.topic} /> },
     { key: 'agent', header: 'Agent', cell: (r) => <span className="mono-sm">{r.agentName}</span> },
     {
       key: 'control',

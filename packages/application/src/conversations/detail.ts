@@ -37,7 +37,19 @@ export interface ConversationDetail {
   queue: { id: string; name: string } | null;
   assignedUser: { id: string; name: string } | null;
   summary: { version: number; text: string; coversThroughSeq: number; createdAt: string } | null;
-  openHandoff: { id: string; status: string; reasonText: string; mode: string; requestedAt: string; agentSummary: string | null } | null;
+  openHandoff: {
+    id: string;
+    status: string;
+    reasonText: string;
+    mode: string;
+    requestedAt: string;
+    agentSummary: string | null;
+    offerExpiresAt: string | null;
+  } | null;
+  /** Latest human-written handover summary (return to AI), if any. */
+  handover: { version: number; text: string; createdAt: string } | null;
+  resolvedBy: { id: string; name: string } | null;
+  firstHumanResponseAt: string | null;
 }
 
 /** Context rail data for the workspace (design/01 right rail). Caller checks access. */
@@ -53,12 +65,14 @@ export async function loadConversationDetail(db: Db, conversationId: string): Pr
     .where(eq(conversations.id, conversationId));
   if (!row) return null;
   const { c, customer, agent, channel, queue, assignee } = row;
-  const [identities, [summary], [handoff], [prompt], [profile]] = await Promise.all([
+  const [identities, [summary], [handover], [handoff], [prompt], [profile], [resolver]] = await Promise.all([
     db.select({ kind: customerIdentities.kind, value: customerIdentities.value }).from(customerIdentities).where(eq(customerIdentities.customerId, customer.id)),
     db.select().from(conversationSummaries).where(and(eq(conversationSummaries.conversationId, c.id), eq(conversationSummaries.kind, 'ROLLING'))).orderBy(desc(conversationSummaries.version)).limit(1),
+    db.select().from(conversationSummaries).where(and(eq(conversationSummaries.conversationId, c.id), eq(conversationSummaries.kind, 'HANDOVER'))).orderBy(desc(conversationSummaries.version)).limit(1),
     db.select().from(handoffs).where(and(eq(handoffs.conversationId, c.id), isNull(handoffs.resolvedAt), isNull(handoffs.cancelledAt), isNull(handoffs.returnedAt))).orderBy(desc(handoffs.requestedAt)).limit(1),
     agent.activePromptVersionId ? db.select({ id: promptVersions.id, version: promptVersions.version }).from(promptVersions).where(eq(promptVersions.id, agent.activePromptVersionId)) : Promise.resolve([]),
     agent.modelProfileId ? db.select({ id: modelProfiles.id, name: modelProfiles.name }).from(modelProfiles).where(eq(modelProfiles.id, agent.modelProfileId)) : Promise.resolve([]),
+    c.resolvedBy ? db.select({ id: users.id, name: users.name }).from(users).where(eq(users.id, c.resolvedBy)) : Promise.resolve([]),
   ]);
   return {
     id: c.id,
@@ -88,7 +102,18 @@ export async function loadConversationDetail(db: Db, conversationId: string): Pr
     assignedUser: assignee ? { id: assignee.id, name: assignee.name } : null,
     summary: summary ? { version: summary.version, text: summary.text, coversThroughSeq: summary.coversThroughSeq, createdAt: summary.createdAt.toISOString() } : null,
     openHandoff: handoff
-      ? { id: handoff.id, status: handoff.status, reasonText: handoff.reasonText, mode: handoff.mode, requestedAt: handoff.requestedAt.toISOString(), agentSummary: handoff.agentSummary }
+      ? {
+          id: handoff.id,
+          status: handoff.status,
+          reasonText: handoff.reasonText,
+          mode: handoff.mode,
+          requestedAt: handoff.requestedAt.toISOString(),
+          agentSummary: handoff.agentSummary,
+          offerExpiresAt: handoff.offerExpiresAt?.toISOString() ?? null,
+        }
       : null,
+    handover: handover ? { version: handover.version, text: handover.text, createdAt: handover.createdAt.toISOString() } : null,
+    resolvedBy: resolver ?? null,
+    firstHumanResponseAt: c.firstHumanResponseAt?.toISOString() ?? null,
   };
 }

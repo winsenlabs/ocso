@@ -31,6 +31,11 @@ export type TimelineItem =
       confirmedByName: string | null;
       latencyMs: number | null;
       summary: unknown;
+      /** Sanitized (audit-safe) arguments — what a confirming human is shown. */
+      args: unknown;
+      /** Confirmation deadline while AWAITING_CONFIRMATION. */
+      expiresAt: string | null;
+      errorCategory: string | null;
       at: string;
     };
 
@@ -126,6 +131,9 @@ async function loadToolEvents(db: Db, conversationId: string): Promise<TimelineI
     confirmedByName,
     latencyMs: c.latencyMs,
     summary: c.resultSummary,
+    args: c.argsSanitized,
+    expiresAt: c.confirmationExpiresAt?.toISOString() ?? null,
+    errorCategory: c.errorCategory,
     at: c.requestedAt.toISOString(),
   }));
 }

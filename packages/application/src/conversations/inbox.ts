@@ -1,7 +1,7 @@
 import { and, desc, eq, ilike, inArray, ne, or, sql, type SQL } from 'drizzle-orm';
 import type { Principal } from '@ocso/auth';
 import { displayId } from '@ocso/domain';
-import { channels, conversations, customerIdentities, customers, queues, users, virtualAgents, type Db } from '@ocso/db';
+import { channels, conversations, customerIdentities, customers, handoffs, queues, users, virtualAgents, type Db } from '@ocso/db';
 import { z } from 'zod';
 import { conversationScope, type VisibilityPolicy } from './access.js';
 import { maskIdentity } from './masking.js';
@@ -34,6 +34,17 @@ export interface ConversationSummary {
   waitingSince: string | null;
   slaDueAt: string | null;
   tags: string[];
+  /** The open handoff (why a human is needed, how it is routed), if any. */
+  handoff: { reason: string; mode: string; status: string } | null;
+  resolvedAt: string | null;
+  disposition: string | null;
+  csat: number | null;
+}
+
+interface OpenHandoffJson {
+  reason: string;
+  mode: string;
+  status: string;
 }
 
 function viewPredicate(view: InboxView, principal: Principal): SQL | undefined {
@@ -82,6 +93,7 @@ export class InboxService {
         assigneeName: users.name,
         queueName: queues.name,
         identity: sql<string | null>`(SELECT ${customerIdentities.kind} || ':' || ${customerIdentities.value} FROM ${customerIdentities} WHERE ${customerIdentities.customerId} = ${conversations.customerId} ORDER BY ${customerIdentities.lastSeenAt} DESC LIMIT 1)`,
+        handoff: sql<OpenHandoffJson | null>`(SELECT json_build_object('reason', ${handoffs.reasonText}, 'mode', ${handoffs.mode}, 'status', ${handoffs.status}) FROM ${handoffs} WHERE ${handoffs.conversationId} = ${conversations.id} AND ${handoffs.resolvedAt} IS NULL AND ${handoffs.cancelledAt} IS NULL AND ${handoffs.returnedAt} IS NULL ORDER BY ${handoffs.requestedAt} DESC LIMIT 1)`,
       })
       .from(conversations)
       .innerJoin(customers, eq(customers.id, conversations.customerId))
@@ -110,6 +122,10 @@ export class InboxService {
         waitingSince: r.c.waitingSince?.toISOString() ?? null,
         slaDueAt: r.c.slaDueAt?.toISOString() ?? null,
         tags: r.c.tags,
+        handoff: r.handoff ? { reason: r.handoff.reason, mode: r.handoff.mode, status: r.handoff.status } : null,
+        resolvedAt: r.c.resolvedAt?.toISOString() ?? null,
+        disposition: r.c.disposition,
+        csat: r.c.csatScore,
       })),
       counts,
     };
