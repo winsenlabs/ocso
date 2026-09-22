@@ -1,7 +1,7 @@
 import { DomainError, ErrorCategory, isDomainError } from '@ocso/domain';
 import { APICallError, RetryError } from 'ai';
 import type { ProviderKind } from '../contract/types.js';
-import { classifyByName, classifyNetworkCode, classifyStatus, type Classification } from './error-classification.js';
+import { classifyByMessage, classifyByName, classifyNetworkCode, classifyStatus, type Classification } from './error-classification.js';
 
 /**
  * Converts any SDK/provider/network failure into a DomainError with a SAFE
@@ -26,6 +26,7 @@ const MIN_SECRET_LENGTH = 6;
 
 interface ErrorFacts {
   name: string;
+  message: string;
   statusCode: number | undefined;
   headers: Record<string, string> | undefined;
   bodyHint: string;
@@ -89,6 +90,7 @@ function factsOf(error: unknown): ErrorFacts {
   const networkCode = typeof cause?.['code'] === 'string' ? cause['code'] : typeof rec['code'] === 'string' ? rec['code'] : undefined;
   return {
     name,
+    message,
     statusCode,
     headers,
     bodyHint: `${body} ${data} ${message} ${providerCode ?? ''}`.toLowerCase(),
@@ -111,11 +113,17 @@ function isAbort(error: unknown): boolean {
   return name === 'AbortError' || name === 'TimeoutError';
 }
 
-function requestIdFrom(headers: Record<string, string> | undefined, names: readonly string[]): string | undefined {
+const SAFE_REQUEST_ID = /^[A-Za-z0-9_.:-]{1,128}$/;
+
+/** Provider request id from response headers, only if it looks like an id. */
+export function requestIdFromHeaders(
+  headers: Record<string, string> | undefined,
+  names: readonly string[],
+): string | undefined {
   if (!headers) return undefined;
   for (const n of names) {
     const v = headers[n];
-    if (typeof v === 'string' && SAFE_CODE.test(v.replace(/[^A-Za-z0-9_.:-]/g, '')) && v.length <= 128) return v;
+    if (typeof v === 'string' && SAFE_REQUEST_ID.test(v)) return v;
   }
   return undefined;
 }
@@ -144,6 +152,7 @@ function classify(error: unknown, facts: ErrorFacts, ctx: ErrorContext): Classif
   if (facts.statusCode !== undefined) return classifyStatus(facts.statusCode, facts.bodyHint);
   return (
     classifyByName(facts.name) ??
+    classifyByMessage(facts.message) ??
     classifyNetworkCode(facts.networkCode, facts.isFetchFailure) ?? {
       category: ErrorCategory.INTERNAL,
       code: 'model_call_failed',
@@ -165,7 +174,7 @@ export function normalizeProviderError(error: unknown, ctx: ErrorContext): Domai
   };
   if (facts.statusCode !== undefined) details['statusCode'] = facts.statusCode;
   if (facts.providerCode) details['providerErrorCode'] = scrubSecrets(facts.providerCode, ctx.secrets);
-  const requestId = requestIdFrom(facts.headers, ctx.requestIdHeaders);
+  const requestId = requestIdFromHeaders(facts.headers, ctx.requestIdHeaders);
   if (requestId) details['providerRequestId'] = requestId;
   const retryAfter = retryAfterMs(facts.headers);
   if (retryAfter !== undefined) details['retryAfterMs'] = retryAfter;

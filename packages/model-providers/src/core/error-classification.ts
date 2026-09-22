@@ -144,6 +144,14 @@ export function classifyStatus(status: number, bodyHint: string): Classification
 /** Error class names (AI SDK `AI_*` names and DOM/Node errors) → classification. */
 const NAME_CLASSIFICATIONS: ReadonlyArray<[RegExp, Classification]> = [
   [
+    /^AI_NoObjectGeneratedError$/,
+    {
+      category: ErrorCategory.PROVIDER_UNAVAILABLE,
+      code: 'model_structured_output_invalid',
+      message: 'The model did not return output matching the requested schema',
+    },
+  ],
+  [
     /^AI_(LoadAPIKeyError|LoadSettingError)$/,
     {
       category: ErrorCategory.AUTHENTICATION,
@@ -172,6 +180,29 @@ const NAME_CLASSIFICATIONS: ReadonlyArray<[RegExp, Classification]> = [
 export function classifyByName(name: string): Classification | null {
   for (const [pattern, classification] of NAME_CLASSIFICATIONS) {
     if (pattern.test(name)) return classification;
+  }
+  return null;
+}
+
+/**
+ * Plain `Error`s some SDK providers throw with fixed message prefixes (the
+ * Bedrock provider re-wraps credential-provider failures this way). Matched
+ * on the prefix only; the message itself is never surfaced.
+ */
+const MESSAGE_CLASSIFICATIONS: ReadonlyArray<[RegExp, Classification]> = [
+  [
+    /^AWS (credential provider failed|SigV4 authentication requires)/,
+    {
+      category: ErrorCategory.AUTHENTICATION,
+      code: 'provider_credentials_unavailable',
+      message: 'The model provider credentials could not be obtained',
+    },
+  ],
+];
+
+export function classifyByMessage(message: string): Classification | null {
+  for (const [pattern, classification] of MESSAGE_CLASSIFICATIONS) {
+    if (pattern.test(message)) return classification;
   }
   return null;
 }

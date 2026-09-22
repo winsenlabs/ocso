@@ -25,6 +25,11 @@ export interface ProviderOptionsPlan {
   portableReasoning?: boolean | undefined;
 }
 
+export interface HealthProbeOptions {
+  maxOutputTokens?: number | undefined;
+  reasoning?: ModelRequest['reasoning'];
+}
+
 /** Everything the shared AI-SDK core needs from one provider module. */
 export interface AiSdkAdapterSpec {
   kind: ProviderKind;
@@ -44,8 +49,8 @@ export interface AiSdkAdapterSpec {
   adjustUsage?: ((usage: LanguageModelUsage, model: string) => SdkUsageLike) | undefined;
   /** Model used by `health()` when the caller does not name one. */
   healthModel: string | null;
-  /** Smallest output budget the provider accepts for the health probe. */
-  healthMaxOutputTokens?: number | undefined;
+  /** Health-probe tuning: smallest accepted output budget, reasoning off where needed. */
+  healthProbe?: HealthProbeOptions | undefined;
   /** Credential values that must never appear in errors (defence in depth). */
   secrets: readonly string[];
 }

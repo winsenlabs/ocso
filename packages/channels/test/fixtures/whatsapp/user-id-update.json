@@ -1,0 +1,31 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "102290129340398",
+      "changes": [
+        {
+          "field": "user_id_update",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "15550783881",
+              "phone_number_id": "106540352242922"
+            },
+            "user_id_update": [
+              {
+                "wa_id": "16505559999",
+                "detail": "BSUID changed after phone number change",
+                "timestamp": "1758535200",
+                "user_id": {
+                  "previous": "US.13491208655302741918",
+                  "current": "US.99887766554433221100"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

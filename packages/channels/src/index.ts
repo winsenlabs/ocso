@@ -1,3 +1,10 @@
 export * from './contract/types.js';
 export * from './contract/render-policy.js';
 export * from './contract/registry.js';
+export * from './common/errors.js';
+export { chunkText } from './common/chunk.js';
+export { normalizeSha256 } from './common/crypto.js';
+export { baseMimeType, mediaKindForMime } from './common/mime.js';
+export { redactSecrets } from './common/redact.js';
+export * from './whatsapp/index.js';
+export * from './webchat/index.js';

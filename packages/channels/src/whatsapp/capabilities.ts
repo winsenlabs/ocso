@@ -1,4 +1,5 @@
-import type { ChannelCapabilities } from '../contract/types.js';
+import type { ChannelCapabilities, MediaKind } from '../contract/types.js';
+import { baseMimeType, isMimeAllowed } from '../common/mime.js';
 
 /**
  * WhatsApp Cloud API capabilities (PM/research/02 §5, Meta "supported media
@@ -20,7 +21,7 @@ export const WHATSAPP_SESSION_WINDOW_HOURS = 24;
 
 export const OUTBOUND_IMAGE_MIME_TYPES: readonly string[] = ['image/jpeg', 'image/png'];
 
-export const WHATSAPP_CAPABILITIES: ChannelCapabilities = Object.freeze({
+export const WHATSAPP_CAPABILITIES: ChannelCapabilities = Object.freeze<ChannelCapabilities>({
   inboundParts: ['TEXT', 'IMAGE', 'AUDIO', 'VIDEO', 'DOCUMENT', 'LOCATION', 'CONTACT', 'STRUCTURED'],
   outboundParts: ['TEXT', 'IMAGE', 'AUDIO', 'VIDEO', 'DOCUMENT', 'LOCATION', 'CONTACT', 'STRUCTURED'],
   maxTextLength: WHATSAPP_TEXT_LIMIT,
@@ -46,3 +47,9 @@ export const WHATSAPP_CAPABILITIES: ChannelCapabilities = Object.freeze({
   },
   sessionWindowHours: WHATSAPP_SESSION_WINDOW_HOURS,
 });
+
+/** Whether WhatsApp accepts this MIME type for an outbound message of `kind`. */
+export function outboundMimeAllowed(kind: MediaKind, mimeType: string, capabilities: ChannelCapabilities): boolean {
+  if (kind === 'IMAGE') return OUTBOUND_IMAGE_MIME_TYPES.includes(baseMimeType(mimeType));
+  return isMimeAllowed(capabilities, kind, mimeType);
+}

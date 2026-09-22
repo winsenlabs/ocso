@@ -22,3 +22,7 @@ export * from './conversations/masking.js';
 export * from './conversations/timeline.js';
 export * from './conversations/notes.js';
 export * from './conversations/detail.js';
+export * from './handoffs/routing.js';
+export * from './handoffs/request.js';
+export * from './handoffs/human-control.js';
+export * from './handoffs/human-reply.js';

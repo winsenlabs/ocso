@@ -1,0 +1,95 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "102290129340398",
+      "changes": [
+        {
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "15550783881",
+              "phone_number_id": "106540352242922"
+            },
+            "contacts": [
+              {
+                "profile": {
+                  "name": "Sheena Nelson"
+                },
+                "wa_id": "16505551234",
+                "user_id": "US.13491208655302741918"
+              }
+            ],
+            "messages": [
+              {
+                "from": "16505551234",
+                "from_user_id": "US.13491208655302741918",
+                "id": "wamid.HBgLMTY1MDU1NTEyMzQVAgASGBQ5RjFBQUQ5NzE3MzYzRjJCQzRBOQA=",
+                "timestamp": "1758535200",
+                "type": "contacts",
+                "contacts": [
+                  {
+                    "addresses": [
+                      {
+                        "city": "Menlo Park",
+                        "country": "United States",
+                        "country_code": "us",
+                        "state": "CA",
+                        "street": "1 Hacker Way",
+                        "type": "HOME",
+                        "zip": "94025"
+                      }
+                    ],
+                    "birthday": "1999-01-23",
+                    "emails": [
+                      {
+                        "email": "barbara@example.com",
+                        "type": "WORK"
+                      }
+                    ],
+                    "name": {
+                      "first_name": "Barbara",
+                      "formatted_name": "Barbara J. Johnson",
+                      "last_name": "Johnson",
+                      "middle_name": "Joana"
+                    },
+                    "org": {
+                      "company": "Example Corp",
+                      "department": "Finance",
+                      "title": "Controller"
+                    },
+                    "phones": [
+                      {
+                        "phone": "+1 (415) 555-0829",
+                        "type": "MOBILE",
+                        "wa_id": "14155550829"
+                      }
+                    ],
+                    "urls": [
+                      {
+                        "url": "https://example.com",
+                        "type": "WORK"
+                      }
+                    ]
+                  },
+                  {
+                    "name": {
+                      "first_name": "Ravi",
+                      "last_name": "Kumar"
+                    },
+                    "phones": [
+                      {
+                        "wa_id": "919812345678"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "field": "messages"
+        }
+      ]
+    }
+  ]
+}

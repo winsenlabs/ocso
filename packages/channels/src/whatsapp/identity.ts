@@ -46,11 +46,10 @@ export function resolveSenderIdentity(message: WaMessage, contacts: readonly WaC
   const bsuid = normalizeBsuid(message.from_user_id ?? contact?.user_id);
   const parent = normalizeBsuid(message.from_parent_user_id ?? contact?.parent_user_id);
   const phone = normalizePhone(message.from ?? contact?.wa_id);
-  const candidates = [
-    bsuid && { kind: WHATSAPP_IDENTITY.BSUID, value: bsuid },
-    phone && { kind: WHATSAPP_IDENTITY.PHONE, value: phone },
-    parent && { kind: WHATSAPP_IDENTITY.PARENT_BSUID, value: parent },
-  ].filter((c): c is { kind: string; value: string } => Boolean(c));
+  const candidates: Array<{ kind: string; value: string }> = [];
+  if (bsuid) candidates.push({ kind: WHATSAPP_IDENTITY.BSUID, value: bsuid });
+  if (phone) candidates.push({ kind: WHATSAPP_IDENTITY.PHONE, value: phone });
+  if (parent) candidates.push({ kind: WHATSAPP_IDENTITY.PARENT_BSUID, value: parent });
   const [primary, ...alternates] = candidates;
   if (!primary) return null;
   const profileName = contact?.profile?.name?.trim() || contact?.profile?.username?.trim() || undefined;

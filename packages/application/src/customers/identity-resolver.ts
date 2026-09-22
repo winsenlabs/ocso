@@ -6,7 +6,7 @@ export interface IdentityClaim {
   value: string;
 }
 
-export interface ResolveInput {
+export interface ResolveCustomerInput {
   primary: IdentityClaim;
   alternates: readonly IdentityClaim[];
   profileName?: string | undefined;
@@ -26,7 +26,7 @@ export interface ResolvedCustomer {
  * the same identity is serialized with a transaction-scoped advisory lock.
  * Customers are never merged automatically.
  */
-export async function resolveCustomer(tx: DbOrTx, input: ResolveInput): Promise<ResolvedCustomer> {
+export async function resolveCustomer(tx: DbOrTx, input: ResolveCustomerInput): Promise<ResolvedCustomer> {
   const claims = dedupeClaims([input.primary, ...input.alternates]);
   for (const claim of claims) {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`identity:${claim.kind}:${claim.value}`}))`);
