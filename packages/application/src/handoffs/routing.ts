@@ -1,5 +1,5 @@
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
-import { pickupDueAt, selectAssignee, type ExecCandidate, type Priority, type SlaPolicy } from '@ocso/domain';
+import { pickupDueAt, resolutionDueAt, selectAssignee, type ConversationType, type ExecCandidate, type Priority, type SlaPolicy } from '@ocso/domain';
 import { assignments, conversations, queueTeams, queues, slaPolicies, teamMembers, users, type DbOrTx } from '@ocso/db';
 
 export type QueueRow = typeof queues.$inferSelect;
@@ -10,18 +10,28 @@ export async function loadQueue(tx: DbOrTx, queueId: string | null): Promise<Que
   return row ?? null;
 }
 
-/** Pickup SLA due time for a queue + priority, or null when the queue has no SLA policy. */
-export async function slaDueFor(tx: DbOrTx, queue: QueueRow | null, priority: Priority, from: Date): Promise<Date | null> {
+async function slaPolicyOf(tx: DbOrTx, queue: QueueRow | null): Promise<SlaPolicy | null> {
   if (!queue?.slaPolicyId) return null;
   const [policy] = await tx.select().from(slaPolicies).where(eq(slaPolicies.id, queue.slaPolicyId));
   if (!policy) return null;
-  const sla: SlaPolicy = {
+  return {
     firstHumanResponseSeconds: policy.firstHumanResponseSeconds,
     pickupSecondsByPriority: policy.pickupSecondsByPriority,
     resolutionSecondsByType: policy.resolutionSecondsByType,
     atRiskFraction: policy.atRiskFraction,
   };
-  return pickupDueAt(sla, priority, from);
+}
+
+/** Pickup SLA due time for a queue + priority, or null when the queue has no SLA policy. */
+export async function slaDueFor(tx: DbOrTx, queue: QueueRow | null, priority: Priority, from: Date): Promise<Date | null> {
+  const sla = await slaPolicyOf(tx, queue);
+  return sla ? pickupDueAt(sla, priority, from) : null;
+}
+
+/** Resolution SLA deadline for a conversation type, measured from when the conversation (re)opened. */
+export async function resolutionDueFor(tx: DbOrTx, queue: QueueRow | null, type: string, openedAt: Date): Promise<Date | null> {
+  const sla = await slaPolicyOf(tx, queue);
+  return sla ? resolutionDueAt(sla, type as ConversationType, openedAt) : null;
 }
 
 /**

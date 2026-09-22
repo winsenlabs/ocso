@@ -85,6 +85,13 @@
       "when": 1790077638225,
       "tag": "0011_login_attempts_ip_index",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790079710333,
+      "tag": "0012_resolution_sla",
+      "breakpoints": true
     }
   ]
 }

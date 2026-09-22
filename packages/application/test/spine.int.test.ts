@@ -124,6 +124,20 @@ describe('control, visibility, timeline', () => {
     await t.pool.query(`DELETE FROM conversations WHERE id = $1`, [hidden]);
   });
 
+  it('sets the resolution SLA deadline from the queue policy when a conversation opens', async () => {
+    const policyId = uuidv7();
+    await t.pool.query(`INSERT INTO sla_policies (id, name, resolution_seconds_by_type) VALUES ($1, 'Support 4h', '{"SUPPORT": 14400}')`, [policyId]);
+    await t.pool.query(`UPDATE queues SET sla_policy_id = $1 WHERE id = $2`, [policyId, queueId]);
+    const ingress = new IngressService(t.db, queue);
+    const r = await ingress.receive(channelId, msg(`wamid.res-${uuidv7()}`, 'card blocked', '+919800000777'), 'c-res');
+    if (r.status !== 'accepted') throw new Error(r.status);
+    const [conv] = await t.db.select().from(conversations).where(eq(conversations.id, r.conversationId));
+    expect(conv!.resolutionDueAt!.getTime() - conv!.openedAt.getTime()).toBe(14_400_000);
+    const detail = await new InboxService(t.db).list(lead, { execsCanViewAiActive: true }, { view: 'all', limit: 50 });
+    expect(detail.items.find((i) => i.id === r.conversationId)?.resolutionDueAt).toBe(conv!.resolutionDueAt!.toISOString());
+    await t.pool.query(`UPDATE queues SET sla_policy_id = NULL WHERE id = $1`, [queueId]);
+  });
+
   it('applies control transitions with timeline, audit and events', async () => {
     const [conv] = await t.db.select().from(conversations).limit(1);
     await t.db.transaction((tx) =>

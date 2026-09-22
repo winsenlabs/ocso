@@ -29,6 +29,7 @@ export interface ConversationDetail {
   tags: string[];
   waitingSince: string | null;
   slaDueAt: string | null;
+  resolutionDueAt: string | null;
   customer: { id: string; name: string | null; language: string | null; attributes: Record<string, unknown>; identities: Array<{ kind: string; value: string }> };
   channel: { id: string; kind: string; name: string } | null;
   agent: { id: string; name: string; conversationType: string; status: string };
@@ -87,6 +88,7 @@ export async function loadConversationDetail(db: Db, conversationId: string): Pr
     tags: c.tags,
     waitingSince: c.waitingSince?.toISOString() ?? null,
     slaDueAt: c.slaDueAt?.toISOString() ?? null,
+    resolutionDueAt: c.resolutionDueAt?.toISOString() ?? null,
     customer: {
       id: customer.id,
       name: customer.displayName,

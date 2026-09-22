@@ -105,6 +105,19 @@ describe('business evaluators', () => {
     expect(await openAlerts(await rule('sla_breaches_above', { threshold: 5 }, { agentId: riya }))).toHaveLength(0);
   });
 
+  it('resolution_sla_breaches_above: open conversations past their resolution target plus late resolutions', async () => {
+    const arjun = await agent('Arjun');
+    const late = await conversation(arjun, { controlState: 'HUMAN_ACTIVE', resolutionDueAt: ago(300) });
+    await conversation(arjun, { controlState: 'RESOLVED', resolutionDueAt: ago(900), resolvedAt: ago(600) }); // resolved late in the window
+    await conversation(arjun, { controlState: 'RESOLVED', resolutionDueAt: ago(600), resolvedAt: ago(900) }); // met
+    await conversation(arjun, { controlState: 'AI_ACTIVE', resolutionDueAt: new Date(NOW.getTime() + 60_000) }); // not yet due
+    const open = await openAlerts(await rule('resolution_sla_breaches_above', { threshold: 0 }, { agentId: arjun }));
+    expect(open).toHaveLength(1);
+    expect(open[0]).toMatchObject({ title: 'Resolution SLA breaches · Arjun', value: '2' });
+    expect(open[0]!.context).toMatchObject({ openBreaches: 1, resolvedLateInWindow: 1 });
+    expect(open[0]!.context['sampleConversationIds']).toContain(late);
+  });
+
   it('repeated_failure_topic: normalized failureTopic counts per agent', async () => {
     const maya = await agent('Maya2');
     const topics = ['Card block', 'card  block', ' CARD BLOCK ', 'Refund status'];

@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { emitEvent } from '../events/outbox.js';
 import type { ActorContext } from '../shared/context.js';
 import { applyControl, lockConversation } from '../conversations/control.js';
-import { endOpenAssignment } from './routing.js';
+import { endOpenAssignment, resolutionDueFor, loadQueue } from './routing.js';
 import { offerToNextExec, openHandoff } from './request.js';
 
 export const ReturnToAiInput = z.object({
@@ -133,7 +133,11 @@ export class HumanControlService {
         actor,
         transitionActor: 'HUMAN',
         description: `transferred by ${nameOf(actor)}`,
-        patch: { assignedUserId: null, waitingSince: now, ...(input.queueId ? { queueId: input.queueId } : {}) },
+        patch: {
+          assignedUserId: null,
+          waitingSince: now,
+          ...(input.queueId ? { queueId: input.queueId, resolutionDueAt: await resolutionDueFor(tx, await loadQueue(tx, input.queueId), conv.type, conv.openedAt) } : {}),
+        },
         now,
       });
       const handoff = await openHandoff(tx, conversationId);

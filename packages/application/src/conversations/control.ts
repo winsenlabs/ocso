@@ -23,6 +23,7 @@ export type ControlPatch = Partial<
     | 'priority'
     | 'waitingSince'
     | 'slaDueAt'
+    | 'resolutionDueAt'
     | 'resolvedAt'
     | 'resolvedBy'
     | 'disposition'

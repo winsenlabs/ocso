@@ -46,6 +46,8 @@ export const conversations = pgTable(
     insightsRequestedAt: ts('insights_requested_at'),
     /** Content removed under the retention policy (metadata and analytics remain). */
     contentPurgedAt: ts('content_purged_at'),
+    /** Resolution SLA deadline from the queue's policy for this conversation type (null = none). */
+    resolutionDueAt: ts('resolution_due_at'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -53,6 +55,7 @@ export const conversations = pgTable(
     index('conversations_state_idx').on(t.controlState, t.queueId, t.priority),
     index('conversations_customer_idx').on(t.customerId),
     index('conversations_assigned_idx').on(t.assignedUserId).where(sql`${t.controlState} <> 'RESOLVED'`),
+    index('conversations_resolution_due_idx').on(t.resolutionDueAt).where(sql`${t.controlState} <> 'RESOLVED' AND ${t.resolutionDueAt} IS NOT NULL`),
     index('conversations_agent_idx').on(t.agentId, t.openedAt),
     index('conversations_recent_idx').on(t.lastInteractionAt),
     // At most one open conversation per customer, channel and agent.

@@ -4,7 +4,7 @@ import { assignments, conversations, customers, escalationRules, handoffs, users
 import { emitEvent } from '../events/outbox.js';
 import type { ActorContext } from '../shared/context.js';
 import { applyControl } from '../conversations/control.js';
-import { loadQueue, pickAssignee, slaDueFor } from './routing.js';
+import { loadQueue, pickAssignee, slaDueFor, resolutionDueFor } from './routing.js';
 
 export interface HandoffRequest {
   trigger: HandoffTrigger;
@@ -77,12 +77,14 @@ export async function requestHandoff(tx: DbOrTx, actor: ActorContext, conversati
     autoAssignAt: mode === 'OPEN_PICKUP' && queue?.autoAssignAfterSeconds ? new Date(now.getTime() + queue.autoAssignAfterSeconds * 1000) : null,
   });
   const slaDueAt = await slaDueFor(tx, queue, priority, now);
+  // The resolution clock runs from opening; routing to a queue with a policy (re)sets its deadline.
+  const resolutionDue = queue ? await resolutionDueFor(tx, queue, conv.type, conv.openedAt) : conv.resolutionDueAt;
   await applyControl(tx, conversationId, {
     command: 'ROUTE_TO_QUEUE',
     actor,
     transitionActor: 'SYSTEM',
     description: `routed to queue “${queue?.name ?? 'unassigned'}” · mode ${mode}`,
-    patch: { queueId: queue?.id ?? null, waitingSince: now, slaDueAt },
+    patch: { queueId: queue?.id ?? null, waitingSince: now, slaDueAt, resolutionDueAt: resolutionDue },
     now,
   });
   await emitEvent(tx, actor, 'handoff.requested', { handoffId, trigger: req.trigger, reason: req.reasonText, priority }, { conversationId, agentId: conv.agentId });

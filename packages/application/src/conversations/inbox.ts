@@ -33,6 +33,8 @@ export interface ConversationSummary {
   lastInteractionAt: string;
   waitingSince: string | null;
   slaDueAt: string | null;
+  /** Resolution SLA deadline (queue policy × conversation type); null when none applies. */
+  resolutionDueAt: string | null;
   tags: string[];
   /** The open handoff (why a human is needed, how it is routed), if any. */
   handoff: { reason: string; mode: string; status: string } | null;
@@ -121,6 +123,7 @@ export class InboxService {
         lastInteractionAt: r.c.lastInteractionAt.toISOString(),
         waitingSince: r.c.waitingSince?.toISOString() ?? null,
         slaDueAt: r.c.slaDueAt?.toISOString() ?? null,
+        resolutionDueAt: r.c.resolutionDueAt?.toISOString() ?? null,
         tags: r.c.tags,
         handoff: r.handoff ? { reason: r.handoff.reason, mode: r.handoff.mode, status: r.handoff.status } : null,
         resolvedAt: r.c.resolvedAt?.toISOString() ?? null,

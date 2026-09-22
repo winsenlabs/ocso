@@ -7,6 +7,7 @@ import { relinkIdentity, resolveCustomer, type IdentityClaim } from '../customer
 import { systemActor } from '../shared/context.js';
 import { applyControl } from './control.js';
 import { appendInteraction } from './interaction-writer.js';
+import { loadQueue, resolutionDueFor } from '../handoffs/routing.js';
 
 /** Channel-neutral inbound message (mirrors @ocso/channels InboundMessage). */
 export interface IngressMessage {
@@ -190,6 +191,8 @@ export class IngressService {
         transitionActor: 'CUSTOMER',
         reopenedBy: 'CUSTOMER',
         description: 'customer wrote again · conversation reopened',
+        // A reopened conversation gets a fresh resolution window.
+        patch: { resolutionDueAt: await resolutionDueFor(tx, await loadQueue(tx, input.agent.defaultQueueId), input.agent.conversationType, input.now) },
         now: input.now,
       });
       return { conversationId: recent.id, created: false };
@@ -204,6 +207,7 @@ export class IngressService {
       type: input.agent.conversationType,
       controlState: 'AI_ACTIVE',
       queueId: input.agent.defaultQueueId,
+      resolutionDueAt: await resolutionDueFor(tx, await loadQueue(tx, input.agent.defaultQueueId), input.agent.conversationType, input.now),
       openedAt: input.now,
       lastInteractionAt: input.now,
     });
