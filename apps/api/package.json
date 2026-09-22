@@ -1,0 +1,57 @@
+{
+  "name": "@ocso/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node --enable-source-maps --import ./dist/instrumentation.js dist/main.js",
+    "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput & node --watch --env-file-if-exists=../../.env --import ./dist/instrumentation.js dist/main.js"
+  },
+  "dependencies": {
+    "@nestjs/common": "catalog:",
+    "@nestjs/core": "catalog:",
+    "@nestjs/platform-express": "catalog:",
+    "reflect-metadata": "catalog:",
+    "rxjs": "catalog:",
+    "nestjs-pino": "catalog:",
+    "pino-http": "catalog:",
+    "pino": "catalog:",
+    "@opentelemetry/api": "catalog:",
+    "@opentelemetry/sdk-node": "catalog:",
+    "@opentelemetry/auto-instrumentations-node": "catalog:",
+    "@opentelemetry/exporter-trace-otlp-proto": "catalog:",
+    "@opentelemetry/exporter-metrics-otlp-proto": "catalog:",
+    "@opentelemetry/exporter-logs-otlp-proto": "catalog:",
+    "@opentelemetry/sdk-metrics": "catalog:",
+    "@opentelemetry/sdk-logs": "catalog:",
+    "@opentelemetry/resources": "catalog:",
+    "@opentelemetry/semantic-conventions": "catalog:",
+    "import-in-the-middle": "catalog:",
+    "@ocso/application": "workspace:*",
+    "@ocso/auth": "workspace:*",
+    "@ocso/config": "workspace:*",
+    "@ocso/db": "workspace:*",
+    "@ocso/domain": "workspace:*",
+    "@ocso/events": "workspace:*",
+    "@ocso/observability": "workspace:*",
+    "@ocso/secrets": "workspace:*",
+    "@ocso/blob": "workspace:*",
+    "@ocso/queue": "workspace:*",
+    "drizzle-orm": "catalog:",
+    "pg": "catalog:",
+    "zod": "catalog:",
+    "@ocso/bootstrap": "workspace:*"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "catalog:",
+    "supertest": "catalog:",
+    "@types/supertest": "catalog:",
+    "@types/express": "^5.0.6",
+    "@types/pg": "catalog:"
+  }
+}
