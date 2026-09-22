@@ -10,7 +10,7 @@ differs.
 | `postgres` | PostgreSQL 18, data on the `pgdata` volume | – |
 | `migrate` | One-shot. Applies `packages/db/migrations`, then exits 0 | – |
 | `api` | NestJS control plane, port 4000 | – (internal) |
-| `worker` | Agent workers, health on 4100. Scale with `--scale worker=N` | – |
+| `worker` | Agent workers, health on 4100. Two replicas by default (`OCSO_WORKER_REPLICAS`) | – |
 | `web` | Next.js UI and BFF. Proxies `/channels`, `/public`, `/oauth`, `/.well-known`, `/blobs` to the API | **3000** |
 
 Profiles: `demo` (example MCP server and seed), `observability` (OTel Collector and Jaeger), and
@@ -125,7 +125,7 @@ Never use it for a real deployment.
 ```bash
 docker compose ps                         # state and health
 docker compose logs -f api worker         # JSON logs (pino); rotated at 10 MB × 5 per container
-docker compose up -d --scale worker=3     # more agent capacity (docs/10)
+docker compose up -d --scale worker=3     # more agent capacity now (docs/10); set OCSO_WORKER_REPLICAS to keep it
 docker compose restart worker             # graceful: 90 s to finish or checkpoint turns
 docker compose down                       # stop (volumes kept)
 ```
@@ -133,7 +133,9 @@ docker compose down                       # stop (volumes kept)
 **Scaling workers.** Workers hold conversation leases in PostgreSQL. Any worker can take over a
 conversation whose lease expired, so scaling up or down never loses a conversation (docs/10 §9).
 The Tech Admin worker settings (min/max workers, target utilization) are advisory under Compose
-(`DEPLOYMENT_DRIVER=compose`): you choose the replica count. The worker settings page shows the exact
+(`DEPLOYMENT_DRIVER=compose`): you choose the replica count with `OCSO_WORKER_REPLICAS` in `.env`
+(default 2, so one worker can fail without a gap). `--scale worker=N` changes it until the next
+`docker compose up -d`. The worker settings page shows the exact
 `--scale worker=N` command for the warm floor (see [worker-scaling.md](worker-scaling.md)). Size `DATABASE_POOL_SIZE` × (api + all
 workers) below PostgreSQL's `max_connections` (100 by default).
 

@@ -249,7 +249,10 @@ services:
         restart: true
       migrate:
         condition: service_completed_successfully
-    # No published ports so `--scale worker=N` works.
+    # No published ports so replicas work. Two by default: if one dies, another takes over its
+    # conversations when their leases expire. OCSO_WORKER_REPLICAS (or `--scale worker=N`) changes it.
+    deploy:
+      replicas: ${OCSO_WORKER_REPLICAS:-2}
     networks: [backend, default]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4100/health/ready').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
