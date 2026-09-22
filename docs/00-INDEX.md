@@ -24,6 +24,28 @@ OCSO is a **single-tenant, multi-user** application. One deployment belongs to o
 16. [16-DELIVERY-PLAN.md](16-DELIVERY-PLAN.md) — phased implementation plan
 17. [99-BUILD-RULES.md](99-BUILD-RULES.md) — mandatory engineering rules
 
+## Plugins and extension points
+
+- [plugins/README.md](plugins/README.md) — what "plugin" means in OCSO, every extension point, and where the boundary leaks
+- [plugins/channels.md](plugins/channels.md) — channel adapters
+- [plugins/add-a-channel.md](plugins/add-a-channel.md) — worked example: add a channel in seven steps
+- [plugins/model-providers.md](plugins/model-providers.md) — model provider definitions and adapters
+- [plugins/tools-and-mcp.md](plugins/tools-and-mcp.md) — MCP tool servers and tool authorization
+- [plugins/alerts.md](plugins/alerts.md) — alert delivery destinations and rule conditions
+- [plugins/email.md](plugins/email.md) — email senders
+- [plugins/infrastructure-drivers.md](plugins/infrastructure-drivers.md) — blob storage, secret store, queue, deployment
+- [plugins/scheduled-tasks.md](plugins/scheduled-tasks.md) — leader-only periodic work
+- [plugins/internal-agent-tools.md](plugins/internal-agent-tools.md) — tools for Ask OCSO
+- [plugins/sign-in-and-sso.md](plugins/sign-in-and-sso.md) — sign-in methods and identity providers
+
+## Operations
+
+- [operations/compose.md](operations/compose.md) — running OCSO with Docker Compose
+- [operations/setup-guide.md](operations/setup-guide.md) — from an empty deployment to a live virtual agent
+- [operations/worker-scaling.md](operations/worker-scaling.md) — worker scaling on Compose and ECS
+- [operations/resilience-testing.md](operations/resilience-testing.md) — chaos and load scripts
+- [operations/aws.md](operations/aws.md) — ECS Fargate with Terraform (not yet applied to a real account)
+
 ## Product definition
 
 OCSO is an open-source runtime for external-facing AI employees. It is not a generic internal-agent platform, not a CRM, and not a business-system replacement.
