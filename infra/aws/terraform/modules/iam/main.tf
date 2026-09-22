@@ -90,7 +90,7 @@ data "aws_iam_policy_document" "app_common" {
   }
   statement {
     sid       = "MediaObjects"
-    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload"]
+    actions   = ["s3:GetObject", "s3:PutObject", "s3:PutObjectTagging", "s3:DeleteObject", "s3:AbortMultipartUpload"]
     resources = ["${var.media_bucket_arn}/*"]
   }
   statement {

@@ -54,6 +54,8 @@ export class S3BlobStore implements BlobStore {
         Body: input.data,
         ContentType: input.contentType,
         Metadata: { sha256, retention: input.retention ?? 'CONVERSATION_MEDIA' },
+        // Lifecycle rules can match tags but not metadata: TEMP objects expire via the bucket rule.
+        ...(input.retention === 'TEMP' ? { Tagging: 'ocso-retention=TEMP' } : {}),
         ...(this.options.kmsKeyId
           ? { ServerSideEncryption: 'aws:kms' as const, SSEKMSKeyId: this.options.kmsKeyId }
           : {}),

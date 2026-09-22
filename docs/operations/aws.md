@@ -316,10 +316,8 @@ organization needs a regional RTO.
 1. **Scaling signals are not published yet.** The worker-side ECS deployment adapter (metrics, runtime
    policies, task protection) is in progress (§7). The metric-math expression is also unvalidated
    (ADR-023).
-2. **TEMP blob lifecycle.** The S3 rules expire objects under `tmp/` or tagged `ocso-retention=TEMP`.
-   The current S3 blob store records the retention class as object *metadata*, which lifecycle rules
-   cannot match. TEMP blobs are therefore not expired until the store uses a `tmp/` key prefix or object
-   tags.
+2. **TEMP blob lifecycle.** Resolved: the S3 blob store tags TEMP objects `ocso-retention=TEMP`
+   (the task roles hold `s3:PutObjectTagging`), which the `expire-temp-tag` lifecycle rule matches.
 3. **Verified only with `terraform validate` / `fmt`.** No `plan`/`apply` has been run against a real
    account yet. Engine availability, quotas and Service Connect behaviour need a staging apply.
 4. No AWS WAF on the ALB. Recommended: managed rule groups plus rate limits on `/channels/*` and
