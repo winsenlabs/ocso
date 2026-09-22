@@ -97,6 +97,7 @@ export const webhookSubscriptions = pgTable('webhook_subscriptions', {
   events: text().array().notNull(),
   signingSecretRef: text().notNull(),
   enabled: boolean().notNull().default(true),
+  createdBy: uuid(),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -117,5 +118,9 @@ export const webhookDeliveries = pgTable(
     createdAt: createdAt(),
     sentAt: ts('sent_at'),
   },
-  (t) => [index('webhook_deliveries_sub_idx').on(t.subscriptionId, t.createdAt)],
+  (t) => [
+    index('webhook_deliveries_sub_idx').on(t.subscriptionId, t.createdAt),
+    // One delivery per event per subscription: the relay can re-run safely.
+    uniqueIndex('webhook_deliveries_event_uq').on(t.subscriptionId, t.eventId),
+  ],
 );

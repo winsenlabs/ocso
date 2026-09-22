@@ -1,4 +1,4 @@
-import { McpConnectionService, type AlertDeliveryService, type AlertEngine, type CustomerClaimsIssuer } from '@ocso/application';
+import { McpConnectionService, relayOutboxToWebhooks, type AlertDeliveryService, type AlertEngine, type CustomerClaimsIssuer } from '@ocso/application';
 import type { WorkerEnv } from '@ocso/config';
 import type { Db } from '@ocso/db';
 import type { QueueAdapter } from '@ocso/queue';
@@ -28,5 +28,6 @@ export function subsystemTasks(deps: SubsystemDeps): ScheduledTask[] {
     // Deliveries whose publish failed (crash between commit and publish) are re-queued.
     { name: 'alert-redispatch', everySeconds: 120, run: () => deps.alertDelivery.redispatchPending(deps.queue) },
     { name: 'retire-signing-keys', everySeconds: 3600, run: () => deps.claims.retireExpired() },
+    { name: 'webhook-relay', everySeconds: 2, run: () => relayOutboxToWebhooks(deps.db, deps.queue) },
   ];
 }

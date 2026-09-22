@@ -1,6 +1,6 @@
 import { Injectable, Module, type OnModuleDestroy } from '@nestjs/common';
 import { createDefaultDeliveryRegistry } from '@ocso/alerts';
-import { AlertDeliveryService, AlertEngine } from '@ocso/application';
+import { AlertDeliveryService, AlertEngine, WebhookDeliveryService } from '@ocso/application';
 import type { WorkerEnv } from '@ocso/config';
 import type { Db } from '@ocso/db';
 import { createGuardedFetch, type GuardedFetch } from '@ocso/mcp';
@@ -11,6 +11,7 @@ import { DB, ENV, QUEUE, SECRET_STORE } from '../infrastructure/tokens.js';
 
 /** Attempts before a transient delivery failure is final; ≤ the consumer's maxAttempts. */
 export const ALERT_DELIVERY_ATTEMPTS = 6;
+export const WEBHOOK_DELIVERY_ATTEMPTS = 8;
 
 /** Alert destinations are external: public https only, through the SSRF guard. */
 @Injectable()
@@ -22,7 +23,7 @@ export class AlertEgress implements OnModuleDestroy {
   }
 }
 
-/** Alert evaluation (leader scheduler) and delivery (alert.deliver consumer), docs/11 §6. */
+/** Alert evaluation + delivery and outbound event webhook delivery (docs/11 §6, E8.10). */
 @Module({
   providers: [
     AlertEgress,
@@ -50,7 +51,13 @@ export class AlertEgress implements OnModuleDestroy {
           maxAttempts: ALERT_DELIVERY_ATTEMPTS,
         }),
     },
+    {
+      provide: WebhookDeliveryService,
+      inject: [DB, SECRET_STORE, AlertEgress],
+      useFactory: (db: Db, secrets: SecretStore, egress: AlertEgress) =>
+        new WebhookDeliveryService({ db, secrets, fetch: egress.guarded.fetch, maxAttempts: WEBHOOK_DELIVERY_ATTEMPTS }),
+    },
   ],
-  exports: [AlertEngine, AlertDeliveryService],
+  exports: [AlertEngine, AlertDeliveryService, WebhookDeliveryService],
 })
 export class WorkerAlertsModule {}

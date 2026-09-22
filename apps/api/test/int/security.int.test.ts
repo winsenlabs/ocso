@@ -59,4 +59,12 @@ describe('customer claims keys (docs/08 §4)', () => {
     expect(keys.body.map((k: { status: string }) => k.status).sort()).toEqual(['ACTIVE', 'RETIRING']);
     await h.http().post('/v1/security/signing-keys/rotate').expect(401);
   });
+
+  it('lists secret metadata for Tech Admins without ever returning values', async () => {
+    const res = await h.http().get('/v1/secrets').set('authorization', `Bearer ${admin}`).expect(200);
+    const claimsKey = res.body.find((s: { kind: string }) => s.kind === 'SIGNING_KEY');
+    expect(claimsKey).toMatchObject({ usedBy: 'customer identity claims', state: 'ok' });
+    expect(JSON.stringify(res.body)).not.toContain('PRIVATE KEY');
+    expect(res.body.every((s: Record<string, unknown>) => !('value' in s) && !('ciphertext' in s))).toBe(true);
+  });
 });

@@ -4,12 +4,12 @@ import type { ApiEnv } from '@ocso/config';
 import type { Db } from '@ocso/db';
 import type { SecretStore } from '@ocso/secrets';
 import { DB, ENV, SECRET_STORE } from '../../infrastructure/tokens.js';
-import { JwksController, SigningKeysController } from './security.controller.js';
+import { JwksController, SecretsController, SigningKeysController } from './security.controller.js';
 
-/** Customer identity claims signing (docs/08 §4): public JWKS + Tech Admin key rotation. */
+/** Customer claims signing keys (docs/08 §4: JWKS + rotation) and the secrets inventory. */
 @Global()
 @Module({
-  controllers: [JwksController, SigningKeysController],
+  controllers: [JwksController, SigningKeysController, SecretsController],
   providers: [
     {
       provide: CustomerClaimsIssuer,

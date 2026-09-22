@@ -26,6 +26,7 @@ import { ModelRuntimeModule } from './modules/model-runtime/model-runtime.module
 import { InternalAgentModule } from './modules/internal-agent/internal-agent.module.js';
 import { CopilotModule } from './modules/copilot/copilot.module.js';
 import { SecurityModule } from './modules/security/security.module.js';
+import { WebhooksModule } from './modules/webhooks/webhooks.module.js';
 
 /** Feature modules are registered here; each owns one domain area (build rule §2). */
 export const FEATURE_MODULES = [
@@ -49,6 +50,7 @@ export const FEATURE_MODULES = [
   InternalAgentModule,
   CopilotModule,
   SecurityModule,
+  WebhooksModule,
 ];
 
 @Module({

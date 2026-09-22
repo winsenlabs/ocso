@@ -1,10 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { CopilotService, DeliveryService, MediaMaterializer, SummaryService, TurnProcessor } from '@ocso/agent-runtime';
-import { AlertDeliveryService, isAlertDeliveryRetryable, type AlertDeliverJob, type WorkerSettings } from '@ocso/application';
+import { AlertDeliveryService, WebhookDeliveryService, isAlertDeliveryRetryable, isWebhookRetryable, type AlertDeliverJob, type WorkerSettings } from '@ocso/application';
 import type { Logger } from '@ocso/observability';
 import { ocsoMetrics } from '@ocso/observability';
 import { backoffSeconds, type HandlerResult, type QueueAdapter, type QueueSubscription } from '@ocso/queue';
-import { ALERT_DELIVERY_ATTEMPTS } from '../alerts/alerts.module.js';
+import { ALERT_DELIVERY_ATTEMPTS, WEBHOOK_DELIVERY_ATTEMPTS } from '../alerts/alerts.module.js';
 import { LOGGER, QUEUE } from '../infrastructure/tokens.js';
 
 /**
@@ -25,6 +25,7 @@ export class ConsumersService {
     @Inject(SummaryService) private readonly summaries: SummaryService,
     @Inject(AlertDeliveryService) private readonly alertDelivery: AlertDeliveryService,
     @Inject(CopilotService) private readonly copilot: CopilotService,
+    @Inject(WebhookDeliveryService) private readonly webhooks: WebhookDeliveryService,
     @Inject(LOGGER) private readonly logger: Logger,
   ) {}
 
@@ -49,6 +50,15 @@ export class ConsumersService {
         await this.copilot.suggest(m.payload.conversationId, m.payload.seq, m.id).catch((err: unknown) => this.logger.warn({ err, conversationId: m.payload.conversationId }, 'copilot suggestion failed'));
         return { kind: 'ack' };
       }), { concurrency: 4, visibilityTimeoutSeconds: 120, maxAttempts: 1 }),
+      this.queue.consume<{ deliveryId: string }>('webhook.deliver', async (m) => this.measure('webhook.deliver', async () => {
+        try {
+          await this.webhooks.deliver(m.payload.deliveryId);
+          return { kind: 'ack' };
+        } catch (err) {
+          if (isWebhookRetryable(err)) return { kind: 'retry', delaySeconds: backoffSeconds(m.attempt, 5, 900), reason: 'webhook delivery' };
+          throw err;
+        }
+      }), { concurrency: 8, visibilityTimeoutSeconds: 60, maxAttempts: WEBHOOK_DELIVERY_ATTEMPTS + 1 }),
       this.queue.consume<AlertDeliverJob>('alert.deliver', async (m) => this.measure('alert.deliver', async () => {
         try {
           await this.alertDelivery.deliver(m.payload.deliveryId);
