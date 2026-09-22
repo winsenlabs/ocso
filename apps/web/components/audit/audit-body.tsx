@@ -87,13 +87,13 @@ export async function AuditBody({ searchParams }: { searchParams: SearchParams }
       />
       <div className="rowsplit" style={{ marginTop: 10 }}>
         {params.before ? (
-          <Link className="btn tiny ghost" href={auditHref({ ...filters, before: undefined })} scroll={false}>
+          <Link className="btn tiny ghost" href={auditHref({ ...filters, before: undefined, beforeId: undefined })} scroll={false}>
             ← Newest
           </Link>
         ) : null}
         <span className="sp" />
         {rows.length === PAGE && last ? (
-          <Link className="btn tiny ghost" href={auditHref({ ...filters, before: last.occurredAt })} scroll={false}>
+          <Link className="btn tiny ghost" href={auditHref({ ...filters, before: last.occurredAt, beforeId: last.id })} scroll={false}>
             Older →
           </Link>
         ) : null}

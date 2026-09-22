@@ -38,6 +38,7 @@ export interface AuditFilter {
   action?: string | undefined;
   since?: string | undefined;
   before?: string | undefined;
+  beforeId?: string | undefined;
   limit?: number | undefined;
 }
 

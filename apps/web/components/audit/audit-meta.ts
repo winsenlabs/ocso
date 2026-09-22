@@ -41,6 +41,8 @@ export interface AuditParams {
   to?: string | undefined;
   /** ISO timestamp: rows strictly older (keyset page). */
   before?: string | undefined;
+  /** Id of the last row shown, so rows sharing its timestamp are not skipped. */
+  beforeId?: string | undefined;
   entry?: string | undefined;
 }
 
@@ -67,6 +69,7 @@ export function parseAuditParams(raw: Record<string, string | string[] | undefin
     from: from && DAY.test(from) ? from : undefined,
     to: to && DAY.test(to) ? to : undefined,
     before: before && !Number.isNaN(Date.parse(before)) ? new Date(before).toISOString() : undefined,
+    beforeId: safe(first(raw['beforeId'])),
     entry: safe(first(raw['entry'])),
   };
 }
@@ -82,6 +85,8 @@ export function auditHref(p: AuditParams): string {
 export function toApiFilter(p: AuditParams, limit: number) {
   const toEnd = p.to ? new Date(Date.parse(`${p.to}T00:00:00Z`) + 86_400_000).toISOString() : undefined;
   const before = [p.before, toEnd].filter((v): v is string => Boolean(v)).sort()[0];
+  // The id tiebreak applies only when the page cursor (not the date filter) is the effective bound.
+  const beforeId = p.before && before === p.before ? p.beforeId : undefined;
   return {
     targetType: p.targetType,
     action: p.action,
@@ -90,6 +95,7 @@ export function toApiFilter(p: AuditParams, limit: number) {
     targetId: p.targetId,
     since: p.from ? new Date(`${p.from}T00:00:00Z`).toISOString() : undefined,
     before,
+    beforeId,
     limit,
   };
 }

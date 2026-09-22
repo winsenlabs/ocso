@@ -46,7 +46,7 @@ export async function privilegedChanges(db: DbOrTx, limit = 20): Promise<Privile
   }>(sql`
     SELECT id, occurred_at, action, target_type, target_id, summary, actor_type, actor_id, actor_name, via, correlation_id
       FROM audit_events
-     WHERE target_type IN (${targets}) AND action NOT IN ('model_provider.test')
+     WHERE target_type IN (${targets}) AND action NOT IN ('model_provider.test') AND action NOT LIKE 'auth.%'
      ORDER BY occurred_at DESC
      LIMIT ${limit}`);
   return rows.map((r) => ({
