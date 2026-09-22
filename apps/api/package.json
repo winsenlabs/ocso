@@ -10,6 +10,7 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node --enable-source-maps --import ./dist/instrumentation.js dist/main.js",
+    "seed": "node dist/seed.js",
     "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput & node --watch --env-file-if-exists=../../.env --import ./dist/instrumentation.js dist/main.js"
   },
   "dependencies": {

@@ -1,0 +1,62 @@
+# OpenTelemetry Collector for the Compose `observability` profile.
+#
+# api/worker export OTLP/HTTP (protobuf) to http://otel-collector:4318 when
+# OTEL_ENABLED=true (packages/observability/src/otel.ts). Traces go to Jaeger;
+# metrics and logs are printed by the debug exporter so the pipeline is
+# visible without extra services — swap in any exporter you run (Prometheus
+# remote write, Loki, a vendor OTLP endpoint, or CloudWatch via sigv4auth on
+# EC2 with an instance role; see docs/operations/compose.md).
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 400
+    spike_limit_mib: 100
+  batch:
+    send_batch_size: 1024
+    timeout: 5s
+  # Defence in depth: the apps never put secrets in telemetry (build rule §21),
+  # but drop common credential-bearing attributes if a library ever does.
+  attributes/scrub:
+    actions:
+      - key: http.request.header.authorization
+        action: delete
+      - key: http.request.header.cookie
+        action: delete
+      - key: db.connection_string
+        action: delete
+
+exporters:
+  otlp_grpc/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+  debug:
+    verbosity: basic
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, attributes/scrub, batch]
+      exporters: [otlp_grpc/jaeger]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [debug]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [debug]

@@ -1,0 +1,413 @@
+# OCSO — single-host deployment with Docker Compose (docs/13 §2,
+# docs/operations/compose.md).
+#
+#   docker compose up -d                  # keygen → postgres → migrate → api/worker → web
+#   open http://localhost:3000            # first run: /setup with the token from `docker compose logs api`
+#
+# Optional profiles (combine freely):
+#   demo           Meridian Bank demo: example MCP server + one-shot seed.
+#                  OCSO_DEMO_SEED=true docker compose --profile demo up -d
+#   observability  OTel Collector + Jaeger (UI on 127.0.0.1:16686).
+#                  OTEL_ENABLED=true docker compose --profile observability up -d
+#   s3             SeaweedFS S3-compatible blob store instead of the local volume (ADR-011).
+#                  BLOB_DRIVER=s3 docker compose --profile s3 up -d
+#
+# Scale agent workers: docker compose up -d --scale worker=3
+# Settings: copy .env.example to .env (every setting has a safe default).
+# Secrets: generated once by `keygen` into the `secrets` volume — never in this
+# file or in git. BACK UP that volume together with PostgreSQL.
+name: ocso
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+# Hardening shared by the long-running OCSO containers.
+x-hardening: &hardening
+  init: true
+  read_only: true
+  tmpfs:
+    - /tmp
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  logging: *logging
+
+x-api-image: &api-image
+  image: ${OCSO_IMAGE_PREFIX:-ocso}/api:${OCSO_VERSION:-local}
+  build:
+    context: .
+    target: api
+    args:
+      APP_VERSION: ${OCSO_VERSION:-local}
+
+x-migrate-image: &migrate-image
+  image: ${OCSO_IMAGE_PREFIX:-ocso}/migrate:${OCSO_VERSION:-local}
+  build:
+    context: .
+    target: migrate
+    args:
+      APP_VERSION: ${OCSO_VERSION:-local}
+
+# Each OCSO container mounts only the `app` sub-directory of the secrets volume.
+x-app-secrets: &app-secrets
+  type: volume
+  source: secrets
+  target: /run/secrets/ocso
+  read_only: true
+  volume:
+    subpath: app
+    nocopy: true
+
+x-db-env: &db-env
+  # A non-empty DATABASE_URL (e.g. managed PostgreSQL) overrides the generated one.
+  DATABASE_URL: ${DATABASE_URL:-}
+  DATABASE_URL_FILE: /run/secrets/ocso/database_url
+  DATABASE_SSL: ${DATABASE_SSL:-false}
+
+x-server-env: &server-env
+  <<: *db-env
+  NODE_ENV: production
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  APP_VERSION: ${OCSO_VERSION:-local}
+  DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-10}
+  QUEUE_DRIVER: postgres
+  DEPLOYMENT_DRIVER: compose
+  OCSO_PUBLIC_URL: ${OCSO_PUBLIC_URL:-http://localhost:3000}
+  # Secrets (ADR-012): local envelope store; the KEK is read from the file.
+  SECRETS_DRIVER: local
+  OCSO_SECRETS_MASTER_KEY_FILE: /run/secrets/ocso/master_key
+  OCSO_INTERNAL_SIGNING_KEY: ${OCSO_INTERNAL_SIGNING_KEY:-}
+  OCSO_INTERNAL_SIGNING_KEY_FILE: /run/secrets/ocso/internal_signing_key
+  # Blobs (ADR-011): `local` = the `blobs` volume; `s3` = SeaweedFS (s3 profile) or
+  # any S3 endpoint you set here.
+  BLOB_DRIVER: ${BLOB_DRIVER:-local}
+  BLOB_LOCAL_DIR: /var/lib/ocso/blobs
+  BLOB_SIGNING_KEY: ${BLOB_SIGNING_KEY:-}
+  BLOB_SIGNING_KEY_FILE: /run/secrets/ocso/blob_signing_key
+  S3_BUCKET: ${S3_BUCKET:-ocso-media}
+  S3_ENDPOINT: ${S3_ENDPOINT:-http://seaweedfs:8333}
+  AWS_REGION: ${AWS_REGION:-us-east-1}
+  AWS_SHARED_CREDENTIALS_FILE: ${AWS_SHARED_CREDENTIALS_FILE:-/run/secrets/ocso/aws_credentials}
+  # Development-only scripted model provider (ADR-015). The demo seed implies it;
+  # the production guard in @ocso/config needs the explicit allow flag too.
+  OCSO_ENABLE_DEV_PROVIDERS: ${OCSO_ENABLE_DEV_PROVIDERS:-${OCSO_DEMO_SEED:-false}}
+  OCSO_ALLOW_DEV_PROVIDERS_IN_PRODUCTION: ${OCSO_ALLOW_DEV_PROVIDERS_IN_PRODUCTION:-${OCSO_DEMO_SEED:-false}}
+  # OpenTelemetry export (observability profile runs the collector).
+  OTEL_ENABLED: ${OTEL_ENABLED:-false}
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
+  OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+
+services:
+  # ── one-shot: create missing secrets on the `secrets` volume ────────────────
+  keygen:
+    <<: *migrate-image
+    command: ["node", "/opt/ocso/keygen.mjs"]
+    # Root only to chown files for postgres (root-read) and the app user (1000).
+    user: "0:0"
+    network_mode: none
+    volumes:
+      - secrets:/secrets
+      - ./infra/compose/keygen.mjs:/opt/ocso/keygen.mjs:ro
+    restart: "no"
+    logging: *logging
+
+  postgres:
+    image: ${OCSO_POSTGRES_IMAGE:-postgres:18.6}
+    environment:
+      POSTGRES_USER: ocso
+      POSTGRES_DB: ocso
+      POSTGRES_PASSWORD_FILE: /run/secrets/ocso-db/db_password
+    volumes:
+      # PostgreSQL 18 images keep data under /var/lib/postgresql/18/docker; mount
+      # the parent (NOT …/data) so major upgrades can use pg_upgrade --link.
+      - pgdata:/var/lib/postgresql
+      - type: volume
+        source: secrets
+        target: /run/secrets/ocso-db
+        read_only: true
+        volume:
+          subpath: postgres
+          nocopy: true
+    depends_on:
+      keygen:
+        condition: service_completed_successfully
+    networks: [backend]
+    shm_size: 256mb
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ocso -d ocso -h 127.0.0.1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
+    stop_grace_period: 60s
+    restart: unless-stopped
+    logging: *logging
+
+  # ── one-shot: explicit migration step (docs/13 §5) ───────────────────────────
+  migrate:
+    <<: *migrate-image
+    environment:
+      <<: *db-env
+    volumes:
+      - *app-secrets
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [backend]
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: "no"
+    logging: *logging
+
+  api:
+    <<: [*api-image, *hardening]
+    environment:
+      <<: *server-env
+      PORT: 4000
+      OTEL_SERVICE_NAME: ocso-api
+      OCSO_SETUP_TOKEN: ${OCSO_SETUP_TOKEN:-}
+      OCSO_SETUP_TOKEN_FILE: /run/secrets/ocso/setup_token
+      TRUST_PROXY: "true"
+    volumes:
+      - *app-secrets
+      - blobs:/var/lib/ocso/blobs
+    depends_on:
+      postgres:
+        condition: service_healthy
+        restart: true
+      migrate:
+        condition: service_completed_successfully
+    # Not published: the web app proxies the public ingress paths to the API.
+    # For direct access while debugging use infra/compose/debug.yaml.
+    expose: ["4000"]
+    networks: [backend, default]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/health/ready').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+  worker:
+    <<: *hardening
+    image: ${OCSO_IMAGE_PREFIX:-ocso}/worker:${OCSO_VERSION:-local}
+    build:
+      context: .
+      target: worker
+      args:
+        APP_VERSION: ${OCSO_VERSION:-local}
+    environment:
+      <<: *server-env
+      HEALTH_PORT: 4100
+      OTEL_SERVICE_NAME: ocso-worker
+    volumes:
+      - *app-secrets
+      - blobs:/var/lib/ocso/blobs
+    depends_on:
+      postgres:
+        condition: service_healthy
+        restart: true
+      migrate:
+        condition: service_completed_successfully
+    # No published ports so `--scale worker=N` works.
+    networks: [backend, default]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4100/health/ready').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    # Time to finish or checkpoint in-flight turns and release leases (docs/10 §9).
+    stop_grace_period: 90s
+    restart: unless-stopped
+
+  web:
+    <<: *hardening
+    image: ${OCSO_IMAGE_PREFIX:-ocso}/web:${OCSO_VERSION:-local}
+    build:
+      context: .
+      target: web
+      args:
+        APP_VERSION: ${OCSO_VERSION:-local}
+        # Baked into Next rewrites at build time; must match the runtime value.
+        API_URL: http://api:4000
+    environment:
+      NODE_ENV: production
+      API_URL: http://api:4000
+      # Secure session cookie (default in production). Browsers accept it on
+      # http://localhost; set false ONLY for plain-http trials on another host.
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
+    tmpfs:
+      - /tmp
+      - /app/apps/web/.next/cache:uid=1000,gid=1000
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${OCSO_HTTP_BIND:-0.0.0.0}:${OCSO_HTTP_PORT:-3000}:3000"
+    networks: [default]
+    healthcheck:
+      # /login renders even when the API is down, so web health never depends on
+      # the API. Each probe costs one /v1/setup/status call, hence 30s.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 2s
+    stop_grace_period: 15s
+    restart: unless-stopped
+
+  # ── profile: demo ────────────────────────────────────────────────────────────
+  mcp-bank-demo:
+    profiles: [demo]
+    image: ${OCSO_IMAGE_PREFIX:-ocso}/mcp-bank-demo:${OCSO_VERSION:-local}
+    build:
+      context: .
+      dockerfile: examples/mcp-bank-demo/Dockerfile
+    # The example server reads its bearer token from the environment only.
+    entrypoint: ["/bin/sh", "-c", 'DEMO_MCP_TOKEN="$$(cat /run/secrets/demo/demo_mcp_token)" exec node dist/main.js']
+    environment:
+      PORT: 8080
+      HOST: 0.0.0.0
+      # DNS-rebinding protection (hostnames): the service name plus loopback for the health probe.
+      DEMO_ALLOWED_HOSTS: mcp-bank-demo,127.0.0.1,localhost
+    volumes:
+      - type: volume
+        source: secrets
+        target: /run/secrets/demo
+        read_only: true
+        volume:
+          subpath: demo
+          nocopy: true
+    depends_on:
+      keygen:
+        condition: service_completed_successfully
+    networks: [backend]
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+    restart: unless-stopped
+    logging: *logging
+
+  seed:
+    <<: *api-image
+    profiles: [demo]
+    command: ["node", "--enable-source-maps", "dist/seed.js"]
+    environment:
+      <<: *server-env
+      # Runs only when explicitly enabled; idempotent (safe on every `up`).
+      OCSO_DEMO_SEED: ${OCSO_DEMO_SEED:-false}
+      OCSO_DEMO_PASSWORD: ${OCSO_DEMO_PASSWORD:-}
+      MCP_DEMO_URL: ${MCP_DEMO_URL:-http://mcp-bank-demo:8080/mcp}
+      DEMO_MCP_TOKEN: ${DEMO_MCP_TOKEN:-}
+      DEMO_MCP_TOKEN_FILE: /run/secrets/ocso/demo_mcp_token
+    volumes:
+      - *app-secrets
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      mcp-bank-demo:
+        condition: service_healthy
+    networks: [backend]
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: "no"
+    logging: *logging
+
+  # ── profile: observability ───────────────────────────────────────────────────
+  otel-collector:
+    profiles: [observability]
+    image: ${OCSO_OTELCOL_IMAGE:-otel/opentelemetry-collector-contrib:0.161.0}
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./infra/compose/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    depends_on:
+      - jaeger
+    networks: [backend, default]
+    restart: unless-stopped
+    logging: *logging
+
+  jaeger:
+    profiles: [observability]
+    image: ${OCSO_JAEGER_IMAGE:-jaegertracing/jaeger:2.21.0}
+    ports:
+      - "127.0.0.1:${OCSO_JAEGER_UI_PORT:-16686}:16686"
+    networks: [backend, default]
+    restart: unless-stopped
+    logging: *logging
+
+  # ── profile: s3 ──────────────────────────────────────────────────────────────
+  seaweedfs:
+    profiles: [s3]
+    image: ${OCSO_SEAWEEDFS_IMAGE:-chrislusf/seaweedfs:4.47}
+    command: ["server", "-dir=/data", "-s3", "-s3.port=8333", "-s3.config=/etc/seaweedfs/s3.json"]
+    volumes:
+      - s3data:/data
+      - type: volume
+        source: secrets
+        target: /etc/seaweedfs
+        read_only: true
+        volume:
+          subpath: seaweedfs
+          nocopy: true
+    depends_on:
+      keygen:
+        condition: service_completed_successfully
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9333/cluster/status >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 15s
+    restart: unless-stopped
+    logging: *logging
+
+  # Creates the media bucket once (idempotent).
+  s3-init:
+    profiles: [s3]
+    image: ${OCSO_SEAWEEDFS_IMAGE:-chrislusf/seaweedfs:4.47}
+    entrypoint: ["/bin/sh", "-c", 'echo "s3.bucket.create -name $${S3_BUCKET}" | weed shell -master=seaweedfs:9333']
+    environment:
+      S3_BUCKET: ${S3_BUCKET:-ocso-media}
+    depends_on:
+      seaweedfs:
+        condition: service_healthy
+    networks: [backend]
+    restart: "no"
+    logging: *logging
+
+volumes:
+  pgdata:
+  blobs:
+  secrets:
+  s3data:
+
+networks:
+  # Default network: published ports and outbound access (model providers,
+  # channel APIs, public MCP servers) for web/api/worker.
+  default: {}
+  # PostgreSQL and in-cluster dependencies: no outbound internet.
+  backend:
+    internal: true
