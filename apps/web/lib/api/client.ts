@@ -11,6 +11,14 @@ import { ApiError, apiErrorFromResponse, unreachableError } from './errors';
  */
 
 const DEFAULT_TIMEOUT_MS = 10_000;
+/**
+ * A read that cannot reach the API is retried for about five seconds: the api
+ * container restarts on every upgrade, and a page loaded during it should
+ * render rather than show "could not load". Only GET is retried (the only
+ * method OCSO can repeat safely), and only when the request never got a
+ * response — a reply of any status is returned as it is.
+ */
+const RETRY_BACKOFF_MS = [200, 500, 1_000, 1_500, 2_000];
 
 export function apiBaseUrl(): string {
   return (process.env['API_URL'] ?? 'http://localhost:4000').replace(/\/+$/, '');
@@ -40,20 +48,27 @@ async function send(method: Method, path: string, body: unknown, options: ApiCal
   if (body !== undefined) headers.set('content-type', 'application/json');
   for (const [name, value] of Object.entries(options.headers ?? {})) headers.set(name, value);
 
-  let res: Response;
-  try {
-    res = await fetch(`${apiBaseUrl()}${path}`, {
-      method,
-      headers,
-      cache: 'no-store',
-      signal: options.signal ?? AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS),
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    });
-  } catch (err) {
-    throw unreachableError(err);
+  const attempts = method === 'GET' && !options.signal ? RETRY_BACKOFF_MS.length + 1 : 1;
+  let res: Response | null = null;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      res = await fetch(`${apiBaseUrl()}${path}`, {
+        method,
+        headers,
+        cache: 'no-store',
+        signal: options.signal ?? AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS),
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      });
+      break;
+    } catch (err) {
+      // Only a connection that never landed is repeated: a timeout means the API may be working on it.
+      const connectionFailed = err instanceof TypeError;
+      if (!connectionFailed || attempt === attempts - 1) throw unreachableError(err);
+      await new Promise((resolve) => setTimeout(resolve, RETRY_BACKOFF_MS[attempt] ?? 400));
+    }
   }
-  if (!res.ok) throw await apiErrorFromResponse(res);
-  return res;
+  if (!res!.ok) throw await apiErrorFromResponse(res!);
+  return res!;
 }
 
 async function parse<S extends z.ZodType>(res: Response, schema: S): Promise<z.infer<S>> {

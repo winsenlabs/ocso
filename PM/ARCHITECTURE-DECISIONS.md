@@ -411,6 +411,11 @@ Autonomous customer-facing AI output is permitted **only** in `AI_ACTIVE`. `AI_R
 
 **Alternatives.** Owner = a single team column on `virtual_agents` (no shared agents; reassignment becomes destructive). Per-user agent ACLs (does not survive people changes; teams already model the org). Deriving ownership from queues at read time (ambiguous for agents that route to several queues; a lead of a queue team could then edit prompts of agents they never owned).
 
+**Addendum (2026-09-22).** A channel answers as exactly one agent: `agent_channels` is unique per
+channel (migration 0020) and `channels.default_agent_id` is kept in step with it, in both directions.
+Attaching a channel another agent answers on is refused (`channel_in_use`); releasing a channel stops it
+routing there. An agent may answer on many channels.
+
 **Consequences.** A CS Lead in no team manages nothing: the web shows "Join or create a team to create agents". The lead who creates a team joins it; a lead adds and removes CS Execs (and leaves) only on teams they belong to, and creates new CS Execs only into those teams — the Tech Admin (`users.manage`) manages every membership, including adding other leads. Escalation rules are addressed through their own agent (`/agents/:agentId/escalation-rules/:ruleId` 404s for another agent's rule); platform-wide rules are read-only there. The audit log is team-scoped the same way (`audit.read_all` for the Tech Admin; otherwise events by teammates or on in-scope targets). Known gap: queue configuration remains shared (not team-owned).
 
 ---

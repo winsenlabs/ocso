@@ -1,10 +1,14 @@
 /* 01 Conversation workspace — page styles from design/01 (inline <style> in the
    mockup) plus what the live screen needs. Loaded by app/(app)/conversations/layout.tsx. */
 
-/* The workspace fills the viewport under the app shell (design: main padding 0, 100vh). */
-.main.shell:has(> .ws){padding:0;height:100vh;overflow:hidden}
-
-.ws{display:grid;grid-template-columns:336px minmax(0,1fr) 316px;height:100vh;min-height:0;overflow:hidden}
+/* The workspace fills the viewport under the app shell (design: main padding 0, 100vh). It cancels the
+   shell's padding on itself rather than through `.main.shell:has(> .ws)`: after a client-side navigation
+   Next keeps the previous route's subtree in the DOM as a `display:none` child, which kept matching that
+   selector and left every later screen without padding. A hidden child takes no space, so this cannot. */
+.ws{
+  display:grid;grid-template-columns:336px minmax(0,1fr) 316px;height:100vh;min-height:0;overflow:hidden;
+  margin:calc(-1 * var(--shell-pad-top)) calc(-1 * var(--shell-pad-x)) calc(-1 * var(--shell-pad-bottom));
+}
 .ws>section,.ws>aside{min-width:0;min-height:0}
 .inbox{border-right:1px solid var(--border);background:var(--surface);display:grid;grid-template-rows:auto auto minmax(0,1fr)}
 .inbox .ih{padding:12px 14px 10px;border-bottom:1px solid var(--border);display:grid;gap:9px}

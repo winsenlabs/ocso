@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { asc, eq } from 'drizzle-orm';
 import { Permission, assertCan } from '@ocso/auth';
 import { notFound, validation } from '@ocso/domain';
-import { channels, uuidv7, type Db } from '@ocso/db';
+import { agentChannels, channels, uuidv7, type Db } from '@ocso/db';
 import type { SecretStore } from '@ocso/secrets';
 import { z } from 'zod';
 import { recordAudit } from '../audit/audit.js';
@@ -129,6 +129,12 @@ export class ChannelService {
         })
         .where(eq(channels.id, id))
         .returning();
+      // A channel answers as exactly one agent: keep its attachment (agent_channels, the agent's
+      // Channels tab) in step with the agent chosen here.
+      if (patch.defaultAgentId !== undefined && patch.defaultAgentId !== before.defaultAgentId) {
+        await tx.delete(agentChannels).where(eq(agentChannels.channelId, id));
+        if (patch.defaultAgentId) await tx.insert(agentChannels).values({ agentId: patch.defaultAgentId, channelId: id });
+      }
       await recordAudit(tx, actor, {
         action: 'channel.update',
         targetType: 'channel',

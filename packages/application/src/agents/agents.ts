@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, ne, notInArray, or } from 'drizzle-orm';
 import { Permission, assertCan, type Principal } from '@ocso/auth';
 import { BusinessHoursSchema, WEEKDAYS, conflict, isAlwaysOpen, notFound, validation, type BusinessHoursInput } from '@ocso/domain';
 import { agentChannels, agentTeams, channels, conversations, handoffs, modelProfiles, promptVersions, virtualAgents, uuidv7, type Db, type DbOrTx } from '@ocso/db';
@@ -116,8 +116,7 @@ export class AgentService {
         })
         .returning();
       await tx.insert(agentTeams).values(owners.map((teamId) => ({ agentId: id, teamId })));
-      if (input.channelIds?.length) await tx.insert(agentChannels).values(input.channelIds.map((channelId) => ({ agentId: id, channelId })));
-      if (input.channelIds?.length) await claimUnroutedChannels(tx, actor, id, input.channelIds);
+      if (input.channelIds?.length) await attachChannels(tx, actor, id, input.channelIds);
       const version = await createPromptVersion(tx, actor, {
         agentId: id,
         components: initialComponents(input.name, input.purpose, input.conversationType),
@@ -148,9 +147,8 @@ export class AgentService {
         .where(eq(virtualAgents.id, id))
         .returning();
       if (channelIds) {
-        await tx.delete(agentChannels).where(eq(agentChannels.agentId, id));
-        if (channelIds.length) await tx.insert(agentChannels).values(channelIds.map((channelId) => ({ agentId: id, channelId })));
-        if (channelIds.length) await claimUnroutedChannels(tx, actor, id, channelIds);
+        await detachChannels(tx, id, channelIds);
+        if (channelIds.length) await attachChannels(tx, actor, id, channelIds);
       }
       const hours = patch.businessHours ? ` · business hours ${describeHours(patch.businessHours)}` : '';
       await recordAudit(tx, actor, { action: 'agent.update', targetType: 'agent', targetId: id, summary: `Updated ${before.name}${hours}`, before, after: patch });
@@ -229,17 +227,41 @@ function slugify(name: string, id: string): string {
 }
 
 /**
- * A channel with no default agent rejects every new customer message
- * (`no_agent`), so attaching an agent to such a channel also makes it the
- * channel's default. Channels that already route to another agent keep it.
+ * A channel answers as exactly one agent, so attaching it here also makes this
+ * agent the channel's default (a channel with no default agent rejects every
+ * customer message as `no_agent`). A channel another agent already answers on
+ * is refused: it is released from that agent first, on its Channels tab or by
+ * clearing the channel's agent.
  */
-async function claimUnroutedChannels(tx: DbOrTx, actor: ActorContext, agentId: string, channelIds: readonly string[]): Promise<void> {
+async function attachChannels(tx: DbOrTx, actor: ActorContext, agentId: string, channelIds: readonly string[]): Promise<void> {
+  const taken = await tx
+    .select({ channel: channels.name, agent: virtualAgents.name })
+    .from(agentChannels)
+    .innerJoin(channels, eq(channels.id, agentChannels.channelId))
+    .innerJoin(virtualAgents, eq(virtualAgents.id, agentChannels.agentId))
+    .where(and(inArray(agentChannels.channelId, [...channelIds]), ne(agentChannels.agentId, agentId)));
+  const [first] = taken;
+  if (first) throw conflict('channel_in_use', `${first.channel} already answers as ${first.agent}. Remove it there first — a channel answers as one agent.`);
+  await tx.insert(agentChannels).values(channelIds.map((channelId) => ({ agentId, channelId }))).onConflictDoNothing();
   const claimed = await tx
     .update(channels)
     .set({ defaultAgentId: agentId, updatedAt: new Date() })
-    .where(and(inArray(channels.id, [...channelIds]), isNull(channels.defaultAgentId)))
+    .where(and(inArray(channels.id, [...channelIds]), or(isNull(channels.defaultAgentId), ne(channels.defaultAgentId, agentId))))
     .returning({ id: channels.id, name: channels.name });
   for (const channel of claimed) {
-    await recordAudit(tx, actor, { action: 'channel.update', targetType: 'channel', targetId: channel.id, summary: `${channel.name} now routes new conversations to this agent (it had no default agent)`, after: { defaultAgentId: agentId } });
+    await recordAudit(tx, actor, { action: 'channel.update', targetType: 'channel', targetId: channel.id, summary: `${channel.name} now routes new conversations to this agent`, after: { defaultAgentId: agentId } });
   }
+}
+
+/** Channels this agent no longer answers on stop routing to it, so they never route to an agent that left them. */
+async function detachChannels(tx: DbOrTx, agentId: string, keep: readonly string[]): Promise<void> {
+  const dropped = await tx
+    .delete(agentChannels)
+    .where(keep.length ? and(eq(agentChannels.agentId, agentId), notInArray(agentChannels.channelId, [...keep])) : eq(agentChannels.agentId, agentId))
+    .returning({ channelId: agentChannels.channelId });
+  if (!dropped.length) return;
+  await tx
+    .update(channels)
+    .set({ defaultAgentId: null, updatedAt: new Date() })
+    .where(and(inArray(channels.id, dropped.map((d) => d.channelId)), eq(channels.defaultAgentId, agentId)));
 }

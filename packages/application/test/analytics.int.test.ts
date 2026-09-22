@@ -160,10 +160,11 @@ async function seed() {
     { id: id.wa, kind: 'WHATSAPP', name: 'WhatsApp', status: 'ACTIVE', publicKey: 'pk-a-wa' },
     { id: id.web, kind: 'WEBCHAT', name: 'Web chat', status: 'ACTIVE', publicKey: 'pk-a-web' },
   ]);
+  // A channel answers as one agent (agent_channels is unique per channel): both are Maya's; Arjun's
+  // conversations still arrive on them, which is what the per-channel analytics below read.
   await db.insert(agentChannels).values([
     { agentId: id.maya, channelId: id.wa },
     { agentId: id.maya, channelId: id.web },
-    { agentId: id.arjun, channelId: id.web },
   ]);
 
   // Maya cohort (last 7 days): c1..c6. Previous window: c7, c8.

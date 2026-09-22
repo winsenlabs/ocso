@@ -151,7 +151,9 @@ under the same phone identity, so a person is one customer whichever integration
   `<script src="<public URL>/ocso-webchat.js" data-key="<key>" async></script>`. See
   `examples/webchat-host/` for identify().
 
-Choose the channel's default virtual agent (created in §5) and set it **Active**.
+Choose the channel's virtual agent (created in §5) and set it **Active**. A channel answers as exactly
+one agent — assigning it to a second agent is refused until the first releases it (its **Channels** tab,
+or clear the agent here) — while one agent may answer on many channels.
 
 ### WhatsApp templates (CS Lead or Tech Admin)
 

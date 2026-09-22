@@ -131,6 +131,13 @@ stops the internal network, your allowlist stops credentials going to the wrong 
 
 ## What the core does for you
 
+**Routing to an agent.** A channel answers as exactly one virtual agent: `channels.default_agent_id`
+(who new conversations go to) and `agent_channels` (the agent's Channels tab) are two records of that
+one fact and are kept in step — assigning the channel to a second agent is refused with
+`channel_in_use` until the first releases it, and releasing it stops the channel routing. One agent may
+answer on many channels. A channel nobody answers on rejects inbound messages as `no_agent`, logged with
+the reason.
+
 **Webhook routing.** Every inbound-webhook kind shares one route in
 `apps/api/src/modules/channels/channel-webhook.controller.ts`:
 

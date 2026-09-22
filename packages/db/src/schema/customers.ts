@@ -70,5 +70,6 @@ export const agentChannels = pgTable(
       .notNull()
       .references(() => channels.id, { onDelete: 'cascade' }),
   },
-  (t) => [primaryKey({ columns: [t.agentId, t.channelId] })],
+  // One agent per channel (a channel routes to exactly one agent); an agent may answer on many channels.
+  (t) => [primaryKey({ columns: [t.agentId, t.channelId] }), uniqueIndex('agent_channels_channel_uq').on(t.channelId)],
 );

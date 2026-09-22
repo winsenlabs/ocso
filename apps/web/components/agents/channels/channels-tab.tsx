@@ -38,7 +38,7 @@ export async function ChannelsTab({ data }: { data: AgentPageData }) {
   });
   return (
     <>
-      <SecHead title="Channels" count={`${agent.channelIds.length} assigned`} desc="what customers reach this agent on · metrics: last 7 days" />
+      <SecHead title="Channels" count={`${agent.channelIds.length} assigned`} desc="what customers reach this agent on · a channel answers as one agent · metrics: last 7 days" />
       {rows.length === 0 ? (
         <EmptyState title="No channels configured">A Tech Admin adds channels (web chat, WhatsApp…) under Connections; assign them to this agent here.</EmptyState>
       ) : (

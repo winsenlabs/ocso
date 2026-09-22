@@ -326,6 +326,22 @@ test('a sensitive action the AI proposed is confirmed from the timeline', async 
   await expect(page.locator('.toolev').filter({ hasText: 'run by a human' })).toContainText('ok');
 });
 
+test('leaving the workspace restores the page padding of the next screen', async ({ page }) => {
+  // Next keeps the previous route's subtree as a display:none child; a `:has(> .ws)` rule on the shell
+  // matched it and left every later screen flush against the sidebar.
+  await login(page, EXEC);
+  const padding = () => page.locator('#main').evaluate((el) => getComputedStyle(el).paddingTop);
+  await page.goto('/conversations');
+  await expect(page.getByRole('heading', { name: 'Conversations' })).toBeVisible();
+  await expect(page.locator('main > .ws')).toHaveCount(1);
+  expect(await page.locator('main > .ws').evaluate((el) => el.getBoundingClientRect().top)).toBe(0);
+  await page.locator('a[href^="/customers"]').first().click();
+  await page.waitForURL('**/customers');
+  await expect(page.getByRole('heading', { name: 'Customers' }).first()).toBeVisible();
+  expect(await padding()).not.toBe('0px');
+  await logout(page);
+});
+
 function startMeridianDemo(): ChildProcess {
   const demo = join(repo, 'examples/mcp-bank-demo');
   if (!existsSync(join(demo, 'dist/main.js'))) execFileSync(join(repo, 'node_modules/.bin/tsc'), ['-p', join(demo, 'tsconfig.build.json')], { stdio: 'inherit' });

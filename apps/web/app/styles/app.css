@@ -27,7 +27,8 @@ a:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-visible,
 .avatar.lg{display:grid;place-items:center;color:#fff;gap:0}
 
 /* ─────────── Shell ─────────── */
-.main.shell{padding:22px 26px 60px}
+:root{--shell-pad-top:22px;--shell-pad-x:26px;--shell-pad-bottom:60px}
+.main.shell{padding:var(--shell-pad-top) var(--shell-pad-x) var(--shell-pad-bottom)}
 button.sb-walle{width:100%;text-align:left;font:inherit;color:white}
 button.sb-walle .sb-walle-name,button.sb-walle .sb-walle-sub{display:block}
 .sb-walle.active{box-shadow:0 0 0 2px var(--accent-ring)}

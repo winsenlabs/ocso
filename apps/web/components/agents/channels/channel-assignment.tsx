@@ -42,6 +42,8 @@ export function ChannelAssignment({ agentId, rows, assigned, canEdit }: { agentI
         </div>
         {rows.map((r) => {
           const on = picked.includes(r.id);
+          // A channel answers as one agent: one another agent already answers on cannot be picked here.
+          const takenBy = !on && r.defaultAgent === 'other' ? (r.defaultAgentName ?? 'another agent') : null;
           return (
             <div className="dt-row" role="row" key={r.id} style={{ gridTemplateColumns: TEMPLATE }}>
               <span role="cell" style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
@@ -55,10 +57,15 @@ export function ChannelAssignment({ agentId, rows, assigned, canEdit }: { agentI
                 <StatusChip tone={STATUS_TONE[r.status] ?? 'muted'}>{r.status.toLowerCase()}</StatusChip>
               </span>
               <span role="cell" className="grant-cell">
-                {canEdit ? (
+                {canEdit && !takenBy ? (
                   <label className="grant-cell">
                     <input type="checkbox" checked={on} onChange={(e) => setPicked((p) => (e.target.checked ? [...p, r.id] : p.filter((x) => x !== r.id)))} aria-label={`Assign ${r.name}`} />
                     {on ? 'yes' : 'no'}
+                  </label>
+                ) : canEdit && takenBy ? (
+                  <label className="grant-cell" title={`${r.name} answers as ${takenBy}. Release it there first.`}>
+                    <input type="checkbox" checked={false} disabled aria-label={`Assign ${r.name} (answers as ${takenBy})`} />
+                    <span className="row-note">in use</span>
                   </label>
                 ) : (
                   <StatusChip tone={on ? 'good' : 'muted'}>{on ? 'assigned' : 'not assigned'}</StatusChip>
