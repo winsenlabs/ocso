@@ -7,6 +7,7 @@ import { completeSetup, login, logout } from '../api/auth';
 import { ApiError, describeApiError } from '../api/errors';
 import { SESSION_COOKIE, safeNextPath, sessionCookieOptions } from '../session-cookie';
 import { field, fieldErrorsFrom, type FormState } from './form-state';
+import { clientIp } from '../client-ip';
 
 const LoginForm = z.object({
   email: z.email('Enter a valid email address').max(320),
@@ -21,7 +22,7 @@ export async function loginAction(_prev: FormState, formData: FormData): Promise
     return { status: 'error', fieldErrors: fieldErrorsFrom(parsed.error.issues), values: { email } };
   }
   try {
-    const session = await login(parsed.data.email, parsed.data.password);
+    const session = await login(parsed.data.email, parsed.data.password, await clientIp());
     (await cookies()).set(SESSION_COOKIE, session.token, sessionCookieOptions(session.expiresAt));
   } catch (err) {
     return { status: 'error', message: loginMessage(err), values: { email } };

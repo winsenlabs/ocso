@@ -51,7 +51,7 @@ export const loginAttempts = pgTable(
     success: boolean().notNull(),
     occurredAt: ts('occurred_at').notNull().defaultNow(),
   },
-  (t) => [index('login_attempts_email_idx').on(sql`lower(${t.email})`, t.occurredAt)],
+  (t) => [index('login_attempts_email_idx').on(sql`lower(${t.email})`, t.occurredAt), index('login_attempts_ip_idx').on(t.ip, t.occurredAt)],
 );
 
 export const teams = pgTable(

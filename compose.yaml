@@ -246,6 +246,8 @@ services:
       # Secure session cookie (default in production). Browsers accept it on
       # http://localhost; set false ONLY for plain-http trials on another host.
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
+      # Reverse proxies in front of web (0 = published directly: X-Forwarded-For is ignored).
+      OCSO_TRUSTED_PROXY_HOPS: ${OCSO_TRUSTED_PROXY_HOPS:-0}
     tmpfs:
       - /tmp
       - /app/apps/web/.next/cache:uid=1000,gid=1000

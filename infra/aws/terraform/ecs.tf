@@ -105,6 +105,8 @@ module "web" {
     HOSTNAME                = "0.0.0.0"
     PORT                    = "3000"
     NEXT_TELEMETRY_DISABLED = "1"
+    # The ALB appends the client address to X-Forwarded-For (per-address sign-in throttling, audit).
+    OCSO_TRUSTED_PROXY_HOPS = "1"
   }
 
   container_port = 3000

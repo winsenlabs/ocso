@@ -29,6 +29,9 @@ export interface IssuedSession {
   principal: Principal;
 }
 
+/** An address may fail this many times the per-account limit (shared NAT/offices) before it is paused. */
+const IP_FAILURE_MULTIPLIER = 5;
+
 const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
 const authError = (code: string, message: string) => new DomainError('authentication', code, message);
 
@@ -40,9 +43,10 @@ export class SessionService {
     private readonly now?: () => Date,
   ) {}
 
-  async login(email: string, password: string, meta: { ip?: string | undefined; userAgent?: string | undefined; correlationId: string }): Promise<IssuedSession> {
+  /** `ipVerified`: the address is the end user's (forwarded by the web tier), not an intermediate hop. */
+  async login(email: string, password: string, meta: { ip?: string | undefined; ipVerified?: boolean | undefined; userAgent?: string | undefined; correlationId: string }): Promise<IssuedSession> {
     const now = nowOf({ now: this.now });
-    await this.assertNotThrottled(email, now);
+    await this.assertNotThrottled(email, meta.ipVerified ? meta.ip : undefined, now);
     const [user] = await this.db.select().from(users).where(sql`lower(${users.email}) = lower(${email})`).limit(1);
     // Always run a hash comparison so response time does not reveal whether the email exists.
     const ok = await verifyPassword(password, user?.passwordHash ?? 'scrypt$15$8$1$AAAAAAAAAAAAAAAAAAAAAA==$AAAA');
@@ -118,8 +122,18 @@ export class SessionService {
     await tx.update(sessions).set({ revokedAt: nowOf({ now: this.now }) }).where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)));
   }
 
-  private async assertNotThrottled(email: string, now: Date): Promise<void> {
+  private async assertNotThrottled(email: string, ip: string | undefined, now: Date): Promise<void> {
     const since = new Date(now.getTime() - this.policy.failureWindowMinutes * 60_000);
+    // Credential stuffing spreads failures across many accounts from one address.
+    if (ip) {
+      const [fromIp] = await this.db
+        .select({ failures: sql<number>`count(*)::int` })
+        .from(loginAttempts)
+        .where(and(eq(loginAttempts.ip, ip), eq(loginAttempts.success, false), gt(loginAttempts.occurredAt, since)));
+      if ((fromIp?.failures ?? 0) >= this.policy.maxFailures * IP_FAILURE_MULTIPLIER) {
+        throw authError('too_many_attempts', 'Too many failed sign-in attempts. Try again later.');
+      }
+    }
     const [row] = await this.db
       .select({ failures: sql<number>`count(*)::int` })
       .from(loginAttempts)

@@ -75,6 +75,16 @@ describe('sessions and user management', () => {
     });
   });
 
+  it('throttles an address spraying many accounts, but only when the address is verified', async () => {
+    const svc = sessionsSvc();
+    const spray = (i: number, ipVerified: boolean) => svc.login(`victim${i}@x.test`, 'wrong password 123', { ip: '203.0.113.7', ipVerified, correlationId: 'c' });
+    // 3 × 5 failures across different accounts from one verified address.
+    for (let i = 0; i < 15; i++) await expect(spray(i, true)).rejects.toMatchObject({ code: 'invalid_credentials' });
+    await expect(svc.login('tejas@meridian.test', 'correct horse battery staple', { ip: '203.0.113.7', ipVerified: true, correlationId: 'c' })).rejects.toMatchObject({ code: 'too_many_attempts' });
+    // An unverified address (e.g. the web tier's own) never trips the per-address limit.
+    await expect(svc.login('tejas@meridian.test', 'correct horse battery staple', { ip: '203.0.113.7', correlationId: 'c' })).resolves.toMatchObject({ token: expect.any(String) });
+  });
+
   it('lets a CS Lead manage only CS Execs, and revokes sessions on role change', async () => {
     const users = new UserService(t.db);
     const team = await new TeamService(t.db).create(ctx({ ...admin, role: 'CS_LEAD' }), { name: 'Cards & EMI', description: null });

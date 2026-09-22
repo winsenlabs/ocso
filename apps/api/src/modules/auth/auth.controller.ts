@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 import { Body, Controller, Get, HttpCode, Inject, Post, Req } from '@nestjs/common';
 import { permissionsForRole, type Principal } from '@ocso/auth';
 import { SessionService, SettingsService, SetupInput, SetupService, type ActorContext } from '@ocso/application';
@@ -23,8 +24,12 @@ export class AuthController {
   @Public()
   @HttpCode(200)
   async login(@Body({ schema: LoginInput }) body: LoginInput, @Req() req: OcsoRequest) {
+    // Set by the web tier from its trusted proxy hop; /v1 is never reachable from outside (ADR-020).
+    const forwarded = req.header('x-ocso-client-ip');
+    const clientIp = forwarded && isIP(forwarded) ? forwarded : undefined;
     const session = await this.sessions.login(body.email, body.password, {
-      ip: req.ip,
+      ip: clientIp ?? req.ip,
+      ipVerified: clientIp !== undefined,
       userAgent: req.header('user-agent'),
       correlationId: req.correlationId ?? 'login',
     });

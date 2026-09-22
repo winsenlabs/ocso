@@ -78,6 +78,13 @@
       "when": 1790076855908,
       "tag": "0010_audit_retention_window",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790077638225,
+      "tag": "0011_login_attempts_ip_index",
+      "breakpoints": true
     }
   ]
 }

@@ -23,6 +23,8 @@ export interface ApiCallOptions {
   token?: string | null | undefined;
   timeoutMs?: number | undefined;
   signal?: AbortSignal | undefined;
+  /** Extra request headers (e.g. the verified client IP on login). */
+  headers?: Readonly<Record<string, string>> | undefined;
 }
 
 export async function readSessionToken(): Promise<string | null> {
@@ -34,6 +36,7 @@ async function send(method: Method, path: string, body: unknown, options: ApiCal
   const token = options.token === undefined ? await readSessionToken() : options.token;
   if (token) headers.set('authorization', `Bearer ${token}`);
   if (body !== undefined) headers.set('content-type', 'application/json');
+  for (const [name, value] of Object.entries(options.headers ?? {})) headers.set(name, value);
 
   let res: Response;
   try {

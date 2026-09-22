@@ -38,8 +38,9 @@ export function fetchMe(token: string): Promise<SessionUser> {
   return api.get('/v1/auth/me', SessionUserSchema, { token });
 }
 
-export function login(email: string, password: string): Promise<LoginResponse> {
-  return api.post('/v1/auth/login', { email, password }, LoginResponse, { token: null });
+/** `clientIp` is the proxy-verified browser address; the API uses it for per-address throttling and the audit trail. */
+export function login(email: string, password: string, clientIp?: string): Promise<LoginResponse> {
+  return api.post('/v1/auth/login', { email, password }, LoginResponse, { token: null, ...(clientIp ? { headers: { 'x-ocso-client-ip': clientIp } } : {}) });
 }
 
 export function logout(token: string): Promise<void> {
