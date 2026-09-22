@@ -33,14 +33,12 @@ afterAll(async () => {
   await t?.drop();
 });
 
-const emit = (type: 'alert.opened' | 'config.changed' | 'tool.failed') =>
-  t.db.transaction((tx) =>
-    type === 'alert.opened'
-      ? emitEvent(tx, { correlationId: 'corr-1' }, 'alert.opened', { alertId: uuidv7(), severity: 'CRITICAL', kind: 'TECHNICAL' })
-      : type === 'tool.failed'
-        ? emitEvent(tx, { correlationId: 'corr-2' }, 'tool.failed', { toolCallId: uuidv7(), toolName: 'payments.reverse', errorCategory: 'tool_unavailable' })
-        : emitEvent(tx, { correlationId: 'corr-3' }, 'config.changed', { area: 'prompt', entityId: null }),
-  );
+const emit = (type: 'alert.opened' | 'config.changed' | 'tool.failed'): Promise<void> =>
+  t.db.transaction(async (tx) => {
+    if (type === 'alert.opened') await emitEvent(tx, { correlationId: 'corr-1' }, 'alert.opened', { alertId: uuidv7(), severity: 'CRITICAL', kind: 'TECHNICAL' });
+    else if (type === 'tool.failed') await emitEvent(tx, { correlationId: 'corr-2' }, 'tool.failed', { toolCallId: uuidv7(), toolName: 'payments.reverse', errorCategory: 'tool_unavailable' });
+    else await emitEvent(tx, { correlationId: 'corr-3' }, 'config.changed', { area: 'prompt', entityId: null });
+  });
 
 describe('outbound event webhooks (E8.10)', () => {
   it('validates subscriptions and returns the signing secret exactly once', async () => {

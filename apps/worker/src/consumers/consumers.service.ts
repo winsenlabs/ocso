@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { CopilotService, DeliveryService, MediaMaterializer, SummaryService, TurnProcessor } from '@ocso/agent-runtime';
+import { ConversationInsightsService, CopilotService, DeliveryService, EvaluationService, MediaMaterializer, SummaryService, TurnProcessor } from '@ocso/agent-runtime';
 import { AlertDeliveryService, WebhookDeliveryService, isAlertDeliveryRetryable, isWebhookRetryable, type AlertDeliverJob, type WorkerSettings } from '@ocso/application';
 import type { Logger } from '@ocso/observability';
 import { ocsoMetrics } from '@ocso/observability';
@@ -26,6 +26,8 @@ export class ConsumersService {
     @Inject(AlertDeliveryService) private readonly alertDelivery: AlertDeliveryService,
     @Inject(CopilotService) private readonly copilot: CopilotService,
     @Inject(WebhookDeliveryService) private readonly webhooks: WebhookDeliveryService,
+    @Inject(ConversationInsightsService) private readonly insights: ConversationInsightsService,
+    @Inject(EvaluationService) private readonly evaluations: EvaluationService,
     @Inject(LOGGER) private readonly logger: Logger,
   ) {}
 
@@ -45,6 +47,14 @@ export class ConsumersService {
         await this.summaries.summarize(m.payload.conversationId, m.id);
         return { kind: 'ack' };
       }), { concurrency: 4, visibilityTimeoutSeconds: 120, maxAttempts: 3 }),
+      this.queue.consume<{ conversationId: string }>('conversation.insights', async (m) => this.measure('conversation.insights', async () => {
+        await this.insights.analyze(m.payload.conversationId, m.id);
+        return { kind: 'ack' };
+      }), { concurrency: 2, visibilityTimeoutSeconds: 180, maxAttempts: 3 }),
+      this.queue.consume<{ evaluationRunId: string }>('evaluation.run', async (m) => this.measure('evaluation.run', async () => {
+        await this.evaluations.run(m.payload.evaluationRunId, m.id);
+        return { kind: 'ack' };
+      }), { concurrency: 1, visibilityTimeoutSeconds: 900, maxAttempts: 2 }),
       // Best effort: a failed draft is not retried — the exec can request one on demand.
       this.queue.consume<{ conversationId: string; seq: number }>('copilot.suggest', async (m) => this.measure('copilot.suggest', async () => {
         await this.copilot.suggest(m.payload.conversationId, m.payload.seq, m.id).catch((err: unknown) => this.logger.warn({ err, conversationId: m.payload.conversationId }, 'copilot suggestion failed'));

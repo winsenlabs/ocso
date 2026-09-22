@@ -3,7 +3,9 @@ import { CustomerClaimsIssuer, SettingsService } from '@ocso/application';
 import {
   ChannelRuntime,
   ContextBuilder,
+  ConversationInsightsService,
   CopilotService,
+  EvaluationService,
   DeliveryService,
   HotContextCache,
   LeaseManager,
@@ -66,6 +68,8 @@ export const HISTORY_WINDOW = 20;
       useFactory: async (db: Db, hot: HotContextCache, settings: SettingsService) =>
         new ContextBuilder(db, hot, { historyWindow: HISTORY_WINDOW, mediaWindow: 6, timezone: (await settings.deployment()).timezone }),
     },
+    { provide: ConversationInsightsService, inject: [DB, ModelGateway], useFactory: (db: Db, gateway: ModelGateway) => new ConversationInsightsService(db, gateway) },
+    { provide: EvaluationService, inject: [DB, ModelGateway], useFactory: (db: Db, gateway: ModelGateway) => new EvaluationService(db, gateway, { historyWindow: HISTORY_WINDOW }) },
     {
       provide: CustomerClaimsIssuer,
       inject: [DB, SECRET_STORE, ENV],
@@ -108,6 +112,6 @@ export const HISTORY_WINDOW = 20;
       },
     },
   ],
-  exports: [WorkerRegistryService, CopilotService, CustomerClaimsIssuer, HotContextCache, LeaseManager, ModelGateway, TurnProcessor, DeliveryService, MediaMaterializer, SummaryService, PROVIDER_SOURCE, TOOL_PROVIDERS],
+  exports: [WorkerRegistryService, CopilotService, CustomerClaimsIssuer, ConversationInsightsService, EvaluationService, HotContextCache, LeaseManager, ModelGateway, TurnProcessor, DeliveryService, MediaMaterializer, SummaryService, PROVIDER_SOURCE, TOOL_PROVIDERS],
 })
 export class RuntimeModule {}

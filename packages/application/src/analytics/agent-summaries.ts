@@ -13,9 +13,10 @@ export interface AgentSummary {
 }
 
 /**
- * Explicit, auditable agent KPIs (docs/11 §3):
- * - containment = conversations opened in the window with no handoff / all opened
- * - escalation  = conversations with ≥1 handoff / all opened
+ * Explicit, auditable agent KPIs (docs/11 §3), same formulas as the analytics
+ * read model (analytics/definitions.ts):
+ * - containment = conversations opened in the window with no handoff of any trigger / all opened
+ * - escalation  = conversations with ≥1 handoff whose trigger is not HUMAN_REQUEST / all opened
  * - csat        = mean of customer ratings received in the window
  */
 export async function agentSummaries(db: Db, windowDays = 7): Promise<Map<string, AgentSummary>> {
@@ -23,6 +24,7 @@ export async function agentSummaries(db: Db, windowDays = 7): Promise<Map<string
     agent_id: string;
     conversations: number;
     escalated: number;
+    human_involved: number;
     open: number;
     waiting: number;
     csat: number | null;
@@ -30,7 +32,8 @@ export async function agentSummaries(db: Db, windowDays = 7): Promise<Map<string
   }>(sql`
     WITH window_convs AS (
       SELECT c.id, c.agent_id, c.control_state,
-             EXISTS (SELECT 1 FROM handoffs h WHERE h.conversation_id = c.id AND h.trigger <> 'HUMAN_REQUEST') AS escalated
+             EXISTS (SELECT 1 FROM handoffs h WHERE h.conversation_id = c.id AND h.trigger <> 'HUMAN_REQUEST') AS escalated,
+             EXISTS (SELECT 1 FROM handoffs h WHERE h.conversation_id = c.id) AS human_involved
         FROM conversations c
        WHERE c.opened_at > now() - make_interval(days => ${windowDays})
     ),
@@ -48,6 +51,7 @@ export async function agentSummaries(db: Db, windowDays = 7): Promise<Map<string
     SELECT a.id AS agent_id,
            count(w.id)::int AS conversations,
            count(w.id) FILTER (WHERE w.escalated)::int AS escalated,
+           count(w.id) FILTER (WHERE w.human_involved)::int AS human_involved,
            coalesce(l.open, 0) AS open,
            coalesce(l.waiting, 0) AS waiting,
            cs.csat, coalesce(cs.csat_n, 0) AS csat_n
@@ -62,7 +66,7 @@ export async function agentSummaries(db: Db, windowDays = 7): Promise<Map<string
       {
         agentId: r.agent_id,
         conversations: r.conversations,
-        containmentRate: r.conversations ? (r.conversations - r.escalated) / r.conversations : null,
+        containmentRate: r.conversations ? (r.conversations - r.human_involved) / r.conversations : null,
         escalationRate: r.conversations ? r.escalated / r.conversations : null,
         csat: r.csat,
         csatResponses: r.csat_n,

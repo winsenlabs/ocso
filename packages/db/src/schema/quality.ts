@@ -42,7 +42,7 @@ export const conversationReviews = pgTable(
     notes: text(),
     createdAt: createdAt(),
   },
-  (t) => [index('conversation_reviews_agent_idx').on(t.agentId, t.createdAt)],
+  (t) => [index('conversation_reviews_agent_idx').on(t.agentId, t.createdAt), index('conversation_reviews_conversation_idx').on(t.conversationId)],
 );
 
 export const csatResponses = pgTable(
@@ -56,11 +56,13 @@ export const csatResponses = pgTable(
     comment: text(),
     receivedAt: ts('received_at').notNull().defaultNow(),
   },
-  (t) => [index('csat_responses_agent_idx').on(t.agentId, t.receivedAt)],
+  (t) => [index('csat_responses_agent_idx').on(t.agentId, t.receivedAt), index('csat_responses_conversation_idx').on(t.conversationId, t.receivedAt)],
 );
 
 /** Replay evaluation of a candidate prompt against historical turns (no side effects). */
-export const evaluationRuns = pgTable('evaluation_runs', {
+export const evaluationRuns = pgTable(
+  'evaluation_runs',
+  {
   id: id(),
   agentId: uuid().notNull(),
   baselineVersionId: uuid(),
@@ -71,7 +73,9 @@ export const evaluationRuns = pgTable('evaluation_runs', {
   createdBy: uuid().references(() => users.id),
   createdAt: createdAt(),
   completedAt: ts('completed_at'),
-});
+  },
+  (t) => [index('evaluation_runs_agent_idx').on(t.agentId, t.createdAt)],
+);
 
 export const evaluationResults = pgTable(
   'evaluation_results',

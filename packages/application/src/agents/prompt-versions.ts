@@ -16,6 +16,7 @@ import { recordAudit } from '../audit/audit.js';
 import { bumpGeneration } from '../cache/generations.js';
 import { emitEvent } from '../events/outbox.js';
 import type { ActorContext } from '../shared/context.js';
+import { markCorrectionsApplied } from '../quality/corrections-applied.js';
 
 export const ComponentsInput = z.object(
   Object.fromEntries(BUSINESS_COMPONENT_KEYS.map((k) => [k, z.string().max(20_000)])) as Record<BusinessComponentKey, z.ZodString>,
@@ -111,6 +112,8 @@ export class PromptService {
         parentVersionId: agent?.activePromptVersionId ?? null,
         correctionIds: input.correctionIds,
       });
+      // Corrections that motivated this version leave the review queue (design/02 Corrections tab).
+      if (input.correctionIds?.length) await markCorrectionsApplied(tx, version.id);
       await tx.delete(promptDrafts).where(eq(promptDrafts.agentId, agentId));
       return version;
     });

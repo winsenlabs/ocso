@@ -53,6 +53,8 @@ export const ApiEnv = z.object({
   SESSION_IDLE_MINUTES: z.coerce.number().int().min(5).default(120),
   SESSION_ABSOLUTE_HOURS: z.coerce.number().int().min(1).default(24),
   TRUST_PROXY: bool.default(true),
+  /** Deep link from telemetry to the trace backend, e.g. `http://localhost:16686/trace/{traceId}`. */
+  OCSO_TRACE_URL_TEMPLATE: z.string().includes('{traceId}').optional(),
 });
 export type ApiEnv = z.infer<typeof ApiEnv>;
 

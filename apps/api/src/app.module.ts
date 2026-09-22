@@ -27,6 +27,9 @@ import { InternalAgentModule } from './modules/internal-agent/internal-agent.mod
 import { CopilotModule } from './modules/copilot/copilot.module.js';
 import { SecurityModule } from './modules/security/security.module.js';
 import { WebhooksModule } from './modules/webhooks/webhooks.module.js';
+import { TelemetryModule } from './modules/telemetry/telemetry.module.js';
+import { AnalyticsModule } from './modules/analytics/analytics.module.js';
+import { QualityModule } from './modules/quality/quality.module.js';
 
 /** Feature modules are registered here; each owns one domain area (build rule §2). */
 export const FEATURE_MODULES = [
@@ -51,6 +54,9 @@ export const FEATURE_MODULES = [
   CopilotModule,
   SecurityModule,
   WebhooksModule,
+  TelemetryModule,
+  AnalyticsModule,
+  QualityModule,
 ];
 
 @Module({

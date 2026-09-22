@@ -19,3 +19,5 @@ export * from './jobs/sweeper.js';
 export * from './tools/human-tools.js';
 export * from './copilot/instructions.js';
 export * from './copilot/copilot.js';
+export * from './jobs/insights.js';
+export * from './jobs/evaluation.js';

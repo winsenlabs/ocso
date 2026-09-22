@@ -70,6 +70,27 @@ export async function relayScheduledJobs(db: Db, queue: QueueAdapter, limit = 10
   return rows.length;
 }
 
+/**
+ * Requests conversation insights once per resolution (docs/11 §3). Covers every
+ * resolve path; a later re-resolution (after a reopen) is analysed again. Publish
+ * happens before marking, so a crash can only duplicate (the job upserts).
+ */
+export async function requestResolvedInsights(db: Db, queue: QueueAdapter, limit = 100): Promise<number> {
+  const { rows } = await db.execute<{ id: string; resolved_at: Date }>(sql`
+    SELECT id, resolved_at FROM conversations
+     WHERE control_state = 'RESOLVED' AND resolved_at < now() - interval '30 seconds'
+       AND (insights_requested_at IS NULL OR insights_requested_at < resolved_at)
+     ORDER BY resolved_at
+     LIMIT ${limit}`);
+  for (const row of rows) {
+    await queue.publish('conversation.insights', { conversationId: row.id }, { dedupeKey: `insights:${row.id}:${new Date(row.resolved_at).getTime()}` });
+  }
+  if (rows.length) {
+    await db.execute(sql`UPDATE conversations SET insights_requested_at = now() WHERE id IN (${sql.join(rows.map((r) => sql`${r.id}::uuid`), sql`, `)})`);
+  }
+  return rows.length;
+}
+
 /** Sensitive tool calls not confirmed in time expire; their held arguments are cleared. */
 export async function expireToolConfirmations(db: Db): Promise<number> {
   const { rowCount } = await db.execute(sql`

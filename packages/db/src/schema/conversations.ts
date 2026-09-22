@@ -42,6 +42,8 @@ export const conversations = pgTable(
     openedAt: ts('opened_at').notNull().defaultNow(),
     resolvedAt: ts('resolved_at'),
     resolvedBy: uuid(),
+    /** Insights job requested for the resolution at this time (re-requested after a later resolve). */
+    insightsRequestedAt: ts('insights_requested_at'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

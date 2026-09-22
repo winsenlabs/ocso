@@ -1,8 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
-import { AlertDeliveryService, AlertEngine, CustomerClaimsIssuer, autoAssignUnclaimed, expireOffers, repairStuckEscalations } from '@ocso/application';
-import { cleanupExpiredLeases, expireToolConfirmations, reapLostWorkers, relayScheduledJobs, sweepStrandedTurns } from '@ocso/agent-runtime';
+import { AlertDeliveryService, AlertEngine, CustomerClaimsIssuer, autoAssignUnclaimed, recordWorkerHealthSample, expireOffers, repairStuckEscalations } from '@ocso/application';
+import { cleanupExpiredLeases, expireToolConfirmations, reapLostWorkers, relayScheduledJobs, requestResolvedInsights, sweepStrandedTurns } from '@ocso/agent-runtime';
 import type { WorkerEnv } from '@ocso/config';
 import { healthSamples, uuidv7, type Db } from '@ocso/db';
 import type { Logger } from '@ocso/observability';
@@ -51,6 +51,8 @@ export class SchedulerService {
       { name: 'cleanup-leases', everySeconds: 60, run: ({ db }) => cleanupExpiredLeases(db) },
       { name: 'relay-scheduled-jobs', everySeconds: 5, run: ({ db, queue }) => relayScheduledJobs(db, queue) },
       { name: 'health-sample', everySeconds: 60, run: ({ db }) => sampleDatabaseHealth(db) },
+      { name: 'worker-health-sample', everySeconds: 60, run: ({ db }) => recordWorkerHealthSample(db) },
+      { name: 'request-insights', everySeconds: 30, run: ({ db, queue }) => requestResolvedInsights(db, queue) },
       { name: 'purge-done-jobs', everySeconds: 3600, run: ({ db }) => db.execute(sql`DELETE FROM jobs WHERE status = 'done' AND completed_at < now() - interval '1 day'`) },
       ...subsystemTasks({ db, env, secrets, queue, alerts, alertDelivery, claims }),
     ];
