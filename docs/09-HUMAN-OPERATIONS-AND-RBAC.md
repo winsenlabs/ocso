@@ -1,0 +1,104 @@
+# Human Operations and RBAC
+
+## 1. Roles
+
+OCSO has three primary human user types.
+
+### Platform Tech Admin
+Technical platform ownership.
+
+### CS Lead
+Business/customer-operations ownership.
+
+### CS Exec
+Frontline human conversation handling.
+
+Avoid multiplying roles until concrete authorization needs require it.
+
+## 2. CS inbox
+
+CS Execs should be able to see all conversations they are authorized to access, including:
+- AI-active conversations where visibility policy allows
+- waiting-for-human conversations
+- open pickup queue
+- assigned conversations
+- priority conversations
+- recently resolved conversations
+
+The default product should make it easy for an eligible rep to inspect and pick up work.
+
+## 3. Handoff
+
+Two primary modes:
+- AUTO_ASSIGN
+- OPEN_PICKUP
+
+Assignment strategy can consider:
+- availability
+- active workload
+- team
+- skill
+- language
+- account ownership
+- priority
+- configured routing rules
+
+## 4. Human control
+
+When a CS Exec takes control:
+- control mode becomes HUMAN_ACTIVE
+- AI stops sending autonomous customer-facing responses
+- agent remains attached to the conversation
+- full shared history remains available
+- optional AI copilot assistance may be provided
+- human may return control to AI
+
+Every control transition is audited.
+
+## 5. Internal notes
+
+Internal notes are never rendered to customer channels and must be represented separately from customer-visible interactions.
+
+## 6. Permission examples
+
+Tech Admin:
+- provider configuration
+- worker/scaling config
+- technical logs/traces
+- MCP technical setup
+- system alerts
+- security configuration
+
+CS Lead:
+- virtual-agent business prompt/instructions
+- queue/routing policy
+- escalation policy
+- QA
+- business analytics
+- prompt corrections
+- business alerts
+- team management subject to policy
+
+CS Exec:
+- conversation handling
+- claim/accept
+- customer reply
+- internal note
+- approved tools
+- resolve
+- return-to-AI
+
+## 7. Prompt correction workflow
+
+CS Leads need a productized way to identify bad behavior and improve instructions.
+
+A correction should ideally capture:
+- source conversation/turn
+- observed problem
+- desired behavior
+- prompt component changed
+- new prompt version
+- author/time
+- optional evaluation before activation
+
+Do not mutate prompts invisibly.
