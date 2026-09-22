@@ -35,14 +35,14 @@ A task is only COMPLETE when its acceptance criteria are demonstrated by an auto
 
 | Phase | Name | Exit criterion | Status |
 |---|---|---|---|
-| P0 | Research & planning | Research notes, BUILD-PLAN, ADRs committed | IN PROGRESS |
-| P1 | Foundation | `docker compose up` yields healthy web/api/worker/db; login works for all three roles | NOT STARTED |
-| P2 | Conversation spine | Customer holds a persistent multimodal web-chat conversation with a named agent (mock model) | NOT STARTED |
-| P3 | Agent runtime & prompt compiler | Robust persistent streamed turns via AI SDK behind OCSO interfaces; prompt versions; summaries; usage | NOT STARTED |
-| P4 | Provider fleet & caching | Six provider adapters, logical profiles, policy-bound fallback, provider prompt caching + OCSO turn cache with metrics | NOT STARTED |
-| P5 | MCP & tools | Admin connects an MCP server (OAuth 2.1), approves tools; agent calls tools safely with authorization + confirmation | NOT STARTED |
-| P6 | WhatsApp & channel behavior | Production-style WhatsApp channel: verification, identity, media, delivery status, idempotency | NOT STARTED |
-| P7 | Human operations | Full AI → human → AI lifecycle with pickup, auto-assign, notes, SLA, copilot | NOT STARTED |
+| P0 | Research & planning | Research notes, BUILD-PLAN, ADRs committed | COMPLETE |
+| P1 | Foundation | `docker compose up` yields healthy web/api/worker/db; login works for all three roles | IN PROGRESS — monorepo, config, logging, errors, DB + migrations + runner, auth/RBAC/setup API done and tested; worker app, web shell (agent running), Compose pending |
+| P2 | Conversation spine | Customer holds a persistent multimodal web-chat conversation with a named agent (mock model) | IN PROGRESS — domain model, ingress, identity, inbox, timeline, control transitions done and tested; API routes, web chat endpoints, workspace UI pending |
+| P3 | Agent runtime & prompt compiler | Robust persistent streamed turns via AI SDK behind OCSO interfaces; prompt versions; summaries; usage | IN PROGRESS — compiler, versions, turn processor, agent loop, usage, streaming deltas done and tested; rolling summary job pending |
+| P4 | Provider fleet & caching | Six provider adapters, logical profiles, policy-bound fallback, provider prompt caching + OCSO turn cache with metrics | IN PROGRESS — six adapters + per-provider caching + contract tests, fallback policy, gateway, hot turn cache done; profile/provider admin API + UI pending; live verification needs credentials |
+| P5 | MCP & tools | Admin connects an MCP server (OAuth 2.1), approves tools; agent calls tools safely with authorization + confirmation | IN PROGRESS — tool authorizer, runner, confirmation hold done; MCP package (agent running) and admin flow pending |
+| P6 | WhatsApp & channel behavior | Production-style WhatsApp channel: verification, identity, media, delivery status, idempotency | IN PROGRESS — adapter, delivery, media, statuses done and tested with fixtures; webhook routes pending; live verification needs a Meta number |
+| P7 | Human operations | Full AI → human → AI lifecycle with pickup, auto-assign, notes, SLA, copilot | IN PROGRESS — handoff/assignment/take-over/return-to-AI services done and tested; API, UI, SLA scheduler, copilot pending |
 | P8 | Observability & alerts | Role-specific telemetry; alert engine with dedupe, lifecycle and pluggable delivery | NOT STARTED |
 | P9 | Internal OCSO agent | Permissioned conversational operation of OCSO with confirmation + audit | NOT STARTED |
 | P10 | Scaling & AWS production | Leases/recovery hardened; SQS/S3/Secrets Manager adapters; ECS Fargate Terraform; autoscaling adapter; load + chaos tests | NOT STARTED |

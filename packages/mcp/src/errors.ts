@@ -84,10 +84,12 @@ export class McpConnectionError extends DomainError {
 }
 
 export type OAuthFailureReason =
+  | 'invalid_redirect_uri'
   | 'no_resource_metadata'
   | 'no_authorization_server'
   | 'authorization_server_not_listed'
   | 'no_authorization_server_metadata'
+  | 'incompatible_authorization_server'
   | 'issuer_mismatch'
   | 'pkce_unsupported'
   | 'resource_mismatch'
@@ -115,7 +117,7 @@ export class McpOAuthError extends DomainError {
   ) {
     const safeCode = oauthError && OAUTH_CODE.test(oauthError) ? oauthError : null;
     super(
-      reason === 'pending_expired' || reason === 'state_mismatch' || reason === 'missing_code'
+      reason === 'pending_expired' || reason === 'state_mismatch' || reason === 'missing_code' || reason === 'invalid_redirect_uri'
         ? ErrorCategory.VALIDATION
         : ErrorCategory.AUTHENTICATION,
       `mcp_oauth_${reason}`,
