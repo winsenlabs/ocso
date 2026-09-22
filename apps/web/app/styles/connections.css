@@ -75,3 +75,7 @@ section.conn-fieldset>.legend{padding:0}
 
 /* Confirmations are portalled to <body> and must sit above the connection drawer (.rdrawer z-index 90). */
 body>.scrim{z-index:95}
+
+/* Channels: generated secrets and setup steps. */
+.generated-secret{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.setup-steps{margin:0;padding-left:18px;display:grid;gap:4px;font-size:12.5px;color:var(--ink-2)}

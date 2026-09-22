@@ -40,7 +40,7 @@ export async function ConnectionsBody({ searchParams }: { searchParams: SearchPa
       <TabPanel idBase="connections" active={tab}>
         {tab === 'providers' ? <ProvidersTab session={session} params={params} /> : null}
         {tab === 'mcp' ? <McpTab session={session} params={params} /> : null}
-        {tab === 'channels' ? <ChannelsTab session={session} /> : null}
+        {tab === 'channels' ? <ChannelsTab session={session} params={params} /> : null}
         {tab === 'secrets' ? <SecretsTab session={session} /> : null}
         {tab === 'webhooks' ? <WebhooksTab session={session} params={params} /> : null}
         {tab === 'mine' ? <PersonalTab params={params} /> : null}

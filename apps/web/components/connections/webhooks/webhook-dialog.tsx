@@ -6,13 +6,13 @@ import { Modal } from '@/components/ui/modal';
 import { createWebhookAction, deleteWebhookAction, refreshWebhooksAction, rotateWebhookSecretAction, testWebhookAction, updateWebhookAction } from '@/lib/actions/webhooks';
 import type { Webhook } from '@/lib/api/webhooks';
 import { ConfirmAction } from '../confirm-action';
+import { CopyButton } from '../copy-button';
 import { Input } from '../profiles/profile-fields';
 import { useCloseTo } from '../routed-modal';
 import { EventPicker } from './event-picker';
 
 /** The signing secret is shown exactly once, after create or rotate. */
 function SecretOnce({ secret }: { secret: string }) {
-  const [copied, setCopied] = useState(false);
   return (
     <div className="confirm" role="status">
       <span className="cl">signing secret · shown once</span>
@@ -21,15 +21,7 @@ function SecretOnce({ secret }: { secret: string }) {
         <code className="secret-once" aria-label="Signing secret">
           {secret}
         </code>
-        <button
-          type="button"
-          className="btn tiny"
-          onClick={() => {
-            void navigator.clipboard?.writeText(secret).then(() => setCopied(true), () => setCopied(false));
-          }}
-        >
-          {copied ? 'Copied' : 'Copy'}
-        </button>
+        <CopyButton value={secret} what="signing secret" />
       </div>
     </div>
   );
