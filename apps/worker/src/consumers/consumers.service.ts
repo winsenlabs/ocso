@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { DeliveryService, MediaMaterializer, SummaryService, TurnProcessor } from '@ocso/agent-runtime';
+import { CopilotService, DeliveryService, MediaMaterializer, SummaryService, TurnProcessor } from '@ocso/agent-runtime';
 import { AlertDeliveryService, isAlertDeliveryRetryable, type AlertDeliverJob, type WorkerSettings } from '@ocso/application';
 import type { Logger } from '@ocso/observability';
 import { ocsoMetrics } from '@ocso/observability';
@@ -24,6 +24,7 @@ export class ConsumersService {
     @Inject(MediaMaterializer) private readonly media: MediaMaterializer,
     @Inject(SummaryService) private readonly summaries: SummaryService,
     @Inject(AlertDeliveryService) private readonly alertDelivery: AlertDeliveryService,
+    @Inject(CopilotService) private readonly copilot: CopilotService,
     @Inject(LOGGER) private readonly logger: Logger,
   ) {}
 
@@ -43,6 +44,11 @@ export class ConsumersService {
         await this.summaries.summarize(m.payload.conversationId, m.id);
         return { kind: 'ack' };
       }), { concurrency: 4, visibilityTimeoutSeconds: 120, maxAttempts: 3 }),
+      // Best effort: a failed draft is not retried — the exec can request one on demand.
+      this.queue.consume<{ conversationId: string; seq: number }>('copilot.suggest', async (m) => this.measure('copilot.suggest', async () => {
+        await this.copilot.suggest(m.payload.conversationId, m.payload.seq, m.id).catch((err: unknown) => this.logger.warn({ err, conversationId: m.payload.conversationId }, 'copilot suggestion failed'));
+        return { kind: 'ack' };
+      }), { concurrency: 4, visibilityTimeoutSeconds: 120, maxAttempts: 1 }),
       this.queue.consume<AlertDeliverJob>('alert.deliver', async (m) => this.measure('alert.deliver', async () => {
         try {
           await this.alertDelivery.deliver(m.payload.deliveryId);

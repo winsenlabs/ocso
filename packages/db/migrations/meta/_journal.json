@@ -29,6 +29,13 @@
       "when": 1790070945006,
       "tag": "0003_tool_call_pending_args",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790071747067,
+      "tag": "0004_copilot_suggestion_basis",
+      "breakpoints": true
     }
   ]
 }

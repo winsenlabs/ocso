@@ -158,6 +158,10 @@ export const copilotSuggestions = pgTable(
     basedOnSeq: integer().notNull(),
     text: text().notNull(),
     rationale: text(),
+    /** Null when generated proactively for an inbound message. */
+    requestedBy: uuid(),
+    style: text(),
+    basis: jsonb().$type<{ historyMessages: number; policyRefs: string[] }>().notNull().default({ historyMessages: 0, policyRefs: [] }),
     status: text().$type<'READY' | 'INSERTED' | 'DISMISSED'>().notNull().default('READY'),
     usageEventId: uuid(),
     createdAt: createdAt(),

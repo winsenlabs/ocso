@@ -17,3 +17,5 @@ export * from './turn/turn-processor.js';
 export * from './jobs/summarize.js';
 export * from './jobs/sweeper.js';
 export * from './tools/human-tools.js';
+export * from './copilot/instructions.js';
+export * from './copilot/copilot.js';

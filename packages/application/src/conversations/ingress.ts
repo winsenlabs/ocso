@@ -106,7 +106,9 @@ export class IngressService {
       });
       const [state] = await tx.select({ controlState: conversations.controlState }).from(conversations).where(eq(conversations.id, conversationId));
       const runTurn = agent.status === 'LIVE' && inboundStartsAiTurn(state!.controlState as ControlState);
-      return { status: 'accepted', conversationId, interactionId: appended.interactionId, seq: appended.seq, created, runTurn } as const;
+      // A human holds the conversation: prepare a copilot draft for them (never sent automatically).
+      const suggest = agent.copilotEnabled && state!.controlState === 'HUMAN_ACTIVE';
+      return { status: 'accepted', conversationId, interactionId: appended.interactionId, seq: appended.seq, created, runTurn, suggest } as const;
     });
 
     if (outcome.status !== 'accepted') return outcome;
@@ -124,8 +126,14 @@ export class IngressService {
             dedupeKey: `turn:${outcome.conversationId}:${outcome.seq}`,
           })
         : Promise.resolve(),
+      outcome.suggest
+        ? this.queue.publish('copilot.suggest', { conversationId: outcome.conversationId, seq: outcome.seq }, {
+            groupKey: outcome.conversationId,
+            dedupeKey: `copilot:${outcome.conversationId}:${outcome.seq}`,
+          })
+        : Promise.resolve(),
     ]);
-    const { runTurn, ...rest } = outcome;
+    const { runTurn, suggest: _suggest, ...rest } = outcome;
     return { ...rest, turnQueued: runTurn };
   }
 

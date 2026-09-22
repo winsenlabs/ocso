@@ -3,6 +3,7 @@ import { SettingsService } from '@ocso/application';
 import {
   ChannelRuntime,
   ContextBuilder,
+  CopilotService,
   DeliveryService,
   HotContextCache,
   LeaseManager,
@@ -65,6 +66,12 @@ export const HISTORY_WINDOW = 20;
         new ContextBuilder(db, hot, { historyWindow: HISTORY_WINDOW, mediaWindow: 6, timezone: (await settings.deployment()).timezone }),
     },
     {
+      provide: CopilotService,
+      inject: [DB, ModelGateway, ContextBuilder, PROVIDER_SOURCE],
+      useFactory: (db: Db, gateway: ModelGateway, context: ContextBuilder, source: ProviderAdapterSource) =>
+        new CopilotService({ db, gateway, context, capabilitiesFor: capabilitiesResolver(db, source) }),
+    },
+    {
       provide: TurnProcessor,
       inject: [DB, QUEUE, LeaseManager, ModelGateway, ContextBuilder, MediaMaterializer, TOOL_PROVIDERS, PROVIDER_SOURCE, LOGGER],
       useFactory: (
@@ -94,6 +101,6 @@ export const HISTORY_WINDOW = 20;
       },
     },
   ],
-  exports: [WorkerRegistryService, HotContextCache, LeaseManager, ModelGateway, TurnProcessor, DeliveryService, MediaMaterializer, SummaryService, PROVIDER_SOURCE, TOOL_PROVIDERS],
+  exports: [WorkerRegistryService, CopilotService, HotContextCache, LeaseManager, ModelGateway, TurnProcessor, DeliveryService, MediaMaterializer, SummaryService, PROVIDER_SOURCE, TOOL_PROVIDERS],
 })
 export class RuntimeModule {}
