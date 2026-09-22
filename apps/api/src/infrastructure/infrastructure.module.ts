@@ -1,10 +1,10 @@
 import { Global, Inject, Module, type OnApplicationShutdown } from '@nestjs/common';
 import { hostname } from 'node:os';
 import { SessionService, SettingsService, SetupService, generatedSetupToken } from '@ocso/application';
-import { createBlobStore, createQueue, createSecretStore } from '@ocso/bootstrap';
+import { createBlobStore, createChannelRegistry, createQueue, createSecretStore } from '@ocso/bootstrap';
 import { ApiEnv, assertDriverConfig, loadEnv } from '@ocso/config';
 import { createDatabase, type Database } from '@ocso/db';
-import { BLOB_STORE, DATABASE, DB, ENV, QUEUE, SECRET_STORE, SETUP_TOKEN } from './tokens.js';
+import { BLOB_STORE, CHANNEL_REGISTRY, DATABASE, DB, ENV, QUEUE, SECRET_STORE, SETUP_TOKEN } from './tokens.js';
 
 function loadApiEnv(): ApiEnv {
   const env = loadEnv(ApiEnv);
@@ -29,6 +29,7 @@ function loadApiEnv(): ApiEnv {
     { provide: DB, inject: [DATABASE], useFactory: (d: Database) => d.db },
     { provide: SECRET_STORE, inject: [ENV, DB], useFactory: createSecretStore },
     { provide: BLOB_STORE, inject: [ENV], useFactory: createBlobStore },
+    { provide: CHANNEL_REGISTRY, useFactory: () => createChannelRegistry() },
     {
       provide: QUEUE,
       inject: [ENV, DATABASE],
@@ -48,7 +49,7 @@ function loadApiEnv(): ApiEnv {
     { provide: SettingsService, inject: [DB], useFactory: (db) => new SettingsService(db) },
     { provide: SetupService, inject: [DB, SETUP_TOKEN], useFactory: (db, token: string) => new SetupService(db, token) },
   ],
-  exports: [ENV, DATABASE, DB, SECRET_STORE, BLOB_STORE, QUEUE, SETUP_TOKEN, SessionService, SettingsService, SetupService],
+  exports: [ENV, DATABASE, DB, SECRET_STORE, BLOB_STORE, CHANNEL_REGISTRY, QUEUE, SETUP_TOKEN, SessionService, SettingsService, SetupService],
 })
 export class InfrastructureModule implements OnApplicationShutdown {
   constructor(@Inject(DATABASE) private readonly database: Database) {}

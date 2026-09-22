@@ -6,3 +6,4 @@ export const SECRET_STORE = Symbol('SECRET_STORE');
 export const BLOB_STORE = Symbol('BLOB_STORE');
 export const QUEUE = Symbol('QUEUE');
 export const SETUP_TOKEN = Symbol('SETUP_TOKEN');
+export const CHANNEL_REGISTRY = Symbol('CHANNEL_REGISTRY');

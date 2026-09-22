@@ -8,6 +8,11 @@
       "@ocso/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./testing": {
+      "@ocso/source": "./src/testing/scripted-adapter.ts",
+      "types": "./dist/testing/scripted-adapter.d.ts",
+      "default": "./dist/testing/scripted-adapter.js"
     }
   },
   "files": [

@@ -8,6 +8,11 @@
       "@ocso/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./otel": {
+      "@ocso/source": "./src/otel.ts",
+      "types": "./dist/otel.d.ts",
+      "default": "./dist/otel.js"
     }
   },
   "files": [
@@ -18,7 +23,17 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "pino": "10.3.1",
-    "@opentelemetry/api": "1.9.1"
+    "pino": "catalog:",
+    "@opentelemetry/api": "catalog:",
+    "@opentelemetry/sdk-node": "catalog:",
+    "@opentelemetry/auto-instrumentations-node": "catalog:",
+    "@opentelemetry/exporter-trace-otlp-proto": "catalog:",
+    "@opentelemetry/exporter-metrics-otlp-proto": "catalog:",
+    "@opentelemetry/exporter-logs-otlp-proto": "catalog:",
+    "@opentelemetry/sdk-metrics": "catalog:",
+    "@opentelemetry/sdk-logs": "catalog:",
+    "@opentelemetry/resources": "catalog:",
+    "@opentelemetry/semantic-conventions": "catalog:",
+    "import-in-the-middle": "catalog:"
   }
 }

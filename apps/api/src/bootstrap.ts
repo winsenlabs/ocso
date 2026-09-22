@@ -22,6 +22,8 @@ export function configureApp(app: NestExpressApplication): void {
   app.disable('x-powered-by');
   // Meta webhook payloads can reach ~3 MB (research/02).
   app.useBodyParser('json', { limit: '5mb' });
+  // Web-chat attachment uploads arrive as the raw request body (size re-checked per channel).
+  app.useBodyParser('raw', { type: ['image/*', 'application/pdf', 'audio/*', 'video/*', 'application/octet-stream'], limit: '25mb' });
   app.use(correlationMiddleware);
   app.useGlobalPipes(new StandardSchemaValidationPipe());
   app.enableShutdownHooks();

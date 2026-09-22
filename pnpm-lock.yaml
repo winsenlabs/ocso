@@ -637,6 +637,13 @@ importers:
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.3(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(pg@8.23.0)
+      pg:
+        specifier: 'catalog:'
+        version: 8.23.0
+    devDependencies:
+      '@types/pg':
+        specifier: 'catalog:'
+        version: 8.23.1
 
   packages/channels:
     dependencies:
@@ -754,10 +761,40 @@ importers:
   packages/observability:
     dependencies:
       '@opentelemetry/api':
-        specifier: 1.9.1
+        specifier: 'catalog:'
         version: 1.9.1
+      '@opentelemetry/auto-instrumentations-node':
+        specifier: 'catalog:'
+        version: 0.80.0(@opentelemetry/api@1.9.1)(@opentelemetry/core@2.11.0(@opentelemetry/api@1.9.1))
+      '@opentelemetry/exporter-logs-otlp-proto':
+        specifier: 'catalog:'
+        version: 0.222.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/exporter-metrics-otlp-proto':
+        specifier: 'catalog:'
+        version: 0.222.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/exporter-trace-otlp-proto':
+        specifier: 'catalog:'
+        version: 0.222.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources':
+        specifier: 'catalog:'
+        version: 2.11.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-logs':
+        specifier: 'catalog:'
+        version: 0.222.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-metrics':
+        specifier: 'catalog:'
+        version: 2.11.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-node':
+        specifier: 'catalog:'
+        version: 0.222.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/semantic-conventions':
+        specifier: 'catalog:'
+        version: 1.43.0
+      import-in-the-middle:
+        specifier: 'catalog:'
+        version: 3.5.1
       pino:
-        specifier: 10.3.1
+        specifier: 'catalog:'
         version: 10.3.1
 
   packages/prompt-compiler:

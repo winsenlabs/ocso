@@ -34,6 +34,10 @@
     "@ocso/tools": "workspace:*",
     "@ocso/application": "workspace:*",
     "@ocso/domain": "workspace:*",
-    "@ocso/alerts": "workspace:*"
+    "@ocso/alerts": "workspace:*",
+    "pg": "catalog:"
+  },
+  "devDependencies": {
+    "@types/pg": "catalog:"
   }
 }

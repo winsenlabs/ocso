@@ -4,7 +4,7 @@ import { SQSClient } from '@aws-sdk/client-sqs';
 import { LocalBlobStore, S3BlobStore, type BlobStore } from '@ocso/blob';
 import { parseQueueUrls, type ApiEnv, type WorkerEnv } from '@ocso/config';
 import { secrets as secretsTable, type Db } from '@ocso/db';
-import { PgQueue, SqsQueue, type QueueAdapter, type SqlClient } from '@ocso/queue';
+import { PgQueue, SqsQueue, type QueueAdapter, type QueueNotifier, type SqlClient } from '@ocso/queue';
 import {
   AwsSecretStore,
   LocalSecretStore,
@@ -47,11 +47,11 @@ export function createBlobStore(env: Env): BlobStore {
   });
 }
 
-export function createQueue(env: Env, sql: SqlClient, workerId: string): QueueAdapter {
+export function createQueue(env: Env, sql: SqlClient, workerId: string, notifier?: QueueNotifier): QueueAdapter {
   if (env.QUEUE_DRIVER === 'sqs') {
     return new SqsQueue(new SQSClient(awsRegion(env)), { queueUrls: parseQueueUrls(env.SQS_QUEUE_URLS) });
   }
-  return new PgQueue(sql, { workerId, conversationAffinityTopics: ['conversation.turn'] });
+  return new PgQueue(sql, { workerId, conversationAffinityTopics: ['conversation.turn'], notifier });
 }
 
 /** SecretRowStore over the `secrets` table. */
