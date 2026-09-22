@@ -24,7 +24,10 @@
     "@ocso/events": "workspace:*",
     "@ocso/tools": "workspace:*",
     "drizzle-orm": "catalog:",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "@ocso/queue": "workspace:*",
+    "@ocso/prompt-compiler": "workspace:*",
+    "@ocso/secrets": "workspace:*"
   },
   "devDependencies": {
     "@ocso/db": "workspace:*"
