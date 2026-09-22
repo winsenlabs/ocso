@@ -19,7 +19,8 @@ const Fields = z.object({
   defaultAgentId: z.uuid().nullable(),
   status: z.enum(['ACTIVE', 'DISABLED', 'DRAFT']),
 });
-const Create = Fields.extend({ kind: z.string().regex(/^[A-Z_]{2,32}$/) });
+/** Any kind the API's registry knows (open; the API refuses unregistered kinds). */
+const Create = Fields.extend({ kind: z.string().regex(/^[A-Z][A-Z0-9_]{1,39}$/) });
 
 async function run<I>(schema: z.ZodType<I>, raw: unknown, call: (input: I) => Promise<Channel>): Promise<ActionResult<SavedChannel>> {
   const parsed = schema.safeParse(raw);

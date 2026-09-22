@@ -5,19 +5,21 @@ import { channels } from './customers.js';
 import { users } from './identity.js';
 
 /**
- * WhatsApp templates created in OCSO and submitted to the provider for
- * approval (docs/07 §3). The provider stays the source of truth for what can
- * be sent; this keeps OCSO's own history (who submitted what, when, and every
- * status change) even before or after the provider lists the template.
+ * Message templates created in OCSO and submitted to the channel's provider
+ * for review (docs/07 §3; any kind whose adapter implements the template
+ * methods). The provider stays the source of truth for what can be sent; this
+ * keeps OCSO's own history (who submitted what, when, and every status
+ * change) even before or after the provider lists the template.
+ * Renamed from `whatsapp_templates` in migration 0019.
  */
-export const whatsappTemplates = pgTable(
-  'whatsapp_templates',
+export const messageTemplates = pgTable(
+  'message_templates',
   {
     id: id(),
     channelId: uuid()
       .notNull()
       .references(() => channels.id, { onDelete: 'cascade' }),
-    /** Twilio Content SID (HX…) or Meta template id. */
+    /** The provider's template id (e.g. a Twilio Content SID or a Meta template id). */
     providerTemplateId: text().notNull(),
     name: text().notNull(),
     language: text().notNull(),
@@ -38,8 +40,8 @@ export const whatsappTemplates = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [
-    uniqueIndex('whatsapp_templates_provider_uq').on(t.channelId, t.providerTemplateId),
-    uniqueIndex('whatsapp_templates_name_uq').on(t.channelId, t.name, t.language).where(sql`${t.deletedAt} IS NULL`),
-    index('whatsapp_templates_pending_idx').on(t.status).where(sql`${t.status} = 'PENDING' AND ${t.deletedAt} IS NULL`),
+    uniqueIndex('message_templates_provider_uq').on(t.channelId, t.providerTemplateId),
+    uniqueIndex('message_templates_name_uq').on(t.channelId, t.name, t.language).where(sql`${t.deletedAt} IS NULL`),
+    index('message_templates_pending_idx').on(t.status).where(sql`${t.status} = 'PENDING' AND ${t.deletedAt} IS NULL`),
   ],
 );

@@ -2,7 +2,9 @@ import { z } from 'zod';
 
 /**
  * Typed, validated configuration (T1.2.1). Everything infrastructure-specific
- * is selected here by driver name; business code never branches on it.
+ * is selected by driver name; business code never branches on it. Driver
+ * names are open strings here: the composition root (@ocso/bootstrap) checks
+ * each against its driver registry and runs that driver's own settings checks.
  */
 const bool = z
   .enum(['true', 'false', '1', '0'])
@@ -10,6 +12,9 @@ const bool = z
 
 /** Compose passes unset settings as empty strings (`${VAR:-}`); treat them as absent. */
 const blank = <T extends z.ZodType>(schema: T) => z.preprocess((v) => (v === '' ? undefined : v), schema.optional());
+
+/** A driver name (`*_DRIVER`): any registered driver; the composition root validates it. */
+const driverName = z.string().trim().min(1).max(64);
 
 /**
  * Transactional email (invites, password reset, sign-in codes, alert emails).
@@ -19,8 +24,8 @@ const blank = <T extends z.ZodType>(schema: T) => z.preprocess((v) => (v === '' 
  */
 function emailEnv() {
   return {
-    /** resend | smtp | log. Default log in development/test; required in production. */
-    EMAIL_DRIVER: blank(z.enum(['resend', 'smtp', 'log'])),
+    /** A registered email driver (first party: resend | smtp | log). Default log in development/test; required in production. */
+    EMAIL_DRIVER: blank(driverName),
     /** Sender, e.g. `Acme Support <support@mail.acme.com>` — a domain verified with the provider. */
     EMAIL_FROM: blank(z.string().max(320)),
     EMAIL_REPLY_TO: blank(z.string().max(320)),
@@ -51,24 +56,28 @@ const common = {
   DATABASE_SSL: bool.default(false),
   DATABASE_POOL_SIZE: z.coerce.number().int().min(1).max(200).default(10),
 
-  QUEUE_DRIVER: z.enum(['postgres', 'sqs']).default('postgres'),
+  /** A registered queue driver (first party: postgres | sqs). */
+  QUEUE_DRIVER: driverName.default('postgres'),
   SQS_QUEUE_URLS: z.string().optional(),
   AWS_REGION: z.string().optional(),
 
-  BLOB_DRIVER: z.enum(['local', 's3']).default('local'),
+  /** A registered blob driver (first party: local | s3). */
+  BLOB_DRIVER: driverName.default('local'),
   BLOB_LOCAL_DIR: z.string().default('./data/blobs'),
   BLOB_SIGNING_KEY: z.string().min(16).optional(),
   S3_BUCKET: z.string().optional(),
   S3_ENDPOINT: z.string().url().optional(),
   S3_KMS_KEY_ID: z.string().optional(),
 
-  SECRETS_DRIVER: z.enum(['local', 'aws']).default('local'),
+  /** A registered secrets driver (first party: local | aws). */
+  SECRETS_DRIVER: driverName.default('local'),
   /** Base64 32-byte key (or path via OCSO_SECRETS_MASTER_KEY_FILE). */
   OCSO_SECRETS_MASTER_KEY: z.string().optional(),
   OCSO_SECRETS_MASTER_KEY_FILE: z.string().optional(),
   SECRETS_NAME_PREFIX: z.string().default('ocso'),
 
-  DEPLOYMENT_DRIVER: z.enum(['compose', 'ecs']).default('compose'),
+  /** A registered deployment driver (first party: compose | ecs); worker only. */
+  DEPLOYMENT_DRIVER: driverName.default('compose'),
   ECS_CLUSTER: z.string().optional(),
   ECS_WORKER_SERVICE: z.string().optional(),
 
@@ -144,16 +153,13 @@ export function loadEnv<T extends z.ZodTypeAny>(schema: T, source: NodeJS.Proces
   throw new Error(`Invalid OCSO configuration:\n${problems.join('\n')}`);
 }
 
-/** Cross-field checks that zod object schemas cannot express cleanly. */
+/**
+ * Cross-field checks that zod object schemas cannot express cleanly. Driver
+ * selection and each driver's own settings are checked by the composition
+ * root (@ocso/bootstrap `assertDrivers`), which knows the registered drivers.
+ */
 export function assertDriverConfig(env: z.infer<typeof ApiEnv> | z.infer<typeof WorkerEnv>): void {
   const problems: string[] = [];
-  if (env.QUEUE_DRIVER === 'sqs' && (!env.SQS_QUEUE_URLS || !env.AWS_REGION)) problems.push('QUEUE_DRIVER=sqs requires SQS_QUEUE_URLS and AWS_REGION');
-  if (env.BLOB_DRIVER === 's3' && !env.S3_BUCKET) problems.push('BLOB_DRIVER=s3 requires S3_BUCKET');
-  if (env.BLOB_DRIVER === 'local' && !env.BLOB_SIGNING_KEY) problems.push('BLOB_DRIVER=local requires BLOB_SIGNING_KEY');
-  if (env.SECRETS_DRIVER === 'local' && !env.OCSO_SECRETS_MASTER_KEY && !env.OCSO_SECRETS_MASTER_KEY_FILE) {
-    problems.push('SECRETS_DRIVER=local requires OCSO_SECRETS_MASTER_KEY or OCSO_SECRETS_MASTER_KEY_FILE');
-  }
-  if (env.DEPLOYMENT_DRIVER === 'ecs' && (!env.ECS_CLUSTER || !env.ECS_WORKER_SERVICE)) problems.push('DEPLOYMENT_DRIVER=ecs requires ECS_CLUSTER and ECS_WORKER_SERVICE');
   if (env.NODE_ENV === 'production' && env.OCSO_ENABLE_DEV_PROVIDERS && process.env['OCSO_ALLOW_DEV_PROVIDERS_IN_PRODUCTION'] !== 'true') {
     problems.push('OCSO_ENABLE_DEV_PROVIDERS must be false in production (set OCSO_ALLOW_DEV_PROVIDERS_IN_PRODUCTION=true to override for demos)');
   }

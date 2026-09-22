@@ -5,7 +5,7 @@ import { SecHead } from '@/components/ui/sec-head';
 import { StatusChip } from '@/components/ui/status-chip';
 import { getEmailSettings } from '@/lib/api/email-settings';
 import { describeApiError } from '@/lib/api/errors';
-import { DRIVER_LABELS, deliveryStatus, statusNotes, type EmailSettings } from '@/lib/email-settings-form';
+import { deliveryStatus, driverLabel, statusNotes, type EmailSettings } from '@/lib/email-settings-form';
 import { hasPermission, requireSession } from '@/lib/session';
 import { EmailTestForm } from './email-test-form';
 
@@ -47,7 +47,7 @@ function EmailStatus({ settings }: { settings: EmailSettings }) {
       <KeyValue
         template="minmax(96px,120px) minmax(0,1fr)"
         items={[
-          { k: 'driver', v: DRIVER_LABELS[settings.driver] },
+          { k: 'driver', v: driverLabel(settings) },
           { k: 'from', v: settings.from ?? 'not set' },
           { k: 'reply-to', v: settings.replyTo ?? 'not set' },
           { k: 'status', v: <StatusChip tone={status.tone}>{status.label}</StatusChip> },

@@ -37,7 +37,8 @@ describe('reply window line', () => {
   it('counts down while open and says what to do once closed', () => {
     expect(windowLine({ open: true, closesAt: '2026-09-22T13:12:30Z' }, now)).toEqual({ tone: 'open', text: 'reply window open · closes in 3h 12m' });
     expect(windowLine({ open: true, closesAt: '2026-09-22T10:00:20Z' }, now)?.text).toBe('reply window open · closes in under a minute');
-    expect(windowLine({ open: false, closesAt: '2026-09-22T09:00:00Z' }, now)).toEqual({ tone: 'closed', text: '24-hour window closed — send an approved template' });
+    expect(windowLine({ open: false, closesAt: '2026-09-22T09:00:00Z', hours: 24 }, now)).toEqual({ tone: 'closed', text: '24-hour reply window closed — send an approved template' });
+    expect(windowLine({ open: false, closesAt: '2026-09-22T09:00:00Z' }, now)?.text).toBe('reply window closed — send an approved template');
     // The page was rendered while open; the clock has since passed closesAt.
     expect(windowLine({ open: true, closesAt: '2026-09-22T09:59:00Z' }, now)?.tone).toBe('closed');
     expect(windowLine({ open: false, closesAt: null }, now)?.text).toMatch(/No customer message yet/);
@@ -78,7 +79,9 @@ describe('Template mode markup', () => {
   });
 
   it('picker: honest empty states', () => {
-    expect(picker(list([]))).toContain('No WhatsApp templates on WhatsApp (Twilio) yet');
+    expect(picker(list([]))).toContain('No message templates on WhatsApp (Twilio) yet');
+    expect(picker(list([]))).toContain('the provider reviews each one');
+    expect(renderToStaticMarkup(createElement(TemplatePicker, { list: list([]), query: '', onQuery: () => {}, refreshing: false, onRefresh: () => {}, onPick: () => {}, reviewer: 'WhatsApp' }))).toContain('WhatsApp reviews each one');
     expect(picker(list([pending]))).toContain('None of the 1 templates on WhatsApp (Twilio) is approved yet');
     expect(picker(list([], { code: 'templates_auth_failed', message: 'Twilio rejected the channel credentials' }))).toContain('check the credentials with Test on the channel');
     expect(picker(list([approved]), 'zzz')).toContain('No template matches “zzz”.');

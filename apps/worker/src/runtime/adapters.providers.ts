@@ -2,23 +2,23 @@ import type { Provider } from '@nestjs/common';
 import type { ProviderAdapterSource } from '@ocso/agent-runtime';
 import { SettingsService } from '@ocso/application';
 import type { BlobStore } from '@ocso/blob';
-import { CachedProviderAdapterSource, McpToolProviderFactory, createProviderRegistry } from '@ocso/bootstrap';
-import type { WorkerEnv } from '@ocso/config';
+import { CachedProviderAdapterSource, createRuntimeToolRegistry, type OcsoPlugin } from '@ocso/bootstrap';
 import type { Db } from '@ocso/db';
+import type { ProviderRegistry } from '@ocso/model-providers';
 import type { ModelInputCapabilities } from '@ocso/prompt-compiler';
 import type { SecretStore } from '@ocso/secrets';
-import { BLOB_STORE, DB, ENV, PROVIDER_SOURCE, SECRET_STORE, TOOL_PROVIDERS } from '../infrastructure/tokens.js';
+import { BLOB_STORE, DB, PLUGINS, PROVIDER_REGISTRY, PROVIDER_SOURCE, SECRET_STORE, TOOL_PROVIDERS } from '../infrastructure/tokens.js';
 
-/** Model provider adapters and MCP tool providers, resolved from configuration + SecretStore. */
+/** Model provider adapters and the tool-provider registry, resolved from configuration + SecretStore. */
 export const ADAPTER_PROVIDERS: Provider[] = [
   {
     provide: PROVIDER_SOURCE,
-    inject: [ENV, DB, SECRET_STORE, BLOB_STORE],
-    useFactory: (env: WorkerEnv, db: Db, secrets: SecretStore, blobs: BlobStore) =>
+    inject: [PROVIDER_REGISTRY, DB, SECRET_STORE, BLOB_STORE],
+    useFactory: (registry: ProviderRegistry, db: Db, secrets: SecretStore, blobs: BlobStore) =>
       new CachedProviderAdapterSource({
         db,
         secrets,
-        registry: createProviderRegistry(env),
+        registry,
         media: {
           resolve: async (blobKey: string) => {
             const obj = await blobs.get(blobKey);
@@ -29,8 +29,10 @@ export const ADAPTER_PROVIDERS: Provider[] = [
   },
   {
     provide: TOOL_PROVIDERS,
-    inject: [DB, SECRET_STORE, SettingsService],
-    useFactory: (db: Db, secrets: SecretStore, settings: SettingsService) => new McpToolProviderFactory(db, secrets, settings),
+    inject: [DB, SECRET_STORE, SettingsService, PLUGINS],
+    // One registry from every plugin's tool sources: built-in tools + MCP connections (same authorization and audit path).
+    useFactory: (db: Db, secrets: SecretStore, settings: SettingsService, plugins: readonly OcsoPlugin[]) =>
+      createRuntimeToolRegistry(db, secrets, settings, plugins),
   },
 ];
 

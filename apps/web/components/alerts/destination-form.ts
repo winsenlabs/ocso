@@ -1,153 +1,98 @@
+import { buildSettings, initialSettingsValues, settingsGroups, type SettingsGroup } from '../connections/channels/settings-form';
+import type { FormValues } from '../workspace/lib/schema-form';
+
 /**
- * Notification destination config per kind (packages/alerts adapters). Pure
- * and client-safe. Secrets (webhook URLs, routing keys, SMTP passwords) are
- * entered once, stored in the SecretStore and never shown again; configs hold
- * only non-secret settings. The API validates both.
+ * Notification destination form, rendered from the delivery adapter's JSON
+ * Schema (GET /v1/notification-destinations/kinds) with the channel settings
+ * renderer. Pure and client-safe; nothing here knows a destination kind.
+ *
+ * A config with variants is a `oneOf` whose branches pin one property with
+ * `const` (email `transport`): the form shows a picker for that property and
+ * the fields of the chosen branch. Secrets are write-only and stored in the
+ * SecretStore; `secret.when` limits the secret field to matching configs.
  */
 
-export type ConfigFieldKind = 'text' | 'number' | 'list' | 'boolean' | 'select';
-
-export interface ConfigField {
-  name: string;
+export interface ConfigVariant {
+  /** The pinned value (`smtp`); '' for a schema without variants. */
+  value: string;
   label: string;
-  kind: ConfigFieldKind;
-  hint?: string;
-  options?: string[];
-  optional?: boolean;
-  /** Shown (and sent) only while another field has this value, e.g. SMTP settings for `transport: smtp`. */
-  onlyWhen?: { field: string; value: string };
+  group: SettingsGroup;
 }
 
-export interface KindSpec {
-  label: string;
-  fields: ConfigField[];
-  /** null = this kind never takes a secret. */
-  secret: { label: string; required: boolean } | null;
-  /** The secret applies only while this field has this value. */
-  secretOnlyWhen?: { field: string; value: string };
-  receives: string;
+export interface ConfigForm {
+  /** The property that selects a variant, or null for a plain object schema. */
+  variantKey: string | null;
+  variantLabel: string;
+  variants: ConfigVariant[];
 }
 
-const SMTP_ONLY = { field: 'transport', value: 'smtp' };
-
-export const DESTINATION_SPECS: Record<string, KindSpec> = {
-  IN_APP: { label: 'In-app', fields: [], secret: null, receives: 'opened alerts, in the OCSO inbox' },
-  EMAIL: {
-    label: 'Email',
-    fields: [
-      { name: 'transport', label: 'Send with', kind: 'select', options: ['deployment', 'smtp'], hint: "deployment = this server's email (EMAIL_DRIVER) · smtp = your own relay" },
-      { name: 'to', label: 'Recipients', kind: 'list', hint: 'comma separated' },
-      { name: 'host', label: 'SMTP host', kind: 'text', onlyWhen: SMTP_ONLY },
-      { name: 'port', label: 'Port', kind: 'number', hint: '587 STARTTLS · 465 implicit TLS', onlyWhen: SMTP_ONLY },
-      { name: 'from', label: 'From address', kind: 'text', onlyWhen: SMTP_ONLY },
-      { name: 'username', label: 'SMTP user', kind: 'text', optional: true, hint: 'defaults to the from address', onlyWhen: SMTP_ONLY },
-      { name: 'requireTLS', label: 'Require TLS', kind: 'boolean', onlyWhen: SMTP_ONLY },
-    ],
-    secret: { label: 'SMTP password', required: false },
-    secretOnlyWhen: SMTP_ONLY,
-    receives: 'opened, resolved and reminders',
-  },
-  SLACK: {
-    label: 'Slack',
-    fields: [{ name: 'channelLabel', label: 'Channel label', kind: 'text', optional: true, hint: 'display only; the webhook fixes the channel' }],
-    secret: { label: 'Incoming webhook URL', required: true },
-    receives: 'opened, resolved and reminders',
-  },
-  TEAMS: {
-    label: 'Microsoft Teams',
-    fields: [{ name: 'channelLabel', label: 'Channel label', kind: 'text', optional: true, hint: 'display only' }],
-    secret: { label: 'Workflows or incoming webhook URL', required: true },
-    receives: 'opened, resolved and reminders',
-  },
-  WEBHOOK: {
-    label: 'Webhook (HMAC-signed)',
-    fields: [{ name: 'url', label: 'Endpoint URL', kind: 'text', hint: 'https only' }],
-    secret: { label: 'Signing secret', required: true },
-    receives: 'every lifecycle change',
-  },
-  PAGERDUTY: {
-    label: 'PagerDuty',
-    fields: [
-      { name: 'region', label: 'Region', kind: 'select', options: ['US', 'EU'] },
-      { name: 'component', label: 'Component', kind: 'text', optional: true },
-      { name: 'group', label: 'Group', kind: 'text', optional: true },
-    ],
-    secret: { label: 'Events API v2 routing key', required: true },
-    receives: 'every lifecycle change (trigger, acknowledge, resolve)',
-  },
-};
-
-export function specOf(kind: string): KindSpec {
-  return DESTINATION_SPECS[kind] ?? { label: kind, fields: [], secret: null, receives: '' };
+interface Node {
+  title?: string;
+  const?: unknown;
+  oneOf?: Node[];
+  anyOf?: Node[];
+  properties?: Record<string, Node>;
+  required?: string[];
 }
 
-/** A blank controlling field shows everything (legacy SMTP configs predate `transport`). */
-export function fieldVisible(field: ConfigField, text: Record<string, string>): boolean {
-  if (!field.onlyWhen) return true;
-  const value = text[field.onlyWhen.field] ?? '';
-  return value === '' || value === field.onlyWhen.value;
+const asNode = (v: unknown): Node => (typeof v === 'object' && v !== null ? (v as Node) : {});
+
+/** Property every branch pins with a string `const`, if any. */
+function discriminator(branches: Node[]): string | null {
+  const first = branches[0]?.properties ?? {};
+  return Object.keys(first).find((key) => branches.every((b) => typeof b.properties?.[key]?.const === 'string')) ?? null;
 }
 
-export function secretVisible(spec: KindSpec, text: Record<string, string>): boolean {
-  if (!spec.secret) return false;
-  if (!spec.secretOnlyWhen) return true;
-  const value = text[spec.secretOnlyWhen.field] ?? '';
-  return value === '' || value === spec.secretOnlyWhen.value;
+export function configForm(schema: unknown): ConfigForm {
+  const root = asNode(schema);
+  const branches = (root.oneOf ?? root.anyOf ?? []).map(asNode);
+  const key = branches.length ? discriminator(branches) : null;
+  if (!key) return { variantKey: null, variantLabel: '', variants: [{ value: '', label: '', group: settingsGroups(root) }] };
+  return {
+    variantKey: key,
+    variantLabel: branches[0]?.properties?.[key]?.title ?? key,
+    variants: branches.map((b) => {
+      const value = String(b.properties?.[key]?.const);
+      const { [key]: _pinned, ...properties } = b.properties ?? {};
+      return { value, label: b.title ?? value, group: settingsGroups({ ...b, properties, required: (b.required ?? []).filter((r) => r !== key) }) };
+    }),
+  };
 }
 
-/** Stored config → form strings. */
-export function configText(kind: string, stored: Record<string, unknown> | null): Record<string, string> {
-  const out: Record<string, string> = {};
-  // Email destinations saved before `transport` existed are SMTP.
-  const config = kind === 'EMAIL' && stored && stored['transport'] === undefined && stored['host'] !== undefined ? { ...stored, transport: 'smtp' } : stored;
-  for (const f of specOf(kind).fields) {
-    const v = config?.[f.name];
-    if (f.kind === 'list') out[f.name] = Array.isArray(v) ? v.join(', ') : '';
-    else if (f.kind === 'boolean') out[f.name] = v === false ? 'false' : 'true';
-    else if (f.kind === 'select') out[f.name] = typeof v === 'string' ? v : (f.options?.[0] ?? '');
-    else out[f.name] = v === undefined || v === null ? '' : String(v);
+/** The variant the values select (first variant when unset). */
+export function activeVariant(form: ConfigForm, values: FormValues): ConfigVariant {
+  const chosen = form.variantKey ? values[form.variantKey] : '';
+  return form.variants.find((v) => v.value === chosen) ?? form.variants[0]!;
+}
+
+/** Form values for a stored config (edit) or a new destination; every variant's fields are prefilled so switching keeps defaults. */
+export function initialConfigValues(form: ConfigForm, config: Record<string, unknown> | null): FormValues {
+  const values: FormValues = {};
+  for (const v of [...form.variants].reverse()) Object.assign(values, initialSettingsValues(v.group, config));
+  if (form.variantKey) {
+    const stored = config?.[form.variantKey];
+    values[form.variantKey] = form.variants.some((v) => v.value === stored) ? String(stored) : (form.variants[0]?.value ?? '');
   }
-  return out;
+  return values;
 }
 
-/** Form strings → config: blanks are omitted (the adapter applies defaults), numbers and lists converted. */
-export function buildConfig(kind: string, text: Record<string, string>): Record<string, unknown> {
-  const config: Record<string, unknown> = {};
-  for (const f of specOf(kind).fields) {
-    if (!fieldVisible(f, text)) continue;
-    const raw = (text[f.name] ?? '').trim();
-    if (f.kind === 'boolean') {
-      config[f.name] = raw !== 'false';
-      continue;
-    }
-    if (raw === '') continue;
-    if (f.kind === 'number') config[f.name] = Number(raw);
-    else if (f.kind === 'list')
-      config[f.name] = raw
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean);
-    else config[f.name] = raw;
-  }
-  return config;
+/** Form values → config for the chosen variant (blank fields left out so the adapter's defaults apply). */
+export function buildDestinationConfig(form: ConfigForm, values: FormValues): { config: Record<string, unknown>; errors: Record<string, string> } {
+  const variant = activeVariant(form, values);
+  const { settings, errors } = buildSettings(variant.group, values);
+  return { config: form.variantKey ? { [form.variantKey]: variant.value, ...settings } : settings, errors };
 }
 
-/** One-line summary of a destination's non-secret config for the table. */
-export function configSummary(kind: string, config: Record<string, unknown> | null): string {
-  if (!config) return '—';
-  switch (kind) {
-    case 'EMAIL':
-      return `${Array.isArray(config['to']) ? config['to'].join(', ') : ''} via ${config['transport'] === 'deployment' || !config['host'] ? 'deployment email' : String(config['host'])}`;
-    case 'WEBHOOK':
-      return String(config['url'] ?? '');
-    case 'SLACK':
-    case 'TEAMS':
-      return typeof config['channelLabel'] === 'string' ? config['channelLabel'] : 'webhook stored as a secret';
-    case 'PAGERDUTY':
-      return `region ${String(config['region'] ?? 'US')}`;
-    case 'IN_APP':
-      return 'OCSO inbox';
-    default:
-      return '';
-  }
+/** Whether the adapter's secret applies to the config being edited (`secret.when`). */
+export function secretApplies(secret: { when: Record<string, string> | null } | null, values: FormValues): boolean {
+  if (!secret) return false;
+  return Object.entries(secret.when ?? {}).every(([field, value]) => values[field] === value);
+}
+
+const EVENT_WORDS: Record<string, string> = { OPENED: 'opened', ACKNOWLEDGED: 'acknowledged', RESOLVED: 'resolved', REMINDER: 'reminders' };
+
+/** ["OPENED", "RESOLVED", "REMINDER"] → "opened, resolved and reminders". */
+export function receivesText(events: readonly string[]): string {
+  const words = events.map((e) => EVENT_WORDS[e] ?? e.toLowerCase());
+  return words.length > 1 ? `${words.slice(0, -1).join(', ')} and ${words.at(-1)}` : (words[0] ?? 'nothing');
 }

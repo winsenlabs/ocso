@@ -1,31 +1,28 @@
 import { Controller, Get, Inject, Query, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { verifyBlobUrl, type BlobStore } from '@ocso/blob';
-import type { ApiEnv } from '@ocso/config';
+import type { BlobStore } from '@ocso/blob';
 import { z } from 'zod';
 import { Public } from '../../common/decorators.js';
-import { BLOB_STORE, ENV } from '../../infrastructure/tokens.js';
+import { BLOB_STORE } from '../../infrastructure/tokens.js';
 
 const SignedQuery = z.object({ exp: z.coerce.number().int(), sig: z.string().min(10).max(200) });
 type SignedQuery = z.infer<typeof SignedQuery>;
 
 /**
- * Signed media downloads for the local blob driver (ADR-011). The signature is
- * the authorization; URLs expire in minutes. S3 deployments use presigned S3
- * URLs directly and never hit this route.
+ * Signed media downloads for blob stores that serve their links through OCSO
+ * (the local driver, ADR-011). The signature is the authorization; URLs expire
+ * in minutes. Stores with their own signed URLs (S3 presigning) have no
+ * `verifySignedGet`, so this route refuses every request for them.
  */
 @Controller('blobs')
 export class BlobsController {
-  constructor(
-    @Inject(BLOB_STORE) private readonly blobs: BlobStore,
-    @Inject(ENV) private readonly env: ApiEnv,
-  ) {}
+  constructor(@Inject(BLOB_STORE) private readonly blobs: BlobStore) {}
 
   @Get('*path')
   @Public()
   async download(@Req() req: Request, @Query({ schema: SignedQuery }) q: SignedQuery, @Res() res: Response): Promise<void> {
     const key = decodeURIComponent(req.path.replace(/^\/blobs\//, ''));
-    if (this.blobs.driver !== 'local' || !verifyBlobUrl(this.env.BLOB_SIGNING_KEY!, key, q.exp, q.sig, Math.floor(Date.now() / 1000))) {
+    if (!this.blobs.verifySignedGet?.(key, q.exp, q.sig, Math.floor(Date.now() / 1000))) {
       res.status(403).json({ error: { category: 'authorization', code: 'invalid_signature', message: 'Link expired or invalid' } });
       return;
     }

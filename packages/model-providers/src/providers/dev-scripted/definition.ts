@@ -4,6 +4,7 @@ import { createAiSdkAdapter } from '../../core/adapter.js';
 import type { ProviderOptionsPlan } from '../../core/spec.js';
 import { commonSettingsShape, parseProviderConfig, withOverrides, type ProviderDefinition } from '../definition.js';
 import { MAX_EXPLICIT_BREAKPOINTS } from '../shared/cache-plans.js';
+import { describePromptCaching } from '../shared/caching-description.js';
 import { ScriptedLanguageModel } from './model.js';
 import { DEV_PROVIDER_OPTIONS_KEY, PrefixCacheSimulator } from './usage.js';
 
@@ -52,11 +53,16 @@ function devProviderOptions(request: ModelRequest): ProviderOptionsPlan {
 export const devScriptedProvider: ProviderDefinition<DevScriptedSettings, Record<string, never>> = {
   kind: 'DEV_SCRIPTED',
   label: 'Scripted model (development only)',
+  mark: 'DEV',
+  cachingSummary: 'simulated explicit breakpoints',
+  // Dev-only: never priced, so no catalog mapping.
   devOnly: true,
   settingsSchema,
   credentialsSchema,
   capabilities: (model, settings) => withOverrides(devCapabilities(), model, settings.capabilityOverrides),
   providerOptions: (_model, request) => devProviderOptions(request),
+  describeCaching: (model, settings) =>
+    describePromptCaching(devScriptedProvider.capabilities(model, settings), { explicit: `simulated explicit breakpoints (≤ ${MAX_EXPLICIT_BREAKPOINTS})` }),
   create(config, deps) {
     const { settings } = parseProviderConfig(devScriptedProvider, config);
     let counter = 0;

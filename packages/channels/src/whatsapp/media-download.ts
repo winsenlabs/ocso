@@ -1,4 +1,5 @@
 import { safeDownload } from '../common/safe-download.js';
+import type { ChannelFetch } from '../contract/types.js';
 
 /**
  * Step 2 of a WhatsApp media fetch: download bytes from Meta's CDN with the
@@ -21,7 +22,7 @@ export function isAllowedMediaUrl(url: URL, graphOrigin: string): boolean {
 }
 
 export interface DownloadOptions {
-  fetch: typeof fetch;
+  fetch: ChannelFetch;
   accessToken: string;
   graphOrigin: string;
   limitBytes: number;

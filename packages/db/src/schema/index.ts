@@ -14,4 +14,4 @@ export * from './audit.js';
 export * from './quality.js';
 export * from './internal-agent.js';
 export * from './secrets.js';
-export * from './whatsapp-templates.js';
+export * from './message-templates.js';

@@ -12,9 +12,10 @@ import {
   type CopilotState,
   type Option,
 } from '@/lib/api/conversations';
+import { loadChannelKinds } from '@/lib/api/channels';
 import { ApiError } from '@/lib/api/errors';
 import { hasPermission, requireSession } from '@/lib/session';
-import { ConversationClient } from './conversation-client';
+import { ConversationClient, type ChannelInfo } from './conversation-client';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const COPILOT_STATES = new Set(['WAITING_FOR_HUMAN', 'HUMAN_ACTIVE']);
@@ -38,14 +39,21 @@ export async function ConversationView({ params }: { params: Promise<{ id: strin
   }
   const [detail, timeline, tools] = core;
 
-  const [customer, copilot, transferQueues, transferUsers] = await Promise.all([
+  const [customer, copilot, transferQueues, transferUsers, kinds] = await Promise.all([
     can(Permission.CUSTOMERS_READ) ? loadCustomer(detail.customer.id).catch(() => null) : Promise.resolve(null),
     can(Permission.COPILOT_USE) && COPILOT_STATES.has(detail.controlState)
       ? loadCopilotLatest(id).catch((): CopilotState => ({ status: 'unavailable' }))
       : Promise.resolve<CopilotState>({ status: 'unavailable' }),
     can(Permission.CONVERSATIONS_TRANSFER) && can(Permission.QUEUES_READ) ? loadQueueOptions().catch(() => [] as Option[]) : none<Option>(),
     can(Permission.CONVERSATIONS_ASSIGN) && can(Permission.USERS_READ) ? loadTransferUsers().catch(() => [] as Option[]) : none<Option>(),
+    loadChannelKinds(),
   ]);
+  // What the channel's kind says about itself (descriptor): the network's name and whether it has message templates.
+  const kind = kinds.find((k) => k.kind === detail.channel?.kind);
+  const channelInfo: ChannelInfo = {
+    label: kind?.mark?.name ?? detail.channel?.name ?? 'no channel',
+    templates: kind?.messageTemplates && kind.templates ? { reviewer: kind.templates.reviewer } : null,
+  };
 
   return (
     <ConversationClient
@@ -61,6 +69,7 @@ export async function ConversationView({ params }: { params: Promise<{ id: strin
       copilot={copilot}
       transferQueues={transferQueues}
       transferUsers={transferUsers.filter((u) => u.id !== session.user.id)}
+      channelInfo={channelInfo}
     />
   );
 }

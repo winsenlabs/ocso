@@ -1,8 +1,14 @@
 import type { DomainError, MediaResolver, ModelMessage, SystemBlock, ToolSpec } from '@ocso/domain';
 
-/** Provider kinds OCSO ships adapters for (docs/06 §1) plus the dev-only scripted provider (ADR-015). */
-export const PROVIDER_KINDS = ['BEDROCK', 'VERTEX', 'FOUNDRY', 'OPENAI', 'ANTHROPIC', 'SARVAM', 'DEV_SCRIPTED'] as const;
-export type ProviderKind = (typeof PROVIDER_KINDS)[number];
+/**
+ * A model provider kind (`OPENAI`, `BEDROCK`…). Open: every provider plugin
+ * brings its own kind, and the ProviderRegistry (not a closed union) decides
+ * which kinds this deployment knows.
+ */
+export type ProviderKind = string;
+
+/** Shape of a provider kind: UPPER_SNAKE_CASE, 2–40 characters (checked on registration and on input). */
+export const PROVIDER_KIND_PATTERN = /^[A-Z][A-Z0-9_]{1,39}$/;
 
 export type ModelPurpose = 'TURN' | 'SUMMARY' | 'COPILOT' | 'INTERNAL_AGENT' | 'CLASSIFIER' | 'EVALUATION' | 'TEST';
 

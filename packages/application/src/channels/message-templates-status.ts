@@ -1,11 +1,11 @@
 import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import type { TemplateCategory, TemplateStatus } from '@ocso/domain';
-import { whatsappTemplates, type Db, type DbOrTx } from '@ocso/db';
+import { messageTemplates, type Db, type DbOrTx } from '@ocso/db';
 import { recordAudit } from '../audit/audit.js';
 import { emitEvent } from '../events/outbox.js';
 import { systemActor, type ActorContext } from '../shared/context.js';
-import type { TemplateProviderSource } from './templates.js';
-import type { TemplateRow } from './templates-view.js';
+import { TEMPLATES_CONFIG_AREA, type TemplateProviderSource } from './message-templates.js';
+import type { TemplateRow } from './message-templates-view.js';
 
 export interface TemplateStatusChange {
   status: TemplateStatus;
@@ -15,7 +15,7 @@ export interface TemplateStatusChange {
 
 /**
  * Record a provider review result for an OCSO-submitted template. A change
- * is audited and announced: `whatsapp_template.status_changed` (the
+ * is audited and announced: `message_template.status_changed` (the
  * submitter's in-app notice) and `config.changed` (template lists refresh).
  * Returns true when the status or reason changed.
  */
@@ -23,19 +23,19 @@ export async function applyTemplateStatus(db: Db, actor: ActorContext, row: Temp
   const reason = change.status === 'REJECTED' || change.status === 'PAUSED' || change.status === 'DISABLED' ? change.reason : null;
   const category = change.category ?? row.category;
   if (change.status === row.status && reason === row.rejectionReason && category === row.category) {
-    await db.update(whatsappTemplates).set({ statusCheckedAt: now }).where(eq(whatsappTemplates.id, row.id));
+    await db.update(messageTemplates).set({ statusCheckedAt: now }).where(eq(messageTemplates.id, row.id));
     return false;
   }
   await db.transaction(async (tx) => {
     await tx
-      .update(whatsappTemplates)
+      .update(messageTemplates)
       .set({ status: change.status, rejectionReason: reason, category, statusCheckedAt: now, statusChangedAt: now, updatedAt: now })
-      .where(eq(whatsappTemplates.id, row.id));
+      .where(eq(messageTemplates.id, row.id));
     await recordAudit(tx, actor, {
-      action: 'whatsapp_template.status_changed',
-      targetType: 'whatsapp_template',
+      action: 'message_template.status_changed',
+      targetType: 'message_template',
       targetId: row.id,
-      summary: `WhatsApp template ${row.name} (${row.language}): ${row.status} → ${change.status}${reason ? ` · ${reason}` : ''}`,
+      summary: `Message template ${row.name} (${row.language}): ${row.status} → ${change.status}${reason ? ` · ${reason}` : ''}`,
       before: { status: row.status, rejectionReason: row.rejectionReason, category: row.category },
       after: { status: change.status, rejectionReason: reason, category },
     });
@@ -45,7 +45,7 @@ export async function applyTemplateStatus(db: Db, actor: ActorContext, row: Temp
 }
 
 async function announce(tx: DbOrTx, actor: ActorContext, row: TemplateRow, status: TemplateStatus): Promise<void> {
-  await emitEvent(tx, actor, 'whatsapp_template.status_changed', {
+  await emitEvent(tx, actor, 'message_template.status_changed', {
     templateId: row.providerTemplateId,
     channelId: row.channelId,
     name: row.name,
@@ -54,7 +54,7 @@ async function announce(tx: DbOrTx, actor: ActorContext, row: TemplateRow, statu
     previousStatus: row.status,
     submittedBy: row.submittedBy,
   });
-  await emitEvent(tx, actor, 'config.changed', { area: 'whatsapp_templates', entityId: row.channelId });
+  await emitEvent(tx, actor, 'config.changed', { area: TEMPLATES_CONFIG_AREA, entityId: row.channelId });
 }
 
 /**
@@ -70,9 +70,9 @@ export async function pollPendingTemplates(
   const now = options.now ?? (() => new Date());
   const rows = await db
     .select()
-    .from(whatsappTemplates)
-    .where(and(eq(whatsappTemplates.status, 'PENDING'), isNull(whatsappTemplates.deletedAt)))
-    .orderBy(sql`${whatsappTemplates.statusCheckedAt} ASC NULLS FIRST`, asc(whatsappTemplates.submittedAt))
+    .from(messageTemplates)
+    .where(and(eq(messageTemplates.status, 'PENDING'), isNull(messageTemplates.deletedAt)))
+    .orderBy(sql`${messageTemplates.statusCheckedAt} ASC NULLS FIRST`, asc(messageTemplates.submittedAt))
     .limit(options.limit ?? 50);
   const actor = systemActor('template-status-poller', options.correlationId, 'Template status poller');
   const result = { checked: 0, changed: 0, failed: 0 };
@@ -94,7 +94,7 @@ export async function pollPendingTemplates(
   return result;
 }
 
-/** A provider-pushed review result (Meta `message_template_status_update`); unknown templates are ignored. */
+/** A provider-pushed review result (`InboundEnvelope.templateUpdates`); unknown templates are ignored. */
 export async function applyProviderTemplateUpdate(
   db: Db,
   channelId: string,
@@ -103,9 +103,9 @@ export async function applyProviderTemplateUpdate(
 ): Promise<boolean> {
   const [row] = await db
     .select()
-    .from(whatsappTemplates)
-    .where(and(eq(whatsappTemplates.channelId, channelId), eq(whatsappTemplates.providerTemplateId, update.templateId), isNull(whatsappTemplates.deletedAt)));
+    .from(messageTemplates)
+    .where(and(eq(messageTemplates.channelId, channelId), eq(messageTemplates.providerTemplateId, update.templateId), isNull(messageTemplates.deletedAt)));
   if (!row) return false;
-  const actor = systemActor('provider-webhook', options.correlationId, 'WhatsApp webhook');
+  const actor = systemActor('provider-webhook', options.correlationId, 'Channel webhook');
   return applyTemplateStatus(db, actor, row, { status: update.status, reason: update.reason }, options.now ?? new Date());
 }

@@ -60,9 +60,13 @@ export interface PriceLine {
 
 const perMillion = (input: number, output: number, currency: string) => `in ${decimalFromMicros(input)} · out ${decimalFromMicros(output)} ${currency} / 1M`;
 
-/** The price shown next to a model: the row that will cost it, else the catalog's offer, else "no catalog price". */
-export function priceLine(m: ModelOption | undefined, providerKind?: string): PriceLine {
-  if (providerKind === 'DEV_SCRIPTED') return { kind: 'dev', text: 'development model · never priced' };
+/**
+ * The price shown next to a model: the row that will cost it, else the
+ * catalog's offer, else "no catalog price". Models of a development-only
+ * provider (`devOnly` on the model list) are never priced.
+ */
+export function priceLine(m: ModelOption | undefined, devOnly = false): PriceLine {
+  if (devOnly) return { kind: 'dev', text: 'development model · never priced' };
   if (m?.configuredPrice) {
     const p = m.configuredPrice;
     const origin = p.origin === 'catalog' ? `catalog price${p.catalogSource ? ` (${p.catalogSource})` : ''}` : 'manual price';
@@ -77,8 +81,8 @@ export function priceLine(m: ModelOption | undefined, providerKind?: string): Pr
 }
 
 /** Compact line under an option in the open list. */
-export function optionMeta(m: ModelOption, providerKind?: string): string {
-  const price = priceLine(m, providerKind);
+export function optionMeta(m: ModelOption, devOnly = false): string {
+  const price = priceLine(m, devOnly);
   return [capabilityLine(m), price.kind === 'none' ? 'no catalog price' : price.text].filter(Boolean).join(' · ');
 }
 

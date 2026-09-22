@@ -55,7 +55,7 @@ export const COMPONENT_DESCRIPTORS: readonly ComponentDescriptor[] = [
     help: 'When and how to use tools. Tool schemas are owned by the Tech Admin via MCP approval.',
   },
   { key: 'escalation', label: 'Escalation rules', owner: 'CS_LEAD', tag: 'escalation_policy', help: 'When to hand off to a human and how to summarize.' },
-  { key: 'channel_constraints', label: 'Channel constraints', owner: 'CS_LEAD', tag: 'channel_constraints', help: 'Per-channel formatting and content limits.' },
+  { key: 'channel_constraints', label: 'Channel constraints', owner: 'CS_LEAD', tag: 'channel_constraints', help: 'Your style and content rules per channel; OCSO adds each channel’s own length, formatting and media limits.' },
   {
     key: 'business_context',
     label: 'Business context',

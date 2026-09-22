@@ -7,7 +7,7 @@ import type { DeliveryAdapterDeps } from './deps.js';
 
 const TeamsConfig = z
   .object({
-    channelLabel: z.string().trim().max(80).optional(),
+    channelLabel: z.string().trim().max(80).optional().meta({ title: 'Channel label', description: 'display only' }),
   })
   .strict();
 export type TeamsConfig = z.infer<typeof TeamsConfig>;
@@ -28,9 +28,13 @@ export function createTeamsAdapter(deps: Pick<DeliveryAdapterDeps, 'fetch' | 'ti
   return {
     kind: 'TEAMS',
     label: 'Microsoft Teams',
-    secret: { required: true, secretKind: 'WEBHOOK_SECRET', description: 'Teams Workflows or incoming webhook URL' },
+    description: 'Posts an Adaptive Card to a Teams channel through a Workflows or incoming webhook.',
+    events: ['OPENED', 'RESOLVED', 'REMINDER'],
+    configSchema: z.toJSONSchema(TeamsConfig, { io: 'input' }) as Record<string, unknown>,
+    secret: { required: true, secretKind: 'WEBHOOK_SECRET', label: 'Workflows or incoming webhook URL', description: 'Teams Workflows or incoming webhook URL' },
     validateConfig: (config) => checkConfig(TeamsConfig, config),
     validateSecret: (secret) => httpsUrlProblems(secret, 'Teams webhook URL'),
+    summary: (config) => config.channelLabel || 'webhook stored as a secret',
     async deliver(message, _config, secret) {
       if (!secret) return { ok: false, retriable: false, error: 'webhook URL not configured' };
       const outcome = await postJson(deps.fetch, { url: secret, body: JSON.stringify(buildTeamsPayload(message)), timeoutMs: deps.timeoutMs });

@@ -3,7 +3,11 @@ import { eq } from 'drizzle-orm';
 import { createTestDatabase, type TestDatabase } from '@ocso/db/testing';
 import { alertRules, alerts, deploymentSettings, modelPricing, usageEvents, uuidv7, virtualAgents } from '@ocso/db';
 import { MemoryQueue } from '@ocso/queue';
+import { createDefaultDeliveryRegistry } from '@ocso/alerts';
 import { AlertEngine, type AlertRuleRow } from '../src/index.js';
+
+/** Destination-kind event routing comes from the delivery registry (adapters declare their events). */
+const routing = createDefaultDeliveryRegistry({ fetch: async () => new Response('') });
 
 /**
  * spend_budget_above (TECHNICAL): month-to-date spend in the deployment
@@ -22,7 +26,7 @@ const USD = 1_000_000;
 
 beforeAll(async () => {
   t = await createTestDatabase();
-  engine = new AlertEngine({ db: t.db, queue: new MemoryQueue() });
+  engine = new AlertEngine({ db: t.db, queue: new MemoryQueue(), destinations: routing });
   await t.db.update(deploymentSettings).set({ timezone: 'Asia/Kolkata' }).where(eq(deploymentSettings.id, 1));
 });
 afterAll(async () => {

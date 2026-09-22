@@ -10,16 +10,20 @@ import {
   PromptService,
   type ActorContext,
 } from '@ocso/application';
-import { loadAgentToolCatalog } from '@ocso/agent-runtime';
-import { users, type Db } from '@ocso/db';
+import { channelContextFrom, loadAgentToolCatalog } from '@ocso/agent-runtime';
+import type { ChannelRegistry } from '@ocso/channels';
+import { channels, users, type Db } from '@ocso/db';
+import { notFound } from '@ocso/domain';
 import { COMPONENT_DESCRIPTORS, compilePrompt, estimateTokens, type PromptComponents } from '@ocso/prompt-compiler';
-import { inArray } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { Actor, CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
-import { DB } from '../../infrastructure/tokens.js';
+import { CHANNEL_REGISTRY, DB } from '../../infrastructure/tokens.js';
 
 const Id = z.uuid();
 const DiffQuery = z.object({ from: z.uuid(), to: z.uuid() });
+const PreviewQuery = z.object({ channelId: z.uuid().optional() });
+type PreviewQuery = z.infer<typeof PreviewQuery>;
 type DiffQuery = z.infer<typeof DiffQuery>;
 type Components = z.infer<typeof ComponentsInput>;
 const RulePatch = EscalationRulePatch;
@@ -38,6 +42,7 @@ export class PromptsController {
     @Inject(AgentService) private readonly agents: AgentService,
     @Inject(EscalationRuleService) private readonly rules: EscalationRuleService,
     @Inject(DB) private readonly db: Db,
+    @Inject(CHANNEL_REGISTRY) private readonly registry: ChannelRegistry,
   ) {}
 
   @Get('prompt')
@@ -60,17 +65,24 @@ export class PromptsController {
     };
   }
 
-  /** Compiled preview with a synthetic customer turn: token estimates and hashes per layer. */
+  /**
+   * Compiled preview with a synthetic customer turn: token estimates and hashes
+   * per layer. The channel block is one of the agent's own channels
+   * (`?channelId=`, default the first attached); none when it has no channel.
+   */
   @Get('prompt/preview')
   @RequirePermission(Permission.AGENTS_READ)
-  async preview(@CurrentPrincipal() principal: Principal, @Param('agentId', { schema: Id }) agentId: string) {
+  async preview(@CurrentPrincipal() principal: Principal, @Param('agentId', { schema: Id }) agentId: string, @Query({ schema: PreviewQuery }) q: PreviewQuery) {
     const [agent, draft] = await Promise.all([this.agents.get(principal, agentId), this.prompts.draft(principal, agentId)]);
+    const channelId = q.channelId ?? agent.channelIds[0];
+    if (q.channelId && !agent.channelIds.includes(q.channelId)) throw notFound('channel', q.channelId);
+    const [channel] = channelId ? await this.db.select().from(channels).where(eq(channels.id, channelId)) : [];
     const compiled = compilePrompt({
       agent: { id: agent.id, name: agent.name, conversationType: agent.conversationType },
       promptVersion: { id: 'draft', version: 0, components: draft.components },
       // The agent's real tool definitions, so the prefix hash matches what turns send.
       tools: (await loadAgentToolCatalog(this.db, agentId)).specs,
-      channel: { kind: 'WHATSAPP', label: 'WhatsApp' },
+      channel: channel ? channelContextFrom(this.registry)(channel) : null,
       customer: null,
       summary: null,
       handover: null,

@@ -23,7 +23,7 @@ export const TWILIO_WHATSAPP_CAPABILITIES: ChannelCapabilities = Object.freeze<C
   inboundParts: ['TEXT', 'IMAGE', 'AUDIO', 'VIDEO', 'DOCUMENT', 'LOCATION', 'STRUCTURED'],
   outboundParts: ['TEXT', 'IMAGE', 'AUDIO', 'VIDEO', 'DOCUMENT', 'LOCATION', 'CONTACT', 'STRUCTURED'],
   maxTextLength: TWILIO_BODY_LIMIT,
-  markdown: 'whatsapp',
+  markdown: 'basic',
   streaming: false,
   deliveryReceipts: true,
   interactive: false,

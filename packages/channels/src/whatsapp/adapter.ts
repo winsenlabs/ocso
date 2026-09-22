@@ -3,7 +3,6 @@ import { isDomainError } from '@ocso/domain';
 import type {
   ChannelAdapter,
   ChannelAdapterDeps,
-  ChannelKindDescriptor,
   ChannelCapabilities,
   ChannelRuntimeConfig,
   FetchedMedia,
@@ -16,6 +15,8 @@ import type {
   TemplateSendRequest,
   VerificationResult,
 } from '../contract/types.js';
+import { NO_NETWORK } from '../contract/types.js';
+import type { ChannelKindDescriptor } from '../contract/descriptor.js';
 import { TemplateProviderError } from '../common/templates.js';
 import { WHATSAPP_CAPABILITIES } from './capabilities.js';
 import { WHATSAPP_DESCRIPTOR } from './descriptor.js';
@@ -196,9 +197,10 @@ export class WhatsAppChannelAdapter implements ChannelAdapter {
   }
 }
 
+/** `deps.fetch` is the composition root's guarded egress fetch (or a test stub); without it the adapter has no network. */
 export function createWhatsAppAdapter(deps: Partial<ChannelAdapterDeps> = {}): WhatsAppChannelAdapter {
   return new WhatsAppChannelAdapter({
-    fetch: deps.fetch ?? globalThis.fetch.bind(globalThis),
+    fetch: deps.fetch ?? NO_NETWORK,
     now: deps.now ?? (() => new Date()),
   });
 }

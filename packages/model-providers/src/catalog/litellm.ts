@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { firstPartyCatalogProviders } from '../registry.js';
 import type { CatalogEntry, CatalogPrice, CatalogPriceTier } from './types.js';
 import { opt, positiveInt, type InputKind } from './util.js';
 
@@ -6,20 +7,10 @@ import { opt, positiveInt, type InputKind } from './util.js';
  * LiteLLM `model_prices_and_context_window.json` (MIT, BerriAI/litellm):
  * `{ [modelKey]: { litellm_provider, mode, input_cost_per_token, … } }` with
  * per-TOKEN USD costs and `supports_*` flags. Used only for models models.dev
- * lacks. Only chat/responses entries of the providers OCSO maps are kept.
+ * lacks. Only chat/responses entries of the providers some provider definition
+ * maps to are kept (`ProviderDefinition.catalog.providers.litellm`).
  */
 
-export const LITELLM_PROVIDERS = [
-  'openai',
-  'anthropic',
-  'bedrock',
-  'bedrock_converse',
-  'vertex_ai-language-models',
-  'vertex_ai-anthropic_models',
-  'azure',
-  'azure_ai',
-] as const;
-const PROVIDERS = new Set<string>(LITELLM_PROVIDERS);
 const MODES = new Set(['chat', 'responses']);
 
 const cost = z.number().finite().min(0);
@@ -82,11 +73,11 @@ function priceOf(e: z.infer<typeof Entry>, raw: Record<string, unknown>): Catalo
   };
 }
 
-export function normalizeLiteLlmEntry(key: string, raw: unknown): CatalogEntry | null {
+export function normalizeLiteLlmEntry(key: string, raw: unknown, providers: ReadonlySet<string>): CatalogEntry | null {
   const parsed = Entry.safeParse(raw);
   if (!parsed.success) return null;
   const e = parsed.data;
-  if (!PROVIDERS.has(e.litellm_provider) || !MODES.has(e.mode ?? '')) return null;
+  if (!providers.has(e.litellm_provider) || !MODES.has(e.mode ?? '')) return null;
   const input: InputKind[] = ['text'];
   if (e.supports_vision) input.push('image');
   if (e.supports_pdf_input) input.push('pdf');
@@ -104,12 +95,13 @@ export function normalizeLiteLlmEntry(key: string, raw: unknown): CatalogEntry |
 }
 
 /** Normalize the whole document. `sample_spec` and malformed entries are skipped. */
-export function normalizeLiteLlm(document: unknown): CatalogEntry[] {
+export function normalizeLiteLlm(document: unknown, providers: readonly string[] = firstPartyCatalogProviders('litellm')): CatalogEntry[] {
   const doc = LiteLlmDocument.parse(document);
+  const keep = new Set(providers);
   const entries: CatalogEntry[] = [];
   for (const [key, raw] of Object.entries(doc)) {
     if (key === 'sample_spec') continue;
-    const entry = normalizeLiteLlmEntry(key, raw);
+    const entry = normalizeLiteLlmEntry(key, raw, keep);
     if (entry) entries.push(entry);
   }
   return entries;

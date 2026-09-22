@@ -12,12 +12,16 @@ export type EmailTestInput = z.infer<typeof EmailTestInput>;
 export interface EmailTestResult {
   ok: boolean;
   driver: EmailStatus['driver'];
+  /** The driver's display name (e.g. `Resend`). */
+  label: string;
+  /** False when the driver never hands messages to anyone (log): a "sent" test reached nobody. */
+  delivers: boolean;
   /** Provider message id (Resend id / SMTP Message-ID) when sent. */
   id: string | null;
   error?: string;
   category?: EmailErrorCategory;
   retriable?: boolean;
-  /** Set for the log driver: the message was only written to the server log. */
+  /** Set for a non-delivering driver: the message was only written to the server log. */
   warning?: string;
 }
 
@@ -58,15 +62,16 @@ export class EmailSettingsService {
       ],
     });
     let result: EmailTestResult;
+    const driver = { driver: this.sender.driver, label: this.statusView.label, delivers: this.sender.delivers !== false };
     try {
       const sent = await this.sender.send({ to: input.to, ...rendered, tags: { kind: 'test' }, idempotencyKey: `email-test/${uuidv7()}` });
-      result = { ok: true, driver: this.sender.driver, id: sent.id };
-      if (this.sender.driver === 'log') result.warning = 'Log driver: the message was written to the server log, nothing was delivered.';
+      result = { ok: true, ...driver, id: sent.id };
+      if (!driver.delivers) result.warning = `${driver.label} driver: the message was written to the server log, nothing was delivered.`;
     } catch (error) {
       result =
         error instanceof EmailSendError
-          ? { ok: false, driver: this.sender.driver, id: null, error: error.message, category: error.category, retriable: error.retriable }
-          : { ok: false, driver: this.sender.driver, id: null, error: 'email send failed', category: 'unknown', retriable: true };
+          ? { ok: false, ...driver, id: null, error: error.message, category: error.category, retriable: error.retriable }
+          : { ok: false, ...driver, id: null, error: 'email send failed', category: 'unknown', retriable: true };
     }
     await recordAudit(this.db, actor, {
       action: 'email.test_send',

@@ -53,11 +53,11 @@ export interface ConversationDetail {
   resolvedBy: { id: string; name: string } | null;
   firstHumanResponseAt: string | null;
   /**
-   * WhatsApp customer-service window (docs/07 §3): free-form replies only
-   * while open; afterwards an approved template. Null for channels without a
-   * window (web chat).
+   * The channel's customer-service window (docs/07 §3; its length comes from
+   * the adapter): free-form replies only while open; afterwards an approved
+   * message template. Null for channels without a window.
    */
-  whatsappWindow: SessionWindowState | null;
+  sessionWindow: SessionWindowState | null;
 }
 
 /** Context rail data for the workspace (design/01 right rail). Caller checks access. */
@@ -87,7 +87,7 @@ export async function loadConversationDetail(
     c.resolvedBy ? db.select({ id: users.id, name: users.name }).from(users).where(eq(users.id, c.resolvedBy)) : Promise.resolve([]),
   ]);
   const hours = channel && options.windowHours ? options.windowHours(channel) : null;
-  const whatsappWindow = channel && hours !== null ? sessionWindowState(hours, await lastCustomerMessageAt(db, customer.id, channel.id), options.now ?? new Date()) : null;
+  const sessionWindow = channel && hours !== null ? sessionWindowState(hours, await lastCustomerMessageAt(db, customer.id, channel.id), options.now ?? new Date()) : null;
   return {
     id: c.id,
     displayId: displayId('conv', c.id),
@@ -130,6 +130,6 @@ export async function loadConversationDetail(
     handover: handover ? { version: handover.version, text: handover.text, createdAt: handover.createdAt.toISOString() } : null,
     resolvedBy: resolver ?? null,
     firstHumanResponseAt: c.firstHumanResponseAt?.toISOString() ?? null,
-    whatsappWindow,
+    sessionWindow,
   };
 }

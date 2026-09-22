@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { AlertBanner } from '@/components/ui/alert-banner';
 import { ChannelMark } from '@/components/ui/channel-mark';
 import { StatusChip, type StatusTone } from '@/components/ui/status-chip';
-import type { ChannelCode } from '@/lib/channels';
+import type { ChannelMarkView } from '@/lib/channels';
 import { updateAgentAction } from '@/lib/actions/agents';
 import { useAgentAction } from '../shared/use-action';
 
@@ -12,7 +12,8 @@ export interface ChannelRow {
   id: string;
   name: string;
   kind: string;
-  code: ChannelCode | null;
+  /** The channel kind's mark, from its descriptor. */
+  mark: ChannelMarkView | null;
   status: string;
   defaultAgent: 'this' | 'other' | 'none';
   defaultAgentName: string | null;
@@ -44,7 +45,7 @@ export function ChannelAssignment({ agentId, rows, assigned, canEdit }: { agentI
           return (
             <div className="dt-row" role="row" key={r.id} style={{ gridTemplateColumns: TEMPLATE }}>
               <span role="cell" style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                {r.code ? <ChannelMark channel={r.code} /> : null}
+                {r.mark ? <ChannelMark mark={r.mark} /> : null}
                 <span style={{ minWidth: 0 }}>
                   {r.name}
                   <span className="mono-sm row-note">{r.kind.toLowerCase()}</span>

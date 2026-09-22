@@ -17,7 +17,8 @@ export function initialComponents(name: string, purpose: string, type: string): 
     policies: '• Never ask for or repeat full card numbers, CVV, PINs or passwords.\n• Do not promise outcomes you cannot confirm.',
     tool_instructions: '• Use tools to check facts before stating them.\n• If a tool fails twice, stop, tell the customer plainly and hand off.',
     escalation: 'Hand off to a human when the customer asks for one, when policy requires it, or when you cannot help safely. Summarise for the human in three lines: what happened, what you did, what they need to decide.',
-    channel_constraints: 'WhatsApp: under 700 characters, no markdown tables, one question per message. Web chat: short paragraphs.',
+    // Length, formatting and media limits come from the channel adapter (the compiler's channel block); this is the business's own style.
+    channel_constraints: 'One question per message. Short paragraphs; lists only when they help the customer act.',
     business_context: '',
   };
 }

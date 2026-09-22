@@ -19,13 +19,33 @@ export interface BlobObject {
 }
 
 export interface BlobStore {
-  readonly driver: 'local' | 's3';
+  /** Name of the driver that built it (BLOB_DRIVER); display and logs only. */
+  readonly driver: string;
   put(input: BlobPutInput): Promise<BlobObject>;
   get(key: string): Promise<{ data: Uint8Array; contentType: string; sizeBytes: number }>;
   head(key: string): Promise<{ contentType: string; sizeBytes: number } | null>;
   delete(key: string): Promise<void>;
   /** Short-lived HTTPS URL for downloads (browser, channel providers). */
   signedGetUrl(key: string, ttlSeconds: number): Promise<string>;
+  /**
+   * Stores whose signed URLs point at OCSO's own `/blobs/<key>` route verify
+   * them here (the signature is the authorization). Stores with their own
+   * signed URLs (S3 presigning) omit it, and the route refuses every request.
+   */
+  verifySignedGet?(key: string, exp: number, sig: string, nowSeconds: number): boolean;
+}
+
+/**
+ * A blob storage driver: registered by name, selected by BLOB_DRIVER. `check`
+ * lists missing or inconsistent settings (start-up fails naming every one);
+ * `create` builds the process-wide store. `Env` is the deployment
+ * environment the driver reads.
+ */
+export interface BlobDriverDefinition<Env = Readonly<Record<string, unknown>>> {
+  /** BLOB_DRIVER value that selects this driver, e.g. `s3`. */
+  readonly name: string;
+  readonly check?: ((env: Env) => readonly string[]) | undefined;
+  readonly create: (env: Env) => BlobStore;
 }
 
 const KEY_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9/_.=-]{0,500}$/;

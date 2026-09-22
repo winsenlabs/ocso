@@ -5,6 +5,7 @@ export * from './resend-sender.js';
 export * from './smtp-transport.js';
 export * from './smtp-sender.js';
 export * from './config.js';
+export * from './drivers.js';
 export { escapeHtml, safeUrl, coarseIp, formatDateTime, formatExpiry } from './templates/escape.js';
 export { renderLayout, type EmailBlock, type LayoutInput } from './templates/layout.js';
 export * from './templates/auth.js';

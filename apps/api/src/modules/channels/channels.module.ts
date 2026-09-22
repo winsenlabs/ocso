@@ -1,5 +1,5 @@
 import { Global, Module } from '@nestjs/common';
-import { ChannelService, IngressService } from '@ocso/application';
+import { ChannelService, IngressService, MessageTemplateService, setIdentityDisplay } from '@ocso/application';
 import { ChannelRuntime } from '@ocso/agent-runtime';
 import type { ChannelRegistry } from '@ocso/channels';
 import type { ApiEnv } from '@ocso/config';
@@ -10,15 +10,25 @@ import { CHANNEL_REGISTRY, DB, ENV, QUEUE, SECRET_STORE } from '../../infrastruc
 import { ChannelIngressService } from './channel-ingress.service.js';
 import { ChannelsAdminController } from './channels-admin.controller.js';
 import { ChannelWebhookController } from './channel-webhook.controller.js';
-import { ChannelTemplatesController, WhatsAppTemplateChannelsController } from './channel-templates.controller.js';
+import { ChannelTemplatesController, MessageTemplateChannelsController } from './channel-templates.controller.js';
 import { SESSION_WINDOW_HOURS, TEMPLATE_PROVIDERS } from './templates.providers.js';
-import { WhatsAppTemplateService } from '@ocso/application';
+
+/** Installs the channel plugins' identity display (masking) hook for list views (application masking.ts). */
+const IDENTITY_DISPLAY = Symbol('IDENTITY_DISPLAY');
 
 @Global()
 @Module({
-  controllers: [ChannelsAdminController, ChannelWebhookController, ChannelTemplatesController, WhatsAppTemplateChannelsController],
+  controllers: [ChannelsAdminController, ChannelWebhookController, ChannelTemplatesController, MessageTemplateChannelsController],
   providers: [
     ...TEMPLATE_PROVIDERS,
+    {
+      provide: IDENTITY_DISPLAY,
+      inject: [CHANNEL_REGISTRY],
+      useFactory: (registry: ChannelRegistry) => {
+        setIdentityDisplay((kind, value) => registry.displayIdentity(kind, value));
+        return true;
+      },
+    },
     ChannelIngressService,
     { provide: IngressService, inject: [DB, QUEUE], useFactory: (db: Db, queue: QueueAdapter) => new IngressService(db, queue, { reopenWindowHours: 72 }) },
     {
@@ -34,10 +44,10 @@ import { WhatsAppTemplateService } from '@ocso/application';
           db,
           secrets,
           (kind, settings, values) => (registry.has(kind) ? registry.get(kind).validateConfig(settings, values) : [`channel kind ${kind} is not available`]),
-          (kind, publicKey) => registry.publicPath(kind, publicKey),
+          (kind, publicKey) => registry.paths(kind, publicKey),
         ),
     },
   ],
-  exports: [ChannelIngressService, ChannelRuntime, IngressService, ChannelService, WhatsAppTemplateService, SESSION_WINDOW_HOURS],
+  exports: [ChannelIngressService, ChannelRuntime, IngressService, ChannelService, MessageTemplateService, SESSION_WINDOW_HOURS],
 })
 export class ChannelsModule {}

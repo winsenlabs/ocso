@@ -5,13 +5,14 @@ import { api } from './client';
 /**
  * Model providers, logical model profiles and pricing (docs/06, ADR-006).
  * Shapes mirror packages/application/src/models/views.ts. Provider responses
- * carry credential NAMES and secret references only, never values.
+ * carry credential NAMES and secret references only, never values. Kinds are
+ * open (the API's provider registry): labels, marks and caching wording come
+ * from /v1/model-providers/kinds and each target's `caching`; an unknown kind
+ * still parses and renders with a generic mark.
  */
 
-export const PROVIDER_KINDS = ['BEDROCK', 'VERTEX', 'FOUNDRY', 'OPENAI', 'ANTHROPIC', 'SARVAM', 'DEV_SCRIPTED'] as const;
-export type ProviderKind = (typeof PROVIDER_KINDS)[number];
-
-const Kind = z.enum(PROVIDER_KINDS);
+export type ProviderKind = string;
+const Kind = z.string();
 
 export const FieldDescriptorSchema = z.object({
   name: z.string(),
@@ -31,6 +32,9 @@ export type FieldDescriptor = z.infer<typeof FieldDescriptorSchema>;
 export const ProviderKindSchema = z.object({
   kind: Kind,
   label: z.string(),
+  /** From the provider definition; absent → a generic mark / caching line. */
+  mark: z.string().optional(),
+  cachingSummary: z.string().optional(),
   devOnly: z.boolean(),
   settings: z.array(FieldDescriptorSchema),
   credentials: z.array(FieldDescriptorSchema),
@@ -49,6 +53,10 @@ export const CapabilitiesSchema = z.object({
   reportsCacheWrites: z.boolean(),
 });
 export type Capabilities = z.infer<typeof CapabilitiesSchema>;
+
+/** How one target caches prompts, in its provider's own words (ADR-006). `mode` is open: unknown modes render as text. */
+export const PromptCachingSchema = z.object({ mode: z.string(), mechanism: z.string(), effect: z.object({ '5m': z.string(), '1h': z.string() }) });
+export type PromptCaching = z.infer<typeof PromptCachingSchema>;
 
 const StatsSchema = z.object({
   requests: z.number(),
@@ -115,6 +123,7 @@ const TargetSchema = z.object({
   providerKind: Kind.nullable(),
   model: z.string(),
   capabilities: CapabilitiesSchema.nullable(),
+  caching: PromptCachingSchema.nullable().default(null),
 });
 export type ProfileTarget = z.infer<typeof TargetSchema>;
 
@@ -156,6 +165,7 @@ const TargetCheckSchema = z.object({
   permitted: z.boolean(),
   reason: z.string().nullable(),
   capabilities: CapabilitiesSchema.nullable(),
+  caching: PromptCachingSchema.nullable().default(null),
 });
 export type TargetCheck = z.infer<typeof TargetCheckSchema>;
 

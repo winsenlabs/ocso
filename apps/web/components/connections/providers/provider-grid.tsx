@@ -4,7 +4,7 @@ import { ProviderCard } from '@/components/ui/provider-card';
 import { StatusChip } from '@/components/ui/status-chip';
 import type { Provider, ProviderKindView } from '@/lib/api/models';
 import { formatAge, formatCompact, formatLatency, formatPercent } from '@/lib/format';
-import { KIND_CACHING, KIND_LOGO, providerStatus, providerTone } from '../models/meta';
+import { cachingSummary, providerMark, providerStatus, providerTone } from '../models/meta';
 import { connectionsHref } from '../url';
 import { ProviderCardFooter } from './provider-card-footer';
 
@@ -34,7 +34,7 @@ function Card({ provider, kind, canManage }: { provider: Provider; kind: Provide
     { k: 'region', v: `${provider.region ?? 'not set'}${provider.residencyZone ? ` · data in ${provider.residencyZone}` : ''}` },
     { k: 'auth', v: authSummary(provider, kind) },
     { k: 'profiles', v: profilesSummary(provider) },
-    { k: 'caching', v: `${KIND_CACHING[provider.kind]}${cache}` },
+    { k: 'caching', v: `${cachingSummary(kind)}${cache}` },
     { k: 'last test', v: tested },
   ];
   if (provider.lastError && provider.status !== 'OK') items.push({ k: 'last error', v: provider.lastError });
@@ -50,7 +50,7 @@ function Card({ provider, kind, canManage }: { provider: Provider; kind: Provide
   const tone = providerTone(provider);
   return (
     <ProviderCard
-      logo={KIND_LOGO[provider.kind]}
+      logo={providerMark(provider.kind, kind)}
       name={provider.name}
       status={providerStatus(provider)}
       {...(tone ? { tone } : {})}
@@ -77,7 +77,7 @@ function UnconfiguredCard({ kind, canManage }: { kind: ProviderKindView; canMana
   const creds = kind.credentials.map((c) => c.label.toLowerCase());
   return (
     <ProviderCard
-      logo={KIND_LOGO[kind.kind]}
+      logo={providerMark(kind.kind, kind)}
       name={kind.label}
       status={{ tone: 'muted', label: 'not configured' }}
       footer={
@@ -99,7 +99,7 @@ function UnconfiguredCard({ kind, canManage }: { kind: ProviderKindView; canMana
         fontSize={12}
         items={[
           { k: 'credentials', v: creds.length ? creds.join(', ') : 'none needed' },
-          { k: 'caching', v: KIND_CACHING[kind.kind] },
+          { k: 'caching', v: cachingSummary(kind) },
           { k: 'profiles', v: '—' },
         ]}
       />

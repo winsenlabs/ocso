@@ -1,17 +1,7 @@
 import { Body, Controller, Get, Headers, HttpCode, Inject, Param, Post, Query, Req, Sse, SseSignal, type MessageEvent } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { Observable, fromEvent, interval, map, merge, takeUntil } from 'rxjs';
-import {
-  attachmentKeyPrefix,
-  isVisitorToken,
-  issueVisitorToken,
-  mediaKindForMime,
-  newVisitorId,
-  originAllowed,
-  resolveWebChatConfig,
-  verifyHostJwt,
-  verifyVisitorToken,
-} from '@ocso/channels';
+import { mediaKindForMime, originAllowed } from '@ocso/channels';
 import { checkMedia, extensionFor, type BlobStore } from '@ocso/blob';
 import type { ApiEnv } from '@ocso/config';
 import { DomainError, validation } from '@ocso/domain';
@@ -33,10 +23,11 @@ type AfterQuery = z.infer<typeof AfterQuery>;
 const DECLARED_TYPE = /^[a-z]+\/[a-z0-9.+-]{1,120}$/;
 
 /**
- * Public customer web-chat API (docs/07 §4). Authenticated by channel-bound
- * visitor tokens (or host-app JWT exchange); customers only ever see
- * customer-visible messages of their own conversation. Browser calls must come
- * from OCSO's own origin (the widget iframe) or an allowed host origin.
+ * Public customer web-chat API (docs/07 §4) for every `embeddable` channel
+ * kind. Authenticated by the kind's visitor tokens (the adapter's `embed`
+ * hooks: channel-bound visitor tokens, host-app JWT exchange); customers only
+ * ever see customer-visible messages of their own conversation. Browser calls
+ * must come from OCSO's own origin (the widget iframe) or an allowed host origin.
  */
 @Controller('public/webchat/:publicKey')
 export class WebChatController {
@@ -58,19 +49,19 @@ export class WebChatController {
   @Public()
   async config(@Param('publicKey') publicKey: string) {
     const ctx = await this.identity.channel(publicKey);
-    const cfg = resolveWebChatConfig(ctx.config);
+    const widget = ctx.embed.widgetConfig(ctx.config);
     const caps = ctx.adapter.capabilities(ctx.config);
     return {
       name: ctx.row.name,
       assistantName: await this.identity.assistantName(ctx),
-      branding: cfg.settings.branding,
+      branding: widget.branding,
       inboundParts: caps.inboundParts,
       maxMediaBytes: caps.maxMediaBytes,
       allowedMimeTypes: caps.allowedMimeTypes,
       maxTextLength: caps.maxTextLength,
-      maxAttachmentsPerMessage: cfg.settings.maxAttachmentsPerMessage,
-      allowedOrigins: cfg.settings.allowedOrigins,
-      hostIdentity: Boolean(cfg.hostJwtSecret),
+      maxAttachmentsPerMessage: widget.maxAttachmentsPerMessage,
+      allowedOrigins: widget.allowedOrigins,
+      hostIdentity: widget.hostIdentity,
     };
   }
 
@@ -79,26 +70,8 @@ export class WebChatController {
   @HttpCode(200)
   async session(@Param('publicKey') publicKey: string, @Headers('origin') origin: string | undefined, @Body({ schema: SessionInput }) body: SessionInput) {
     const ctx = await this.channelFor(publicKey, origin);
-    const cfg = resolveWebChatConfig(ctx.config);
-    const now = new Date();
-    let visitorId = newVisitorId();
-    let externalCustomerRef: string | undefined;
-    if (body.visitorToken && isVisitorToken(body.visitorToken)) {
-      try {
-        const claims = verifyVisitorToken(body.visitorToken, cfg.visitorTokenSecret, { channelId: cfg.channelId, now });
-        visitorId = claims.visitorId;
-        externalCustomerRef = claims.externalCustomerRef;
-      } catch {
-        // Expired or foreign token: start a new anonymous visitor.
-      }
-    }
-    if (body.hostToken) {
-      if (!cfg.hostJwtSecret) throw validation('host_auth_disabled', 'Authenticated customers are not enabled for this channel');
-      const claims = verifyHostJwt(body.hostToken, cfg.hostJwtSecret, { issuer: cfg.settings.hostJwtIssuer, audience: cfg.settings.hostJwtAudience, now });
-      externalCustomerRef = claims.customerRef;
-    }
-    const issued = issueVisitorToken({ channelId: cfg.channelId, visitorId, externalCustomerRef, ttlSeconds: cfg.settings.visitorTokenTtlSeconds }, cfg.visitorTokenSecret, now);
-    return { token: issued.token, visitorId: issued.visitorId, expiresAt: issued.expiresAt.toISOString(), authenticated: Boolean(externalCustomerRef) };
+    const session = ctx.embed.openSession(ctx.config, { visitorToken: body.visitorToken, hostToken: body.hostToken });
+    return { token: session.token, visitorId: session.visitorId, expiresAt: session.expiresAt.toISOString(), authenticated: session.authenticated };
   }
 
   @Post('messages')
@@ -165,7 +138,7 @@ export class WebChatController {
     if (!kind || !caps.inboundParts.includes(kind) || data.byteLength > caps.maxMediaBytes[kind]) {
       throw validation('attachment_rejected', 'Attachment rejected: too_large', { reason: 'too_large', limitBytes: kind ? caps.maxMediaBytes[kind] : 0 });
     }
-    const key = `${attachmentKeyPrefix(ctx.config.id, visitor)}${randomUUID()}.${extensionFor(check.mimeType)}`;
+    const key = `${ctx.embed.attachmentKeyPrefix(ctx.config, visitor)}${randomUUID()}.${extensionFor(check.mimeType)}`;
     const stored = await this.blobs.put({ key, data, contentType: check.mimeType, retention: 'CONVERSATION_MEDIA' });
     return { uploadId: stored.key, mimeType: stored.contentType, sizeBytes: stored.sizeBytes, sha256: stored.sha256 };
   }
@@ -197,7 +170,7 @@ export class WebChatController {
   private async channelFor(publicKey: string, origin: string | undefined): Promise<WebChatContext> {
     const ctx = await this.identity.channel(publicKey);
     if (!origin || origin === this.publicOrigin) return ctx;
-    const { allowedOrigins } = resolveWebChatConfig(ctx.config).settings;
+    const { allowedOrigins } = ctx.embed.widgetConfig(ctx.config);
     if (allowedOrigins.length === 0 || originAllowed(origin, allowedOrigins)) return ctx;
     throw new DomainError('authorization', 'webchat_origin_not_allowed', 'This site is not allowed to use this chat');
   }

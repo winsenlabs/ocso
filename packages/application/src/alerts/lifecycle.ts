@@ -1,4 +1,5 @@
 import { eq } from 'drizzle-orm';
+import type { DestinationEventRouting } from '@ocso/alerts';
 import { alerts, type DbOrTx } from '@ocso/db';
 import { recordAudit } from '../audit/audit.js';
 import { emitEvent } from '../events/outbox.js';
@@ -17,6 +18,8 @@ export interface ResolveOptions {
   resolvedBy: string | null;
   resolution: string;
   destinationIds: readonly string[];
+  /** Which destination kinds receive the RESOLVED event (the delivery registry). */
+  routing: DestinationEventRouting;
   auditAction: 'alert.resolve' | 'alert.auto_resolve' | 'alert.rule_deleted';
   auditSummary: string;
 }
@@ -38,7 +41,7 @@ export async function markResolved(tx: DbOrTx, actor: ActorContext, alert: Alert
   const agentId = alertAgentId(alert);
   await emitEvent(tx, actor, 'alert.updated', { alertId: alert.id, status: 'RESOLVED' }, { agentId });
   await emitEvent(tx, actor, 'alert.resolved', { alertId: alert.id }, { agentId });
-  return createDeliveries(tx, alert.id, o.destinationIds, 'RESOLVED', o.now);
+  return createDeliveries(tx, o.routing, alert.id, o.destinationIds, 'RESOLVED', o.now);
 }
 
 export interface AcknowledgeOptions {
@@ -46,6 +49,7 @@ export interface AcknowledgeOptions {
   userId: string;
   note: string | null;
   destinationIds: readonly string[];
+  routing: DestinationEventRouting;
 }
 
 /** OPEN → ACKNOWLEDGED with audit, event and ACKNOWLEDGED deliveries (caller publishes). */
@@ -60,5 +64,5 @@ export async function markAcknowledged(tx: DbOrTx, actor: ActorContext, alert: A
     after: { status: 'ACKNOWLEDGED', ...(o.note ? { note: o.note } : {}) },
   });
   await emitEvent(tx, actor, 'alert.updated', { alertId: alert.id, status: 'ACKNOWLEDGED' }, { agentId: alertAgentId(alert) });
-  return createDeliveries(tx, alert.id, o.destinationIds, 'ACKNOWLEDGED', o.now);
+  return createDeliveries(tx, o.routing, alert.id, o.destinationIds, 'ACKNOWLEDGED', o.now);
 }

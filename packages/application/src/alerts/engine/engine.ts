@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, type SQL } from 'drizzle-orm';
-import { evaluationWindow, type AlertKind, type AlertSeverity } from '@ocso/alerts';
+import { evaluationWindow, type AlertKind, type AlertSeverity, type DestinationEventRouting } from '@ocso/alerts';
 import { alertRules, uuidv7, type Db } from '@ocso/db';
 import type { QueueAdapter } from '@ocso/queue';
 import { systemActor } from '../../shared/context.js';
@@ -19,6 +19,8 @@ export interface AlertEngineMetrics {
 export interface AlertEngineOptions {
   db: Db;
   queue: QueueAdapter;
+  /** The alert delivery registry: which destination kinds receive which lifecycle events. */
+  destinations: DestinationEventRouting;
   evaluators?: EvaluatorRegistry | undefined;
   /** SQS mode: queue driver stats for queue_age_above (Postgres mode reads the jobs table). */
   queueStats?: QueueStatsFn | undefined;
@@ -104,7 +106,7 @@ export class AlertEngine {
       rule,
       queueStats: this.options.queueStats,
     });
-    return this.options.db.transaction((tx) => applyObservations(tx, actor, rule, evaluator, observations, now));
+    return this.options.db.transaction((tx) => applyObservations(tx, actor, rule, evaluator, observations, now, this.options.destinations));
   }
 }
 

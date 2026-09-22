@@ -12,7 +12,6 @@ import { ControlBanner, type DialogKind } from './control-banner';
 import { ResolveDialog, ReturnToAiDialog, TransferDialog } from './control-dialogs';
 import { ConversationHeader } from './conversation-header';
 import { CustomerRail } from './customer-rail';
-import { channelLabel } from './lib/channel';
 import { controlView, type ControlView } from './lib/control';
 import { useConversationTags } from './lib/use-conversation-tags';
 import { useActionRunner } from './lib/use-action';
@@ -32,6 +31,15 @@ export interface ConversationClientProps {
   copilot: CopilotState;
   transferQueues: Option[];
   transferUsers: Option[];
+  /** The conversation's channel as its kind describes it (GET /v1/channels/kinds). */
+  channelInfo: ChannelInfo;
+}
+
+export interface ChannelInfo {
+  /** The network's name ("WhatsApp"), else the channel's configured name. */
+  label: string;
+  /** Set when the kind supports message templates; `reviewer` approves them. */
+  templates: { reviewer: string } | null;
 }
 
 /**
@@ -109,7 +117,7 @@ export function ConversationClient(props: ConversationClientProps) {
 
   const knownName = detail.customer.name ?? props.customer?.displayName ?? null;
   const customerName = knownName ? firstName(knownName) : 'the customer';
-  const channel = channelLabel(detail.channel?.kind, detail.channel?.name);
+  const channel = props.channelInfo.label;
   const customerTurns = timeline.filter((i) => i.kind === 'message' && i.actorType === 'CUSTOMER').length;
   const passedNotes = timeline.filter((i) => i.kind === 'note' && i.passToAgent).length;
   const canTransfer = view.actions.includes('transfer') && (props.transferQueues.length > 0 || props.transferUsers.length > 0);
@@ -119,6 +127,7 @@ export function ConversationClient(props: ConversationClientProps) {
       <section className="center" aria-label="Conversation">
         <ConversationHeader
           detail={detail}
+          channelLabel={channel}
           externalRef={props.customer?.externalRef ?? null}
           meId={me.id}
           timeZone={timeZone}
@@ -146,12 +155,13 @@ export function ConversationClient(props: ConversationClientProps) {
             copilot={props.copilot}
             tools={props.tools.available}
             can={{ reply: perms.has(Permission.CONVERSATIONS_REPLY), note: perms.has(Permission.CONVERSATIONS_NOTE), runTools: perms.has(Permission.TOOLS_EXECUTE_HUMAN) }}
-            replyWindow={detail.whatsappWindow}
+            replyWindow={detail.sessionWindow}
             channelId={detail.channel?.id ?? null}
+            templates={props.channelInfo.templates}
             renderedAt={props.renderedAt}
           />
         ) : (
-          <Locked detail={detail} view={view} live={live} customerName={customerName} canReply={perms.has(Permission.CONVERSATIONS_REPLY)} />
+          <Locked detail={detail} view={view} live={live} customerName={customerName} canReply={perms.has(Permission.CONVERSATIONS_REPLY)} templates={props.channelInfo.templates} />
         )}
       </section>
       <CustomerRail detail={detail} customer={props.customer} timeline={timeline} tools={props.tools} meId={me.id} timeZone={timeZone} tags={tags} canTag={canTag} />
@@ -167,13 +177,28 @@ export function ConversationClient(props: ConversationClientProps) {
 
 /**
  * Locked composer (design/01): why this human cannot write, and the one
- * action that changes that. A resolved WhatsApp conversation can also be
- * reopened by sending an approved template (reopen-and-send, docs/09 §4).
+ * action that changes that. A resolved conversation on a channel with
+ * message templates can also be reopened by sending an approved template
+ * (reopen-and-send, docs/09 §4).
  */
-function Locked({ detail, view, live, customerName, canReply }: { detail: ConversationDetail; view: ControlView; live: string; customerName: string; canReply: boolean }) {
+function Locked({
+  detail,
+  view,
+  live,
+  customerName,
+  canReply,
+  templates,
+}: {
+  detail: ConversationDetail;
+  view: ControlView;
+  live: string;
+  customerName: string;
+  canReply: boolean;
+  templates: ChannelInfo['templates'];
+}) {
   const { pending, error, run } = useActionRunner();
   const [withTemplate, setWithTemplate] = useState(false);
-  const templateReopen = detail.controlState === 'RESOLVED' && detail.whatsappWindow !== null && detail.channel !== null && canReply && view.actions.includes('reopen');
+  const templateReopen = detail.controlState === 'RESOLVED' && templates !== null && detail.channel !== null && canReply && view.actions.includes('reopen');
   const agent = detail.agent.name;
   const cmd = (c: 'claim' | 'accept' | 'take-over' | 'cancel-return' | 'reopen', label: string) =>
     view.actions.includes(c) ? { label, onClick: () => void run(() => controlAction(detail.id, c)), disabled: pending } : null;
@@ -221,7 +246,7 @@ function Locked({ detail, view, live, customerName, canReply }: { detail: Conver
               Cancel
             </button>
           </div>
-          <TemplateComposer conversationId={detail.id} channelId={detail.channel.id} customerName={customerName} reopen onSent={() => setWithTemplate(false)} />
+          <TemplateComposer conversationId={detail.id} channelId={detail.channel.id} customerName={customerName} reopen reviewer={templates?.reviewer} onSent={() => setWithTemplate(false)} />
         </div>
       ) : (
         <LockedBar

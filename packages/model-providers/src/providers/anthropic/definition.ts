@@ -1,5 +1,6 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { z } from 'zod';
+import { liteLlmKey, modelsDevKey } from '../../catalog/mapping.js';
 import { createAiSdkAdapter } from '../../core/adapter.js';
 import { listAnthropicModels } from '../../discovery/anthropic.js';
 import { listContext } from '../../discovery/context.js';
@@ -12,6 +13,7 @@ import {
   type ProviderDefinition,
 } from '../definition.js';
 import { anthropicCachePlan } from '../shared/cache-plans.js';
+import { CACHE_CONTROL_WORDING, describePromptCaching } from '../shared/caching-description.js';
 import { claudeCapabilities } from '../shared/model-families.js';
 import { fetchOption } from '../shared/sdk-helpers.js';
 
@@ -36,11 +38,20 @@ const DEFAULT_HEALTH_MODEL = 'claude-haiku-4-5';
 export const anthropicProvider: ProviderDefinition<AnthropicSettings, AnthropicCredentials> = {
   kind: 'ANTHROPIC',
   label: 'Anthropic API',
+  mark: 'ANT',
+  cachingSummary: 'explicit cache_control breakpoints',
   devOnly: false,
   settingsSchema,
   credentialsSchema,
+  // The API model id, unchanged: a dated snapshot is priced only when the catalog lists that exact id.
+  catalog: {
+    providers: { 'models.dev': ['anthropic'], litellm: ['anthropic'] },
+    listingProvider: 'anthropic',
+    candidates: (model) => [modelsDevKey('anthropic', model), liteLlmKey('anthropic', model)],
+  },
   capabilities: (model, settings) => withOverrides(claudeCapabilities(model), model, settings.capabilityOverrides),
   providerOptions: (_model, request) => anthropicCachePlan(request),
+  describeCaching: (model, settings) => describePromptCaching(anthropicProvider.capabilities(model, settings), CACHE_CONTROL_WORDING),
   create(config, deps) {
     const { settings, credentials } = parseProviderConfig(anthropicProvider, config);
     const anthropic = createAnthropic({

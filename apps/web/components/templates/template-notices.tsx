@@ -8,22 +8,22 @@ import '@/app/styles/templates.css';
 
 /**
  * Review results of the templates this person submitted, wherever they are
- * in OCSO (docs/07 §3): WhatsApp decides minutes to hours later, so the
+ * in OCSO (docs/07 §3): the provider decides minutes to hours later, so the
  * result is announced in-app instead of waiting on the templates page.
  */
 export function TemplateNotices({ meId }: { meId: string }) {
   const [notices, setNotices] = useState<TemplateNotice[]>([]);
   useRealtime({
-    types: ['whatsapp_template.status_changed'],
+    types: ['message_template.status_changed'],
     onEvent: (event) => {
-      if (event.type !== 'whatsapp_template.status_changed') return;
+      if (event.type !== 'message_template.status_changed') return;
       const notice = templateNotice(event.id, event.payload, meId);
       if (notice) setNotices((current) => [...current.filter((n) => n.id !== notice.id).slice(-2), notice]);
     },
   });
   if (!notices.length) return null;
   return (
-    <div className="tpl-notices" role="status" aria-live="polite" aria-label="WhatsApp template updates">
+    <div className="tpl-notices" role="status" aria-live="polite" aria-label="Message template updates">
       {notices.map((n) => (
         <div key={n.id} className={`alert ${n.tone === 'good' ? '' : n.tone}`}>
           <span>

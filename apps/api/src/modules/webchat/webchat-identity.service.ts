@@ -1,16 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, desc, eq, or } from 'drizzle-orm';
 import { ChannelRuntime } from '@ocso/agent-runtime';
-import {
-  identifyToken,
-  resolveWebChatConfig,
-  type ChannelAdapter,
-  type ChannelRuntimeConfig,
-  type WebChatIdentity,
-} from '@ocso/channels';
-import { DomainError, notFound } from '@ocso/domain';
+import type { ChannelAdapter, ChannelRegistry, ChannelRuntimeConfig, EmbeddedChat, EmbedVisitor } from '@ocso/channels';
+import { notFound } from '@ocso/domain';
 import { channels, conversations, customerIdentities, virtualAgents, type Db } from '@ocso/db';
-import { DB } from '../../infrastructure/tokens.js';
+import { CHANNEL_REGISTRY, DB } from '../../infrastructure/tokens.js';
 
 export interface VisitorConversation {
   id: string;
@@ -22,22 +16,30 @@ export interface VisitorConversation {
 
 export interface WebChatContext {
   adapter: ChannelAdapter;
+  /** The kind's widget protocol (visitor tokens, identity, widget settings). */
+  embed: EmbeddedChat;
   config: ChannelRuntimeConfig;
   row: typeof channels.$inferSelect;
 }
 
-/** Resolves web-chat channels by public key and visitors to their conversation. */
+/**
+ * Resolves embeddable channels by public key and visitors to their
+ * conversation. Any kind whose descriptor is `embeddable` is served by the
+ * public widget API; the adapter's `embed` hooks do the kind-specific part.
+ */
 @Injectable()
 export class WebChatIdentityService {
   constructor(
     @Inject(DB) private readonly db: Db,
     @Inject(ChannelRuntime) private readonly runtime: ChannelRuntime,
+    @Inject(CHANNEL_REGISTRY) private readonly registry: ChannelRegistry,
   ) {}
 
   async channel(publicKey: string): Promise<WebChatContext> {
     const [row] = await this.db.select({ id: channels.id, kind: channels.kind, status: channels.status }).from(channels).where(eq(channels.publicKey, publicKey));
-    if (!row || row.kind !== 'WEBCHAT' || row.status !== 'ACTIVE') throw notFound('channel', publicKey);
-    return this.runtime.load(row.id);
+    const embed = row ? this.registry.embed(row.kind) : null;
+    if (!row || !embed || row.status !== 'ACTIVE') throw notFound('channel', publicKey);
+    return { ...(await this.runtime.load(row.id)), embed };
   }
 
   /** Name of the channel's default virtual agent (the assistant the customer talks to). */
@@ -47,14 +49,12 @@ export class WebChatIdentityService {
     return row?.name ?? null;
   }
 
-  identify(ctx: WebChatContext, authorization: string | undefined): WebChatIdentity {
-    const token = /^Bearer\s+(\S+)$/i.exec(authorization ?? '')?.[1];
-    if (!token) throw new DomainError('authentication', 'webchat_token_missing', 'Visitor token required');
-    return identifyToken(token, resolveWebChatConfig(ctx.config), new Date());
+  identify(ctx: WebChatContext, authorization: string | undefined): EmbedVisitor {
+    return ctx.embed.identify(ctx.config, /^Bearer\s+(\S+)$/i.exec(authorization ?? '')?.[1]);
   }
 
   /** The visitor's latest conversation on this channel, if any. */
-  async conversationFor(channelId: string, identity: WebChatIdentity): Promise<VisitorConversation | null> {
+  async conversationFor(channelId: string, identity: EmbedVisitor): Promise<VisitorConversation | null> {
     const customerId = await this.customerIdFor(identity);
     if (!customerId) return null;
     const [row] = await this.db
@@ -79,7 +79,7 @@ export class WebChatIdentityService {
    * customer, else an alternate's — so a guest who is then identified by the
    * host site keeps seeing the conversation their next message will join.
    */
-  async customerIdFor(identity: WebChatIdentity): Promise<string | null> {
+  async customerIdFor(identity: EmbedVisitor): Promise<string | null> {
     const claims = [{ kind: identity.identityKind, value: identity.identityValue }, ...identity.alternateIdentities];
     const rows = await this.db
       .select({ kind: customerIdentities.kind, value: customerIdentities.value, customerId: customerIdentities.customerId })

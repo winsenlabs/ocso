@@ -14,14 +14,6 @@ export const STATE_CHIP: Record<string, { tone: StatusTone; label: string }> = {
 export const DELIVERY_TONE: Record<string, StatusTone> = { SENT: 'good', PENDING: 'muted', FAILED: 'danger', SKIPPED: 'muted' };
 
 export const ROLE_LABEL: Record<string, string> = { PLATFORM_TECH_ADMIN: 'Tech Admin', CS_LEAD: 'CS Lead', CS_EXEC: 'CS Exec' };
-export const DESTINATION_LABEL: Record<string, string> = {
-  IN_APP: 'In-app',
-  EMAIL: 'Email (SMTP)',
-  SLACK: 'Slack',
-  TEAMS: 'Microsoft Teams',
-  WEBHOOK: 'Webhook (HMAC-signed)',
-  PAGERDUTY: 'PagerDuty',
-};
 
 export type AlertTab = 'inbox' | 'rules' | 'destinations';
 export type StatusFilter = 'UNRESOLVED' | 'OPEN' | 'ACKNOWLEDGED' | 'RESOLVED' | 'ALL';

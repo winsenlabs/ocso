@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, ne, or, isNull, sql, type SQL } from 'drizzle-orm';
-import type { AlertKind } from '@ocso/alerts';
+import type { AlertKind, DestinationEventRouting } from '@ocso/alerts';
 import type { Principal, Role } from '@ocso/auth';
 import { alertRules, alerts, notificationDestinations, uuidv7, virtualAgents, type Db, type DbOrTx } from '@ocso/db';
 import { forbidden, notFound, validation } from '@ocso/domain';
@@ -39,6 +39,8 @@ export class AlertRuleService {
   constructor(
     private readonly db: Db,
     private readonly queue: QueueAdapter,
+    /** The alert delivery registry (deleting a rule resolves its alerts and notifies destinations). */
+    private readonly destinations: DestinationEventRouting,
     evaluators?: EvaluatorRegistry,
   ) {
     this.evaluators = evaluators ?? createDefaultEvaluatorRegistry();
@@ -134,6 +136,7 @@ export class AlertRuleService {
             resolvedBy: principal.userId,
             resolution: 'Resolved: alert rule deleted',
             destinationIds: rule.destinationIds,
+            routing: this.destinations,
             auditAction: 'alert.rule_deleted',
             auditSummary: `Resolved alert "${alert.title}" because its rule was deleted`,
           })),

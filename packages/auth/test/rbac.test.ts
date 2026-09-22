@@ -61,9 +61,9 @@ describe('role permission matrix', () => {
     [Role.PLATFORM_TECH_ADMIN, P.CONVERSATIONS_READ, false],
     [Role.PLATFORM_TECH_ADMIN, P.PROMPTS_EDIT, false],
     [Role.PLATFORM_TECH_ADMIN, P.ANALYTICS_BUSINESS_READ, false],
-    [Role.CS_LEAD, P.WHATSAPP_TEMPLATES_MANAGE, true],
-    [Role.PLATFORM_TECH_ADMIN, P.WHATSAPP_TEMPLATES_MANAGE, true],
-    [Role.CS_EXEC, P.WHATSAPP_TEMPLATES_MANAGE, false],
+    [Role.CS_LEAD, P.MESSAGE_TEMPLATES_MANAGE, true],
+    [Role.PLATFORM_TECH_ADMIN, P.MESSAGE_TEMPLATES_MANAGE, true],
+    [Role.CS_EXEC, P.MESSAGE_TEMPLATES_MANAGE, false],
   ] as const)('%s → %s = %s', (role, permission, expected) => {
     expect(can(principal(role), permission)).toBe(expected);
   });

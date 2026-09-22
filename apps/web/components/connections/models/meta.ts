@@ -1,32 +1,25 @@
 import type { StatusTone } from '../../ui/status-chip';
-import type { Capabilities, CapabilityKey, Provider, ProviderKind } from '../../../lib/api/models';
+import type { CapabilityKey, PromptCaching, Provider, ProviderKindView } from '../../../lib/api/models';
 
 /**
  * Presentation of model providers and profiles (design/04). Pure and
- * client-safe; the caching copy restates ADR-006's per-provider table.
+ * client-safe. Nothing here names a provider kind: marks, labels and caching
+ * wording come from the provider definitions through the API
+ * (GET /v1/model-providers/kinds, and each target's `caching`).
  */
 
-/** Short mono logo text per kind (never a vendor logo). */
-export const KIND_LOGO: Readonly<Record<ProviderKind, string>> = {
-  BEDROCK: 'AWS',
-  VERTEX: 'GCP',
-  FOUNDRY: 'MSF',
-  OPENAI: 'OAI',
-  ANTHROPIC: 'ANT',
-  SARVAM: 'SVM',
-  DEV_SCRIPTED: 'DEV',
-};
+/**
+ * Short mono mark for a kind (never a vendor logo): the definition's own, else
+ * derived from the kind, so a kind this build has never seen still renders.
+ */
+export function providerMark(kind: string, view?: Pick<ProviderKindView, 'mark'> | undefined): string {
+  if (view?.mark) return view.mark;
+  const letters = kind.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+  return letters.slice(0, 3) || '?';
+}
 
-/** What each adapter does for prompt caching (ADR-006), shown on provider cards. */
-export const KIND_CACHING: Readonly<Record<ProviderKind, string>> = {
-  BEDROCK: 'cachePoint breakpoints (Claude, Nova)',
-  VERTEX: 'implicit prefix (Gemini) · cache_control (Claude)',
-  FOUNDRY: 'prompt cache key (OpenAI) · cache_control (Claude)',
-  OPENAI: 'automatic · prompt cache key',
-  ANTHROPIC: 'explicit cache_control breakpoints',
-  SARVAM: 'no documented control · unverified',
-  DEV_SCRIPTED: 'simulated explicit breakpoints',
-};
+/** The kind's one-line caching summary for provider cards; unknown kinds say so. */
+export const cachingSummary = (view: Pick<ProviderKindView, 'cachingSummary'> | undefined): string => view?.cachingSummary ?? 'not described by this deployment';
 
 export const CAPABILITY_LABELS: Readonly<Record<CapabilityKey, string>> = {
   imageInput: 'Image input',
@@ -59,62 +52,24 @@ export function providerTone(p: Pick<Provider, 'enabled' | 'available' | 'status
   return undefined;
 }
 
-export type CachingMode = 'explicit' | 'key-based' | 'implicit' | 'unverified' | 'none' | 'unknown';
+/** explicit · key-based · implicit · unverified · none (as the provider describes it), or unknown when nothing describes it. */
+export type CachingMode = string;
 
-const ANTHROPIC_FAMILY: ReadonlySet<ProviderKind> = new Set(['ANTHROPIC', 'VERTEX', 'FOUNDRY']);
-const KEY_BASED: ReadonlySet<ProviderKind> = new Set(['OPENAI', 'FOUNDRY']);
-
-/** How one target caches (ADR-006): explicit breakpoints, implicit/automatic, or key-based routing. */
-export function cachingMode(kind: ProviderKind | null, caps: Capabilities | null): CachingMode {
-  if (!kind || !caps) return 'unknown';
-  switch (caps.promptCaching) {
-    case 'EXPLICIT':
-      return 'explicit';
-    case 'AUTOMATIC':
-      return KEY_BASED.has(kind) ? 'key-based' : 'implicit';
-    case 'UNVERIFIED':
-      return 'unverified';
-    default:
-      return 'none';
-  }
-}
+/**
+ * How one target caches (ADR-006), from the provider's own description; null
+ * when its kind is unavailable here or its stored settings are invalid.
+ */
+export const cachingMode = (caching: PromptCaching | null): CachingMode => caching?.mode ?? 'unknown';
 
 /** The mechanism the adapter uses for this target. */
-export function cachingMechanism(kind: ProviderKind | null, caps: Capabilities | null): string {
-  const mode = cachingMode(kind, caps);
-  if (mode === 'unknown') return 'unknown — provider kind unavailable or its settings are invalid';
-  if (mode === 'none') return 'not supported for this model';
-  if (mode === 'unverified') return kind === 'SARVAM' ? 'no documented control · cached tokens recorded if reported' : 'unverified · no cache directives sent';
-  if (mode === 'explicit') {
-    if (kind === 'BEDROCK') return 'explicit cachePoint breakpoints (≤ 4)';
-    if (kind === 'DEV_SCRIPTED') return 'simulated explicit breakpoints (≤ 4)';
-    return ANTHROPIC_FAMILY.has(kind!) ? 'explicit cache_control breakpoints (≤ 4)' : 'explicit breakpoints (≤ 4)';
-  }
-  if (mode === 'key-based') {
-    return caps!.reportsCacheWrites ? 'automatic + prompt cache key · explicit breakpoints (GPT-5.6+)' : 'automatic + prompt cache key';
-  }
-  return kind === 'VERTEX' ? 'implicit prefix caching (stable prefix first)' : 'automatic prefix caching';
-}
+export const cachingMechanism = (caching: PromptCaching | null): string =>
+  caching?.mechanism ?? 'unknown — provider kind unavailable or its settings are invalid';
 
-/** What this profile's cache policy and TTL turn into for one target. */
-export function cacheSettingEffect(
-  kind: ProviderKind | null,
-  caps: Capabilities | null,
-  policy: 'OFF' | 'PREFIX',
-  ttl: '5m' | '1h' | null,
-): string {
+/** What this profile's cache policy and TTL turn into for one target (no TTL = the 5m default). */
+export function cacheSettingEffect(caching: PromptCaching | null, policy: 'OFF' | 'PREFIX', ttl: '5m' | '1h' | null): string {
   if (policy === 'OFF') return 'off · no cache directives sent';
-  const mode = cachingMode(kind, caps);
-  if (mode === 'unknown' || mode === 'none' || mode === 'unverified') return 'nothing sent';
-  if (mode === 'explicit') {
-    if (ttl !== '1h') return 'breakpoints · 5m TTL';
-    return kind === 'BEDROCK' ? 'breakpoints · 1h TTL on Claude 4.5+, else 5m' : 'breakpoints · 1h TTL';
-  }
-  if (mode === 'key-based') {
-    if (ttl !== '1h') return 'cache key · default retention';
-    return caps!.reportsCacheWrites ? 'cache key · 30m implicit retention' : 'cache key · 24h retention';
-  }
-  return 'stable prefix · TTL managed by the provider';
+  if (!caching) return 'nothing sent';
+  return caching.effect[ttl === '1h' ? '1h' : '5m'];
 }
 
 /** Human text for a target rejection reason from POST /v1/model-profiles/validate. */

@@ -1,5 +1,5 @@
 import { canonicalJson } from './hash.js';
-import type { CompileInput } from './types.js';
+import type { ChannelLimits, CompileInput } from './types.js';
 
 /**
  * Untrusted/dynamic data is wrapped in explicit tags and neutralized so it can
@@ -50,13 +50,34 @@ export function renderHandover(input: CompileInput): string | null {
 }
 
 export function renderConversationFrame(input: CompileInput): string {
-  return wrap(
-    'conversation',
-    [
-      `Agent: ${neutralize(input.agent.name)}`,
-      `Conversation type: ${input.agent.conversationType}`,
-      `Current channel: ${neutralize(input.channel.label)} (${input.channel.kind})`,
-      `Today: ${input.today}`,
-    ].join('\n'),
-  );
+  return wrap('conversation', [`Agent: ${neutralize(input.agent.name)}`, `Conversation type: ${input.agent.conversationType}`, `Today: ${input.today}`].join('\n'));
+}
+
+const FORMATTING: Readonly<Record<ChannelLimits['markdown'], string>> = {
+  none: 'plain text only — no markdown of any kind',
+  basic: 'bold, italic and simple lists only — no headings, tables, code blocks or [text](links)',
+  commonmark: 'Markdown (short paragraphs; no tables)',
+};
+
+const MEDIA: ReadonlyArray<[string, string]> = [
+  ['IMAGE', 'images'],
+  ['AUDIO', 'audio'],
+  ['VIDEO', 'video'],
+  ['DOCUMENT', 'documents'],
+  ['LOCATION', 'locations'],
+];
+
+/** The current channel and its adapter-declared limits (replaces per-channel rules in business prompts). */
+export function renderChannel(input: CompileInput): string | null {
+  const channel = input.channel;
+  if (!channel) return null;
+  const lines = [`Current channel: ${neutralize(channel.label)} (${neutralize(channel.kind)})`];
+  const limits = channel.limits;
+  if (limits) {
+    lines.push(`Message length: at most ${limits.maxTextLength} characters per message; longer replies arrive as several messages, so stay well under it.`);
+    lines.push(`Formatting: ${FORMATTING[limits.markdown]}.`);
+    const media = MEDIA.filter(([type]) => limits.outboundParts.includes(type)).map(([, label]) => label);
+    lines.push(`The channel can deliver to the customer: text${media.length ? `, ${media.join(', ')}` : ' only'}.`);
+  }
+  return wrap('ocso_channel', lines.join('\n'));
 }

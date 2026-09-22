@@ -11,26 +11,21 @@ What you will touch:
 
 | File | Change |
 |---|---|
-| `packages/channels/src/contract/types.ts` | add `'TELEGRAM'` to `CHANNEL_KINDS` |
-| `packages/db/src/schema/customers.ts` | add `'TELEGRAM'` to the `channels.kind` `$type` union (TypeScript only, no migration) |
 | `packages/channels/src/telegram/*` | the adapter (new) |
 | `packages/channels/src/index.ts` | export it |
-| `packages/bootstrap/src/channels.ts` | register it |
+| `packages/bootstrap/src/first-party.ts` | one line: add `createTelegramAdapter` to the `@ocso/channels` entry |
 | `packages/channels/test/*` | tests and fixtures (new) |
 | `docs/operations/setup-guide.md`, `packages/channels/README.md` | operator setup and adapter notes |
 
-What you do not touch: the API routes, the ingress service, the agent runtime, the database schema,
-the queue, or the channel form in the web app. They are generic.
+What you do not touch: the API, the ingress service, the agent runtime, the prompt compiler, the
+database (the `channels.kind` column is `text` and nothing enumerates kinds), the queue, or the web app.
+The "Add channel" form, the channel card, the inbox badge, the setup steps, the Webhooks list and the
+prompt's channel block all come from what the adapter declares.
 
-## 1. Add the kind
+## 1. Pick the kind
 
-```ts
-// packages/channels/src/contract/types.ts
-export const CHANNEL_KINDS = ['WHATSAPP', 'TWILIO_WHATSAPP', 'WEBCHAT', 'TELEGRAM', 'SMS', 'RCS', 'VOICE', 'CUSTOM_APP'] as const;
-```
-
-Update the matching `$type<…>` union on `channels.kind` in `packages/db/src/schema/customers.ts`. The
-column is `text`, so existing databases accept the new value without a migration.
+A kind is an upper-snake-case string: `'TELEGRAM'`. There is no list to add it to; the registry
+accepts it when the adapter is registered, and refuses a malformed or duplicate one at start-up.
 
 ## 2. Settings and secrets
 
@@ -57,9 +52,10 @@ export function validateTelegramConfig(settings: unknown, secrets: Readonly<Reco
 
 ## 3. Descriptor and capabilities
 
-The descriptor drives the "Add channel" form and the webhook URL. Setting `inboundWebhook: true` with
-`webhookSegment: 'telegram'` makes the registry route `/channels/telegram/<publicKey>/webhook` to this
-adapter.
+The descriptor is everything OCSO shows about the kind: the "Add channel" form, the channel card, the
+badge in the inbox and analytics, the steps after saving, the webhook URL and the Webhooks list.
+Setting `inboundWebhook: true` with `webhookSegment: 'telegram'` makes the registry route
+`/channels/telegram/<publicKey>/webhook` to this adapter.
 
 ```ts
 // packages/channels/src/telegram/descriptor.ts
@@ -67,14 +63,20 @@ export const TELEGRAM_DESCRIPTOR: ChannelKindDescriptor = {
   kind: 'TELEGRAM',
   label: 'Telegram bot',
   description: 'Customers message your Telegram bot; Telegram posts updates to the OCSO webhook.',
+  mark: { code: 'TG', name: 'Telegram' },
   settingsSchema: z.toJSONSchema(TelegramSettings, { io: 'input' }) as Record<string, unknown>,
   secrets: [
     { key: 'botToken', label: 'Bot token', required: true, hint: 'From @BotFather.' },
     { key: 'webhookSecret', label: 'Webhook secret', required: true, generate: 'client',
       hint: 'Pass the same value as secret_token when you call setWebhook.' },
   ],
+  setupSteps: [
+    'Call setWebhook on the Bot API with url = the webhook URL above and secret_token = the webhook secret you saved.',
+    'Send your bot a message; the channel card shows the last inbound time.',
+  ],
   inboundWebhook: true,
   webhookSegment: 'telegram',
+  webhookEvents: 'messages',
   embeddable: false,
 };
 
@@ -143,6 +145,10 @@ export function parseTelegramUpdate(rawBody: Buffer | null, now: () => Date): In
 `TelegramUpdate` is a zod schema of the fields you read. Anything you do not handle (edited messages,
 callback queries, group chats) is counted in `ignored`, never thrown.
 
+`telegram_user` values are numeric ids, which the generic list masking would take for phone numbers.
+Implement `displayIdentity(identityKind, value)` on the adapter to show them your way (for example
+`telegram · …4321`), returning `null` for identity kinds that are not yours.
+
 ## 5. Media, render and send
 
 `fetchMedia` downloads what `parseInbound` marked `PENDING`. The core then re-checks the bytes against
@@ -164,7 +170,7 @@ export function renderTelegram(parts: readonly InteractionPart[]): RenderedOutbo
 }
 
 // packages/channels/src/telegram/send.ts
-export async function sendTelegram(target: OutboundTarget, message: RenderedOutbound, ctx: { config: ChannelRuntimeConfig; fetch: typeof fetch }): Promise<SendResult> {
+export async function sendTelegram(target: OutboundTarget, message: RenderedOutbound, ctx: { config: ChannelRuntimeConfig; fetch: ChannelFetch }): Promise<SendResult> {
   const settings = TelegramSettings.parse(ctx.config.settings);
   const token = ctx.config.secrets['botToken'] ?? '';
   const res = await ctx.fetch(`${settings.apiBaseUrl}/bot${token}/sendMessage`, {
@@ -184,7 +190,9 @@ export async function sendTelegram(target: OutboundTarget, message: RenderedOutb
 ```
 
 The bot token is part of the URL path here, so never put the URL in an error message. `redactSecrets`
-masks the token if the provider echoes it.
+masks the token if the provider echoes it. `ctx.fetch` is the `deps.fetch` your factory received: the
+host's SSRF-guarded egress, which reaches `api.telegram.org` and refuses internal addresses unless the
+Tech Admin allowlisted them. Never call the global `fetch`.
 
 Optionally implement `checkConnection` with read-only calls (Telegram's `getMe` and `getWebhookInfo`) to
 get a **Test connection** button.
@@ -199,18 +207,20 @@ export { TELEGRAM_DESCRIPTOR } from './descriptor.js';
 // packages/channels/src/index.ts
 export * from './telegram/index.js';
 
-// packages/bootstrap/src/channels.ts
-return new ChannelRegistry()
-  .register(createTwilioWhatsAppAdapter(adapterDeps))
-  .register(createWhatsAppAdapter(adapterDeps))
-  .register(createWebChatAdapter(adapterDeps))
-  .register(createTelegramAdapter(adapterDeps));
+// packages/bootstrap/src/first-party.ts — the one registration line
+{ name: '@ocso/channels', channels: [createTwilioWhatsAppAdapter, createWhatsAppAdapter, createWebChatAdapter, createTelegramAdapter] },
 ```
 
 `adapter.ts` is the class and factory from the skeleton in [channels.md](channels.md#skeleton),
-calling the functions above. Both the api and the worker pick the adapter up from this one registry.
+calling the functions above; the factory takes `{ fetch, now }` and falls back to `NO_NETWORK`, never to
+the global `fetch`. The api, the worker and the seed pick the adapter up from the one composition root.
 After a rebuild, **Connections & models → Channels → Add channel** lists "Telegram bot", renders its
-settings and secret fields, and shows the webhook URL after saving.
+settings and secret fields, and after saving shows the webhook URL and your setup steps; conversations
+carry the `TG` badge.
+
+Templates and the widget are opt-in: implement the template methods and describe `templates` for
+provider-reviewed message templates (the Message templates page and the composer's Template mode
+follow), or set `embeddable: true` with `embed` hooks to serve customers through OCSO's widget.
 
 ## 7. Tests and docs
 
@@ -220,14 +230,11 @@ settings and secret fields, and shows the webhook URL after saving.
   the `twilio-*.test.ts` files: config validation, verification (missing, wrong and right secret token),
   inbound parsing (text, photo, ignored updates), render (chunking at 4096), send (success, 429, 400,
   token redaction) with a fake `fetch`.
+- Add a case to `packages/channels/test/registry.test.ts` if your descriptor uses something new.
 - For an end-to-end check through the real API, copy `apps/api/test/int/twilio-whatsapp.int.test.ts`
-  and point the adapter's `apiBaseUrl` at a local stub.
+  and point the adapter's `apiBaseUrl` at a local stub. Allowlist the stub's host first
+  (`PATCH /v1/settings/deployment { egressAllowedInternalHosts: ['127.0.0.1'] }`): the egress guard
+  refuses loopback otherwise.
 - Run `pnpm lint`, `pnpm typecheck` and `pnpm test`.
 - Document the operator steps in `docs/operations/setup-guide.md` §3, including the `setWebhook` call
   with `url` = the webhook URL OCSO shows and `secret_token` = the webhook secret.
-
-Optional polish in the web app: a two-letter channel mark and label in
-`apps/web/components/workspace/lib/channel.ts` and `apps/web/lib/channels.ts`, and provider-console
-steps in `apps/web/components/connections/channels/provider-steps.tsx`. Without them the UI uses the
-descriptor's label and a generic setup note. These maps are a known leak in the plugin boundary (see
-[README.md](README.md#where-the-boundary-leaks-today)).

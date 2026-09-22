@@ -7,8 +7,8 @@ import { agentsOwnedBy } from '../agents/access.js';
 export type ChannelRow = typeof channels.$inferSelect;
 
 /**
- * Who may manage a channel's WhatsApp templates (docs/09 §6): templates are
- * business content, so `whatsapp_templates.manage` (CS Lead, Tech Admin).
+ * Who may manage a channel's message templates (docs/09 §6): templates are
+ * business content, so `message_templates.manage` (CS Lead, Tech Admin).
  * A Tech Admin (channels.manage) manages every channel; a CS Lead only
  * channels used by a virtual agent one of their teams owns (the channel's
  * default agent or an agent the channel is attached to). Out of scope is
@@ -21,7 +21,7 @@ export function manageableChannelsSql(principal: Principal) {
 }
 
 export async function loadManageableChannel(db: DbOrTx, principal: Principal, channelId: string): Promise<ChannelRow> {
-  assertCan(principal, Permission.WHATSAPP_TEMPLATES_MANAGE);
+  assertCan(principal, Permission.MESSAGE_TEMPLATES_MANAGE);
   const scope = manageableChannelsSql(principal);
   const [row] = await db
     .select()

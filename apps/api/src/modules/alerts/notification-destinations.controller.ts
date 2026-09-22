@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Patch, Post } f
 import { Permission } from '@ocso/auth';
 import { DestinationInput, DestinationPatch, NotificationDestinationService, type ActorContext } from '@ocso/application';
 import { z } from 'zod';
-import { Actor, Authenticated, RequirePermission } from '../../common/decorators.js';
+import { Actor, Authenticated, RequireAnyPermission, RequirePermission } from '../../common/decorators.js';
 
 /** Alert delivery targets. Secrets are write-only: accepted on create/update, never returned. */
 @Controller('v1/notification-destinations')
@@ -14,6 +14,16 @@ export class NotificationDestinationsController {
   @Authenticated()
   list(@Actor() actor: ActorContext) {
     return this.destinations.list(actor);
+  }
+
+  /**
+   * Registered destination kinds: label, config form (JSON Schema), secret
+   * field and the lifecycle events each receives. Same audience as the list.
+   */
+  @Get('kinds')
+  @RequireAnyPermission(Permission.NOTIFICATION_DESTINATIONS_MANAGE, Permission.ALERT_RULES_TECHNICAL_MANAGE, Permission.ALERT_RULES_BUSINESS_MANAGE)
+  kinds(@Actor() actor: ActorContext) {
+    return this.destinations.kinds(actor);
   }
 
   @Get(':id')

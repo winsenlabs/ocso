@@ -38,7 +38,7 @@ afterAll(async () => {
 describe('GET /v1/settings/email', () => {
   it('shows the Tech Admin driver, from and reply-to — never the key', async () => {
     const res = await h.http().get('/v1/settings/email').set(as('admin')).expect(200);
-    expect(res.body).toEqual({ driver: 'resend', from: FROM, replyTo: 'help@meridian.test', configured: true, warnings: [] });
+    expect(res.body).toEqual({ driver: 'resend', label: 'Resend', from: FROM, replyTo: 'help@meridian.test', configured: true, warnings: [] });
     expect(JSON.stringify(res.body)).not.toContain(API_KEY);
   });
 
@@ -53,7 +53,7 @@ describe('POST /v1/settings/email/test', () => {
   it('sends through Resend with the configured sender and records an audit event', async () => {
     resendCalls.length = 0;
     const res = await h.http().post('/v1/settings/email/test').set(as('admin')).send({ to: 'tarun@meridian.test' }).expect(200);
-    expect(res.body).toEqual({ ok: true, driver: 'resend', id: 'resend-msg-1' });
+    expect(res.body).toEqual({ ok: true, driver: 'resend', label: 'Resend', delivers: true, id: 'resend-msg-1' });
     const call = resendCalls[0]!;
     expect(call.headers.get('authorization')).toBe(`Bearer ${API_KEY}`);
     expect(call.headers.get('idempotency-key')).toMatch(/^email-test\//);

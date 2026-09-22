@@ -24,6 +24,10 @@ test('Tech Admin configures providers: every kind is listed, credentials stay wr
   for (const kind of ['AWS Bedrock', 'Google Vertex AI', 'Microsoft Foundry', 'OpenAI API', 'Anthropic API', 'Sarvam AI', 'Scripted model (development only)']) {
     await expect(grid.getByRole('listitem', { name: kind, exact: true })).toContainText('not configured');
   }
+  // Mark and caching line come from the provider definition (GET /v1/model-providers/kinds), not from the web app.
+  const bedrock = grid.getByRole('listitem', { name: 'AWS Bedrock', exact: true });
+  await expect(bedrock.locator('.logo')).toHaveText('AWS');
+  await expect(bedrock).toContainText('cachePoint breakpoints (Claude, Nova)');
 
   await card(page, 'Scripted model (development only)').getByRole('link', { name: 'Configure' }).click();
   let dialog = page.getByRole('dialog', { name: 'Add model provider' });

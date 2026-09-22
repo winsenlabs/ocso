@@ -1,12 +1,12 @@
 import { and, asc, desc, eq } from 'drizzle-orm';
-import { TEMPLATE_MESSAGE_SCHEMA, TemplateMessageDataSchema, type InteractionPart } from '@ocso/domain';
+import { TemplateMessageDataSchema, isTemplateMessageSchema, type InteractionPart } from '@ocso/domain';
 import { conversations, customerIdentities, interactionParts, interactions, type Db } from '@ocso/db';
 import { customerSafeParts, type ChannelAdapter, type ChannelRuntimeConfig, type OutboundMediaResolver, type OutboundTarget, type SendResult } from '@ocso/channels';
 import type { BlobStore } from '@ocso/blob';
 import { emitEvent, lastCustomerMessageAt } from '@ocso/application';
 import type { ChannelRuntime } from './channel-runtime.js';
 
-/** Outcome code stored on the interaction when WhatsApp needs a template (same code as the API's 409). */
+/** Outcome code stored on the interaction when the channel needs a template (same code as the API's 409). */
 export const SESSION_WINDOW_CLOSED = 'session_window_closed';
 
 export type DeliveryOutcome = { kind: 'sent' | 'skipped' } | { kind: 'retry'; reason: string } | { kind: 'failed'; reason: string };
@@ -14,7 +14,7 @@ export type DeliveryOutcome = { kind: 'sent' | 'skipped' } | { kind: 'retry'; re
 /**
  * Outbound delivery (docs/07 §2, §5): only customer-safe parts reach the
  * adapter; the provider message id is recorded for delivery receipts.
- * A template message (one `ocso.whatsapp_template` part) goes through the
+ * A template message (one `ocso.message_template` part) goes through the
  * adapter's sendTemplate instead of render/send (docs/07 §3). The session
  * window is judged from the customer's last message on this channel across
  * conversations. At-least-once on crash between send and record (ADR-007).
@@ -76,7 +76,7 @@ export class DeliveryService {
 
   /** One provider call per rendered payload, or a single template send. */
   private sends(adapter: ChannelAdapter, config: ChannelRuntimeConfig, parts: InteractionPart[], target: OutboundTarget, media: OutboundMediaResolver): Array<() => Promise<SendResult>> {
-    const templatePart = parts.find((p) => p.type === 'STRUCTURED' && p.schema === TEMPLATE_MESSAGE_SCHEMA);
+    const templatePart = parts.find((p) => p.type === 'STRUCTURED' && isTemplateMessageSchema(p.schema));
     if (!templatePart || templatePart.type !== 'STRUCTURED') return adapter.render(parts, config).map((rendered) => () => adapter.send(target, rendered, config, media));
     const data = TemplateMessageDataSchema.safeParse(templatePart.data);
     const sendTemplate = adapter.sendTemplate?.bind(adapter);

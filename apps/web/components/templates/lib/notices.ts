@@ -1,6 +1,6 @@
 /**
- * In-app notice for the person who submitted a WhatsApp template when
- * WhatsApp's review result arrives (`whatsapp_template.status_changed`).
+ * In-app notice for the person who submitted a message template when the
+ * provider's review result arrives (`message_template.status_changed`).
  */
 
 export interface TemplateStatusEvent {
@@ -21,11 +21,11 @@ export interface TemplateNotice {
 }
 
 const TEXT: Readonly<Record<string, { tone: TemplateNotice['tone']; text: string }>> = {
-  APPROVED: { tone: 'good', text: 'was approved by WhatsApp — execs can now send it' },
-  REJECTED: { tone: 'error', text: 'was rejected by WhatsApp — see the reason and submit a corrected version' },
-  PAUSED: { tone: 'warn', text: 'was paused by WhatsApp after negative customer feedback' },
-  DISABLED: { tone: 'error', text: 'was disabled by WhatsApp and can no longer be sent' },
-  PENDING: { tone: 'warn', text: 'is back in WhatsApp review' },
+  APPROVED: { tone: 'good', text: 'was approved — execs can now send it' },
+  REJECTED: { tone: 'error', text: 'was rejected — see the reason and submit a corrected version' },
+  PAUSED: { tone: 'warn', text: 'was paused by the provider after negative customer feedback' },
+  DISABLED: { tone: 'error', text: 'was disabled by the provider and can no longer be sent' },
+  PENDING: { tone: 'warn', text: 'is back in review' },
 };
 
 /** A notice for the submitter only (others see the change on the templates page). */
@@ -37,6 +37,6 @@ export function templateNotice(eventId: string, event: TemplateStatusEvent, meId
     id: eventId,
     tone: known.tone,
     text: `Template ${event.name} (${event.language}) ${known.text}.`,
-    href: `/whatsapp-templates?channel=${encodeURIComponent(event.channelId)}`,
+    href: `/templates?channel=${encodeURIComponent(event.channelId)}`,
   };
 }

@@ -26,6 +26,8 @@ interface Item {
 /** In-process queue for unit tests. Same semantics as the Postgres driver, no durability. */
 export class MemoryQueue implements QueueAdapter {
   readonly driver = 'memory' as const;
+  readonly inDatabase = false;
+  readonly reportsOldestAge = true;
   private readonly items = new Map<string, Item>();
   private readonly loops = new Set<ConsumerLoop<unknown>>();
 

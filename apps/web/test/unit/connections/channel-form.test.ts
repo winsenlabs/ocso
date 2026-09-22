@@ -5,6 +5,7 @@ import { WHATSAPP_DESCRIPTOR } from '../../../../../packages/channels/src/whatsa
 import {
   buildSettings,
   embedSnippet,
+  identitySettingOf,
   inboundWebhookUrl,
   initialSettingsValues,
   randomSecret,
@@ -85,12 +86,18 @@ describe('channel API problems, secrets and next steps', () => {
     expect(randomSecret()).not.toBe(a);
   });
 
-  it('builds the webhook URL and the embed snippet', () => {
-    expect(inboundWebhookUrl('https://ocso.example.com/', { kind: 'WHATSAPP', publicKey: 'k1', webhookPath: '/channels/whatsapp/k1/webhook' })).toBe('https://ocso.example.com/channels/whatsapp/k1/webhook');
-    expect(inboundWebhookUrl('https://ocso.example.com', { kind: 'SMS', publicKey: 'k2', webhookPath: null })).toBe('https://ocso.example.com/channels/sms/k2/webhook');
-    expect(inboundWebhookUrl('https://ocso.example.com', { kind: 'TWILIO_WHATSAPP', publicKey: 'k3', webhookPath: '/channels/twilio-whatsapp/k3/webhook' })).toBe(
-      'https://ocso.example.com/channels/twilio-whatsapp/k3/webhook',
-    );
+  it('builds the webhook URL from the path the API derived from the descriptor (never from the kind), and the embed snippet', () => {
+    expect(inboundWebhookUrl('https://ocso.example.com/', { webhookPath: '/channels/whatsapp/k1/webhook' })).toBe('https://ocso.example.com/channels/whatsapp/k1/webhook');
+    expect(inboundWebhookUrl('https://ocso.example.com', { webhookPath: null })).toBeNull();
+    expect(inboundWebhookUrl('https://ocso.example.com', { webhookPath: '/channels/twilio-whatsapp/k3/webhook' })).toBe('https://ocso.example.com/channels/twilio-whatsapp/k3/webhook');
     expect(embedSnippet('https://ocso.example.com', 'abc')).toBe('<script src="https://ocso.example.com/ocso-webchat.js" data-key="abc" async></script>');
+  });
+
+  it('shows the identifying setting the descriptor names (first key with a value)', () => {
+    const setting = TWILIO_WHATSAPP_DESCRIPTOR.identitySetting ?? null;
+    expect(identitySettingOf({ messagingServiceSid: 'MG123' }, setting)).toEqual({ k: 'sender', v: 'MG123' });
+    expect(identitySettingOf({ from: 'whatsapp:+14155238886', messagingServiceSid: 'MG123' }, setting)).toEqual({ k: 'sender', v: 'whatsapp:+14155238886' });
+    expect(identitySettingOf({}, setting)).toBeNull();
+    expect(identitySettingOf({ from: 'x' }, null)).toBeNull();
   });
 });

@@ -4,6 +4,7 @@ import { channels, conversations, customers, evaluationResults, evaluationRuns, 
 import { compilePrompt, type HistoryEntry, type PromptComponents } from '@ocso/prompt-compiler';
 import { sanitizeForAudit } from '@ocso/tools';
 import type { ModelGateway } from '../model/gateway.js';
+import { basicChannelContext, type ChannelContextResolver } from '../context/channel-context.js';
 import { loadHistory } from '../context/history.js';
 import { HANDOFF_TOOL, isBuiltin } from '../tools/builtins.js';
 import { loadAgentToolCatalog, type AgentToolCatalog } from '../tools/catalog.js';
@@ -60,7 +61,7 @@ export class EvaluationService {
   constructor(
     private readonly db: Db,
     private readonly gateway: ModelGateway,
-    private readonly options: { historyWindow?: number } = {},
+    private readonly options: { historyWindow?: number; channelContext?: ChannelContextResolver | undefined } = {},
   ) {}
 
   async run(evaluationRunId: string, correlationId = `evaluation:${evaluationRunId}`): Promise<EvaluationOutcome> {
@@ -148,7 +149,7 @@ export class EvaluationService {
       this.db.insert(evaluationResults).values({ id: uuidv7(), runId, conversationId: c.conversationId, seq: c.seq, customerText, baselineText: c.baselineText, ...values });
     try {
       const [ctx] = await this.db
-        .select({ channelKind: channels.kind, channelName: channels.name, customerId: customers.id, displayName: customers.displayName, language: customers.language, attributes: customers.attributes })
+        .select({ channel: channels, customerId: customers.id, displayName: customers.displayName, language: customers.language, attributes: customers.attributes })
         .from(conversations)
         .innerJoin(customers, eq(customers.id, conversations.customerId))
         .leftJoin(channels, eq(channels.id, conversations.channelId))
@@ -157,7 +158,7 @@ export class EvaluationService {
         agent: { id: agent.id, name: agent.name, conversationType: agent.conversationType },
         promptVersion: { id: `eval:${runId}`, version: 0, components },
         tools: catalog.specs,
-        channel: { kind: ctx?.channelKind ?? 'WEBCHAT', label: ctx?.channelName ?? 'Chat' },
+        channel: ctx?.channel ? (this.options.channelContext ?? basicChannelContext)(ctx.channel) : null,
         customer: ctx ? { customerId: ctx.customerId, displayName: ctx.displayName ?? undefined, language: ctx.language ?? undefined, attributes: ctx.attributes } : null,
         summary: null,
         handover: null,

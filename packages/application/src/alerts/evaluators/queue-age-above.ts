@@ -35,7 +35,7 @@ export const queueAgeAbove = defineEvaluator({
   kinds: ['TECHNICAL'],
   agentScoped: false,
   method:
-    'Age of the oldest ready job (status queued, available now) on `topic`, from the Postgres jobs table — or the queue driver stats in SQS mode. Fires when the age exceeds `thresholdSeconds`.',
+    'Age of the oldest ready job (status queued, available now) on `topic`, from the database jobs table — or the queue driver\'s stats when messages live outside the database. Fires when the age exceeds `thresholdSeconds`.',
   params: Params,
   async evaluate(ctx) {
     const { depth, oldestSeconds } = await oldestQueued(ctx);
@@ -48,7 +48,7 @@ export const queueAgeAbove = defineEvaluator({
         value: formatDurationMs(age * 1000),
         body: `Oldest ready item on ${ctx.params.topic} has waited ${formatDurationMs(age * 1000)} against a ${formatDurationMs(threshold * 1000)} threshold; ${formatCount(depth)} item(s) ready.`,
         source: `Queue · ${ctx.params.topic}`,
-        context: { topic: ctx.params.topic, depth, oldestAgeSeconds: oldestSeconds, thresholdSeconds: threshold, driver: ctx.queueStats ? 'stats' : 'postgres' },
+        context: { topic: ctx.params.topic, depth, oldestAgeSeconds: oldestSeconds, thresholdSeconds: threshold, measuredFrom: ctx.queueStats ? 'queue_stats' : 'jobs_table' },
       }),
     ];
   },

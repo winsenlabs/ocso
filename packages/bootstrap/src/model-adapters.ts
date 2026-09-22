@@ -3,12 +3,17 @@ import type { ProviderAdapterSource } from '@ocso/agent-runtime';
 import { parseSettings, resolveCredentials, toRuntimeConfig, type ProviderRow } from '@ocso/application';
 import { modelProfiles, modelProviders, type Db } from '@ocso/db';
 import { notFound, type MediaResolver } from '@ocso/domain';
-import { createDefaultRegistry, type ModelCapabilities, type ModelProviderAdapter, type ProviderRegistry } from '@ocso/model-providers';
+import { createRegistry, type ModelCapabilities, type ModelProviderAdapter, type ProviderRegistry } from '@ocso/model-providers';
 import type { SecretStore } from '@ocso/secrets';
+import { FIRST_PARTY_PLUGINS } from './first-party.js';
+import { contributions, type OcsoPlugin } from './plugin.js';
 
-/** Provider registry for this deployment; DEV_SCRIPTED only when explicitly enabled (ADR-015). */
-export function createProviderRegistry(env: { OCSO_ENABLE_DEV_PROVIDERS: boolean }): ProviderRegistry {
-  return createDefaultRegistry({ enableDevProviders: env.OCSO_ENABLE_DEV_PROVIDERS });
+/**
+ * Provider registry for this deployment: every plugin's `modelProviders`;
+ * `devOnly` definitions only when OCSO_ENABLE_DEV_PROVIDERS=true (ADR-015).
+ */
+export function createProviderRegistry(env: { OCSO_ENABLE_DEV_PROVIDERS: boolean }, plugins: readonly OcsoPlugin[] = FIRST_PARTY_PLUGINS): ProviderRegistry {
+  return createRegistry(contributions(plugins, 'modelProviders'), { enableDevProviders: env.OCSO_ENABLE_DEV_PROVIDERS });
 }
 
 /** Media input support of a profile's primary target (structurally the prompt compiler's ModelInputCapabilities). */

@@ -41,6 +41,9 @@ interface Envelope {
  */
 export class SqsQueue implements QueueAdapter {
   readonly driver = 'sqs' as const;
+  readonly inDatabase = false;
+  /** Queue age is the CloudWatch ApproximateAgeOfOldestMessage metric, not an API answer. */
+  readonly reportsOldestAge = false;
 
   constructor(
     private readonly client: SQSClient,

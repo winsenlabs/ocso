@@ -124,10 +124,18 @@ export function randomSecret(bytes = 32): string {
   return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-/** Where the provider calls OCSO; prefer the path the API reports for the channel. */
-export function inboundWebhookUrl(origin: string, channel: { kind: string; publicKey: string; webhookPath: string | null }): string {
-  const path = channel.webhookPath?.startsWith('/channels/') ? channel.webhookPath : `/channels/${channel.kind.toLowerCase()}/${channel.publicKey}/webhook`;
-  return `${origin.replace(/\/+$/, '')}${path}`;
+/** Where the provider calls OCSO: the webhook path the API derived from the kind's descriptor (null when the kind has none). */
+export function inboundWebhookUrl(origin: string, channel: { webhookPath: string | null }): string | null {
+  return channel.webhookPath ? `${origin.replace(/\/+$/, '')}${channel.webhookPath}` : null;
+}
+
+/** The first identifying setting the kind's descriptor names that holds a value (e.g. the WhatsApp sender), for the channel card. */
+export function identitySettingOf(settings: Record<string, unknown>, setting: { label: string; keys: readonly string[] } | null): { k: string; v: string } | null {
+  for (const key of setting?.keys ?? []) {
+    const value = settings[key];
+    if (setting && typeof value === 'string' && value) return { k: setting.label, v: value };
+  }
+  return null;
 }
 
 export function embedSnippet(origin: string, publicKey: string): string {

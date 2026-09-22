@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { isTimeoutError } from '../common/http.js';
+import type { ChannelFetch } from '../contract/types.js';
 
 /**
  * Minimal Meta Graph API client. Returns discriminated results instead of
@@ -12,7 +13,7 @@ export interface GraphClientOptions {
   version: string;
   accessToken: string;
   timeoutMs: number;
-  fetch: typeof fetch;
+  fetch: ChannelFetch;
 }
 
 export interface GraphError {

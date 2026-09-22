@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  TEMPLATE_MESSAGE_SCHEMA,
   TemplateDraftSchema,
   checkTemplateDraft,
+  isTemplateMessageSchema,
   draftAsTemplate,
   isTemplateSendable,
   placeholdersIn,
@@ -149,15 +151,26 @@ describe('template drafts (builder + API rules)', () => {
   });
 });
 
-describe('WhatsApp customer-service window', () => {
+describe('customer-service window', () => {
   const now = new Date('2026-09-22T10:00:00Z');
-  it('is open for 24 hours after the last customer message', () => {
-    expect(sessionWindowState(24, new Date('2026-09-21T13:12:00Z'), now)).toEqual({ open: true, closesAt: '2026-09-22T13:12:00.000Z' });
-    expect(sessionWindowState(24, new Date('2026-09-21T09:59:59Z'), now)).toEqual({ open: false, closesAt: '2026-09-22T09:59:59.000Z' });
+  it('is open for the adapter-declared hours after the last customer message', () => {
+    expect(sessionWindowState(24, new Date('2026-09-21T13:12:00Z'), now)).toEqual({ open: true, closesAt: '2026-09-22T13:12:00.000Z', hours: 24 });
+    expect(sessionWindowState(24, new Date('2026-09-21T09:59:59Z'), now)).toEqual({ open: false, closesAt: '2026-09-22T09:59:59.000Z', hours: 24 });
+    expect(sessionWindowState(48, new Date('2026-09-21T09:59:59Z'), now)).toMatchObject({ open: true, hours: 48 });
   });
 
   it('is closed before the customer ever wrote, and absent for channels without a window', () => {
-    expect(sessionWindowState(24, null, now)).toEqual({ open: false, closesAt: null });
+    expect(sessionWindowState(24, null, now)).toEqual({ open: false, closesAt: null, hours: 24 });
     expect(sessionWindowState(null, new Date(), now)).toBeNull();
+  });
+});
+
+describe('template message part schema', () => {
+  it('writes the channel-neutral name and still recognises parts stored before the rename', () => {
+    expect(TEMPLATE_MESSAGE_SCHEMA).toBe('ocso.message_template');
+    expect(isTemplateMessageSchema('ocso.message_template')).toBe(true);
+    expect(isTemplateMessageSchema('ocso.whatsapp_template')).toBe(true);
+    expect(isTemplateMessageSchema('ocso.other')).toBe(false);
+    expect(isTemplateMessageSchema(undefined)).toBe(false);
   });
 });

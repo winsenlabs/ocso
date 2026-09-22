@@ -4,7 +4,6 @@ import type {
   ChannelAdapter,
   ChannelAdapterDeps,
   ChannelCapabilities,
-  ChannelKindDescriptor,
   ChannelRuntimeConfig,
   ConnectionCheckResult,
   FetchedMedia,
@@ -18,6 +17,8 @@ import type {
   VerificationResult,
   WebhookAcknowledgement,
 } from '../contract/types.js';
+import { NO_NETWORK } from '../contract/types.js';
+import type { ChannelKindDescriptor } from '../contract/descriptor.js';
 import { TemplateProviderError } from '../common/templates.js';
 import { TWILIO_WHATSAPP_CAPABILITIES } from './capabilities.js';
 import { resolveTwilioConfig, validateTwilioWhatsAppConfig, type ResolvedTwilioConfig } from './config.js';
@@ -163,9 +164,10 @@ export class TwilioWhatsAppChannelAdapter implements ChannelAdapter {
   }
 }
 
+/** `deps.fetch` is the composition root's guarded egress fetch (or a test stub); without it the adapter has no network. */
 export function createTwilioWhatsAppAdapter(deps: Partial<ChannelAdapterDeps> = {}): TwilioWhatsAppChannelAdapter {
   return new TwilioWhatsAppChannelAdapter({
-    fetch: deps.fetch ?? globalThis.fetch.bind(globalThis),
+    fetch: deps.fetch ?? NO_NETWORK,
     now: deps.now ?? (() => new Date()),
   });
 }

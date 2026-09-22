@@ -5,7 +5,7 @@ import { useState, useTransition } from 'react';
 import { deleteTemplateAction } from '@/lib/actions/templates';
 import { useRealtime } from '@/lib/realtime/use-realtime';
 
-/** Delete at the provider, after an explicit confirm (WhatsApp blocks an approved name for 30 days). */
+/** Delete at the provider, after an explicit confirm (providers may block the name for a while, WhatsApp for 30 days). */
 export function DeleteTemplateButton({ channelId, templateId, name }: { channelId: string; templateId: string; name: string }) {
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,9 +44,9 @@ export function DeleteTemplateButton({ channelId, templateId, name }: { channelI
 export function TemplatesLive({ channelId }: { channelId: string }) {
   const router = useRouter();
   useRealtime({
-    types: ['whatsapp_template.status_changed', 'config.changed'],
+    types: ['message_template.status_changed', 'config.changed'],
     onEvent: (event) => {
-      if (event.type === 'whatsapp_template.status_changed' ? event.payload.channelId === channelId : event.type === 'config.changed' && event.payload.area === 'whatsapp_templates') router.refresh();
+      if (event.type === 'message_template.status_changed' ? event.payload.channelId === channelId : event.type === 'config.changed' && event.payload.area === 'message_templates') router.refresh();
     },
     onReconnect: () => router.refresh(),
   });

@@ -7,25 +7,29 @@ import { renderAlert, severityTag } from '../render.js';
 import type { DeliveryAdapterDeps } from './deps.js';
 import { classifySmtpError, type OutgoingMail } from './email-transport.js';
 
-const Recipients = z.array(z.email().max(320)).min(1).max(50);
+const Recipients = z.array(z.email().max(320)).min(1).max(50).meta({ title: 'Recipients' });
+const transport = <T extends string>(value: T) => z.literal(value).meta({ title: 'Send with' });
 
 /** `deployment`: the server's own sender (EMAIL_DRIVER — Resend, SMTP or log). No per-destination credentials. */
-const DeploymentEmailConfig = z.object({ transport: z.literal('deployment'), to: Recipients }).strict();
+const DeploymentEmailConfig = z.object({ transport: transport('deployment'), to: Recipients }).strict().meta({ title: "This server's email (EMAIL_DRIVER)" });
 
 /** `smtp`: a relay configured on this destination (password in the SecretStore). */
+const SmtpFields = {
+  transport: transport('smtp'),
+  to: Recipients,
+  host: z.string().trim().min(1).max(253).meta({ title: 'SMTP host' }),
+  port: z.number().int().min(1).max(65_535).default(587).meta({ title: 'Port', description: '587 STARTTLS · 465 implicit TLS' }),
+  from: z.email().max(320).meta({ title: 'From address' }),
+  /** SMTP user; defaults to `from` when a password secret is configured. */
+  username: z.string().trim().min(1).max(320).optional().meta({ title: 'SMTP user', description: 'defaults to the from address' }),
+  /** Require STARTTLS on non-implicit-TLS ports. Disable only for local relays. */
+  requireTLS: z.boolean().default(true).meta({ title: 'Require TLS', description: 'disable only for local relays' }),
+};
 const SmtpEmailConfig = z
   .object({
-    transport: z.literal('smtp'),
-    host: z.string().trim().min(1).max(253),
-    port: z.number().int().min(1).max(65_535).default(587),
-    /** Implicit TLS; defaults to true on port 465. */
+    ...SmtpFields,
+    /** Implicit TLS; defaults to true on port 465. API-only: the form derives it from the port. */
     secure: z.boolean().optional(),
-    /** Require STARTTLS on non-implicit-TLS ports. Disable only for local relays. */
-    requireTLS: z.boolean().default(true),
-    from: z.email().max(320),
-    to: Recipients,
-    /** SMTP user; defaults to `from` when a password secret is configured. */
-    username: z.string().trim().min(1).max(320).optional(),
   })
   .strict()
   .transform((c) => ({ ...c, secure: c.secure ?? c.port === 465 }));
@@ -44,17 +48,29 @@ const EmailConfig = z.preprocess(
 export type EmailConfig = z.output<typeof EmailConfig>;
 export type SmtpEmailConfig = Extract<EmailConfig, { transport: 'smtp' }>;
 
-const SMTP_SECRET: SecretRequirement = { required: false, secretKind: 'OTHER', description: 'SMTP password (omit for unauthenticated relays)' };
+/** The admin form: one branch per transport (`oneOf` pinned by `transport`). */
+const EmailForm = z.discriminatedUnion('transport', [DeploymentEmailConfig, z.object(SmtpFields).strict().meta({ title: 'Your own SMTP relay' })]);
+
+const SMTP_SECRET: SecretRequirement = {
+  required: false,
+  secretKind: 'OTHER',
+  label: 'SMTP password',
+  description: 'SMTP password (omit for unauthenticated relays)',
+  when: { transport: 'smtp' },
+};
 
 /** Email delivery through the deployment sender (default) or a per-destination SMTP relay. */
 export function createEmailAdapter(deps: Pick<DeliveryAdapterDeps, 'mailTransport' | 'timeoutMs' | 'emailSender'>): AlertDeliveryAdapter<EmailConfig> {
   return {
     kind: 'EMAIL',
     label: 'Email',
+    description: "Emails the recipients through this server's email (EMAIL_DRIVER) or your own SMTP relay.",
+    events: ['OPENED', 'RESOLVED', 'REMINDER'],
+    configSchema: z.toJSONSchema(EmailForm, { io: 'input' }) as Record<string, unknown>,
     secret: SMTP_SECRET,
-    secretFor: (config) => (config.transport === 'smtp' ? SMTP_SECRET : null),
     validateConfig: (config) => checkConfig(EmailConfig, config),
     validateSecret: () => [],
+    summary: (config) => `${config.to.join(', ')} via ${config.transport === 'smtp' ? config.host : 'deployment email'}`,
     async deliver(message, config, secret) {
       if (config.transport === 'deployment') return sendWithDeployment(deps.emailSender ?? null, message, config.to);
       const transport = deps.mailTransport({

@@ -1,4 +1,6 @@
 import type { DeliveryStatus, InteractionPart, InteractionPartType, MediaRef, MessageTemplate, TemplateDraft, TemplateStatus } from '@ocso/domain';
+import type { ChannelKind, ChannelKindDescriptor } from './descriptor.js';
+import type { EmbeddedChat } from './embed.js';
 
 /**
  * ChannelAdapter contract (docs/07 §2). Adapters own transport concerns only:
@@ -6,17 +8,6 @@ import type { DeliveryStatus, InteractionPart, InteractionPartType, MediaRef, Me
  * delivery status, idempotency keys and capability declaration.
  * They never run the agent loop and never touch the database.
  */
-
-/**
- * Known channel kinds (the DB column is text). A kind is usable only when an
- * adapter for it is registered; the API validates against the registry.
- */
-export const CHANNEL_KINDS = ['WHATSAPP', 'TWILIO_WHATSAPP', 'WEBCHAT', 'SMS', 'RCS', 'VOICE', 'CUSTOM_APP'] as const;
-export type ChannelKind = (typeof CHANNEL_KINDS)[number];
-
-export function isChannelKind(value: string): value is ChannelKind {
-  return (CHANNEL_KINDS as readonly string[]).includes(value);
-}
 
 export type MediaKind = 'IMAGE' | 'AUDIO' | 'VIDEO' | 'DOCUMENT';
 
@@ -26,13 +17,14 @@ export interface ChannelCapabilities {
   /** Part types OCSO may render outbound on this channel. */
   outboundParts: readonly InteractionPartType[];
   maxTextLength: number;
-  markdown: 'none' | 'whatsapp' | 'commonmark';
+  /** Formatting the channel shows: plain text, basic emphasis and lists (the adapter converts markdown), or full CommonMark. */
+  markdown: 'none' | 'basic' | 'commonmark';
   streaming: boolean;
   deliveryReceipts: boolean;
   interactive: boolean;
   maxMediaBytes: Readonly<Record<MediaKind, number>>;
   allowedMimeTypes: Readonly<Record<MediaKind, readonly string[]>>;
-  /** Hours after the last customer message during which free-form replies are allowed (WhatsApp: 24). */
+  /** Hours after the last customer message during which free-form replies are allowed; null = no window. */
   sessionWindowHours: number | null;
   /** Identity kinds this channel can address, most preferred first; delivery picks the customer's identity by it. */
   identityKinds?: readonly string[] | undefined;
@@ -186,42 +178,36 @@ export interface ConnectionCheckResult {
   checks: ConnectionCheck[];
 }
 
+/**
+ * What an adapter gets from the composition root. `fetch` is the only way an
+ * adapter reaches the network: the composition root passes the SSRF-guarded
+ * egress fetch (public https hosts plus the Tech Admin's internal allowlist);
+ * tests pass a stub. Adapters never call the global fetch.
+ */
 export interface ChannelAdapterDeps {
-  fetch: typeof fetch;
+  fetch: ChannelFetch;
   now: () => Date;
 }
 
-/** A secret the admin enters (or OCSO generates) when configuring a channel; never returned by the API. */
-export interface ChannelSecretField {
-  key: string;
-  label: string;
-  required: boolean;
-  hint: string;
-  /** `server`: OCSO generates it when omitted (nobody needs to see it). `client`: the form may offer a generator, since the admin must copy it elsewhere. */
-  generate?: 'server' | 'client' | undefined;
-}
+/** The fetch adapters are given (the global fetch's shape, minus `Request` inputs). */
+export type ChannelFetch = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
-/** What the "Add channel" form needs to know about a channel kind. */
-export interface ChannelKindDescriptor {
-  kind: ChannelKind;
-  label: string;
-  description: string;
-  /** JSON Schema (input shape) of the non-secret settings. */
-  settingsSchema: Record<string, unknown>;
-  secrets: ChannelSecretField[];
-  /** Provider calls OCSO at `/channels/<webhookSegment>/<publicKey>/webhook`. */
-  inboundWebhook: boolean;
-  /** URL segment of the inbound webhook (lower-case, `a-z0-9-`); defaults to the kind in kebab case. */
-  webhookSegment?: string | undefined;
-  /** Customers reach it through the embeddable widget (`/ocso-webchat.js`, `data-key=<publicKey>`). */
-  embeddable: boolean;
-}
+/** Stand-in for a missing `fetch` dependency: fails loudly instead of reaching the network unguarded. */
+export const NO_NETWORK: ChannelFetch = () => Promise.reject(new Error('channel adapter has no network access: the composition root must inject the egress fetch'));
 
 export interface ChannelAdapter {
   readonly kind: ChannelKind;
-  /** Form description for channel administration. */
-  describe?(): ChannelKindDescriptor;
+  /** Everything the API and web app know about this kind (form, labels, mark, setup steps, public paths). */
+  describe(): ChannelKindDescriptor;
   capabilities(config: ChannelRuntimeConfig): ChannelCapabilities;
+  /**
+   * How staff see a customer identity this channel created, in lists (full
+   * values stay in the database and permitted detail views). Return null for
+   * identity kinds that are not this channel's; core then masks generically.
+   */
+  displayIdentity?(identityKind: string, value: string): string | null;
+  /** The public widget protocol; required exactly when the descriptor is `embeddable`. */
+  readonly embed?: EmbeddedChat | undefined;
   /** Validate admin-entered settings/secrets; returns human-readable problems. */
   validateConfig(settings: unknown, secrets: Readonly<Record<string, string>>): string[];
   verifyRequest(req: RawHttpRequest, config: ChannelRuntimeConfig): VerificationResult;
@@ -236,13 +222,16 @@ export interface ChannelAdapter {
   /** Read-only check of the stored credentials against the provider; never sends a message. */
   checkConnection?(config: ChannelRuntimeConfig): Promise<ConnectionCheckResult>;
 
-  /* ── Message templates (WhatsApp; docs/07 §3). Optional: channels without a session window have none. ── */
+  /*
+   * ── Message templates (docs/07 §3). Optional: a kind supports templates when
+   * its adapter implements these methods (and describes them in `templates`). ──
+   */
 
   /** Every template the provider holds for this channel, normalized; throws a typed TemplateProviderError. */
   listTemplates?(config: ChannelRuntimeConfig): Promise<MessageTemplate[]>;
   /** Send an approved template; allowed outside the customer-service window. */
   sendTemplate?(target: OutboundTarget, request: TemplateSendRequest, config: ChannelRuntimeConfig, media: OutboundMediaResolver): Promise<SendResult>;
-  /** Create the template at the provider and submit it for WhatsApp approval (all or nothing). */
+  /** Create the template at the provider and submit it for review (all or nothing). */
   createTemplate?(config: ChannelRuntimeConfig, draft: TemplateDraft): Promise<MessageTemplate>;
   /** Current review state of one template; null when the provider no longer has it. */
   templateStatus?(config: ChannelRuntimeConfig, templateId: string): Promise<MessageTemplate | null>;
@@ -251,12 +240,12 @@ export interface ChannelAdapter {
 }
 
 export interface TemplateSendRequest {
-  /** Provider id: Twilio Content SID or Meta template id. */
+  /** The provider's template id. */
   templateId: string;
   language: string;
   /** Values keyed by TemplateVariable.key. */
   variables: Readonly<Record<string, string>>;
-  /** Header media link for templates whose media is chosen at send time (Meta). */
+  /** Header media link for templates whose media is chosen at send time. */
   headerMediaUrl?: string | undefined;
   /** The normalized definition (from listTemplates) the values were validated against. */
   template: MessageTemplate;

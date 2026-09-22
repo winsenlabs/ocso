@@ -157,9 +157,9 @@ Choose the channel's default virtual agent (created in §5) and set it **Active*
 
 WhatsApp allows free-form replies only for 24 hours after the customer's last message. After that the
 business may only send a **template** WhatsApp approved in advance. Templates are business content, so
-CS Leads (for channels their teams' agents use) and Tech Admins manage them (`whatsapp_templates.manage`).
+CS Leads (for channels their teams' agents use) and Tech Admins manage them (`message_templates.manage`).
 
-- **Create in OCSO.** **WhatsApp templates** in the sidebar (Tech Admin: also **Templates** on a WhatsApp
+- **Create in OCSO.** **Message templates** in the sidebar (Tech Admin: also **Templates** on a WhatsApp
   channel card) → **New template**. Give a name (`payment_reminder`: lower-case, digits, underscores), a
   language code (`en`, `en_US`, `hi`…) and a category:
   - **Utility** — about something the customer already asked for or bought (payment due, case update).

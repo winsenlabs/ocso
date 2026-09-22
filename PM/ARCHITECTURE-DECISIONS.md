@@ -36,7 +36,7 @@ Status values: **PROPOSED** (awaiting verification), **ACCEPTED**, **SUPERSEDED*
 
 **Status:** ACCEPTED (2026-09-22) — evidence in `research/04-backend-frontend-stack.md`.
 
-**Decision.** `typescript@7.0.2` (native compiler) for every package and app, ESM (`"type": "module"`, `module: nodenext`, `.js` import suffixes), strict base config with `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`. NestJS apps add `experimentalDecorators` + `emitDecoratorMetadata` in their own tsconfig (NestJS 12 still uses legacy decorators + `reflect-metadata`; TS 7 emits the metadata correctly). Apps and packages build with plain `tsc -p tsconfig.build.json`; the Nest CLI is not used (it needs the TS JS API, absent until TS 7.1). Workspace packages export source through a custom `@ocso/source` condition for tests/typecheck and `dist` for production. Lint uses `oxlint` + `oxlint-tsgolint` (typescript-eslint requires the TS 6 API). Injectables are imported as values (never `import type`) so decorator metadata is not erased.
+**Decision.** `typescript@7.0.2` (native compiler) for every package and app, ESM (`"type": "module"`, `module: nodenext`, `.js` import suffixes), strict base config with `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`. NestJS apps add `experimentalDecorators` + `emitDecoratorMetadata` in their own tsconfig (NestJS 12 still uses legacy decorators + `reflect-metadata`; TS 7 emits the metadata correctly). Apps and packages build with plain `tsc -p tsconfig.build.json`; the Nest CLI is not used (it needs the TS JS API, absent until TS 7.1). Workspace packages export source through a custom `@ocso/source` condition for tests/typecheck and `dist` for production. `pnpm lint` runs the repository's source guards (`scripts/check-source-guards.mjs`: file size, import boundaries, workspace dependency cycles, and the plugin boundary — core code names no plugin kind); no ESLint, oxlint or Prettier is configured (typescript-eslint requires the TS 6 API), so `tsc` strictness plus the guards are the static checks. Injectables are imported as values (never `import type`) so decorator metadata is not erased.
 
 **Why.** Latest stable stack (build rule §1); ~10× faster type-checking in a large monorepo.
 
@@ -464,3 +464,67 @@ Autonomous customer-facing AI output is permitted **only** in `AI_ACTIVE`. `AI_R
 **Consequences.** Migration `0017_model_catalog_and_pricing_origin` adds `model_catalog_snapshots` and the `model_pricing` columns `origin`, `catalog_*`, `tiers` and `updated_at`. Existing rows become `manual`. The API and worker make outbound https calls to models.dev and raw.githubusercontent.com. Air-gapped deployments keep working on the vendored snapshot and set `OCSO_MODEL_CATALOG_REFRESH=false`, which turns refresh off in the API and worker. Known approximations are listed in PM/research/09 §8: 1-hour cache writes are costed at the 5-minute rate, batch, fast mode and data-residency uplifts are not modeled, and the budget alert re-prices older unpriced usage at average input size. The Vertex and Bedrock listings are built to their documented shapes and still owe a live check.
 
 **Spec impact.** docs/06 (implementation notes), docs/11 (new alert condition), docs/operations/setup-guide.md §2 and §7, PM/research/09.
+
+## ADR-028 — The plugin boundary: open kinds, self-describing plugins, one composition root
+
+**Status:** ACCEPTED (2026-09-22). Product owner direction: "the plugin boundary is the product." An audit of the
+code found about 40 places where core named a specific kind (closed kind unions and `z.enum`s, per-kind maps and
+switches in the web app, `'WEBCHAT'`/`'DEV_SCRIPTED'`/`'OPENAI'`/`'IN_APP'` defaults, a WhatsApp-named template
+subsystem) and one security bug: built-in agent tools bypassed tool authorization and audit.
+
+**Decision.** OCSO is a core plus contracts. Core code never names a specific kind; per-kind knowledge lives in the
+plugin and reaches the web app through `/kinds` endpoints.
+
+1. **Kinds are open strings validated by registries.** `ChannelKind`, `ProviderKind` and `DestinationKind` are
+   `string`, checked against a shared pattern (`/^[A-Z][A-Z0-9_]{1,39}$/`) and the registry (`has()`); application
+   inputs use `z.string()` plus a registry check, never a closed enum. DB `kind` columns were already `text`; only the
+   TypeScript column types widened. Channel kinds without adapters (SMS, RCS, VOICE, CUSTOM_APP) were dropped.
+2. **Plugins describe themselves.**
+   - Channels: `describe()` is required. The descriptor carries label, `mark`, `identitySetting`, `setupSteps`,
+     webhook events, settings JSON Schema, secrets (generated or entered), inbound webhook segment, `embeddable` plus an
+     `embed` hook (widget config, sessions, signed identity, attachment keys), `templates` terms, and
+     `displayIdentity`. The registry refuses inconsistent plugins (embeddable without `embed`, `templates` without the
+     template methods, bad marks or segments). `GET /v1/channels/kinds` serves it to any staff reader.
+   - Model providers: `ProviderDefinition` carries `mark`, `cachingSummary`, `describeCaching`, `baseModel`,
+     `devOnly` (gates registration and means "never priced") and its catalog mapping (`catalog.providers`,
+     `candidates`) — the ADR-027 mapping switch moved into the definitions; catalog snapshots keep the catalog
+     providers the definitions declare.
+   - Alert destinations: `AlertDeliveryAdapter` carries `description`, `events` (replacing the `DESTINATION_EVENTS`
+     map), a `configSchema` (JSON Schema), declarative secret requirements (`when`) and `summary(config)`;
+     `GET /v1/notification-destinations/kinds`. The web form renders from the schema with the channel settings
+     renderer.
+3. **Capabilities, not kind names.** Message templates are a channel capability (the adapter implements the template
+   methods): `message_templates.manage`, `message_template.status_changed`, `sessionWindow`, table
+   `message_templates` (migration 0019 renames `whatsapp_templates`), `/templates` (the old path answers 308). The
+   compiled prompt's channel block is generated from adapter capabilities (`maxTextLength`, markdown level, outbound
+   parts) instead of text naming WhatsApp; with no channel the block is omitted. Masking of channel identities goes
+   through the plugin's `displayIdentity`.
+4. **Tools: one registry, one path.** Built-in tools are a first-party `ToolProviderSource` in the same
+   `ToolProviderRegistry` as MCP. Every call — built-in or MCP — goes catalog entry → `authorizeToolCall` →
+   `tool_calls` row → provider → result row and events. Only first-party tools may return effects (handoff);
+   an MCP tool cannot shadow a built-in name; a first-party tool may not be SENSITIVE (it would wait for a human).
+5. **Egress.** Channel adapters receive an injected `ChannelFetch`; the default is `NO_NETWORK`. The composition root
+   passes the SSRF-guarded fetch (public https; the deployment's internal-host allowlist; response size cap).
+6. **Drivers are registries too.** Email (resend, smtp, log), blob (local, s3), secrets (local, aws), queue
+   (postgres, sqs) and deployment (compose, ecs) each have a driver definition `{ name, check?(env), create(env, deps) }`
+   (email: `resolve`/`create`, `label`, `delivers`). `*_DRIVER` env settings are open strings with the same defaults;
+   each driver checks its own settings; an unknown name fails start-up listing the registered drivers. Core asks
+   drivers for capabilities instead of comparing names: `BlobStore.verifySignedGet`, `QueueAdapter.inDatabase` and
+   `reportsOldestAge`, `DeploymentStatus.facts`, `EmailSender.delivers`.
+7. **One composition root.** `@ocso/bootstrap` defines `OcsoPlugin { name, channels?, modelProviders?,
+   alertDestinations?, toolProviders?, emailDrivers?, blobDrivers?, secretsDrivers?, queueDrivers?, deploymentDrivers? }`
+   (contributions needing host services are factories) and `FIRST_PARTY_PLUGINS`. The api and the worker each provide
+   one `PLUGINS` list and build every registry from it (the api used to build two provider registries).
+8. **Enforcement.** `pnpm lint` runs `scripts/plugin-boundary.mjs`: it reads the plugin packages from
+   `FIRST_PARTY_PLUGINS`, collects their kinds and driver names from source (no hand-kept list), and fails when core
+   (apps, application, agent-runtime, domain, db schema, auth, events, prompt-compiler, web) contains a quoted kind
+   literal or per-kind key. Seeds, tests, fixtures, migrations and `src/testing/` are exempt; a per-line
+   `// plugin-boundary: allow <reason>` escape exists and is unused.
+
+**Consequences.** A new channel, model provider or alert destination is one module behind its contract plus one
+registration line; no core, database or web change. Plugins are still compiled in: the versioned
+`@winsendotai/ocso-plugin-sdk` and a config-driven loader come next and plug into the composition root. Known
+limits: driver-specific env settings are still declared in `@ocso/config`; alert conditions, scheduled tasks and
+Ask OCSO tools have registries but are not plugin contributions yet; template draft rules still follow WhatsApp's
+review rules; the widget API path `/public/webchat/:publicKey/*`
+is shared by every embeddable kind; built-in tools have no `tools` rows, so they cannot be revoked per agent yet.

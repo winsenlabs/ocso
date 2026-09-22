@@ -66,8 +66,9 @@ review:
 
 `pnpm lint` (`scripts/check-source-guards.mjs`) enforces the mechanical parts: file size, import
 boundaries (packages never import an app, apps never import each other, `@ocso/domain` imports no other
-`@ocso` package, no relative imports into another package) and no dependency cycles between workspace
-packages.
+`@ocso` package, no relative imports into another package), no dependency cycles between workspace
+packages, and the plugin boundary: core code never names a channel, model provider, alert destination or
+driver kind (`scripts/plugin-boundary.mjs`, ADR-028). Per-kind knowledge belongs in the plugin.
 
 Code conventions (ADR-001, ADR-003): TypeScript 7, ESM with `.js` import suffixes, a strict config with
 `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`. NestJS decorators and modules exist only in

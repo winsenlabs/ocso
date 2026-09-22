@@ -1,11 +1,11 @@
 import type { Provider } from '@nestjs/common';
-import { WhatsAppTemplateService, type SessionWindowHours } from '@ocso/application';
+import { MessageTemplateService, type SessionWindowHours } from '@ocso/application';
 import { ChannelRuntime, templateProviderSource } from '@ocso/agent-runtime';
 import type { ChannelRegistry } from '@ocso/channels';
 import type { Db } from '@ocso/db';
 import { CHANNEL_REGISTRY, DB } from '../../infrastructure/tokens.js';
 
-/** `SessionWindowHours` for the API: the channel adapter's declared window (WhatsApp 24 h; web chat none). */
+/** `SessionWindowHours` for the API: the channel adapter's declared window (null = none). */
 export const SESSION_WINDOW_HOURS = Symbol('SESSION_WINDOW_HOURS');
 
 export function windowHoursFrom(registry: ChannelRegistry): SessionWindowHours {
@@ -19,8 +19,8 @@ export function windowHoursFrom(registry: ChannelRegistry): SessionWindowHours {
 export const TEMPLATE_PROVIDERS: Provider[] = [
   { provide: SESSION_WINDOW_HOURS, inject: [CHANNEL_REGISTRY], useFactory: (registry: ChannelRegistry) => windowHoursFrom(registry) },
   {
-    provide: WhatsAppTemplateService,
+    provide: MessageTemplateService,
     inject: [DB, ChannelRuntime],
-    useFactory: (db: Db, runtime: ChannelRuntime) => new WhatsAppTemplateService(db, templateProviderSource(runtime)),
+    useFactory: (db: Db, runtime: ChannelRuntime) => new MessageTemplateService(db, templateProviderSource(runtime)),
   },
 ];

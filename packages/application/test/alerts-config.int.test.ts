@@ -56,7 +56,7 @@ afterAll(async () => {
   await t?.drop();
 });
 
-const rules = () => new AlertRuleService(t.db, queue);
+const rules = () => new AlertRuleService(t.db, queue, registry);
 const destinations = () => new NotificationDestinationService(t.db, secrets, registry, { baseUrl: 'https://ocso.test' });
 const input = (o: Partial<AlertRuleInput>): AlertRuleInput => ({
   name: 'rule',

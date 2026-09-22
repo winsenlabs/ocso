@@ -41,11 +41,32 @@ export interface ModelInputCapabilities {
   audioInput: boolean;
 }
 
+/**
+ * The channel's limits as its adapter declares them (ChannelCapabilities);
+ * the compiler turns them into the channel block, so no business prompt has
+ * to restate a channel's length, formatting or media rules.
+ */
+export interface ChannelLimits {
+  maxTextLength: number;
+  /** Plain text, basic emphasis and lists, or full CommonMark. */
+  markdown: 'none' | 'basic' | 'commonmark';
+  /** Part types the channel delivers to the customer (IMAGE, AUDIO, VIDEO, DOCUMENT, …). */
+  outboundParts: readonly string[];
+}
+
+export interface ChannelContext {
+  kind: string;
+  /** The channel's configured name. */
+  label: string;
+  limits?: ChannelLimits | undefined;
+}
+
 export interface CompileInput {
   agent: { id: string; name: string; conversationType: ConversationType };
   promptVersion: { id: string; version: number; components: PromptComponents };
   tools: readonly ToolSpec[];
-  channel: { kind: string; label: string };
+  /** Null for conversations without a channel (previews, replays of channel-less conversations). */
+  channel: ChannelContext | null;
   customer: CustomerContext | null;
   summary: SummaryContext | null;
   handover: HandoverContext | null;
@@ -68,7 +89,7 @@ export interface CompiledPromptHashes {
   toolSchemaHash: string;
   /** Everything before the AGENT_PREFIX breakpoint (tools + stable system). */
   agentPrefixHash: string;
-  /** Customer context + summary + handover + channel + date. */
+  /** Conversation frame + channel + customer context + summary + handover. */
   conversationContextHash: string;
   customerContextHash: string | null;
   /** Hash of the full request (for audit and debugging). */

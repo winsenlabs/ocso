@@ -1,8 +1,8 @@
 # Running OCSO with Docker Compose
 
-Single-host deployment (docs/13 §2): one machine, for example one EC2 instance, running every OCSO
-process in containers. The same images run on ECS Fargate ([aws.md](aws.md)); only configuration
-differs.
+Single-host deployment (docs/13 §2): one machine — a VM or server you run, in any cloud or on
+premises — running every OCSO process in containers. The same images run on ECS Fargate
+([aws.md](aws.md)); only configuration differs.
 
 | Service | What it does | Published |
 |---|---|---|
@@ -14,9 +14,12 @@ differs.
 | `web` | Next.js UI and BFF. Proxies `/channels`, `/public`, `/oauth`, `/.well-known`, `/blobs` to the API | **3000** |
 
 Profiles: `demo` (example MCP server and seed), `observability` (OTel Collector and Jaeger), and
-`s3` (SeaweedFS instead of the local blob volume).
+`s3` (SeaweedFS instead of the local blob volume). Overlay files: `infra/compose/tls.yaml` (HTTPS with
+Caddy, see [HTTPS](#https-with-the-bundled-caddy-overlay)) and `infra/compose/debug.yaml` (API and
+PostgreSQL on 127.0.0.1).
 
-Only port 3000 is published. The staff API (`/v1/*`) is not reachable from outside: the browser talks
+Only port 3000 is published (with the TLS overlay, Caddy publishes 80 and 443 instead and port 3000
+stays on 127.0.0.1). The staff API (`/v1/*`) is not reachable from outside: the browser talks
 to Next.js, and Next.js calls the API over the internal network (ADR-020). PostgreSQL sits on an
 `internal` network with no outbound internet.
 
@@ -28,8 +31,9 @@ to Next.js, and Next.js calls the API over the internal network (ADR-020). Postg
   with conversations and media.
 - To build: the repository checkout. The build works with the classic builder, and BuildKit/buildx
   is optional. To deploy prebuilt images you only need `compose.yaml`, `infra/compose/`, and `.env`.
-- For anything beyond localhost, a TLS-terminating reverse proxy (Caddy, nginx, or an ALB) in front
-  of port 3000, with `OCSO_PUBLIC_URL` set to the public `https://` origin.
+- For anything beyond localhost, TLS in front of port 3000, with `OCSO_PUBLIC_URL` set to the public
+  `https://` origin: the bundled Caddy overlay ([HTTPS](#https-with-the-bundled-caddy-overlay)), or
+  your own reverse proxy (nginx, a load balancer).
 
 ## 2. First run
 
@@ -38,6 +42,33 @@ cp .env.example .env          # set EMAIL_* first (section 9); the rest has safe
 docker compose up -d --build  # keygen → postgres → migrate → api + worker → web
 docker compose ps             # api, worker, web become "healthy"; keygen and migrate "exited (0)"
 ```
+
+### HTTPS with the bundled Caddy overlay
+
+`infra/compose/tls.yaml` adds a Caddy container that obtains and renews a Let's Encrypt certificate
+automatically (HTTP-01 on port 80, TLS-ALPN on 443), redirects http to https, and proxies to the web
+app without buffering server-sent events (`infra/compose/Caddyfile`). You need a DNS `A`/`AAAA` record
+for your domain pointing at the host, and ports 80 and 443 open to the internet. Set in `.env`:
+
+```dotenv
+OCSO_DOMAIN=ocso.example.com
+OCSO_PUBLIC_URL=https://ocso.example.com
+# Keep the web port off the public interface: Docker's published ports bypass host firewalls such as ufw.
+OCSO_HTTP_BIND=127.0.0.1
+# Caddy appends the client address to X-Forwarded-For; sign-in rate limits and audit use that hop.
+OCSO_TRUSTED_PROXY_HOPS=1
+```
+
+```bash
+docker compose -f compose.yaml -f infra/compose/tls.yaml up -d --build
+```
+
+Pass the same two `-f` files to every later `docker compose` command (or set
+`COMPOSE_FILE=compose.yaml:infra/compose/tls.yaml` in `.env`). Certificates live on the `caddy_data`
+volume; no account email is needed. Channel webhooks and the web chat widget use `OCSO_PUBLIC_URL`,
+so set it before creating channels. With your own reverse proxy instead, apply the same
+`OCSO_PUBLIC_URL`, `OCSO_HTTP_BIND` and `OCSO_TRUSTED_PROXY_HOPS` rules (one hop per proxy that appends
+`X-Forwarded-For`).
 
 **Configure email before inviting anyone.** Invites, password resets and sign-in codes go out by email
 (section 9). A first `docker compose up` starts without it so you can try OCSO: messages then only reach
@@ -232,8 +263,9 @@ the volume. Recommended practice:
 - **Restrict the host.** Allow no interactive users besides operators. Docker access is root access,
   so control membership of the `docker` group.
 - **Move the master key off the data volume.** Use a Docker secret from a root-only file (mode 0400)
-  on an encrypted disk, and point `OCSO_SECRETS_MASTER_KEY_FILE` at it with an override file. On EC2,
-  fetch it at boot from AWS Secrets Manager or SSM with the instance role, into a tmpfs.
+  on an encrypted disk, and point `OCSO_SECRETS_MASTER_KEY_FILE` at it with an override file. On a
+  cloud VM, fetch it at boot from the provider's secret manager (e.g. AWS Secrets Manager or SSM with
+  the instance role) into a tmpfs.
 - **Rotate what can be rotated.** Provider, channel and MCP credentials rotate from the UI (new
   SecretStore version). To rotate the blob or internal signing keys, delete the file on the volume,
   run `docker compose up -d keygen`, then restart api and worker. Outstanding signed URLs and visitor
@@ -242,7 +274,8 @@ the volume. Recommended practice:
   `.env`; an explicit value wins over the generated file. Real S3: `BLOB_DRIVER=s3` with your
   bucket, and credentials from an instance role. For that, remove `S3_ENDPOINT` and
   `AWS_SHARED_CREDENTIALS_FILE` from the api and worker environment in a `compose.override.yaml`.
-- **Terminate TLS in front of port 3000.** Keep `SESSION_COOKIE_SECURE=true`.
+- **Terminate TLS in front of port 3000**, for example with the Caddy overlay
+  ([HTTPS](#https-with-the-bundled-caddy-overlay)). Keep `SESSION_COOKIE_SECURE=true`.
 - **Keep the containers hardened.** They run as non-root with a read-only root filesystem,
   `no-new-privileges`, and all capabilities dropped. Do not relax this in overrides.
 - **Never** put secrets in `compose.yaml`, commit `.env`, or paste secrets into issues or logs. The
@@ -280,7 +313,7 @@ infrastructure, so it is configured here — environment and secret files — an
 
 | Variable | Meaning |
 |---|---|
-| `EMAIL_DRIVER` | `resend` (recommended), `smtp`, or `log` (development only; production needs `EMAIL_ALLOW_LOG_IN_PRODUCTION=true`) |
+| `EMAIL_DRIVER` | A registered email driver: `resend` (recommended), `smtp`, or `log` (development only; production needs `EMAIL_ALLOW_LOG_IN_PRODUCTION=true`). An unknown name fails start-up and lists the registered drivers |
 | `EMAIL_FROM` | Sender, e.g. `Acme Support <support@mail.acme.com>`, on a domain verified with the provider |
 | `EMAIL_REPLY_TO` | Optional reply address, e.g. your support inbox |
 | `RESEND_API_KEY_FILE` | File with the Resend API key (`RESEND_API_KEY` also works, but leaves the key in `.env`) |
@@ -330,7 +363,7 @@ deployment" — only recipients to enter). A destination can still use its own S
 | Symptom | Check |
 |---|---|
 | `migrate` exited non-zero | `docker compose logs migrate`. An edited, already-applied migration is refused on purpose. Restore the file. |
-| api stays `starting` or unhealthy | `docker compose logs api`. `Invalid OCSO configuration` lists the bad variable, with secret values hidden. |
+| api stays `starting` or unhealthy | `docker compose logs api`. `Invalid OCSO configuration` lists the bad variable, with secret values hidden. A `*_DRIVER=<name> is not available` line lists the drivers this build registers. |
 | `ocso-entrypoint: … unreadable file` | The `secrets` volume is missing a file. Run `docker compose up keygen` and check `docker compose logs keygen`. For `RESEND_API_KEY_FILE` / `SMTP_PASSWORD_FILE`, write the file first (section 9). |
 | `EMAIL_DRIVER is required in production` | Configure email (section 9), or set `EMAIL_ALLOW_LOG_IN_PRODUCTION=true` for a trial without email. |
 | Test email fails with `auth` | Resend: the domain in `EMAIL_FROM` is not verified, or the API key is revoked or restricted to another domain. SMTP: wrong user or password. |

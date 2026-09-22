@@ -4,15 +4,15 @@ import { channels, conversations, type DbOrTx } from '@ocso/db';
 
 /**
  * Hours of free-form replies after the customer's last message for a
- * channel (the adapter's `sessionWindowHours`; WhatsApp 24), or null when the
- * channel has no window. Provided by the API/worker from the adapter registry.
+ * channel (the adapter's `sessionWindowHours`), or null when the channel has
+ * no window. Provided by the API/worker from the adapter registry.
  */
 export type SessionWindowHours = (channel: { id: string; kind: string; name: string; settings: Record<string, unknown> }) => number | null;
 
 /**
  * The customer's last message on this channel across their conversations:
- * WhatsApp's window belongs to the customer and the business number, not to
- * one OCSO conversation.
+ * the window belongs to the customer and the business account (e.g. the
+ * WhatsApp number), not to one OCSO conversation.
  */
 export async function lastCustomerMessageAt(db: DbOrTx, customerId: string, channelId: string): Promise<Date | null> {
   const [row] = await db
@@ -43,7 +43,7 @@ export function sessionWindowClosed(state: SessionWindowState): DomainError {
   return new DomainError(
     ErrorCategory.CONFLICT,
     'session_window_closed',
-    `The 24-hour WhatsApp reply window closed${when}: the customer can only be reached with an approved template until they write again`,
+    `The ${state.hours}-hour reply window closed${when}: the customer can only be reached with an approved message template until they write again`,
     { closesAt: state.closesAt },
   );
 }

@@ -48,8 +48,8 @@ export const Permission = {
   REVIEWS_MANAGE: 'reviews.manage',
   CORRECTIONS_MANAGE: 'corrections.manage',
   ANALYTICS_BUSINESS_READ: 'analytics.business.read',
-  /** Create, submit for approval and delete WhatsApp message templates (business content; docs/07 §3). */
-  WHATSAPP_TEMPLATES_MANAGE: 'whatsapp_templates.manage',
+  /** Create, submit for the provider's review and delete message templates of channels that have them (business content; docs/07 §3). */
+  MESSAGE_TEMPLATES_MANAGE: 'message_templates.manage',
   EVALUATIONS_RUN: 'evaluations.run',
 
   // Platform (control plane)

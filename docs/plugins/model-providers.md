@@ -25,27 +25,55 @@ invariants and error mapping. Operator settings per provider are in
 
 ## The contract
 
-Two layers. A **definition** is what you register. It describes the provider to the admin form and
-creates adapters. An **adapter** is one configured provider that the runtime calls.
+Two layers. A **definition** is what you register. It carries everything OCSO knows about the kind (the admin
+form, the UI's mark and caching wording, how the model catalogs spell its model ids) and creates adapters. An
+**adapter** is one configured provider that the runtime calls. Nothing outside the plugin names a kind: provider
+kinds are open strings, and the registry decides which kinds a deployment accepts.
 
 `packages/model-providers/src/providers/definition.ts`, trimmed:
 
 ```ts
 export interface ProviderDefinition<S = unknown, C = unknown> {
-  readonly kind: ProviderKind;
+  /** UPPER_SNAKE_CASE (`PROVIDER_KIND_PATTERN`); stored on provider rows and usage. */
+  readonly kind: ProviderKind; // = string
   readonly label: string;
-  /** Dev-only providers are registered only when explicitly enabled (ADR-015). */
+  /** Short mono mark the admin UI shows in place of a vendor logo, e.g. `OAI` (1–4 characters). */
+  readonly mark: string;
+  /** One line on what the adapter does for prompt caching, shown on provider cards. */
+  readonly cachingSummary: string;
+  /** Registered only when explicitly enabled (ADR-015); usage never priced. */
   readonly devOnly: boolean;
   /** Non-secret settings the Tech Admin enters (validated at save time and on create). */
   readonly settingsSchema: z.ZodType<S>;
   /** Secret fields, resolved from SecretStore by trusted code only. */
   readonly credentialsSchema: z.ZodType<C>;
+  /** Where the open-source model catalogs list this provider's models (ADR-027). Absent: manual prices only. */
+  readonly catalog?: ProviderCatalogMapping;
   capabilities(model: string, settings: S): ModelCapabilities;
   /** Cache directives, cache keys and reasoning overrides for one request. */
   providerOptions(model: string, request: ModelRequest, settings: S): ProviderOptionsPlan;
+  /** How one model caches prompts, in words for the admin UI. Absent: derived from capabilities. */
+  describeCaching?(model: string, settings: S): PromptCachingDescription;
+  /** The underlying model when the id alone does not say (a deployment name), for catalog lookups. */
+  baseModel?(model: string, settings: S): string | null;
   create(config: ProviderRuntimeConfig, deps: AdapterDeps): ModelProviderAdapter;
 }
+
+export interface ProviderCatalogMapping {
+  /** Catalog providers `candidates` uses; the catalog snapshots keep only these providers' models. */
+  readonly providers: { 'models.dev'?: readonly string[]; litellm?: readonly string[] };
+  /** models.dev provider whose models stand in when the provider has no listing endpoint. */
+  readonly listingProvider?: string;
+  /** Exact catalog keys for one model id, models.dev first. [] = the id says nothing about the model: not priced. */
+  candidates(model: string, baseModel: string | null): CatalogCandidate[];
+}
 ```
+
+`PromptCachingDescription` is `{ mode, mechanism, effect: { '5m', '1h' } }`: the mode chip (`explicit`,
+`key-based`, `implicit`, `unverified`, `none`), the mechanism in words, and what a profile's prefix cache
+policy sends for each TTL. `describePromptCaching(capabilities, wording)` builds it from the model's
+capabilities (so capability overrides are honoured) with your own wording; `keyBasedCaching` covers the
+OpenAI family. Catalog keys are built with `modelsDevKey(provider, id)` and `liteLlmKey(provider, id)`.
 
 `packages/model-providers/src/contract/types.ts`, trimmed:
 
@@ -58,6 +86,8 @@ export interface ModelProviderAdapter {
   stream(request: ModelRequest, model: string): AsyncIterable<ModelStreamEvent>;
   generate(request: ModelRequest, model: string): Promise<ModelResult>;
   health(model?: string): Promise<ProviderHealth>;
+  /** Models this configuration can call, from the provider's own listing (ADR-027). Optional. */
+  listModels?(options?: ListModelsOptions): Promise<ProviderModelInfo[]>;
 }
 ```
 
@@ -74,17 +104,21 @@ as `null` when the provider did not report them, never as zero.
 export const PRODUCTION_PROVIDERS: readonly ProviderDefinition[] = [
   bedrockProvider, vertexProvider, foundryProvider, openAiProvider, anthropicProvider, sarvamProvider,
 ];
+/** Every provider this package ships. A new provider is one definition file plus one line here. */
+export const FIRST_PARTY_PROVIDERS = [...PRODUCTION_PROVIDERS, devScriptedProvider];
 
-export function createDefaultRegistry(options: DefaultRegistryOptions): ProviderRegistry {
+export function createRegistry(definitions, options: { enableDevProviders: boolean }): ProviderRegistry {
   const registry = new ProviderRegistry();
-  for (const definition of PRODUCTION_PROVIDERS) registry.register(definition);
-  if (options.enableDevProviders) registry.register(devScriptedProvider);
+  for (const d of definitions) if (!d.devOnly || options.enableDevProviders) registry.register(d);
   return registry;
 }
+export const createDefaultRegistry = (options) => createRegistry(FIRST_PARTY_PROVIDERS, options);
 ```
 
-`packages/bootstrap/src/model-adapters.ts` calls this for the api and the worker, passing
-`OCSO_ENABLE_DEV_PROVIDERS`. The kind must also be in `PROVIDER_KINDS` in `contract/types.ts`.
+`register()` rejects a kind that does not match `PROVIDER_KIND_PATTERN` and a kind registered twice. The
+api and the worker get their registry from `packages/bootstrap`, passing `OCSO_ENABLE_DEV_PROVIDERS`.
+Adding a provider needs no edit to the application, the API, the database schema or the web app: inputs
+accept any well-formed kind and the services check it against the registry (`provider_kind_not_available`).
 
 ## What the core does for you
 
@@ -97,10 +131,18 @@ translates prompts, media and tool schemas, streams, normalizes usage per step, 
 token, and maps every failure to a `DomainError` with a fixed message and scrubbed details. Tools are
 schema-only: the model proposes calls and OCSO authorizes and runs them (ADR-014).
 
-**Administration.** `GET /v1/model-providers/kinds` turns each definition's zod schemas into form field
-descriptors (`packages/application/src/models/field-descriptors.ts`). The web app renders the provider
-form from them, so a new provider needs no form code. Credentials are written to the SecretStore and
-never returned. **Test** runs your `health()` probe plus one small real `generate()` call.
+**Administration.** `GET /v1/model-providers/kinds` (providers.read) returns, per registered kind, its
+`label`, `mark`, `cachingSummary`, `devOnly` and the settings and credential form field descriptors built
+from its zod schemas (`packages/application/src/models/field-descriptors.ts`). Profile targets and policy
+checks carry each target's `caching` description from `describeCaching`. The web app renders only from
+these, so a new provider needs no web code; a kind the web build has never seen still parses and gets a
+generic mark. Credentials are written to the SecretStore and never returned. **Test** runs your `health()`
+probe plus one small real `generate()` call.
+
+**Pricing.** The model catalog (`src/catalog/`) knows no provider kind. It looks models up through the
+definition's `catalog` mapping and `baseModel`, keeps in its snapshots exactly the catalog providers the
+first-party definitions declare, and uses `listingProvider` as the model list for providers without a
+listing endpoint. Dev-only providers are never priced.
 
 **Runtime.** `CachedProviderAdapterSource` (`packages/bootstrap/src/model-adapters.ts`) builds one
 adapter per provider configuration and reuses it until the row changes, so token caches inside the
@@ -124,13 +166,22 @@ const settingsSchema = z.object({
 const credentialsSchema = z.object({ apiKey: requiredSecret('Acme API key') });
 
 export const acmeProvider: ProviderDefinition<z.infer<typeof settingsSchema>, z.infer<typeof credentialsSchema>> = {
-  kind: 'ACME', // add to PROVIDER_KINDS first
+  kind: 'ACME',
   label: 'Acme AI',
+  mark: 'ACM',
+  cachingSummary: 'no documented control',
   devOnly: false,
   settingsSchema,
   credentialsSchema,
+  // Only if models.dev / LiteLLM list Acme; otherwise omit (manual prices only).
+  catalog: {
+    providers: { 'models.dev': ['acme'] },
+    listingProvider: 'acme',
+    candidates: (model) => [modelsDevKey('acme', model)],
+  },
   capabilities: (model, settings) => withOverrides(acmeCapabilities(model), model, settings.capabilityOverrides),
   providerOptions: () => ({}), // no cache directives documented
+  // describeCaching omitted: the wording is derived from capabilities().promptCaching.
   create(config, deps) {
     const { settings, credentials } = parseProviderConfig(acmeProvider, config);
     const acme = createOpenAICompatible({ name: 'acme', baseURL: settings.baseURL, apiKey: credentials.apiKey, includeUsage: true, ...fetchOption(deps) });
@@ -150,7 +201,9 @@ export const acmeProvider: ProviderDefinition<z.infer<typeof settingsSchema>, z.
 };
 ```
 
-Then export it from `src/index.ts` and add it to `PRODUCTION_PROVIDERS`.
+Then add it to `PRODUCTION_PROVIDERS` in `src/registry.ts` (and export it from `src/index.ts` if other code
+needs it by name). If you declared new catalog providers, regenerate the vendored catalog snapshot
+(`node scripts/refresh-model-catalog.mjs`) so it prices your models before the first catalog refresh.
 
 ## Tests to copy
 
@@ -159,21 +212,19 @@ Then export it from `src/index.ts` and add it to `PRODUCTION_PROVIDERS`.
   responses, and the suite checks text and tool-call streaming, usage mapping, request ids, cache
   directives in the request body, tool ordering, and that credentials never appear in errors. See
   `anthropic.contract.test.ts` and its fixture file for the pattern.
-- `packages/model-providers/test/registry.test.ts`: registration, duplicates, dev-only gating.
+- `packages/model-providers/test/registry.test.ts`: registration, open kinds, duplicates, dev-only gating,
+  marks and per-model caching wording.
+- `packages/model-providers/test/catalog/catalog.test.ts`: catalog keys per kind (exact ids, Bedrock region
+  prefixes, Vertex `@default`, Foundry underlying models) through each definition's mapping.
 - `packages/model-providers/test/core/`: the shared core, if you change it.
 - `apps/api/test/int/models.int.test.ts`: provider and profile administration through the API.
 
 ## Limits today
 
-- `PROVIDER_KINDS` is a closed union, and the application validates provider kinds against it with
-  `z.enum` (`packages/application/src/models/inputs.ts`) as well as against the registry.
-- The web app keeps its own copy of the provider kinds as a `z.enum` (`apps/web/lib/api/models.ts`),
-  plus per-kind logo text and caching descriptions (`apps/web/components/connections/models/meta.ts`,
-  `apps/web/components/system/provider-health.tsx`). A new kind needs edits there today, or the web
-  app rejects the API response.
+- Providers are compiled in and registered in this package (`FIRST_PARTY_PROVIDERS`); there is no loader
+  for providers published elsewhere yet.
+- The catalog snapshots keep the catalog providers the first-party definitions declare. A provider
+  registered from outside this package would also need its catalog providers passed to `buildSnapshot`.
 - Provider behaviour is verified against recorded provider-format responses. Live calls need real
   credentials, which CI does not have.
-- **In progress:** model discovery (an optional `listModels` on the adapter, under `src/discovery/`)
-  and an open-source model catalog for prices (`src/catalog/`, `src/pricing/`) are being written as
-  this is published. Their catalog mapping currently switches on provider kind, which will move onto
-  the definition.
+- The Vertex and Bedrock model listings are built to their documented shapes and still owe a live check.

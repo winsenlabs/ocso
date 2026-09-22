@@ -19,7 +19,11 @@ import {
   workers,
 } from '@ocso/db';
 import { MemoryQueue } from '@ocso/queue';
+import { createDefaultDeliveryRegistry } from '@ocso/alerts';
 import { AlertEngine, type AlertRuleRow } from '../src/index.js';
+
+/** Destination-kind event routing comes from the delivery registry (adapters declare their events). */
+const routing = createDefaultDeliveryRegistry({ fetch: async () => new Response('') });
 
 let t: TestDatabase;
 let engine: AlertEngine;
@@ -28,7 +32,7 @@ const ago = (seconds: number) => new Date(NOW.getTime() - seconds * 1000);
 
 beforeAll(async () => {
   t = await createTestDatabase();
-  engine = new AlertEngine({ db: t.db, queue: new MemoryQueue() });
+  engine = new AlertEngine({ db: t.db, queue: new MemoryQueue(), destinations: routing });
 });
 afterAll(async () => {
   await t?.drop();
@@ -101,13 +105,13 @@ describe('technical evaluators', () => {
     const { open } = await run(r);
     expect(open).toHaveLength(1);
     expect(open[0]).toMatchObject({ title: 'Queue age above 30.0s · conversation.turn', value: '45.0s', source: 'Queue · conversation.turn' });
-    expect(open[0]!.context).toMatchObject({ depth: 1, driver: 'postgres' });
+    expect(open[0]!.context).toMatchObject({ depth: 1, measuredFrom: 'jobs_table' });
 
     const sqs = await rule('queue_age_above', { topic: 'channel.deliver', thresholdSeconds: 10 });
-    const sqsEngine = new AlertEngine({ db: t.db, queue: new MemoryQueue(), queueStats: async () => ({ depth: 7, inFlight: 0, dead: 0, oldestAgeSeconds: 12 }) });
+    const sqsEngine = new AlertEngine({ db: t.db, queue: new MemoryQueue(), destinations: routing, queueStats: async () => ({ depth: 7, inFlight: 0, dead: 0, oldestAgeSeconds: 12 }) });
     const viaStats = await run(sqs, NOW, sqsEngine);
     expect(viaStats.open[0]).toMatchObject({ value: '12.0s' });
-    expect(viaStats.open[0]!.context).toMatchObject({ depth: 7, driver: 'stats' });
+    expect(viaStats.open[0]!.context).toMatchObject({ depth: 7, measuredFrom: 'queue_stats' });
   });
 
   it('provider_error_rate_above: per-provider error ratio with a minimum request count', async () => {

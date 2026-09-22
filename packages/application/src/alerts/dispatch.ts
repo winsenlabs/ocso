@@ -1,5 +1,5 @@
 import { and, eq, inArray } from 'drizzle-orm';
-import { destinationReceives, isDestinationKind, type AlertEvent } from '@ocso/alerts';
+import type { AlertEvent, DestinationEventRouting } from '@ocso/alerts';
 import { alertDeliveries, notificationDestinations, uuidv7, type DbOrTx } from '@ocso/db';
 import { TOPICS, type QueueAdapter } from '@ocso/queue';
 
@@ -15,11 +15,13 @@ export interface PendingDelivery {
 
 /**
  * Create PENDING alert_deliveries rows for every enabled destination of the
- * rule that receives `event`. Call inside the transaction that changed the
- * alert; publish the jobs after commit with `publishDeliveries`.
+ * rule whose adapter receives `event` (the registry decides; destinations of
+ * an unregistered kind receive nothing). Call inside the transaction that
+ * changed the alert; publish the jobs after commit with `publishDeliveries`.
  */
 export async function createDeliveries(
   tx: DbOrTx,
+  routing: DestinationEventRouting,
   alertId: string,
   destinationIds: readonly string[],
   event: AlertEvent,
@@ -30,7 +32,7 @@ export async function createDeliveries(
     .select({ id: notificationDestinations.id, kind: notificationDestinations.kind })
     .from(notificationDestinations)
     .where(and(inArray(notificationDestinations.id, [...new Set(destinationIds)]), eq(notificationDestinations.enabled, true)));
-  const targets = destinations.filter((d) => isDestinationKind(d.kind) && destinationReceives(d.kind, event));
+  const targets = destinations.filter((d) => routing.receives(d.kind, event));
   if (!targets.length) return [];
   const rows = targets.map((d) => ({ id: uuidv7(), alertId, destinationId: d.id, event, status: 'PENDING' as const, createdAt: now }));
   await tx.insert(alertDeliveries).values(rows);

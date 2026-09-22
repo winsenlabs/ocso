@@ -1,17 +1,19 @@
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { ToolSpec } from '@ocso/domain';
 import { agentToolGrants, mcpConnections, tools, type DbOrTx } from '@ocso/db';
-import { sanitizeToolDescription, type AgentToolGrant, type ConnectionRecord, type ToolRecord } from '@ocso/tools';
-import { BUILTIN_TOOL_SPECS } from './builtins.js';
+import { sanitizeToolDescription, type AgentToolGrant, type ConnectionRecord, type FirstPartyTool, type ToolRecord } from '@ocso/tools';
+import { BUILTIN_TOOLS } from './builtins.js';
 
 export interface CatalogEntry {
   tool: ToolRecord;
   connection: ConnectionRecord | null;
   grant: AgentToolGrant | null;
-  /** Name on the MCP server (differs from the model-facing name). */
+  /** Name on the provider (the MCP server's name; the model-facing name for first-party tools). */
   serverName: string;
   /** Trusted connection: calls carry short-lived customer identity claims (docs/08 §4). */
   sendCustomerClaims: boolean;
+  /** The `tools` row (MCP tools); null for first-party tools, which are code rather than records. */
+  recordId: string | null;
 }
 
 export interface AgentToolCatalog {
@@ -20,12 +22,40 @@ export interface AgentToolCatalog {
 }
 
 /**
- * Effective tools for a virtual agent (docs/08 §3): built-ins plus approved,
- * enabled tools on usable SHARED connections that the connection allows for
- * this agent AND the CS Lead granted to this agent. Personal (USER) connections
- * are never exposed to agents.
+ * First-party tools are available to every agent: approved and enabled by
+ * definition, granted with no argument rules and no forced confirmation.
+ * They still pass authorizeToolCall (conversation state, JSON Schema, risk).
  */
-export async function loadAgentToolCatalog(db: DbOrTx, agentId: string): Promise<AgentToolCatalog> {
+function firstPartyEntry(tool: FirstPartyTool, agentId: string): CatalogEntry {
+  return {
+    tool: {
+      id: tool.name,
+      connectionId: null,
+      modelName: tool.name,
+      displayName: tool.name,
+      riskClass: tool.riskClass,
+      approved: true,
+      enabled: true,
+      inputSchema: tool.inputSchema,
+      requiredScopes: [],
+      humanRoles: [],
+    },
+    connection: null,
+    grant: { agentId, toolId: tool.name, enabled: true, alwaysConfirm: false, argumentRules: [] },
+    serverName: tool.name,
+    sendCustomerClaims: false,
+    recordId: null,
+  };
+}
+
+/**
+ * Effective tools for a virtual agent (docs/08 §3): first-party tools (the
+ * built-ins unless the registry's list is passed) plus approved, enabled
+ * tools on usable SHARED connections that the connection allows for this
+ * agent AND the CS Lead granted to this agent. Personal (USER) connections
+ * are never exposed to agents. An MCP tool can never shadow a first-party name.
+ */
+export async function loadAgentToolCatalog(db: DbOrTx, agentId: string, firstParty: readonly FirstPartyTool[] = BUILTIN_TOOLS): Promise<AgentToolCatalog> {
   const rows = await db
     .select({ t: tools, c: mcpConnections, g: agentToolGrants })
     .from(tools)
@@ -43,11 +73,17 @@ export async function loadAgentToolCatalog(db: DbOrTx, agentId: string): Promise
     );
 
   const entries = new Map<string, CatalogEntry>();
-  const specs: ToolSpec[] = [...BUILTIN_TOOL_SPECS];
+  const specs: ToolSpec[] = [];
+  for (const tool of firstParty) {
+    entries.set(tool.name, firstPartyEntry(tool, agentId));
+    specs.push({ name: tool.name, description: tool.description, inputSchema: tool.inputSchema });
+  }
   for (const { t, c, g } of rows) {
+    if (entries.has(t.modelName)) continue;
     entries.set(t.modelName, {
       serverName: t.name,
       sendCustomerClaims: c.sendCustomerClaims,
+      recordId: t.id,
       tool: {
         id: t.id,
         connectionId: t.connectionId,

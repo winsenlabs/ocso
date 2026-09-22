@@ -1,5 +1,5 @@
 import type { MediaRef } from '@ocso/domain';
-import type { ChannelCapabilities, FetchedMedia } from '../contract/types.js';
+import type { ChannelCapabilities, FetchedMedia, ChannelFetch } from '../contract/types.js';
 import { sha256Hex } from '../common/crypto.js';
 import { ChannelMediaError } from '../common/errors.js';
 import { mediaKindForMime } from '../common/mime.js';
@@ -32,7 +32,7 @@ export function isAllowedTwilioMediaHost(url: URL): boolean {
 
 export interface TwilioMediaContext {
   config: ResolvedTwilioConfig;
-  fetch: typeof fetch;
+  fetch: ChannelFetch;
   capabilities: ChannelCapabilities;
 }
 

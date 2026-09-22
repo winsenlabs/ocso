@@ -2,15 +2,17 @@ import { MessageTemplateSchema, TEMPLATE_STATUS_LABELS, isTemplateSendable, rend
 import { z } from 'zod';
 
 /**
- * Workspace helpers for WhatsApp templates (docs/07 §3): the reply-window
+ * Workspace helpers for message templates (docs/07 §3): the reply-window
  * line, the picker's search and hints, and the variables form. Validation
  * and the preview use the same @ocso/domain functions as the API, so what
  * the exec sees is what the customer receives.
  */
 
+/** The channel's customer-service window (its length comes from the channel adapter). */
 export interface WindowState {
   open: boolean;
   closesAt: string | null;
+  hours?: number | undefined;
 }
 
 export interface WindowLine {
@@ -26,13 +28,13 @@ function hoursMinutes(seconds: number): string {
   return m > 0 ? `${m}m` : 'under a minute';
 }
 
-/** "reply window open · closes in 3h 12m" / "24-hour window closed — send an approved template". */
+/** "reply window open · closes in 3h 12m" / "24-hour reply window closed — send an approved template". */
 export function windowLine(window: WindowState | null, now: number): WindowLine | null {
   if (!window) return null;
   const closes = window.closesAt ? Date.parse(window.closesAt) : NaN;
   if (window.open && Number.isFinite(closes) && closes > now) return { tone: 'open', text: `reply window open · closes in ${hoursMinutes((closes - now) / 1000)}` };
   if (!window.closesAt) return { tone: 'closed', text: 'No customer message yet — start with an approved template' };
-  return { tone: 'closed', text: '24-hour window closed — send an approved template' };
+  return { tone: 'closed', text: `${window.hours ? `${window.hours}-hour ` : ''}reply window closed — send an approved template` };
 }
 
 /** Free-form replies are possible now (no window on this channel, or it is open). */

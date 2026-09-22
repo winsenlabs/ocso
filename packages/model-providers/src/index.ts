@@ -8,14 +8,24 @@ export type { AiSdkAdapterSpec, HealthProbeOptions, ProviderOptions, ProviderOpt
 export { normalizeProviderError, scrubSecrets, type ErrorContext } from './core/errors.js';
 export { healthProbeRequest } from './core/health.js';
 
-// Provider modules.
+// Provider modules: the plugin contract (definition, catalog mapping, caching wording) and the first-party providers.
 export {
   commonSettingsShape,
   parseProviderConfig,
+  promptCachingOf,
   withOverrides,
   type CapabilityOverrides,
+  type ProviderCatalogMapping,
   type ProviderDefinition,
 } from './providers/definition.js';
+export {
+  CACHE_CONTROL_WORDING,
+  describePromptCaching,
+  keyBasedCaching,
+  type CachingWording,
+  type PromptCachingDescription,
+  type PromptCachingMode,
+} from './providers/shared/caching-description.js';
 export { anthropicProvider, type AnthropicSettings } from './providers/anthropic/definition.js';
 export { bedrockProvider, type BedrockSettings } from './providers/bedrock/definition.js';
 export { vertexProvider, type VertexSettings } from './providers/vertex/definition.js';
@@ -25,7 +35,15 @@ export { openAiProvider, type OpenAiSettings } from './providers/openai/definiti
 export { sarvamProvider, type SarvamSettings } from './providers/sarvam/definition.js';
 export { devScriptedProvider, type DevScriptedSettings } from './providers/dev-scripted/definition.js';
 
-export { ProviderRegistry, createDefaultRegistry, PRODUCTION_PROVIDERS, type DefaultRegistryOptions } from './registry.js';
+export {
+  ProviderRegistry,
+  catalogProvidersOf,
+  createDefaultRegistry,
+  createRegistry,
+  FIRST_PARTY_PROVIDERS,
+  PRODUCTION_PROVIDERS,
+  type DefaultRegistryOptions,
+} from './registry.js';
 
 // Model discovery (listings) and the open-source model catalog + pricing helpers (ADR-027).
 export { LISTING_UNSUPPORTED, MODEL_LIST_TIMEOUT_MS } from './discovery/http.js';

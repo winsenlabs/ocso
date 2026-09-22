@@ -10,11 +10,12 @@ import { setTeams } from './teams.js';
 import { seededContent, startTwilioStub, type TwilioStub } from './twilio-stub.js';
 
 /**
- * WhatsApp templates over the real API against a local Twilio stub
- * (Messages + Content API): the workspace list (cached), the 24-hour window
- * on the conversation and on free-form replies, sending an approved template
- * (validation, holder rule, idempotency, reopen-and-send, delivery through
- * the adapter), and the CS Lead create → review → approved → sendable loop.
+ * Message templates (WhatsApp through Twilio) over the real API against a
+ * local Twilio stub (Messages + Content API): the workspace list (cached),
+ * the adapter's 24-hour window on the conversation and on free-form replies,
+ * sending an approved template (validation, holder rule, idempotency,
+ * reopen-and-send, delivery through the adapter), and the CS Lead create →
+ * review → approved → sendable loop.
  */
 
 const ACCOUNT_SID = 'ACa1b2c3d4e5f60718293a4b5c6d7e8f90';
@@ -55,6 +56,8 @@ beforeAll(async () => {
   ]);
   h = await startApi();
   tokens.admin = await completeSetup(h);
+  // Channel adapters reach only public https hosts unless the Tech Admin allowlists an internal one (the stub is on loopback).
+  await api().patch('/v1/settings/deployment').set(auth(tokens.admin)).send({ egressAllowedInternalHosts: ['127.0.0.1'] }).expect(200);
   const mk = async (email: string, role: string) => (await api().post('/v1/users').set(auth(tokens.admin)).send({ email, name: email.split('@')[0], role, password: 'a password 12345' }).expect(201)).body.id as string;
   const leadId = await mk('lead@ocso.test', 'CS_LEAD');
   const otherLeadId = await mk('other-lead@ocso.test', 'CS_LEAD');
@@ -118,11 +121,11 @@ describe('template list for the workspace', () => {
   });
 });
 
-describe('24-hour window', () => {
+describe('customer-service window (the adapter declares 24 hours)', () => {
   it('shows an open window on the conversation, closing 24 h after the last customer message', async () => {
     const detail = await api().get(`/v1/conversations/${conversationId}`).set(auth(tokens.exec)).expect(200);
-    expect(detail.body.whatsappWindow.open).toBe(true);
-    const closes = Date.parse(detail.body.whatsappWindow.closesAt) - Date.now();
+    expect(detail.body.sessionWindow).toMatchObject({ open: true, hours: 24 });
+    const closes = Date.parse(detail.body.sessionWindow.closesAt) - Date.now();
     expect(closes).toBeGreaterThan(23 * 3_600_000);
     expect(closes).toBeLessThanOrEqual(24 * 3_600_000);
   });
@@ -130,9 +133,10 @@ describe('24-hour window', () => {
   it('refuses a free-form reply after the window with 409 session_window_closed and stores nothing', async () => {
     await closeWindow();
     const detail = await api().get(`/v1/conversations/${conversationId}`).set(auth(tokens.exec)).expect(200);
-    expect(detail.body.whatsappWindow.open).toBe(false);
+    expect(detail.body.sessionWindow.open).toBe(false);
     const res = await api().post(`/v1/conversations/${conversationId}/messages`).set(auth(tokens.exec)).send({ clientMessageId: 'reply-after-window', parts: [{ type: 'TEXT', text: 'Hello?' }] }).expect(409);
     expect(res.body.error).toMatchObject({ category: 'conflict', code: 'session_window_closed', details: { closesAt: expect.any(String) } });
+    expect(res.body.error.message).toMatch(/^The 24-hour reply window closed/);
     const { rows } = await h.db.pool.query(`SELECT count(*)::int AS n FROM interactions WHERE idempotency_key = 'human:reply-after-window'`);
     expect(rows[0].n).toBe(0);
   });
@@ -163,7 +167,7 @@ describe('sending a template', () => {
     expect(message.parts).toEqual([
       {
         type: 'STRUCTURED',
-        schema: 'ocso.whatsapp_template',
+        schema: 'ocso.message_template',
         fallbackText: 'Hi Priya, your order A-10423 is ready for pickup at the front desk.',
         data: expect.objectContaining({ templateId: APPROVED, name: 'order_ready_pickup', language: 'en', category: 'UTILITY', variables: { '1': 'Priya', '2': 'A-10423' } }),
       },
@@ -179,6 +183,15 @@ describe('sending a template', () => {
     expect(Object.fromEntries(new URLSearchParams(post.body))).toMatchObject({ To: 'whatsapp:+919812341208', ContentSid: APPROVED, ContentVariables: '{"1":"Priya","2":"A-10423"}' });
     const { rows } = await h.db.pool.query(`SELECT delivery_status, external_message_id FROM interactions WHERE id = $1`, [sent.body.interactionId]);
     expect(rows[0]).toMatchObject({ delivery_status: 'SENT', external_message_id: expect.stringMatching(/^SM/) });
+  });
+
+  it('still delivers template messages stored before the rename (ocso.whatsapp_template parts)', async () => {
+    const sent = await templateMessage(tokens.exec, orderReady).expect(201);
+    await h.db.pool.query(`UPDATE interaction_parts SET content = jsonb_set(content, '{schema}', '"ocso.whatsapp_template"') WHERE interaction_id = $1`, [sent.body.interactionId]);
+    const delivery = new DeliveryService(h.db.db, h.app.get(ChannelRuntime), h.app.get<BlobStore>(BLOB_STORE));
+    expect(await delivery.deliver(sent.body.interactionId, 'test-delivery-legacy')).toEqual({ kind: 'sent' });
+    const post = stub.requests.filter((r) => r.path.endsWith('/Messages.json')).at(-1)!;
+    expect(Object.fromEntries(new URLSearchParams(post.body))).toMatchObject({ ContentSid: APPROVED });
   });
 
   it('a free-form reply that slipped into the queue before the window closed fails as session_window_closed', async () => {
@@ -210,26 +223,27 @@ describe('creating templates (CS Lead) and the review loop', () => {
   };
   let created: { id: string; status: string };
 
-  it('only whatsapp_templates.manage holders whose teams use the channel may create; drafts are validated', async () => {
+  it('only message_templates.manage holders whose teams use the channel may create; drafts are validated', async () => {
     await api().post(`/v1/channels/${ids.channel}/templates`).set(auth(tokens.exec)).send(draft).expect(403);
     await api().post(`/v1/channels/${ids.channel}/templates`).set(auth(tokens.otherLead)).send(draft).expect(404);
     const bad = await api().post(`/v1/channels/${ids.channel}/templates`).set(auth(tokens.lead)).send({ ...draft, name: 'Card Blocked', body: '{{1}} blocked' }).expect(400);
     expect(bad.body.error.code).toBe('invalid_template');
     expect(bad.body.error.details.problems.map((p: { field: string }) => p.field)).toEqual(expect.arrayContaining(['name', 'body']));
-    const channels = await api().get('/v1/whatsapp-templates/channels').set(auth(tokens.lead)).expect(200);
-    expect(channels.body).toEqual([expect.objectContaining({ id: ids.channel, kindLabel: 'WhatsApp — Twilio' })]);
-    expect((await api().get('/v1/whatsapp-templates/channels').set(auth(tokens.otherLead)).expect(200)).body).toEqual([]);
+    const channels = await api().get('/v1/message-templates/channels').set(auth(tokens.lead)).expect(200);
+    expect(channels.body).toEqual([expect.objectContaining({ id: ids.channel, kindLabel: 'WhatsApp — Twilio', templates: { reviewer: 'WhatsApp', placeholderScope: 'template' } })]);
+    expect((await api().get('/v1/message-templates/channels').set(auth(tokens.otherLead)).expect(200)).body).toEqual([]);
+    await api().get('/v1/message-templates/channels').set(auth(tokens.exec)).expect(403);
   });
 
-  it('creates the content, submits it for WhatsApp approval, records and audits it', async () => {
+  it('creates the content, submits it for review, records and audits it', async () => {
     const res = await api().post(`/v1/channels/${ids.channel}/templates`).set(auth(tokens.lead)).send(draft).expect(201);
     created = res.body.template;
     expect(res.body.template).toMatchObject({ name: 'card_blocked_update', status: 'PENDING', category: 'UTILITY', contentType: 'whatsapp/card', submission: { submittedBy: { name: 'lead' } } });
     expect(res.body.warnings).toEqual([]);
     const submitted = stub.requests.find((r) => r.path.endsWith('/ApprovalRequests/whatsapp'));
     expect(JSON.parse(submitted!.body)).toEqual({ name: 'card_blocked_update', category: 'UTILITY' });
-    const actions = await h.db.pool.query(`SELECT action FROM audit_events WHERE target_type = 'whatsapp_template' ORDER BY occurred_at`);
-    expect(actions.rows.map((r: { action: string }) => r.action)).toEqual(['whatsapp_template.create', 'whatsapp_template.submit']);
+    const actions = await h.db.pool.query(`SELECT action FROM audit_events WHERE target_type = 'message_template' ORDER BY occurred_at`);
+    expect(actions.rows.map((r: { action: string }) => r.action)).toEqual(['message_template.create', 'message_template.submit']);
     await api().post(`/v1/channels/${ids.channel}/templates`).set(auth(tokens.lead)).send(draft).expect(409);
     const list = await api().get(`/v1/channels/${ids.channel}/templates`).set(auth(tokens.exec)).expect(200);
     expect(list.body.templates.find((t: { id: string }) => t.id === created.id)).toMatchObject({ status: 'PENDING' });
@@ -240,7 +254,7 @@ describe('creating templates (CS Lead) and the review loop', () => {
     stub.approve(created.id, 'approved');
     const runtime = h.app.get(ChannelRuntime);
     expect(await pollPendingTemplates(h.db.db, templateProviderSource(runtime), { correlationId: 'test-poll' })).toEqual({ checked: 1, changed: 1, failed: 0 });
-    const events = await h.db.pool.query(`SELECT payload FROM outbox_events WHERE type = 'whatsapp_template.status_changed'`);
+    const events = await h.db.pool.query(`SELECT payload FROM outbox_events WHERE type = 'message_template.status_changed'`);
     expect(events.rows.map((r: { payload: unknown }) => r.payload)).toEqual([expect.objectContaining({ templateId: created.id, status: 'APPROVED', previousStatus: 'PENDING', submittedBy: expect.any(String) })]);
     const status = await api().get(`/v1/channels/${ids.channel}/templates/${created.id}`).set(auth(tokens.lead)).expect(200);
     expect(status.body).toMatchObject({ status: 'APPROVED', rejectionReason: null });
@@ -265,7 +279,7 @@ describe('creating templates (CS Lead) and the review loop', () => {
     expect(stub.contents.has(other.body.template.id)).toBe(false);
     const list = await api().get(`/v1/channels/${ids.channel}/templates`).set(auth(tokens.lead)).expect(200);
     expect(list.body.templates.map((t: { id: string }) => t.id)).not.toContain(other.body.template.id);
-    const { rows } = await h.db.pool.query(`SELECT count(*)::int AS n FROM audit_events WHERE action = 'whatsapp_template.delete'`);
+    const { rows } = await h.db.pool.query(`SELECT count(*)::int AS n FROM audit_events WHERE action = 'message_template.delete'`);
     expect(rows[0].n).toBe(1);
   });
 });

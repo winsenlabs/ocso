@@ -10,6 +10,7 @@ import {
   type ModelProviderAdapter,
   type ProviderKind,
   type ProviderModelInfo,
+  type ProviderRegistry,
 } from '@ocso/model-providers';
 import { nowOf, type ActorContext } from '../shared/context.js';
 import { authorize } from './access.js';
@@ -25,6 +26,8 @@ export interface AdapterLookup {
 export interface ModelListServiceDeps {
   db: Db;
   adapters: AdapterLookup;
+  /** Provider definitions: catalog mappings, underlying models, dev-only flags. */
+  registry: ProviderRegistry;
   catalog: ModelCatalogService;
   now?: (() => Date) | undefined;
   /** Listing cache per provider; default 10 minutes. */
@@ -68,6 +71,8 @@ export interface ModelOption {
 export interface ModelListView {
   providerId: string;
   providerKind: ProviderKind;
+  /** A development-only provider: its models are never priced. */
+  devOnly: boolean;
   /** provider = its listing API (or configured deployments); catalog = no listing, catalog models shown instead. */
   source: 'provider' | 'catalog';
   fetchedAt: string;
@@ -140,11 +145,12 @@ export class ModelListService {
     return {
       providerId,
       providerKind: row.kind,
+      devOnly: this.deps.registry.get(row.kind)?.devOnly ?? false,
       source: listing.source,
       fetchedAt: listing.fetchedAt.toISOString(),
       cached: fresh === true && !options.refresh,
       error: listing.error,
-      models: this.options(row.kind, row.settings, listing.models, catalog, pricing, now),
+      models: this.options(row, listing.models, catalog, pricing, now),
     };
   }
 
@@ -155,7 +161,7 @@ export class ModelListService {
   }
 
   private async fetchListing(providerId: string, kind: ProviderKind, catalog: ModelCatalog, now: Date): Promise<Listing> {
-    const fallback = (): Listing => ({ source: 'catalog', fetchedAt: now, models: catalog.entriesFor(kind), error: null });
+    const fallback = (): Listing => ({ source: 'catalog', fetchedAt: now, models: catalog.entriesFor(this.deps.registry.get(kind)?.catalog), error: null });
     try {
       const adapter = await this.deps.adapters.get(providerId);
       if (!adapter.listModels) return fallback();
@@ -170,17 +176,18 @@ export class ModelListService {
   }
 
   private options(
-    kind: ProviderKind,
-    settings: Readonly<Record<string, unknown>>,
+    provider: { kind: ProviderKind; settings: Readonly<Record<string, unknown>> },
     models: Listing['models'],
     catalog: ModelCatalog,
     pricing: readonly PricingRow[],
     now: Date,
   ): ModelOption[] {
+    const { kind } = provider;
+    const mapping = this.deps.registry.get(kind)?.catalog;
     const options = models.map((m): ModelOption => {
       const listed = isCatalogEntry(m) ? null : m;
-      const baseModel = listed?.baseModel ?? baseModelFor(kind, settings, m.id);
-      const described = catalog.describe(kind, m.id, baseModel);
+      const baseModel = listed?.baseModel ?? baseModelFor(this.deps.registry, provider, m.id);
+      const described = catalog.describe(mapping, m.id, baseModel);
       const found = described.metadata;
       const meta = isCatalogEntry(m) ? m : found?.entry;
       return {

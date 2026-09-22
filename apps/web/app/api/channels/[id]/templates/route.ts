@@ -6,7 +6,7 @@ import { loadChannelTemplates } from '@/lib/api/templates';
 const Id = z.uuid();
 
 /**
- * WhatsApp templates of a channel for the workspace composer's template
+ * Message templates of a channel for the workspace composer's template
  * picker (browser-initiated, loaded when the picker opens). Proxies
  * GET /v1/channels/:id/templates with the session token; `?refresh=true`
  * bypasses the API's ~5 minute provider cache.

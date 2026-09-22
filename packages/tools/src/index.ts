@@ -4,4 +4,5 @@ export * from './authorizer.js';
 export * from './classification.js';
 export * from './sanitize.js';
 export * from './provider.js';
+export * from './registry.js';
 export * from './ajv-validator.js';

@@ -1,16 +1,16 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { and, desc, eq } from 'drizzle-orm';
 import { toolCalls } from '@ocso/db';
-import { createAjvValidator } from '@ocso/tools';
+import { connectionToolSource, createAjvValidator } from '@ocso/tools';
 import type { Principal } from '@ocso/auth';
 import { randomBytes } from 'node:crypto';
 import { CustomerClaimsIssuer } from '@ocso/application';
 import { InMemorySecretRows, LocalSecretStore, parseMasterKey } from '@ocso/secrets';
-import { HumanToolService, expireToolConfirmations } from '../src/index.js';
+import { HumanToolService, createToolProviderRegistry, expireToolConfirmations } from '../src/index.js';
 import { createRuntimeHarness, turnMessage, type RuntimeHarness } from './harness.js';
 
 let h: RuntimeHarness;
-const invoked: Array<{ toolName: string; args: unknown; customerClaims?: string | undefined }> = [];
+const invoked: Array<{ toolName: string; args: unknown; customerClaims?: string | undefined; scope?: unknown }> = [];
 let service: HumanToolService;
 let toolId: string;
 let exec: Principal;
@@ -32,7 +32,10 @@ beforeAll(async () => {
   exec = { userId: execId, role: 'CS_EXEC', displayName: 'Nikhil Menon', teamIds: [], via: 'UI' };
   service = new HumanToolService(
     h.t.db,
-    { forConnection: async () => ({ connectionId, invoke: async (call) => { invoked.push({ toolName: call.toolName, args: call.args, customerClaims: call.customerClaims }); return { status: 'SUCCEEDED', output: { type: 'json', value: { reference: 'RVSL-5521904' } }, latencyMs: 12 }; } }) },
+    createToolProviderRegistry(
+      h.t.db,
+      connectionToolSource('test-mcp', { forConnection: async () => ({ connectionId, invoke: async (call) => { invoked.push({ toolName: call.toolName, args: call.args, customerClaims: call.customerClaims, scope: call.scope }); return { status: 'SUCCEEDED', output: { type: 'json', value: { reference: 'RVSL-5521904' } }, latencyMs: 12 }; } }) }),
+    ),
     createAjvValidator(),
     new CustomerClaimsIssuer({ db: h.t.db, secrets: new LocalSecretStore(new InMemorySecretRows(), parseMasterKey('k', randomBytes(32).toString('base64'))), issuer: 'https://ocso.test' }),
   );

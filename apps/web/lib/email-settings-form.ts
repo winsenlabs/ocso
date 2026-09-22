@@ -5,14 +5,14 @@
  */
 import type { FormState } from './actions/form-state';
 
-export type EmailDriver = 'resend' | 'smtp' | 'log';
-
-/** GET /v1/settings/email — the deployment's email configuration (never secrets). */
+/** GET /v1/settings/email — the deployment's email configuration (never secrets). Driver names are open (EMAIL_DRIVER). */
 export interface EmailSettings {
-  driver: EmailDriver;
+  driver: string;
+  /** The driver's display name from the API (absent on older APIs). */
+  label?: string | undefined;
   from: string | null;
   replyTo: string | null;
-  /** False for the log driver: nothing is delivered. */
+  /** False for a non-delivering driver (log): nothing is delivered. */
   configured: boolean;
   warnings: string[];
 }
@@ -20,7 +20,10 @@ export interface EmailSettings {
 /** POST /v1/settings/email/test result. */
 export interface EmailTestResult {
   ok: boolean;
-  driver: EmailDriver;
+  driver: string;
+  label?: string | undefined;
+  /** False when the driver never hands messages to anyone: a "sent" test reached nobody. */
+  delivers?: boolean | undefined;
   id: string | null;
   error?: string | undefined;
   category?: string | undefined;
@@ -30,16 +33,13 @@ export interface EmailTestResult {
 
 export type NoticeTone = 'info' | 'warn' | 'error';
 
-/** Test-send form state: a FormState plus the banner tone (a log-driver "success" is a warning). */
+/** Test-send form state: a FormState plus the banner tone (a non-delivering "success" is a warning). */
 export interface EmailTestState extends FormState {
   tone?: NoticeTone;
 }
 
-export const DRIVER_LABELS: Readonly<Record<EmailDriver, string>> = {
-  resend: 'Resend',
-  smtp: 'SMTP',
-  log: 'Log — development only',
-};
+/** Display name of the deployment's email driver: the API's label, else the EMAIL_DRIVER name. */
+export const driverLabel = (s: { driver: string; label?: string | undefined }): string => s.label ?? s.driver;
 
 const CATEGORY_HINTS: Readonly<Record<string, string>> = {
   auth: 'The provider rejected the credentials or the sender. Check the API key or SMTP login and that the sending domain is verified.',
@@ -65,12 +65,12 @@ export function parseTestRecipient(raw: string): { ok: true; to: string } | { ok
 /** Banner tone and text for a test-send result. Provider errors are shown with a hint for their category. */
 export function describeTestResult(result: EmailTestResult): { tone: NoticeTone; message: string } {
   const warning = result.warning ? ` ${result.warning}` : '';
-  if (result.ok && result.driver === 'log') {
-    return { tone: 'warn', message: `Not delivered: the log driver only writes emails to the server log.${warning}` };
+  if (result.ok && result.delivers === false) {
+    return { tone: 'warn', message: `Not delivered: the ${result.driver} driver does not send email.${warning}` };
   }
   if (result.ok) {
     const id = result.id ? ` · message id ${result.id}` : '';
-    return { tone: result.warning ? 'warn' : 'info', message: `Test email sent via ${DRIVER_LABELS[result.driver]}${id}.${warning}` };
+    return { tone: result.warning ? 'warn' : 'info', message: `Test email sent via ${driverLabel(result)}${id}.${warning}` };
   }
   const hint = CATEGORY_HINTS[result.category ?? 'unknown'] ?? CATEGORY_HINTS['unknown']!;
   const detail = result.error ? ` (${result.error})` : '';
@@ -81,14 +81,14 @@ export function describeTestResult(result: EmailTestResult): { tone: NoticeTone;
 /** Status chip for the card: can the deployment actually deliver email? */
 export function deliveryStatus(settings: EmailSettings): { tone: 'good' | 'warn'; label: string } {
   if (settings.configured) return { tone: 'good', label: 'delivering' };
-  return { tone: 'warn', label: settings.driver === 'log' ? 'not delivered · log only' : 'not configured' };
+  return { tone: 'warn', label: `not delivered · ${settings.driver} driver` };
 }
 
-/** Notes shown under the status: API warnings first, plus the log-driver explanation when it applies. */
+/** Notes shown under the status: API warnings first, plus the explanation for a non-delivering driver. */
 export function statusNotes(settings: EmailSettings): string[] {
   const notes = [...settings.warnings];
-  if (settings.driver === 'log' && !notes.some((n) => /log/i.test(n))) {
-    notes.push('Invites, password resets and sign-in codes are only written to the server log; nobody receives them.');
+  if (!settings.configured && !notes.some((n) => /deliver|log/i.test(n))) {
+    notes.push(`Invites, password resets and sign-in codes are not delivered by the ${settings.driver} driver; nobody receives them.`);
   }
   return notes;
 }

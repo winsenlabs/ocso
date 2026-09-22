@@ -8,7 +8,7 @@ import { MemoryQueue } from '@ocso/queue';
 import { SettingsService } from '@ocso/application';
 import { createAjvValidator } from '@ocso/tools';
 import { createLogger } from '@ocso/observability';
-import { ChannelRuntime, ContextBuilder, HotContextCache, LeaseManager, MediaMaterializer, ModelGateway, ToolRunner, TurnProcessor, UsageRecorder } from '@ocso/agent-runtime';
+import { ChannelRuntime, ContextBuilder, HotContextCache, LeaseManager, MediaMaterializer, ModelGateway, ToolRunner, TurnProcessor, UsageRecorder, createToolProviderRegistry } from '@ocso/agent-runtime';
 import { ScriptedAdapter } from '@ocso/agent-runtime/testing';
 import { completeSetup, startApi, type ApiHarness } from './harness.js';
 import { setTeams } from './teams.js';
@@ -54,7 +54,7 @@ beforeAll(async () => {
     gateway: new ModelGateway(h.db.db, { get: async () => adapter.current! }, new UsageRecorder(h.db.db), new SettingsService(h.db.db)),
     context: new ContextBuilder(h.db.db, new HotContextCache(), { historyWindow: 20, mediaWindow: 6, timezone: 'UTC' }),
     media: new MediaMaterializer(h.db.db, new ChannelRuntime(h.db.db, new ChannelRegistry(), new LocalSecretStore(new InMemorySecretRows(), parseMasterKey('k', randomBytes(32).toString('base64')))), new LocalBlobStore({ rootDir: '/tmp/ocso-widget', publicApiBaseUrl: 'http://x', signingKey: 'k' })),
-    toolRunner: (catalog) => new ToolRunner(h.db.db, catalog, { forConnection: async () => { throw new Error('no tools'); } }, createAjvValidator(), null),
+    toolRunner: (catalog) => new ToolRunner(h.db.db, catalog, createToolProviderRegistry(h.db.db), createAjvValidator(), null),
     capabilitiesFor: async () => ({ imageInput: true, fileInput: true, audioInput: false }),
     logger: createLogger({ service: 'test', version: '0', level: 'fatal' }),
     summarizeAfter: 40,

@@ -12,10 +12,10 @@ export const PAGERDUTY_ENDPOINTS = {
 
 const PagerDutyConfig = z
   .object({
-    region: z.enum(['US', 'EU']).default('US'),
+    region: z.enum(['US', 'EU']).default('US').meta({ title: 'Region', description: 'PagerDuty service region' }),
     /** Optional PagerDuty `component` / `group` overrides. */
-    component: z.string().trim().max(120).optional(),
-    group: z.string().trim().max(120).optional(),
+    component: z.string().trim().max(120).optional().meta({ title: 'Component' }),
+    group: z.string().trim().max(120).optional().meta({ title: 'Group' }),
   })
   .strict();
 export type PagerDutyConfig = z.output<typeof PagerDutyConfig>;
@@ -42,9 +42,13 @@ export function createPagerDutyAdapter(deps: Pick<DeliveryAdapterDeps, 'fetch' |
   return {
     kind: 'PAGERDUTY',
     label: 'PagerDuty',
-    secret: { required: true, secretKind: 'API_KEY', description: 'Events API v2 integration (routing) key' },
+    description: 'Opens, acknowledges and resolves PagerDuty incidents (Events API v2); the alert fingerprint is the dedup key.',
+    events: ['OPENED', 'ACKNOWLEDGED', 'RESOLVED', 'REMINDER'],
+    configSchema: z.toJSONSchema(PagerDutyConfig, { io: 'input' }) as Record<string, unknown>,
+    secret: { required: true, secretKind: 'API_KEY', label: 'Events API v2 routing key', description: 'Events API v2 integration (routing) key' },
     validateConfig: (config) => checkConfig(PagerDutyConfig, config),
     validateSecret: (secret) => (/^[A-Za-z0-9]{20,64}$/.test(secret) ? [] : ['routing key must be 20–64 letters or digits']),
+    summary: (config) => [`region ${config.region}`, config.component, config.group].filter(Boolean).join(' · '),
     async deliver(message, config, secret) {
       if (!secret) return { ok: false, retriable: false, error: 'routing key not configured' };
       const outcome = await postJson(deps.fetch, {

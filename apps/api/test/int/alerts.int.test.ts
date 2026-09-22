@@ -112,4 +112,24 @@ describe('alerts API RBAC', () => {
     expect(test.body).toEqual({ ok: true, retriable: false });
     await h.http().delete(`/v1/notification-destinations/${inApp.body.id}`).set(as('admin')).expect(204);
   });
+
+  it('serves destination kinds from the delivery registry and validates kinds against it', async () => {
+    const kinds = await h.http().get('/v1/notification-destinations/kinds').set(as('admin')).expect(200);
+    const byKind = new Map(kinds.body.map((k: { kind: string }) => [k.kind, k]));
+    expect([...byKind.keys()]).toEqual(expect.arrayContaining(['IN_APP', 'EMAIL', 'WEBHOOK', 'PAGERDUTY']));
+    expect(byKind.get('PAGERDUTY')).toMatchObject({ label: 'PagerDuty', events: ['OPENED', 'ACKNOWLEDGED', 'RESOLVED', 'REMINDER'], secret: { label: 'Events API v2 routing key', required: true } });
+    expect(byKind.get('IN_APP')).toMatchObject({ secret: null, configSchema: { type: 'object' } });
+    // Rule editors attach destinations, so they may read the kinds; an exec may not.
+    await h.http().get('/v1/notification-destinations/kinds').set(as('lead')).expect(200);
+    await h.http().get('/v1/notification-destinations/kinds').set(as('exec')).expect(403);
+
+    const unknown = await h.http().post('/v1/notification-destinations').set(as('admin')).send({ name: 'Pager', kind: 'SMS_GATEWAY' }).expect(400);
+    expect(JSON.stringify(unknown.body)).toContain('unsupported_destination_kind');
+
+    const created = await h.http().post('/v1/notification-destinations').set(as('admin')).send({ name: 'Incidents EU', kind: 'PAGERDUTY', config: { region: 'EU' }, secret: 'R0ut1ngKeyR0ut1ngKey42' }).expect(201);
+    expect(created.body).toMatchObject({ summary: 'region EU', config: { region: 'EU' } });
+    const leadView = await h.http().get('/v1/notification-destinations').set(as('lead')).expect(200);
+    expect(leadView.body.find((d: { id: string }) => d.id === created.body.id)).toMatchObject({ config: null, summary: null });
+    await h.http().delete(`/v1/notification-destinations/${created.body.id}`).set(as('admin')).expect(204);
+  });
 });

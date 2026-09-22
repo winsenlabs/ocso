@@ -180,6 +180,84 @@ describe('check-source-guards', () => {
     assert.deepEqual(report.cycles[0].path, ['@ocso/auth', '@ocso/queue', '@ocso/db', '@ocso/auth']);
   });
 
+  describe('plugin boundary', () => {
+    /** A composition root listing two plugin packages (and a core package that also contributes). */
+    const pluginFixture = (files = {}) =>
+      fixture({
+        manifests: {
+          'packages/bootstrap': { name: '@ocso/bootstrap' },
+          'packages/channels': { name: '@ocso/channels' },
+          'packages/queue': { name: '@ocso/queue' },
+          'packages/application': { name: '@ocso/application' },
+        },
+        files: {
+          'packages/bootstrap/src/first-party.ts':
+            "export const FIRST_PARTY_PLUGINS = [\n  { name: '@ocso/channels', channels: [] },\n  { name: '@ocso/queue' },\n  { name: '@ocso/application' },\n];\n",
+          'packages/bootstrap/src/drivers.ts': "import type { QueueDriverDefinition } from '@ocso/queue';\nexport const kafka: QueueDriverDefinition = { name: 'kafka', create: () => null };\n",
+          'packages/channels/src/acme/adapter.ts': "export class AcmeAdapter {\n  readonly kind = 'ACME_CHAT' as const;\n}\n// kind: 'IN_A_COMMENT'\n",
+          'packages/channels/src/beta/descriptor.ts': "export const beta = { kind: 'BETA_SMS', label: 'Beta' };\n",
+          'packages/channels/src/beta/descriptor.test.ts': "export const t = { kind: 'TEST_ONLY' };\n",
+          'packages/queue/src/pg.ts': "export class PgQueue {\n  readonly driver = 'postgres' as const;\n}\n",
+          // A core package's own declarations are scanned as core, never harvested.
+          'packages/application/src/actors.ts': "export const actor = { kind: 'AGENT' };\n",
+          ...files,
+        },
+      });
+
+    test('derives kinds and driver names from the plugins the composition root lists', () => {
+      const { code, report } = run(pluginFixture());
+      assert.equal(code, 0);
+      assert.deepEqual(report.pluginBoundary.plugins, ['@ocso/channels', '@ocso/queue']);
+      assert.deepEqual(report.pluginBoundary.kinds, ['ACME_CHAT', 'BETA_SMS']);
+      assert.deepEqual(report.pluginBoundary.drivers, ['kafka', 'postgres']);
+      assert.deepEqual(report.pluginBoundary.violations, []);
+    });
+
+    test('core code naming a kind, a per-kind key or a driver (in driver context) fails with file:line', () => {
+      const { code, report } = run(
+        pluginFixture({
+          'apps/api/src/route.ts': "export const isAcme = (k: string) => k === 'ACME_CHAT';\nexport const labels = {\n  BETA_SMS: 'Beta',\n};\n",
+          'apps/web/components/mark.tsx': 'export const M = () => <Mark kind="BETA_SMS" />;\n',
+          'packages/application/src/queue.ts':
+            "export const fast = (q: { driver: string }) => q.driver === 'postgres';\nexport const source = 'postgres'; // a word, not a driver selection\n",
+        }),
+      );
+      assert.equal(code, 1);
+      assert.deepEqual(
+        report.pluginBoundary.violations.map((v) => `${v.rule} ${v.at} ${v.literal}`),
+        [
+          'plugin-kind apps/api/src/route.ts:1 ACME_CHAT',
+          'plugin-key apps/api/src/route.ts:3 BETA_SMS',
+          'plugin-kind apps/web/components/mark.tsx:1 BETA_SMS',
+          'plugin-driver packages/application/src/queue.ts:1 postgres',
+        ],
+      );
+      assert.match(report.pluginBoundary.violations[0].message, /declared by @ocso\/channels/);
+    });
+
+    test('seeds, tests and plugin packages may name kinds; a reasoned escape opts one line out', () => {
+      const { code, report } = run(
+        pluginFixture({
+          'apps/api/src/seed/steps.ts': "export const k = 'ACME_CHAT';\n",
+          'apps/api/src/route.test.ts': "export const k = 'ACME_CHAT';\n",
+          'packages/channels/src/use.ts': "export const k = 'ACME_CHAT';\n",
+          'apps/api/src/legacy.ts':
+            "export const a = 'ACME_CHAT'; // plugin-boundary: allow stored rows written before kinds were open\n// plugin-boundary: allow migration shim\nexport const b = 'BETA_SMS';\nexport const c = 'ACME_CHAT'; // plugin-boundary: allow\n",
+        }),
+      );
+      assert.equal(code, 1);
+      assert.deepEqual(report.pluginBoundary.violations.map((v) => v.at), ['apps/api/src/legacy.ts:4']);
+      assert.deepEqual(report.pluginBoundary.escapes.map((e) => e.at), ['apps/api/src/legacy.ts:1', 'apps/api/src/legacy.ts:3']);
+    });
+
+    test('without a composition root the check is skipped', () => {
+      const { code, report } = run(fixture({ files: { 'apps/api/src/route.ts': "export const k = 'ACME_CHAT';\n" } }));
+      assert.equal(code, 0);
+      assert.deepEqual(report.pluginBoundary.kinds, []);
+      assert.equal(report.pluginBoundary.scanned, 0);
+    });
+  });
+
   test('findCycles reports self-loops and ignores acyclic graphs', () => {
     assert.deepEqual(findCycles(new Map([['a', ['b']], ['b', []]])), []);
     assert.deepEqual(findCycles(new Map([['a', ['a']]])), [{ members: ['a'], path: ['a', 'a'] }]);

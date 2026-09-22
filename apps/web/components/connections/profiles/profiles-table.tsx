@@ -16,7 +16,7 @@ function agentsCaption(p: Profile): string {
 
 function cacheCaption(p: Profile): string {
   if (p.cachePolicy === 'OFF') return 'caching off';
-  const modes = [...new Set(p.targets.map((t) => cachingMode(t.providerKind, t.capabilities)))];
+  const modes = [...new Set(p.targets.map((t) => cachingMode(t.caching)))];
   return `prefix${p.cacheTtl ? ` · ${p.cacheTtl}` : ''}${modes.length ? ` · ${modes.join(' / ')}` : ''}`;
 }
 

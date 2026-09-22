@@ -13,6 +13,7 @@ import {
 } from '@ocso/db';
 import { compilePrompt, type CompiledPrompt, type CompileInput, type HandoverContext, type ModelInputCapabilities, type PromptComponents } from '@ocso/prompt-compiler';
 import { loadAgentToolCatalog, type AgentToolCatalog } from '../tools/catalog.js';
+import { basicChannelContext, type ChannelContextResolver } from './channel-context.js';
 import { loadHistory, loadPending } from './history.js';
 import type { CacheLayer, CachedAgentPrefix, ConversationCacheEntry, HotContextCache } from './turn-cache.js';
 
@@ -33,6 +34,8 @@ export interface ContextBuilderOptions {
   historyWindow: number;
   mediaWindow: number;
   timezone: string;
+  /** The channel block's content (adapter limits); defaults to the channel's name and kind. */
+  channelContext?: ChannelContextResolver | undefined;
 }
 
 const sameGenerations = (a: Record<string, number>, b: Record<string, number>) =>
@@ -77,7 +80,7 @@ export class ContextBuilder {
       agent: { id: agent.id, name: agent.name, conversationType: agent.conversationType },
       promptVersion: { id: prefix.promptVersionId, version: 0, components: prefix.components as PromptComponents },
       tools: prefix.catalog.specs,
-      channel: { kind: channel?.kind ?? 'WEBCHAT', label: channel?.name ?? 'Chat' },
+      channel: channel ? (this.options.channelContext ?? basicChannelContext)(channel) : null,
       customer,
       summary: summary?.context ?? null,
       handover,

@@ -1,7 +1,7 @@
 import 'server-only';
 import { z } from 'zod';
 import { api } from './client';
-import { PROVIDER_KINDS, PriceTierSchema, PricingSchema, type ProviderKind } from './models';
+import { PriceTierSchema, PricingSchema, type ProviderKind } from './models';
 
 /**
  * Model discovery and the open-source model catalog (ADR-027): what a
@@ -10,7 +10,8 @@ import { PROVIDER_KINDS, PriceTierSchema, PricingSchema, type ProviderKind } fro
  * Shapes mirror packages/application/src/models/{model-list-service,pricing-missing,catalog/*}.ts.
  */
 
-const Kind = z.enum(PROVIDER_KINDS);
+/** Open: any kind the API's provider registry holds. */
+const Kind = z.string();
 
 /** A catalog price offered for a model (micro-USD per 1M tokens). */
 export const CatalogPriceSchema = z.object({
@@ -64,6 +65,8 @@ export type ModelOption = z.infer<typeof ModelOptionSchema>;
 export const ModelListSchema = z.object({
   providerId: z.string(),
   providerKind: Kind,
+  /** A development-only provider: its models are never priced. */
+  devOnly: z.boolean().default(false),
   source: z.enum(['provider', 'catalog']),
   fetchedAt: z.string(),
   cached: z.boolean(),

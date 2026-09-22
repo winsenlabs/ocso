@@ -20,8 +20,9 @@ export interface ScalingSampleDetail extends ScalingSample {
  * - SlotDemand = TurnsInFlight + ready conversation.turn wake-ups (queue.stats);
  * - Workers = HEALTHY workers whose heartbeat is ≤ 3 × heartbeat interval old
  *   (same definition as the telemetry fleet view);
- * - OldestQueueAgeSeconds = the queue driver's oldest ready turn. SQS stats
- *   cannot tell (that age is a CloudWatch metric), so there it is the oldest
+ * - OldestQueueAgeSeconds = the queue driver's oldest ready turn. Drivers
+ *   whose stats cannot tell (`reportsOldestAge: false`, e.g. SQS: that age is
+ *   a CloudWatch metric) get it from PostgreSQL instead: the oldest
  *   unprocessed customer message in an AI-controlled conversation with no
  *   turn running — the stranded-turn sweeper's predicate;
  * - TurnLatencyP95 = p95 of turns.latency_ms completed in the last 5 minutes.
@@ -30,11 +31,11 @@ export interface ScalingSampleDetail extends ScalingSample {
  */
 export async function computeScalingSample(
   db: DbOrTx,
-  queue: Pick<QueueAdapter, 'stats' | 'driver'>,
+  queue: Pick<QueueAdapter, 'stats' | 'reportsOldestAge'>,
   now: Date = new Date(),
 ): Promise<ScalingSampleDetail> {
   const [fleet, stats] = await Promise.all([fleetFigures(db, now), queue.stats('conversation.turn').catch((): QueueStats | null => null)]);
-  const ageFromQueue = stats !== null && (stats.oldestAgeSeconds !== null || queue.driver !== 'sqs');
+  const ageFromQueue = stats !== null && (stats.oldestAgeSeconds !== null || queue.reportsOldestAge);
   const waiting = stats && ageFromQueue ? null : await waitingTurns(db, now);
   const queuedTurns = stats ? stats.depth : (waiting?.count ?? 0);
   const oldest = ageFromQueue ? (stats?.oldestAgeSeconds ?? 0) : (waiting?.oldestSeconds ?? 0);

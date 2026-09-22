@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { alertRules, alerts, uuidv7 } from '@ocso/db';
 import { MemoryQueue } from '@ocso/queue';
+import { createDefaultDeliveryRegistry } from '@ocso/alerts';
 import {
   AgentAnalyticsService,
   AlertRuleInput,
@@ -17,6 +18,9 @@ import {
   tagSuggestions,
 } from '../src/index.js';
 import { actor, createOwnershipFixture, type OwnershipFixture } from './support/ownership-fixture.js';
+
+/** Destination-kind event routing comes from the delivery registry (adapters declare their events). */
+const routing = createDefaultDeliveryRegistry({ fetch: async () => new Response('') });
 
 /**
  * Everything agent-scoped follows the agent's owning teams (ADR-026):
@@ -127,12 +131,12 @@ describe('alerts', () => {
     ]);
   });
 
-  const titles = async (who: keyof OwnershipFixture['p']) => (await new AlertService(f.t.db, queue).list(actor(f.p[who]))).items.map((a) => a.title).sort();
+  const titles = async (who: keyof OwnershipFixture['p']) => (await new AlertService(f.t.db, queue, routing).list(actor(f.p[who]))).items.map((a) => a.title).sort();
 
   it('shows leads alerts of their agents and alerts about no agent; other agents’ alerts are not found', async () => {
     expect(await titles('leadA')).toEqual(['Escalation rate · Maya', 'Queue age']);
     expect(await titles('leadB')).toEqual(['Escalation rate · Arjun', 'Queue age']);
-    const svc = new AlertService(f.t.db, queue);
+    const svc = new AlertService(f.t.db, queue, routing);
     await expect(svc.get(actor(f.p.leadB), ids.maya)).rejects.toMatchObject(notFound);
     await expect(svc.acknowledge(actor(f.p.leadB), ids.maya)).rejects.toMatchObject(notFound);
     await expect(svc.list(actor(f.p.leadB), { agentId: f.agent.maya })).rejects.toMatchObject(notFound);
@@ -142,7 +146,7 @@ describe('alerts', () => {
   });
 
   it('keeps the platform-wide rule visible to every lead, agent rules only to their agents’ leads', async () => {
-    const rules = new AlertRuleService(f.t.db, queue);
+    const rules = new AlertRuleService(f.t.db, queue, routing);
     const mayaRule = await rules.create(actor(f.p.leadA), AlertRuleInput.parse({ name: 'Maya CSAT', kind: 'BUSINESS', condition: 'csat_below', agentId: f.agent.maya, audienceRoles: ['CS_LEAD'] }));
     const listed = async (who: 'leadA' | 'leadB') => (await rules.list(actor(f.p[who]), { kind: 'BUSINESS' })).map((r) => r.name).sort();
     expect(await listed('leadA')).toEqual(['Escalation rate', 'Maya CSAT']);

@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { modelPricing, modelProfiles, modelProviders, type DbOrTx } from '@ocso/db';
-import { selectPrice, type ModelCatalog, type ProviderKind } from '@ocso/model-providers';
-import { baseModelFor, toSuggestion, type CatalogPriceSuggestion } from './catalog/catalog-prices.js';
+import { selectPrice, type ModelCatalog, type ProviderKind, type ProviderRegistry } from '@ocso/model-providers';
+import { baseModelFor, isPricedKind, toSuggestion, type CatalogPriceSuggestion } from './catalog/catalog-prices.js';
 
 /** A model in use that no price row prices (so its usage shows "no price"). */
 export interface MissingPrice {
@@ -26,8 +26,12 @@ interface Acc {
   requests30d: number;
 }
 
-/** Models referenced by profiles (primary + fallbacks) or used in the last 30 days, without a price row. */
-export async function modelsWithoutPrice(db: DbOrTx, catalog: ModelCatalog, now: Date): Promise<MissingPrice[]> {
+/**
+ * Models referenced by profiles (primary + fallbacks) or used in the last 30
+ * days, without a price row. Kinds this deployment cannot price (not
+ * registered, or dev-only) are left out: no price row could be added for them.
+ */
+export async function modelsWithoutPrice(db: DbOrTx, catalog: ModelCatalog, registry: ProviderRegistry, now: Date): Promise<MissingPrice[]> {
   const since = new Date(now.getTime() - MISSING_PRICE_USAGE_DAYS * 86_400_000);
   const [providers, profiles, pricing, usage] = await Promise.all([
     db.select({ id: modelProviders.id, kind: modelProviders.kind, name: modelProviders.name, settings: modelProviders.settings }).from(modelProviders),
@@ -63,9 +67,10 @@ export async function modelsWithoutPrice(db: DbOrTx, catalog: ModelCatalog, now:
   }
   const missing: MissingPrice[] = [];
   for (const a of acc.values()) {
-    if (a.providerKind === 'DEV_SCRIPTED' || selectPrice(pricing, a.providerKind, a.model, now)) continue;
+    if (!isPricedKind(registry, a.providerKind) || selectPrice(pricing, a.providerKind, a.model, now)) continue;
     const first = [...a.providers.values()][0];
-    const match = catalog.describe(a.providerKind, a.model, first ? baseModelFor(a.providerKind, first.settings, a.model) : null).price;
+    const baseModel = first ? baseModelFor(registry, { kind: a.providerKind, settings: first.settings }, a.model) : null;
+    const match = catalog.describe(registry.get(a.providerKind)?.catalog, a.model, baseModel).price;
     missing.push({
       providerKind: a.providerKind,
       model: a.model,

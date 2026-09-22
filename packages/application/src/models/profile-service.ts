@@ -8,10 +8,10 @@ import { bumpGeneration } from '../cache/generations.js';
 import { emitEvent } from '../events/outbox.js';
 import { nowOf, type ActorContext } from '../shared/context.js';
 import { authorize, authorizeAny, isForeignKeyViolation, isUniqueViolation } from './access.js';
-import { baseModelFor, ensureCatalogPrices, type PriceCheck, type PriceTarget } from './catalog/catalog-prices.js';
+import { baseModelFor, ensureCatalogPrices, isPricedKind, type PriceCheck, type PriceTarget } from './catalog/catalog-prices.js';
 import type { ModelCatalogService } from './catalog/catalog-service.js';
 import type { ProfileInput, ProfilePatch } from './inputs.js';
-import { capabilitiesOf, checkProfileTargets, type ProfilePolicyCheck } from './model-policy.js';
+import { checkProfileTargets, modelFacts, type ProfilePolicyCheck } from './model-policy.js';
 import { agentsByProfile } from './references.js';
 import { EMPTY_USAGE_STATS, modelUsageStats } from './usage-stats.js';
 import { toProfileView, type ProfileRow, type ProfileView } from './views.js';
@@ -197,7 +197,8 @@ export class ProfileService {
   /**
    * Price every target from the catalog when no row prices it yet. Best
    * effort after the commit: a catalog problem never fails the save; such
-   * targets are reported as missing.
+   * targets are reported as missing. Targets of kinds that are never priced
+   * (dev-only, or not registered here) are not reported.
    */
   private async prices(actor: ActorContext, row: ProfileRow): Promise<PriceCheck[]> {
     const catalog = this.deps.catalog;
@@ -206,10 +207,10 @@ export class ProfileService {
     const targets: PriceTarget[] = [];
     for (const t of [{ providerId: row.providerId, model: row.model }, ...row.fallbacks]) {
       const p = providers.get(t.providerId);
-      if (p && p.kind !== 'DEV_SCRIPTED') targets.push({ providerKind: p.kind, model: t.model, baseModel: baseModelFor(p.kind, p.settings, t.model) });
+      if (p && isPricedKind(this.deps.registry, p.kind)) targets.push({ providerKind: p.kind, model: t.model, baseModel: baseModelFor(this.deps.registry, p, t.model) });
     }
     try {
-      return await ensureCatalogPrices(this.deps.db, await catalog.catalog(), actor, targets, nowOf(this.deps));
+      return await ensureCatalogPrices(this.deps.db, await catalog.catalog(), this.deps.registry, actor, targets, nowOf(this.deps));
     } catch {
       return targets.map((t) => ({ providerKind: t.providerKind, model: t.model, status: 'missing', origin: null, source: null, priceId: null }));
     }
@@ -240,7 +241,7 @@ export class ProfileService {
         providers: byId,
         agents: agents.get(row.id) ?? [],
         stats: stats ? (stats.get(row.id) ?? EMPTY_USAGE_STATS) : null,
-        capabilities: (provider, model) => capabilitiesOf(this.deps.registry, provider, model),
+        facts: (provider, model) => modelFacts(this.deps.registry, provider, model),
       }),
     );
   }

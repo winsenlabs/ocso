@@ -24,7 +24,9 @@ describe('email configuration (bootstrap env)', () => {
       });
       expect(env).toMatchObject({ EMAIL_DRIVER: 'smtp', SMTP_PORT: 465, SMTP_SECURE: true, SMTP_REQUIRE_TLS: false, EMAIL_ALLOW_LOG_IN_PRODUCTION: true });
     }
-    expect(() => loadEnv(ApiEnv, { ...base, EMAIL_DRIVER: 'sendgrid' })).toThrow(/EMAIL_DRIVER/);
+    // Driver names are open: the composition root checks them against the registered email drivers.
+    expect(loadEnv(ApiEnv, { ...base, EMAIL_DRIVER: 'sendgrid' }).EMAIL_DRIVER).toBe('sendgrid');
+    expect(() => loadEnv(ApiEnv, { ...base, EMAIL_DRIVER: 'x'.repeat(65) })).toThrow(/EMAIL_DRIVER/);
   });
 
   it('hides RESEND_API_KEY and SMTP_URL values in configuration errors', () => {

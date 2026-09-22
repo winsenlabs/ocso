@@ -1,15 +1,16 @@
 import { DataTable } from '@/components/ui/data-table';
 import { StatusChip } from '@/components/ui/status-chip';
-import type { Capabilities, ProviderKind } from '@/lib/api/models';
+import type { Capabilities, PromptCaching } from '@/lib/api/models';
 import { cacheSettingEffect, cachingMechanism, cachingMode, targetReasonText } from '../models/meta';
 
 export interface TargetRowView {
   key: string;
   role: 'PRIMARY' | 'FALLBACK';
   providerName: string | null;
-  providerKind: ProviderKind | null;
   model: string;
   capabilities: Capabilities | null;
+  /** The provider's own description of how this model caches (null: kind unavailable or settings invalid). */
+  caching: PromptCaching | null;
   /** From the policy check; undefined when not validated (read-only view). */
   permitted?: boolean | undefined;
   reason?: string | null | undefined;
@@ -50,14 +51,14 @@ export function TargetCachingTable({ targets, cachePolicy, cacheTtl }: { targets
           header: 'Caching support',
           cell: (t) => (
             <span>
-              <StatusChip tone={cachingMode(t.providerKind, t.capabilities) === 'explicit' ? 'accent' : 'muted'}>{cachingMode(t.providerKind, t.capabilities)}</StatusChip>
+              <StatusChip tone={cachingMode(t.caching) === 'explicit' ? 'accent' : 'muted'}>{cachingMode(t.caching)}</StatusChip>
               <span className="mono-sm" style={{ display: 'block' }}>
-                {cachingMechanism(t.providerKind, t.capabilities)}
+                {cachingMechanism(t.caching)}
               </span>
             </span>
           ),
         },
-        { key: 'effect', header: 'This profile', cell: (t) => <span className="mono-sm">{cacheSettingEffect(t.providerKind, t.capabilities, cachePolicy, cacheTtl)}</span> },
+        { key: 'effect', header: 'This profile', cell: (t) => <span className="mono-sm">{cacheSettingEffect(t.caching, cachePolicy, cacheTtl)}</span> },
         { key: 'inputs', header: 'Inputs', cell: (t) => <span className="mono-sm">{inputs(t.capabilities)}</span> },
         ...(validated
           ? [

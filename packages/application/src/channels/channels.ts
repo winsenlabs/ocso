@@ -11,8 +11,8 @@ import type { ActorContext } from '../shared/context.js';
 import { patchOf } from '../shared/patch.js';
 
 export const ChannelInput = z.object({
-  /** A registered channel adapter kind (checked against the registry by the API; plugins add kinds). */
-  kind: z.string().regex(/^[A-Z][A-Z0-9_]{1,39}$/, 'must be a channel kind such as WHATSAPP'),
+  /** A registered channel adapter kind (open: the API checks it against the channel registry; plugins add kinds). */
+  kind: z.string().regex(/^[A-Z][A-Z0-9_]{1,39}$/, 'must be a channel kind (upper snake case)'),
   name: z.string().trim().min(1).max(120),
   settings: z.record(z.string(), z.unknown()).default({}),
   /** Plaintext secrets entered once by the admin; stored in the SecretStore, never returned. */
@@ -35,20 +35,23 @@ export interface ChannelView {
   secretRefs: Record<string, string>;
   defaultAgentId: string | null;
   lastInboundAt: string | null;
+  /** Where the provider posts inbound messages (`/channels/<segment>/<publicKey>/webhook`), for webhook kinds. */
   webhookPath: string | null;
+  /** The widget page customers open (`/chat/<publicKey>`), for embeddable kinds. */
+  embedPath: string | null;
 }
 
 /** Validates settings + secrets for a channel kind (provided by the channel adapter registry). */
 export type ChannelConfigValidator = (kind: string, settings: unknown, secrets: Record<string, string>) => string[];
-/** Public path of a channel (provider webhook or widget page), from the channel adapter registry. */
-export type ChannelPathResolver = (kind: string, publicKey: string) => string | null;
+/** Public paths of a channel (provider webhook, widget page), from the channel adapter registry. */
+export type ChannelPathResolver = (kind: string, publicKey: string) => { webhookPath: string | null; embedPath: string | null };
 
 export class ChannelService {
   constructor(
     private readonly db: Db,
     private readonly secrets: SecretStore,
     private readonly validate: ChannelConfigValidator,
-    private readonly publicPath: ChannelPathResolver,
+    private readonly paths: ChannelPathResolver,
   ) {}
 
   async list(): Promise<ChannelView[]> {
@@ -79,7 +82,7 @@ export class ChannelService {
         .insert(channels)
         .values({
           id,
-          kind: input.kind as typeof channels.$inferInsert.kind,
+          kind: input.kind,
           name: input.name,
           status: input.status,
           publicKey: randomBytes(12).toString('base64url'),
@@ -164,7 +167,7 @@ export class ChannelService {
       secretRefs: row.secretRefs,
       defaultAgentId: row.defaultAgentId,
       lastInboundAt: row.lastInboundAt?.toISOString() ?? null,
-      webhookPath: this.publicPath(row.kind, row.publicKey),
+      ...this.paths(row.kind, row.publicKey),
     };
   }
 }

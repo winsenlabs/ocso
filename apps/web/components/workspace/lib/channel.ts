@@ -1,25 +1,14 @@
-import { CHANNEL_NAMES, type ChannelCode } from '../../../lib/channels';
+import { markOfKind, type ChannelMarkView } from '../../../lib/channels';
 
-/** API channel kinds (packages/channels CHANNEL_KINDS) → the design's two-letter marks. */
-const KIND_TO_CODE: Readonly<Record<string, ChannelCode>> = {
-  WHATSAPP: 'WA',
-  TWILIO_WHATSAPP: 'WA',
-  WEBCHAT: 'WB',
-  CUSTOM_APP: 'AP',
-  EMAIL: 'EM',
-  VOICE: 'VO',
-  INSTAGRAM: 'IG',
-  SMS: 'SM',
-  RCS: 'SM',
-};
+/** Kind descriptors as the workspace needs them (GET /v1/channels/kinds, see lib/api/channels.ts). */
+export type KindMarks = ReadonlyArray<{ kind: string; mark: ChannelMarkView | null }>;
 
-export function channelCode(kind: string | null | undefined): ChannelCode | null {
-  return kind ? (KIND_TO_CODE[kind] ?? null) : null;
+/** The mark a channel kind's adapter declares; null for kinds the API does not describe. */
+export function channelMark(kinds: KindMarks, kind: string | null | undefined): ChannelMarkView | null {
+  return markOfKind(kinds, kind);
 }
 
-/** "WhatsApp", "Web chat", or the channel's configured name for kinds without a mark. */
-export function channelLabel(kind: string | null | undefined, name?: string | null): string {
-  const code = channelCode(kind);
-  if (code) return CHANNEL_NAMES[code];
-  return name ?? 'no channel';
+/** The network's name from the kind's mark ("WhatsApp", "Web chat"), else the channel's configured name. */
+export function channelLabel(kinds: KindMarks, kind: string | null | undefined, name?: string | null): string {
+  return channelMark(kinds, kind)?.name ?? name ?? 'no channel';
 }

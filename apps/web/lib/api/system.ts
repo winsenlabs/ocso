@@ -80,31 +80,28 @@ export const WorkerSettingsSchema = z.object({
 export type WorkerSettingsView = z.infer<typeof WorkerSettingsSchema>;
 export type WorkerSettingsPatch = Partial<Record<WorkerField, number>> & { autoscalingEnabled?: boolean };
 
-const EcsStatus = z.object({
-  driver: z.literal('ecs'),
-  checkedAt: z.string(),
-  cluster: z.string(),
-  service: z.string(),
-  serviceStatus: z.string(),
-  desiredCount: nn,
-  runningCount: nn,
-  pendingCount: nn,
-  rolloutState: z.string().nullable(),
-  scalableTarget: z.object({ minCapacity: n, maxCapacity: n, dynamicScalingSuspended: z.boolean() }).nullable(),
-  policies: z.array(z.object({ name: z.string(), type: z.string(), present: z.boolean() })),
-  alarms: z.array(z.object({ name: z.string(), state: z.string() })),
+/** One panel row in the deployment driver's own words (DeploymentFact); the UI never needs to know the driver. */
+const DeploymentFact = z.object({
+  label: z.string(),
+  value: z.string(),
+  states: z.array(z.object({ name: z.string(), tone: z.string(), title: z.string().optional() })).optional(),
 });
-const ComposeStatus = z.object({ driver: z.literal('compose'), checkedAt: z.string(), replicaControl: z.string(), note: z.string() });
+/** Any driver's describe() snapshot; snapshots recorded before `facts` existed may carry only a `note`. */
+const DeploymentStatus = z.object({
+  driver: z.string(),
+  checkedAt: z.string().optional(),
+  facts: z.array(DeploymentFact).optional(),
+  note: z.string().optional(),
+});
 
 export const WorkerDeploymentSchema = z.object({
   driver: z.string().nullable(),
-  /** A driver this UI does not know yet still parses (rendered generically). */
-  deployment: z.union([EcsStatus, ComposeStatus, z.object({ driver: z.string(), checkedAt: z.string().optional() })]).nullable(),
+  deployment: DeploymentStatus.nullable(),
   describedAt: z.string().nullable(),
   describeError: z.string().nullable(),
 });
 export type WorkerDeployment = z.infer<typeof WorkerDeploymentSchema>;
-export type EcsDeploymentStatus = z.infer<typeof EcsStatus>;
+export type DeploymentFactView = z.infer<typeof DeploymentFact>;
 
 export const loadWorkerSettings = () => api.get('/v1/settings/workers', WorkerSettingsSchema);
 export const updateWorkerSettings = (patch: WorkerSettingsPatch) => api.patch('/v1/settings/workers', patch, WorkerSettingsSchema);

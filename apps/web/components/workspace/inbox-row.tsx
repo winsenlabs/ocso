@@ -3,8 +3,8 @@ import { ChannelMark } from '@/components/ui/channel-mark';
 import { ControlState, controlStateKind } from '@/components/ui/control-state';
 import { SlaTimer } from '@/components/ui/sla-timer';
 import type { ConversationSummary } from '@/lib/api/conversations';
+import type { ChannelMarkView } from '@/lib/channels';
 import { formatDateTime, formatTime } from '@/lib/format';
-import { channelCode } from './lib/channel';
 import { controlLabel, customerDisplayName } from './lib/labels';
 import { pickupSla, slaLabel } from './lib/sla';
 import { RowTags } from './row-tags';
@@ -18,6 +18,8 @@ export interface InboxRowProps {
   now: number;
   /** The inbox tag filter, highlighted on the row. */
   activeTag?: string | null;
+  /** The channel kind's mark (descriptor); none for kinds the API does not describe. */
+  mark?: ChannelMarkView | null;
 }
 
 function when(iso: string, timeZone: string, now: number): string {
@@ -28,8 +30,7 @@ function when(iso: string, timeZone: string, now: number): string {
 const PRIO: Readonly<Record<string, string>> = { P1: 'p1', P2: 'p2' };
 
 /** One inbox row (design/01 .crow). */
-export function InboxRow({ item, href, selected, meId, timeZone, now, activeTag = null }: InboxRowProps) {
-  const code = channelCode(item.channel.kind);
+export function InboxRow({ item, href, selected, meId, timeZone, now, activeTag = null, mark = null }: InboxRowProps) {
   const kind = controlStateKind(item.controlState);
   const sla = pickupSla(item.controlState, item.waitingSince, item.slaDueAt, now);
   return (
@@ -44,7 +45,7 @@ export function InboxRow({ item, href, selected, meId, timeZone, now, activeTag 
           </time>
         </span>
         <span className="l2">
-          {code ? <ChannelMark channel={code} /> : null}
+          {mark ? <ChannelMark mark={mark} /> : null}
           <span className="ag">
             {item.agent.name} · {item.agent.conversationType.toLowerCase()}
           </span>

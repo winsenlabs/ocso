@@ -1,17 +1,18 @@
 import { z } from 'zod';
 
 /**
- * WhatsApp message templates, channel-neutral (docs/07 §3, PM/research/10).
- * Outside the 24-hour customer-service window a business may only send a
- * template the provider (Twilio Content API / Meta WhatsApp Manager) has
- * approved. Adapters normalize provider shapes into these types; the API,
- * the workspace and the template builder only ever see these.
+ * Message templates, channel-neutral (docs/07 §3, PM/research/10): content a
+ * channel's provider reviews before it may be sent, e.g. WhatsApp's approved
+ * templates, the only way to reach a customer after the customer-service
+ * window closes. Adapters normalize provider shapes into these types; the
+ * API, the workspace and the template builder only ever see these. The
+ * categories and review rules follow WhatsApp, today's only template channel.
  */
 
 export const TEMPLATE_CATEGORIES = ['UTILITY', 'MARKETING', 'AUTHENTICATION'] as const;
 export type TemplateCategory = (typeof TEMPLATE_CATEGORIES)[number];
 
-/** DRAFT: exists at the provider but was never submitted for WhatsApp approval. */
+/** DRAFT: exists at the provider but was never submitted for review. */
 export const TEMPLATE_STATUSES = ['DRAFT', 'PENDING', 'APPROVED', 'REJECTED', 'PAUSED', 'DISABLED'] as const;
 export type TemplateStatus = (typeof TEMPLATE_STATUSES)[number];
 
@@ -54,7 +55,7 @@ export const TemplateButtonSchema = z.object({
 export type TemplateButton = z.infer<typeof TemplateButtonSchema>;
 
 export const MessageTemplateSchema = z.object({
-  /** Provider id: Twilio Content SID (HX…) or Meta template id. */
+  /** The provider's template id (e.g. a Twilio Content SID `HX…`, a Meta template id). */
   id: z.string().min(1),
   name: z.string(),
   language: z.string(),
@@ -93,7 +94,14 @@ export function isTemplateSendable(template: Pick<MessageTemplate, 'status' | 'u
 }
 
 /** Structured-part schema of a sent template message (the interaction's single part). */
-export const TEMPLATE_MESSAGE_SCHEMA = 'ocso.whatsapp_template';
+export const TEMPLATE_MESSAGE_SCHEMA = 'ocso.message_template';
+/** The same part as stored before templates became channel-neutral; still read, never written. */
+export const LEGACY_TEMPLATE_MESSAGE_SCHEMA = 'ocso.whatsapp_template';
+
+/** True for a structured part schema that marks a sent template message (current or legacy name). */
+export function isTemplateMessageSchema(schema: string | undefined): boolean {
+  return schema === TEMPLATE_MESSAGE_SCHEMA || schema === LEGACY_TEMPLATE_MESSAGE_SCHEMA;
+}
 
 export const TemplateMessageDataSchema = z.object({
   templateId: z.string().min(1),

@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { buildSnapshot, ModelCatalog } from '../../src/catalog/catalog.js';
 import { normalizeLiteLlm, perMillion } from '../../src/catalog/litellm.js';
-import { catalogCandidates } from '../../src/catalog/mapping.js';
 import { normalizeModelsDev, tierThreshold } from '../../src/catalog/models-dev.js';
 import { CatalogSnapshotSchema } from '../../src/catalog/types.js';
 import { vendoredSnapshots } from '../../src/catalog/vendored.js';
+import { catalogProvidersOf, createDefaultRegistry, FIRST_PARTY_PROVIDERS } from '../../src/registry.js';
+
+/** Each provider definition carries its own catalog mapping (ADR-027); tests look it up by kind. */
+const registry = createDefaultRegistry({ enableDevProviders: true });
+const mapping = (kind: string) => registry.get(kind)?.catalog;
+const catalogCandidates = (kind: string, model: string, base?: string) => mapping(kind)?.candidates(model, base ?? null) ?? [];
 
 /** Excerpts in the shape of models.dev api.json and LiteLLM's price map (research/09 §5). */
 const MODELS_DEV = {
@@ -118,7 +123,7 @@ describe('LiteLLM normalization', () => {
 });
 
 describe('catalog lookups (kind + model id → catalog key)', () => {
-  const price = (kind: Parameters<typeof catalogCandidates>[0], model: string, base?: string) => catalog.describe(kind, model, base).price;
+  const price = (kind: string, model: string, base?: string) => catalog.describe(mapping(kind), model, base).price;
 
   it('exact ids; models.dev first, LiteLLM for models models.dev lacks', () => {
     expect(price('OPENAI', 'gpt-5.5')).toMatchObject({ source: 'models.dev', price: { input: 5, output: 30 } });
@@ -152,9 +157,21 @@ describe('catalog lookups (kind + model id → catalog key)', () => {
   });
 
   it('metadata without a price (Sarvam) and never-priced kinds', () => {
-    expect(catalog.describe('SARVAM', 'sarvam-105b')).toMatchObject({ metadata: { entry: { contextWindow: 131_072 } }, price: null });
+    expect(catalog.describe(mapping('SARVAM'), 'sarvam-105b')).toMatchObject({ metadata: { entry: { contextWindow: 131_072 } }, price: null });
     expect(catalogCandidates('DEV_SCRIPTED', 'scripted-1')).toEqual([]);
-    expect(catalog.entriesFor('OPENAI').map((e) => e.id)).toEqual(['gpt-5.5', 'gpt-4o-mini']);
+    expect(catalog.entriesFor(mapping('OPENAI')).map((e) => e.id)).toEqual(['gpt-5.5', 'gpt-4o-mini']);
+    // Providers without a listing stand-in (Vertex) or without a mapping (dev, unknown kinds) list nothing.
+    expect(catalog.entriesFor(mapping('VERTEX'))).toEqual([]);
+    expect(catalog.entriesFor(mapping('MISTRAL'))).toEqual([]);
+    expect(catalog.describe(undefined, 'gpt-5.5')).toEqual({ metadata: null, price: null });
+    expect(catalog.describe(mapping('OPENAI'), '  ')).toEqual({ metadata: null, price: null });
+  });
+
+  it('the catalogs keep exactly the providers the definitions map to', () => {
+    expect(catalogProvidersOf(FIRST_PARTY_PROVIDERS, 'models.dev').sort()).toEqual(['amazon-bedrock', 'anthropic', 'azure', 'google-vertex', 'google-vertex-anthropic', 'openai', 'sarvam']);
+    expect(catalogProvidersOf(FIRST_PARTY_PROVIDERS, 'litellm').sort()).toEqual(['anthropic', 'azure', 'azure_ai', 'bedrock', 'bedrock_converse', 'openai', 'vertex_ai-anthropic_models', 'vertex_ai-language-models']);
+    // A new provider's catalog provider is kept once its definition maps to it.
+    expect(normalizeModelsDev(MODELS_DEV, ['groq']).map((e) => e.id)).toEqual(['llama-x']);
   });
 
   it('snapshots carry a content hash that changes with the content', () => {
@@ -171,7 +188,7 @@ describe('vendored snapshot', () => {
     const snapshots = vendoredSnapshots();
     expect(snapshots.map((s) => s.source).sort()).toEqual(['litellm', 'models.dev']);
     const vendored = new ModelCatalog(snapshots.map((snapshot) => ({ snapshot, origin: 'vendored' as const })));
-    expect(vendored.describe('OPENAI', 'gpt-5.4-mini').price?.price).toMatchObject({ input: 0.75, output: 4.5 });
-    expect(vendored.describe('ANTHROPIC', 'claude-sonnet-5').price?.price).toMatchObject({ input: 2, output: 10 });
+    expect(vendored.describe(mapping('OPENAI'), 'gpt-5.4-mini').price?.price).toMatchObject({ input: 0.75, output: 4.5 });
+    expect(vendored.describe(mapping('ANTHROPIC'), 'claude-sonnet-5').price?.price).toMatchObject({ input: 2, output: 10 });
   });
 });

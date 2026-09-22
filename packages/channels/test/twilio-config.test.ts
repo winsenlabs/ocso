@@ -47,8 +47,11 @@ describe('Twilio WhatsApp configuration', () => {
     expect(registry.kindForWebhookSegment('webchat')).toBeNull();
     expect(registry.publicPath('TWILIO_WHATSAPP', 'k1')).toBe('/channels/twilio-whatsapp/k1/webhook');
     expect(registry.publicPath('WHATSAPP', 'k2')).toBe('/channels/whatsapp/k2/webhook');
-    expect(registry.publicPath('WEBCHAT', 'k3')).toBe('/webchat/k3');
-    expect(registry.publicPath('SMS', 'k4')).toBeNull();
+    // The widget page the web app serves (apps/web/app/chat/[publicKey]), not a webhook.
+    expect(registry.publicPath('WEBCHAT', 'k3')).toBe('/chat/k3');
+    expect(registry.webhookPath('WEBCHAT', 'k3')).toBeNull();
+    expect(registry.embedPath('TWILIO_WHATSAPP', 'k1')).toBeNull();
+    expect(registry.publicPath('NOT_A_KIND', 'k4')).toBeNull();
     expect(registry.webhookUrl('TWILIO_WHATSAPP', 'k1', 'https://ocso.example.com/ignored/path')).toBe('https://ocso.example.com/channels/twilio-whatsapp/k1/webhook');
     expect(registry.has('TWILIO_WHATSAPP')).toBe(true);
     expect(registry.has('NOT_A_KIND')).toBe(false);

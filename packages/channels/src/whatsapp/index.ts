@@ -1,6 +1,7 @@
 export * from './adapter.js';
 export * from './capabilities.js';
 export * from './config.js';
+export { WHATSAPP_DESCRIPTOR, WHATSAPP_MARK } from './descriptor.js';
 export * from './errors.js';
 export * from './format.js';
 export * from './identity.js';

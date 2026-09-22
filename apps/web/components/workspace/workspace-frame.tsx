@@ -1,5 +1,6 @@
 import { Permission } from '@ocso/auth';
 import { EmptyState } from '@/components/ui/empty-state';
+import { loadChannelKinds } from '@/lib/api/channels';
 import { loadAgentOptions, loadQueueOptions, type Option } from '@/lib/api/conversations';
 import { hasPermission, requireSession } from '@/lib/session';
 import { InboxClient, InboxSkeletonRows } from './inbox-client';
@@ -14,12 +15,15 @@ export async function InboxPane() {
   const session = await requireSession();
   if (!hasPermission(session, Permission.CONVERSATIONS_READ)) return <WorkspaceForbidden role={session.roleLabel} />;
 
-  const [agents, queues] = await Promise.all([
+  const [agents, queues, kinds] = await Promise.all([
     hasPermission(session, Permission.AGENTS_READ) ? loadAgentOptions().catch(() => [] as Option[]) : Promise.resolve([] as Option[]),
     hasPermission(session, Permission.QUEUES_READ) ? loadQueueOptions().catch(() => [] as Option[]) : Promise.resolve([] as Option[]),
+    loadChannelKinds(),
   ]);
   const defaultView = hasPermission(session, Permission.CONVERSATIONS_READ_TEAM) ? 'all' : 'mine';
-  return <InboxClient defaultView={defaultView} agents={agents} queues={queues} meId={session.user.id} timeZone={session.user.deployment.timezone} />;
+  // Only the marks travel to the browser (the descriptors' forms stay server-side).
+  const marks = kinds.map((k) => ({ kind: k.kind, mark: k.mark }));
+  return <InboxClient defaultView={defaultView} agents={agents} queues={queues} meId={session.user.id} timeZone={session.user.deployment.timezone} marks={marks} />;
 }
 
 export function WorkspaceForbidden({ role }: { role: string }) {

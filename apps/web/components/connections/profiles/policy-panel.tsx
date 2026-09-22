@@ -9,9 +9,9 @@ export function checkedTargets(check: PolicyCheck): TargetRowView[] {
     key: `${i}-${t.providerId}-${t.model}`,
     role: i === 0 ? 'PRIMARY' : 'FALLBACK',
     providerName: t.providerName,
-    providerKind: t.providerKind,
     model: t.model,
     capabilities: t.capabilities,
+    caching: t.caching,
     permitted: t.permitted,
     reason: t.reason,
   }));

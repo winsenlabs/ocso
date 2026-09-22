@@ -2,7 +2,8 @@ import { sql } from 'drizzle-orm';
 import { bigint, boolean, index, integer, jsonb, pgTable, real, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { createdAt, id, ts, updatedAt } from './columns.js';
 
-export type ProviderKindColumn = 'BEDROCK' | 'VERTEX' | 'FOUNDRY' | 'OPENAI' | 'ANTHROPIC' | 'SARVAM' | 'DEV_SCRIPTED';
+/** A model provider kind (`OPENAI`, `BEDROCK`…). Open: the provider registry, not the schema, decides which kinds exist. */
+export type ProviderKindColumn = string;
 
 /** Provider = infrastructure (endpoint, region, credentials by reference). */
 export const modelProviders = pgTable(

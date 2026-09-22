@@ -3,6 +3,7 @@ import { deliveryStatus, describeTestResult, parseTestRecipient, statusNotes, ty
 
 const settings = (overrides: Partial<EmailSettings> = {}): EmailSettings => ({
   driver: 'resend',
+  label: 'Resend',
   from: 'Meridian Support <support@meridian.test>',
   replyTo: null,
   configured: true,
@@ -26,18 +27,23 @@ describe('email settings: test recipient', () => {
 
 describe('email settings: test result text', () => {
   it('reports a delivered test with the provider id', () => {
-    expect(describeTestResult({ ok: true, driver: 'resend', id: 're_123' })).toEqual({ tone: 'info', message: 'Test email sent via Resend · message id re_123.' });
-    expect(describeTestResult({ ok: true, driver: 'smtp', id: null, warning: 'Reply-to is not set.' })).toEqual({
+    expect(describeTestResult({ ok: true, driver: 'resend', label: 'Resend', delivers: true, id: 're_123' })).toEqual({ tone: 'info', message: 'Test email sent via Resend · message id re_123.' });
+    expect(describeTestResult({ ok: true, driver: 'smtp', label: 'SMTP', id: null, warning: 'Reply-to is not set.' })).toEqual({
       tone: 'warn',
       message: 'Test email sent via SMTP. Reply-to is not set.',
     });
   });
 
-  it('never presents the log driver as delivered', () => {
-    const r = describeTestResult({ ok: true, driver: 'log', id: null, warning: 'Nothing was delivered.' });
+  it('never presents a non-delivering driver as delivered', () => {
+    const r = describeTestResult({ ok: true, driver: 'log', label: 'Log — development only', delivers: false, id: null, warning: 'Nothing was delivered.' });
     expect(r.tone).toBe('warn');
     expect(r.message).toMatch(/^Not delivered: the log driver/);
     expect(r.message).toContain('Nothing was delivered.');
+  });
+
+  it('renders a driver it has never heard of (open driver names, older APIs without a label)', () => {
+    expect(describeTestResult({ ok: true, driver: 'postbox', id: 'pb-1' })).toEqual({ tone: 'info', message: 'Test email sent via postbox · message id pb-1.' });
+    expect(deliveryStatus(settings({ driver: 'postbox', label: undefined }))).toEqual({ tone: 'good', label: 'delivering' });
   });
 
   it('explains failures by category and includes the safe provider reason', () => {
@@ -63,15 +69,15 @@ describe('email settings: status', () => {
     expect(statusNotes(settings())).toEqual([]);
   });
 
-  it('flags the log driver and explains it once', () => {
-    const log = settings({ driver: 'log', configured: false, from: null });
-    expect(deliveryStatus(log)).toEqual({ tone: 'warn', label: 'not delivered · log only' });
+  it('flags a non-delivering driver and explains it once', () => {
+    const log = settings({ driver: 'log', label: 'Log — development only', configured: false, from: null });
+    expect(deliveryStatus(log)).toEqual({ tone: 'warn', label: 'not delivered · log driver' });
     expect(statusNotes(log)).toHaveLength(1);
     const withWarning = settings({ driver: 'log', configured: false, warnings: ['Log driver allowed in production by EMAIL_ALLOW_LOG_IN_PRODUCTION.'] });
     expect(statusNotes(withWarning)).toEqual(['Log driver allowed in production by EMAIL_ALLOW_LOG_IN_PRODUCTION.']);
   });
 
-  it('shows an unconfigured provider as not configured', () => {
-    expect(deliveryStatus(settings({ driver: 'smtp', configured: false }))).toEqual({ tone: 'warn', label: 'not configured' });
+  it('shows any driver that does not deliver as not delivered', () => {
+    expect(deliveryStatus(settings({ driver: 'smtp', configured: false }))).toEqual({ tone: 'warn', label: 'not delivered · smtp driver' });
   });
 });

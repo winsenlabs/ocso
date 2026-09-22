@@ -4,6 +4,7 @@ import type {
   MessageHandler,
   PublishOptions,
   QueueAdapter,
+  QueueNotifier,
   QueueStats,
   QueueSubscription,
   Topic,
@@ -24,11 +25,6 @@ export interface PgQueueOptions {
   notifier?: QueueNotifier | undefined;
 }
 
-export interface QueueNotifier {
-  notify(topic: Topic): Promise<void>;
-  onNotify(listener: (topic: Topic) => void): () => void;
-}
-
 interface JobRow extends Record<string, unknown> {
   id: string;
   topic: Topic;
@@ -41,6 +37,8 @@ interface JobRow extends Record<string, unknown> {
 /** PostgreSQL-backed queue for Compose deployments (`jobs` table, SKIP LOCKED). */
 export class PgQueue implements QueueAdapter {
   readonly driver = 'postgres' as const;
+  readonly inDatabase = true;
+  readonly reportsOldestAge = true;
 
   constructor(
     private readonly sql: SqlClient,

@@ -1,10 +1,9 @@
 import { readFileSync } from 'node:fs';
-import { mailboxAddress, normalizeMailbox } from './address.js';
-import type { EmailDriver, EmailSender } from './contract.js';
-import { LogEmailSender } from './log-sender.js';
-import { ResendEmailSender, type EmailFetch } from './resend-sender.js';
-import { SmtpEmailSender } from './smtp-sender.js';
-import type { MailTransportFactory, SmtpTransportOptions } from './smtp-transport.js';
+import { normalizeMailbox } from './address.js';
+import type { EmailDriver, EmailDriverContext, EmailDriverDefinition, EmailSender } from './contract.js';
+import { DEFAULT_EMAIL_DRIVER, EMAIL_DRIVERS } from './drivers.js';
+import type { EmailFetch } from './resend-sender.js';
+import type { MailTransportFactory } from './smtp-transport.js';
 
 /**
  * Deployment email configuration (bootstrap only: environment and secret
@@ -29,33 +28,44 @@ export interface EmailEnv {
   SMTP_PASSWORD_FILE?: string | undefined;
 }
 
-export interface EmailSenderDeps {
-  fetch?: EmailFetch | undefined;
-  transportFactory?: MailTransportFactory | undefined;
+/** What resolving the configuration needs besides the environment. */
+export interface EmailResolveDeps {
   /** Reads *_FILE secrets; default fs.readFileSync (utf8). */
   readFile?: ((path: string) => string) | undefined;
+  timeoutMs?: number | undefined;
+  /** Registered email drivers (the composition root passes its registry); default EMAIL_DRIVERS. */
+  drivers?: readonly EmailDriverDefinition[] | undefined;
+}
+
+export interface EmailSenderDeps extends EmailResolveDeps {
+  fetch?: EmailFetch | undefined;
+  transportFactory?: MailTransportFactory | undefined;
   /** Log driver output (one line per message). */
   log?: ((line: string) => void) | undefined;
   resendBaseUrl?: string | undefined;
-  timeoutMs?: number | undefined;
 }
 
 export interface ResolvedEmailConfig {
+  /** EMAIL_DRIVER in effect (the registered driver's name). */
   driver: EmailDriver;
   from: string;
   replyTo: string | null;
-  /** Operator-facing notes (e.g. log driver allowed in production). */
+  /** Operator-facing notes (e.g. a non-delivering driver allowed in production). */
   warnings: string[];
-  resend: { apiKey: string } | null;
-  smtp: SmtpTransportOptions | null;
+  /** The selected driver. */
+  definition: EmailDriverDefinition;
+  /** What the driver resolved (credentials included): infrastructure-internal, never serialized. */
+  options: unknown;
 }
 
 /** Secret-free summary for the Settings page and start-up logs. */
 export interface EmailStatus {
   driver: EmailDriver;
+  /** The driver's display name, e.g. `Resend`. */
+  label: string;
   from: string | null;
   replyTo: string | null;
-  /** True when messages actually leave the process (resend / smtp). */
+  /** True when messages actually leave the process (a delivering driver). */
   configured: boolean;
   warnings: string[];
 }
@@ -68,58 +78,60 @@ export class EmailConfigError extends Error {
   }
 }
 
-/** From address of the log driver when EMAIL_FROM is unset. */
+/** From address of a non-delivering driver (log) when EMAIL_FROM is unset. */
 export const LOG_DRIVER_FROM = 'OCSO <no-reply@ocso.invalid>';
 const DOCS = 'docs/operations/compose.md §9';
 
 /**
- * Validate the environment and resolve secrets. EMAIL_DRIVER defaults to
- * `log` in development/test and must be set explicitly in production, where
- * `log` also needs EMAIL_ALLOW_LOG_IN_PRODUCTION=true.
+ * Validate the environment and resolve secrets. EMAIL_DRIVER names a
+ * registered driver; unset it defaults to `log` in development/test and must
+ * be set explicitly in production, where a non-delivering driver also needs
+ * EMAIL_ALLOW_LOG_IN_PRODUCTION=true.
  */
-export function resolveEmailConfig(env: EmailEnv, deps: Pick<EmailSenderDeps, 'readFile' | 'timeoutMs'> = {}): ResolvedEmailConfig {
+export function resolveEmailConfig(env: EmailEnv, deps: EmailResolveDeps = {}): ResolvedEmailConfig {
+  const drivers = deps.drivers ?? EMAIL_DRIVERS;
+  const name = env.EMAIL_DRIVER ?? DEFAULT_EMAIL_DRIVER;
+  const definition = drivers.find((d) => d.name === name);
+  if (!definition) {
+    throw new EmailConfigError([`EMAIL_DRIVER=${name} is not available; registered email drivers: ${drivers.map((d) => d.name).join(', ') || 'none'}`]);
+  }
   const problems: string[] = [];
   const warnings: string[] = [];
   const production = env.NODE_ENV === 'production';
   const allowLog = env.EMAIL_ALLOW_LOG_IN_PRODUCTION === true;
-  const driver: EmailDriver = env.EMAIL_DRIVER ?? 'log';
+  const delivering = drivers.filter((d) => d.delivers).map((d) => d.name).join(' or ') || 'a delivering driver';
   if (production && !env.EMAIL_DRIVER && !allowLog) {
-    problems.push(`EMAIL_DRIVER is required in production: resend or smtp (see ${DOCS}); EMAIL_ALLOW_LOG_IN_PRODUCTION=true accepts the log driver for a trial`);
-  } else if (production && driver === 'log') {
-    if (!allowLog) problems.push(`EMAIL_DRIVER=log delivers no email; in production use resend or smtp (see ${DOCS}), or set EMAIL_ALLOW_LOG_IN_PRODUCTION=true for a trial`);
-    else warnings.push('Log driver in production: invites, password resets and sign-in codes are only written to the server log — nobody receives them.');
+    problems.push(`EMAIL_DRIVER is required in production: ${delivering} (see ${DOCS}); EMAIL_ALLOW_LOG_IN_PRODUCTION=true accepts the ${name} driver for a trial`);
+  } else if (production && !definition.delivers) {
+    if (!allowLog) problems.push(`EMAIL_DRIVER=${name} delivers no email; in production use ${delivering} (see ${DOCS}), or set EMAIL_ALLOW_LOG_IN_PRODUCTION=true for a trial`);
+    else warnings.push(`${definition.label} driver in production: invites, password resets and sign-in codes are not delivered — nobody receives them.`);
   }
 
   const from = mailbox(env.EMAIL_FROM, 'EMAIL_FROM', problems);
   const replyTo = mailbox(env.EMAIL_REPLY_TO, 'EMAIL_REPLY_TO', problems);
-  if (driver !== 'log' && !env.EMAIL_FROM) problems.push(`EMAIL_DRIVER=${driver} requires EMAIL_FROM (an address on a domain verified with your provider)`);
+  if (definition.delivers && !env.EMAIL_FROM) problems.push(`EMAIL_DRIVER=${name} requires EMAIL_FROM (an address on a domain verified with your provider)`);
 
   const read = deps.readFile ?? ((path: string) => readFileSync(path, 'utf8'));
-  const secret = (value: string | undefined, file: string | undefined, name: string): string | null => {
-    if (value) return value.trim();
-    if (!file) return null;
-    try {
-      const content = read(file).trim();
-      if (!content) problems.push(`${name}_FILE points to an empty file`);
-      return content || null;
-    } catch {
-      problems.push(`${name}_FILE points to a missing or unreadable file`);
-      return null;
-    }
+  const ctx: EmailDriverContext = {
+    from,
+    timeoutMs: deps.timeoutMs ?? 10_000,
+    problem: (message) => problems.push(message),
+    secret: (value, file, secretName) => {
+      if (value) return value.trim();
+      if (!file) return null;
+      try {
+        const content = read(file).trim();
+        if (!content) problems.push(`${secretName}_FILE points to an empty file`);
+        return content || null;
+      } catch {
+        problems.push(`${secretName}_FILE points to a missing or unreadable file`);
+        return null;
+      }
+    },
   };
-
-  let resend: ResolvedEmailConfig['resend'] = null;
-  let smtp: SmtpTransportOptions | null = null;
-  const timeoutMs = deps.timeoutMs ?? 10_000;
-  if (driver === 'resend') {
-    const apiKey = secret(env.RESEND_API_KEY, env.RESEND_API_KEY_FILE, 'RESEND_API_KEY');
-    if (apiKey) resend = { apiKey };
-    else if (!env.RESEND_API_KEY_FILE) problems.push('EMAIL_DRIVER=resend requires RESEND_API_KEY or RESEND_API_KEY_FILE');
-  } else if (driver === 'smtp') {
-    smtp = smtpOptions(env, secret(env.SMTP_PASSWORD, env.SMTP_PASSWORD_FILE, 'SMTP_PASSWORD'), from, timeoutMs, problems);
-  }
+  const options = definition.resolve(env, ctx);
   if (problems.length) throw new EmailConfigError(problems);
-  return { driver, from: from ?? LOG_DRIVER_FROM, replyTo, warnings, resend, smtp };
+  return { driver: definition.name, from: from ?? LOG_DRIVER_FROM, replyTo, warnings, definition, options };
 }
 
 /** Build the deployment-wide sender from the environment (EMAIL_SENDER in api and worker). */
@@ -128,29 +140,17 @@ export function createEmailSender(env: EmailEnv, deps: EmailSenderDeps = {}): Em
 }
 
 export function senderFor(config: ResolvedEmailConfig, deps: EmailSenderDeps = {}): EmailSender {
-  switch (config.driver) {
-    case 'resend':
-      return new ResendEmailSender({
-        apiKey: config.resend!.apiKey,
-        from: config.from,
-        replyTo: config.replyTo,
-        baseUrl: deps.resendBaseUrl,
-        fetch: deps.fetch,
-        timeoutMs: deps.timeoutMs,
-      });
-    case 'smtp':
-      return new SmtpEmailSender({ from: config.from, replyTo: config.replyTo, smtp: config.smtp!, transportFactory: deps.transportFactory });
-    case 'log':
-      return new LogEmailSender(config.from, deps.log ?? null);
-  }
+  return config.definition.create(config.options, { from: config.from, replyTo: config.replyTo }, deps);
 }
 
 export function emailStatus(config: ResolvedEmailConfig): EmailStatus {
+  const delivers = config.definition.delivers;
   return {
     driver: config.driver,
-    from: config.driver === 'log' && config.from === LOG_DRIVER_FROM ? null : config.from,
+    label: config.definition.label,
+    from: !delivers && config.from === LOG_DRIVER_FROM ? null : config.from,
     replyTo: config.replyTo,
-    configured: config.driver !== 'log',
+    configured: delivers,
     warnings: [...config.warnings],
   };
 }
@@ -163,38 +163,4 @@ function mailbox(value: string | undefined, setting: string, problems: string[])
     problems.push((error as Error).message);
     return null;
   }
-}
-
-function smtpOptions(env: EmailEnv, password: string | null, from: string | null, timeoutMs: number, problems: string[]): SmtpTransportOptions | null {
-  let host = env.SMTP_HOST;
-  let port = env.SMTP_PORT;
-  let secure = env.SMTP_SECURE;
-  let user = env.SMTP_USER;
-  let pass = password;
-  if (env.SMTP_URL) {
-    let url: URL;
-    try {
-      url = new URL(env.SMTP_URL);
-    } catch {
-      problems.push('SMTP_URL must look like smtp://user:password@host:587 or smtps://host:465 (value hidden)');
-      return null;
-    }
-    if (url.protocol !== 'smtp:' && url.protocol !== 'smtps:') {
-      problems.push('SMTP_URL must use the smtp:// or smtps:// scheme');
-      return null;
-    }
-    host ??= url.hostname || undefined;
-    secure ??= url.protocol === 'smtps:';
-    port ??= url.port ? Number(url.port) : undefined;
-    user ??= url.username ? decodeURIComponent(url.username) : undefined;
-    pass ??= url.password ? decodeURIComponent(url.password) : null;
-  }
-  if (!host) {
-    problems.push('EMAIL_DRIVER=smtp requires SMTP_HOST or SMTP_URL');
-    return null;
-  }
-  const effectivePort = port ?? (secure ? 465 : 587);
-  const auth = pass ? { user: user ?? (from ? mailboxAddress(from) : ''), pass } : undefined;
-  if (auth && !auth.user) problems.push('SMTP_PASSWORD requires SMTP_USER (or EMAIL_FROM as the user name)');
-  return { host, port: effectivePort, secure: secure ?? effectivePort === 465, requireTLS: env.SMTP_REQUIRE_TLS ?? true, auth, timeoutMs };
 }

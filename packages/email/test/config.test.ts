@@ -11,7 +11,10 @@ import {
   normalizeMailbox,
   parseMailbox,
   resolveEmailConfig,
+  type EmailDriverDefinition,
   type EmailEnv,
+  type EmailSender,
+  type SmtpTransportOptions,
 } from '../src/index.js';
 import { API_KEY, fakeFetch, fakeTransport } from './helpers.js';
 
@@ -33,7 +36,8 @@ describe('createEmailSender (EMAIL_DRIVER selection)', () => {
       expect(sender).toBeInstanceOf(LogEmailSender);
       expect(sender.from).toBe(LOG_DRIVER_FROM);
     }
-    expect(emailStatus(resolveEmailConfig({ NODE_ENV: 'test' }))).toEqual({ driver: 'log', from: null, replyTo: null, configured: false, warnings: [] });
+    expect(emailStatus(resolveEmailConfig({ NODE_ENV: 'test' }))).toEqual({ driver: 'log', label: 'Log — development only', from: null, replyTo: null, configured: false, warnings: [] });
+    expect(createEmailSender({}).delivers).toBe(false);
   });
 
   it('production requires an explicit driver and refuses log unless explicitly allowed', () => {
@@ -41,7 +45,7 @@ describe('createEmailSender (EMAIL_DRIVER selection)', () => {
     expect(problems({ NODE_ENV: 'production', EMAIL_DRIVER: 'log' })[0]).toMatch(/EMAIL_DRIVER=log delivers no email.*EMAIL_ALLOW_LOG_IN_PRODUCTION=true/);
     const allowed = resolveEmailConfig({ NODE_ENV: 'production', EMAIL_ALLOW_LOG_IN_PRODUCTION: true });
     expect(allowed.driver).toBe('log');
-    expect(emailStatus(allowed)).toMatchObject({ configured: false, warnings: [expect.stringMatching(/Log driver in production/)] });
+    expect(emailStatus(allowed)).toMatchObject({ configured: false, warnings: [expect.stringMatching(/driver in production: .*nobody receives them/)] });
     expect(() => createEmailSender({ NODE_ENV: 'production' })).toThrow(/Invalid OCSO configuration:\n {2}- EMAIL_DRIVER is required/);
   });
 
@@ -53,9 +57,9 @@ describe('createEmailSender (EMAIL_DRIVER selection)', () => {
     expect(f.calls[0]).toMatchObject({ url: 'https://resend.fake/emails', body: { from: 'Meridian <support@mail.meridian.test>', reply_to: 'help@meridian.test' } });
 
     const fromFile = resolveEmailConfig({ ...RESEND, RESEND_API_KEY: undefined, RESEND_API_KEY_FILE: '/run/secrets/resend' }, { readFile: () => `${API_KEY}\n` });
-    expect(fromFile.resend).toEqual({ apiKey: API_KEY });
+    expect(fromFile.options).toEqual({ apiKey: API_KEY });
     const status = emailStatus(fromFile);
-    expect(status).toEqual({ driver: 'resend', from: 'Meridian <support@mail.meridian.test>', replyTo: null, configured: true, warnings: [] });
+    expect(status).toEqual({ driver: 'resend', label: 'Resend', from: 'Meridian <support@mail.meridian.test>', replyTo: null, configured: true, warnings: [] });
     expect(JSON.stringify(status)).not.toContain(API_KEY);
   });
 
@@ -84,14 +88,49 @@ describe('createEmailSender (EMAIL_DRIVER selection)', () => {
     expect(t.options[0]).toEqual({ host: 'smtp.meridian.test', port: 587, secure: false, requireTLS: true, auth: { user: 'apikey', pass: 'pw-from-file' }, timeoutMs: 10_000 });
 
     const url = resolveEmailConfig({ ...smtp, SMTP_URL: 'smtps://mailer%40meridian.test:p%40ss@smtp.meridian.test' });
-    expect(url.smtp).toMatchObject({ host: 'smtp.meridian.test', port: 465, secure: true, auth: { user: 'mailer@meridian.test', pass: 'p@ss' } });
+    expect(url.options).toMatchObject({ host: 'smtp.meridian.test', port: 465, secure: true, auth: { user: 'mailer@meridian.test', pass: 'p@ss' } });
     const relay = resolveEmailConfig({ ...smtp, SMTP_HOST: 'mailpit', SMTP_PORT: 1025, SMTP_REQUIRE_TLS: false });
-    expect(relay.smtp).toEqual({ host: 'mailpit', port: 1025, secure: false, requireTLS: false, auth: undefined, timeoutMs: 10_000 });
+    expect(relay.options).toEqual({ host: 'mailpit', port: 1025, secure: false, requireTLS: false, auth: undefined, timeoutMs: 10_000 });
     // Password without SMTP_USER: the from address is the user name.
-    expect(resolveEmailConfig({ ...smtp, SMTP_HOST: 'h.test', SMTP_PASSWORD: 'pw' }).smtp?.auth).toEqual({ user: 'ocso@meridian.test', pass: 'pw' });
+    expect((resolveEmailConfig({ ...smtp, SMTP_HOST: 'h.test', SMTP_PASSWORD: 'pw' }).options as SmtpTransportOptions).auth).toEqual({ user: 'ocso@meridian.test', pass: 'pw' });
     expect(problems({ ...smtp })).toEqual(['EMAIL_DRIVER=smtp requires SMTP_HOST or SMTP_URL']);
     const badUrl = problems({ ...smtp, SMTP_URL: 'http://user:secretpw@host' });
     expect(badUrl).toEqual(['SMTP_URL must use the smtp:// or smtps:// scheme']);
+  });
+});
+
+describe('email driver registry', () => {
+  it('names the registered drivers when EMAIL_DRIVER is unknown', () => {
+    expect(problems({ EMAIL_DRIVER: 'sendgrid' })).toEqual(['EMAIL_DRIVER=sendgrid is not available; registered email drivers: resend, smtp, log']);
+    expect(problems({ EMAIL_DRIVER: 'resend' }, undefined)).toEqual([expect.stringMatching(/requires EMAIL_FROM/), expect.stringMatching(/requires RESEND_API_KEY/)]);
+  });
+
+  it('selects a registered third-party driver through the same resolve/create contract', async () => {
+    const sent: string[] = [];
+    const custom: EmailDriverDefinition<{ token: string }> = {
+      name: 'postbox',
+      label: 'Postbox',
+      delivers: true,
+      resolve: (_env, ctx) => {
+        const token = ctx.secret(undefined, '/run/secrets/postbox', 'POSTBOX_TOKEN');
+        return token ? { token } : null;
+      },
+      create: (options, sender): EmailSender => ({
+        driver: 'postbox',
+        from: sender.from,
+        send: async (m) => {
+          sent.push(`${options.token}:${[m.to].flat().join(',')}`);
+          return { id: 'pb-1' };
+        },
+      }),
+    };
+    const env: EmailEnv = { NODE_ENV: 'production', EMAIL_DRIVER: 'postbox', EMAIL_FROM: 'OCSO <ocso@meridian.test>' };
+    const config = resolveEmailConfig(env, { drivers: [custom], readFile: () => 'tok\n' });
+    expect(emailStatus(config)).toEqual({ driver: 'postbox', label: 'Postbox', from: 'OCSO <ocso@meridian.test>', replyTo: null, configured: true, warnings: [] });
+    await createEmailSender(env, { drivers: [custom], readFile: () => 'tok' }).send({ to: 'a@meridian.test', subject: 's', html: 'h', text: 't' });
+    expect(sent).toEqual(['tok:a@meridian.test']);
+    // Only registered drivers exist: the first-party ones are not implied.
+    expect(() => resolveEmailConfig({ EMAIL_DRIVER: 'resend' }, { drivers: [custom] })).toThrow(/registered email drivers: postbox$/);
   });
 });
 

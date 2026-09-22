@@ -7,11 +7,11 @@ import { ConversationsController } from './conversations.controller.js';
 import { ConversationAttachmentsController } from './conversation-attachments.controller.js';
 import { ConversationToolsController } from './conversation-tools.controller.js';
 import { HumanToolService } from '@ocso/agent-runtime';
-import { McpToolProviderFactory } from '@ocso/bootstrap';
+import { createRuntimeToolRegistry, type OcsoPlugin } from '@ocso/bootstrap';
 import { CustomerClaimsIssuer, SettingsService } from '@ocso/application';
 import type { SecretStore } from '@ocso/secrets';
 import { createAjvValidator } from '@ocso/tools';
-import { SECRET_STORE } from '../../infrastructure/tokens.js';
+import { PLUGINS, SECRET_STORE } from '../../infrastructure/tokens.js';
 
 @Module({
   controllers: [ConversationsController, ConversationToolsController, ConversationAttachmentsController],
@@ -21,9 +21,9 @@ import { SECRET_STORE } from '../../infrastructure/tokens.js';
     { provide: HumanControlService, inject: [DB], useFactory: (db: Db) => new HumanControlService(db) },
     {
       provide: HumanToolService,
-      inject: [DB, SECRET_STORE, SettingsService, CustomerClaimsIssuer],
-      useFactory: (db: Db, secrets: SecretStore, settings: SettingsService, claims: CustomerClaimsIssuer) =>
-        new HumanToolService(db, new McpToolProviderFactory(db, secrets, settings), createAjvValidator(), claims),
+      inject: [DB, SECRET_STORE, SettingsService, CustomerClaimsIssuer, PLUGINS],
+      useFactory: (db: Db, secrets: SecretStore, settings: SettingsService, claims: CustomerClaimsIssuer, plugins: readonly OcsoPlugin[]) =>
+        new HumanToolService(db, createRuntimeToolRegistry(db, secrets, settings, plugins), createAjvValidator(), claims),
     },
   ],
   exports: [ConversationAccessService],

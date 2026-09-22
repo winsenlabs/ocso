@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ConnectionCheck, ConnectionCheckResult } from '../contract/types.js';
+import type { ConnectionCheck, ConnectionCheckResult, ChannelFetch } from '../contract/types.js';
 import { safeProviderText } from '../common/redact.js';
 import { twilioSecretValues, type ResolvedTwilioConfig } from './config.js';
 import { TwilioRestClient, type TwilioResult } from './rest-client.js';
@@ -31,7 +31,7 @@ function accountCheck(name: string, result: TwilioResult, secrets: readonly stri
   return { name, ok: true, detail: `${label} is active` };
 }
 
-export async function checkTwilioConnection(config: ResolvedTwilioConfig, fetchImpl: typeof fetch): Promise<ConnectionCheckResult> {
+export async function checkTwilioConnection(config: ResolvedTwilioConfig, fetchImpl: ChannelFetch): Promise<ConnectionCheckResult> {
   const client = new TwilioRestClient(config, fetchImpl);
   const secrets = twilioSecretValues(config);
   const url = client.accountUrl();

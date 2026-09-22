@@ -73,12 +73,12 @@ describe('capability and price lines', () => {
     expect(priceLine(option('gpt-5.5', { catalogPrice }))).toEqual({ kind: 'offer', text: 'in 5.00 · out 30.00 USD / 1M · more above 272K input · models.dev, added when you save' });
     expect(priceLine(option('ft:custom')).kind).toBe('none');
     expect(priceLine(undefined).text).toMatch(/^no catalog price/);
-    expect(priceLine(option('scripted-1', { catalogPrice }), 'DEV_SCRIPTED')).toEqual({ kind: 'dev', text: 'development model · never priced' });
+    expect(priceLine(option('scripted-1', { catalogPrice }), true)).toEqual({ kind: 'dev', text: 'development model · never priced' });
     expect(optionMeta(option('ft:x', { toolCalling: true }))).toBe('tools · no catalog price');
   });
 
   it('status line: listing errors keep free text, catalog stand-ins are labelled', () => {
-    const base: ModelList = { providerId: 'p', providerKind: 'OPENAI', source: 'provider', fetchedAt: '2026-09-22T00:00:00Z', cached: true, models: MODELS.slice(0, 2), error: null };
+    const base: ModelList = { providerId: 'p', providerKind: 'OPENAI', devOnly: false, source: 'provider', fetchedAt: '2026-09-22T00:00:00Z', cached: true, models: MODELS.slice(0, 2), error: null };
     expect(listSummary(base, 'OpenAI')).toBe('2 models from OpenAI (cached) · type to search, or enter any id.');
     expect(listSummary({ ...base, models: [], error: { category: 'authentication', code: 'provider_authentication_failed', message: 'The model provider rejected the configured credentials (HTTP 401) [OPENAI]' } }, 'OpenAI')).toBe(
       'Could not list OpenAI models: The model provider rejected the configured credentials (HTTP 401) [OPENAI]. You can still type a model id.',

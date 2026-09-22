@@ -10,7 +10,7 @@ export type ScalingTrigger = 'startup' | 'periodic' | 'config_changed';
 export interface ScalingServiceDeps {
   db: Db;
   adapter: DeploymentAdapter;
-  queue: Pick<QueueAdapter, 'stats' | 'driver'>;
+  queue: Pick<QueueAdapter, 'stats' | 'reportsOldestAge'>;
   logger?: DeploymentLogger | undefined;
   now?: (() => Date) | undefined;
 }

@@ -14,6 +14,10 @@
  *          (use the package name so the dependency is declared and built).
  *   3. No dependency cycles between workspace packages (package.json deps,
  *      devDependencies and peerDependencies).
+ *   4. Plugin boundary (scripts/plugin-boundary.mjs): core code never names a
+ *      plugin kind or driver; the kinds are derived from the plugins the
+ *      composition root compiles in. Offending file:line are printed; a
+ *      reasoned `// plugin-boundary: allow <reason>` opts one line out.
  *
  * Usage: node scripts/check-source-guards.mjs [--json] [--root <dir>]
  * Exit code: 0 when there are no failures (warnings allowed), 1 otherwise, 2 on bad usage.
@@ -22,6 +26,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { COMPOSITION_ROOT, checkPluginBoundary } from './plugin-boundary.mjs';
 
 const WARN_LINES = 300;
 const FAIL_LINES = 500;
@@ -421,7 +426,8 @@ export function runGuards(root) {
   violations.push(...checkManifestBoundaries(ctx));
   files.sort((a, b) => b.lines - a.lines || a.path.localeCompare(b.path));
   const cycles = findCycles(new Map(workspaces.map((w) => [w.name, w.deps])));
-  const failures = files.filter((f) => f.status === 'FAIL').length + violations.length + cycles.length;
+  const pluginBoundary = checkPluginBoundary(root, workspaces, stripNonCode);
+  const failures = files.filter((f) => f.status === 'FAIL').length + violations.length + cycles.length + pluginBoundary.violations.length;
   return {
     root,
     thresholds: { warnLines: WARN_LINES, failLines: FAIL_LINES },
@@ -430,6 +436,7 @@ export function runGuards(root) {
     files,
     violations,
     cycles,
+    pluginBoundary,
     warnings: files.filter((f) => f.status === 'WARN').length,
     failures,
     ok: failures === 0,
@@ -459,6 +466,17 @@ function printReport(r) {
     out.push(`Workspace dependency cycles (${r.cycles.length}):`);
     for (const c of r.cycles) out.push(`  FAIL  ${c.path.join(' → ')}${c.members.length > c.path.length - 1 ? `  (component: ${c.members.join(', ')})` : ''}`);
   } else out.push('Workspace dependency graph: acyclic.');
+  out.push('');
+  const pb = r.pluginBoundary;
+  if (!pb.kinds.length && !pb.drivers.length) out.push(`Plugin boundary: no plugins found (${COMPOSITION_ROOT} absent); skipped.`);
+  else {
+    out.push(`Plugin boundary: ${pb.kinds.length} kinds and ${pb.drivers.length} driver names from ${pb.plugins.length} plugin packages; ${pb.scanned} core files scanned.`);
+    if (pb.violations.length) {
+      out.push(`Core code naming a plugin kind (${pb.violations.length}):`);
+      for (const v of pb.violations) out.push(`  FAIL  [${v.rule}] ${v.at}  "${v.literal}"  ${v.message}`);
+    } else out.push('  ok: core code names no plugin kind.');
+    for (const e of pb.escapes) out.push(`  ALLOW ${e.at}  ${e.literals.join(', ')}  (plugin-boundary: allow)`);
+  }
   out.push('');
   out.push(r.ok ? `PASS with ${r.warnings} warning(s).` : `FAILED: ${r.failures} failure(s), ${r.warnings} warning(s).`);
   console.log(out.join('\n'));

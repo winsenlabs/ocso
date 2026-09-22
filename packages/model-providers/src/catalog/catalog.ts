@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto';
-import type { ProviderKind } from '../contract/types.js';
+import type { ProviderCatalogMapping } from '../providers/definition.js';
+import { firstPartyCatalogProviders } from '../registry.js';
 import { normalizeLiteLlm } from './litellm.js';
-import { catalogCandidates, PRIMARY_CATALOG_PROVIDER } from './mapping.js';
 import { normalizeModelsDev } from './models-dev.js';
 import { CATALOG_SOURCES, type CatalogEntry, type CatalogOrigin, type CatalogPrice, type CatalogSnapshot, type CatalogSource } from './types.js';
 
-/** A catalog entry found for (kind, model), with where it came from. */
+/** A catalog entry found for a provider's model, with where it came from. */
 export interface CatalogMatch {
   source: CatalogSource;
   fetchedAt: string;
@@ -39,9 +39,13 @@ export function catalogHash(entries: readonly CatalogEntry[]): string {
   return createHash('sha256').update(JSON.stringify(sorted)).digest('hex');
 }
 
-/** Normalize one fetched source document into a snapshot. Throws on a document of the wrong shape. */
-export function buildSnapshot(source: CatalogSource, document: unknown, fetchedAt: Date): CatalogSnapshot {
-  const entries = source === 'models.dev' ? normalizeModelsDev(document) : normalizeLiteLlm(document);
+/**
+ * Normalize one fetched source document into a snapshot, keeping the models
+ * of `providers` (default: the catalog providers the first-party provider
+ * definitions map to). Throws on a document of the wrong shape.
+ */
+export function buildSnapshot(source: CatalogSource, document: unknown, fetchedAt: Date, providers: readonly string[] = firstPartyCatalogProviders(source)): CatalogSnapshot {
+  const entries = source === 'models.dev' ? normalizeModelsDev(document, providers) : normalizeLiteLlm(document, providers);
   return { source, fetchedAt: fetchedAt.toISOString(), contentHash: catalogHash(entries), entries };
 }
 
@@ -67,8 +71,13 @@ export class ModelCatalog {
     return new ModelCatalog([]);
   }
 
-  describe(kind: ProviderKind, model: string, baseModel?: string | null): CatalogDescription {
-    const candidates = catalogCandidates(kind, model, baseModel);
+  /**
+   * Metadata and price for one model through the provider's own mapping
+   * (`ProviderDefinition.catalog`). No mapping, or an empty id: nothing found.
+   */
+  describe(mapping: ProviderCatalogMapping | undefined, model: string, baseModel?: string | null): CatalogDescription {
+    const id = model.trim();
+    const candidates = mapping && id ? mapping.candidates(id, baseModel ?? null) : [];
     let metadata: CatalogMatch | null = null;
     let price: CatalogPriceMatch | null = null;
     for (const source of CATALOG_SOURCES) {
@@ -87,9 +96,9 @@ export class ModelCatalog {
     return this.index.get(key(source, provider, id)) ?? null;
   }
 
-  /** Catalog-listed models for a kind (stand-in when the provider has no listing endpoint). */
-  entriesFor(kind: ProviderKind): CatalogEntry[] {
-    const provider = PRIMARY_CATALOG_PROVIDER[kind];
+  /** Catalog-listed models of a provider (stand-in when it has no listing endpoint): its mapping's models.dev `listingProvider`. */
+  entriesFor(mapping: ProviderCatalogMapping | undefined): CatalogEntry[] {
+    const provider = mapping?.listingProvider;
     if (!provider) return [];
     const primary = this.snapshots.find((s) => s.snapshot.source === 'models.dev')?.snapshot;
     return (primary?.entries ?? []).filter((e) => e.provider === provider && !e.deprecated);

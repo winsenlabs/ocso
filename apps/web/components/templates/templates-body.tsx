@@ -17,24 +17,27 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
 const STATUS_TONE: Readonly<Record<TemplateStatus, StatusTone>> = { APPROVED: 'good', PENDING: 'accent', DRAFT: 'muted', REJECTED: 'danger', PAUSED: 'warn', DISABLED: 'danger' };
 
-export const templatesHref = (channelId: string, extra: Record<string, string> = {}) => `/whatsapp-templates?${new URLSearchParams({ channel: channelId, ...extra }).toString()}`;
+export const templatesHref = (channelId: string, extra: Record<string, string> = {}) => `/templates?${new URLSearchParams({ channel: channelId, ...extra }).toString()}`;
+
+/** The kind's own words for its templates; plain defaults when the API has none. */
+const termsOf = (channel: TemplateChannel) => channel.templates ?? { reviewer: 'the provider', placeholderScope: 'template' as const };
 
 /**
- * WhatsApp templates page (docs/07 §3, docs/09 §6): the channels a CS Lead's
- * teams use (every WhatsApp channel for a Tech Admin), each channel's
- * templates with review status and rejection reasons, and the builder that
- * submits new ones for WhatsApp approval.
+ * Message templates page (docs/07 §3, docs/09 §6): the channels with
+ * templates that a CS Lead's teams use (every one for a Tech Admin), each
+ * channel's templates with review status and rejection reasons, and the
+ * builder that submits new ones for the provider's review.
  */
 export async function TemplatesBody({ searchParams }: { searchParams: Promise<Params> }) {
   const [session, params] = await Promise.all([requireSession(), searchParams]);
-  if (!hasPermission(session, Permission.WHATSAPP_TEMPLATES_MANAGE)) return <NotPermitted role={session.roleLabel} />;
+  if (!hasPermission(session, Permission.MESSAGE_TEMPLATES_MANAGE)) return <NotPermitted role={session.roleLabel} />;
   const channels = await loadTemplateChannels();
   if (!channels.length) {
     return (
-      <EmptyState title="No WhatsApp channel to manage">
+      <EmptyState title="No channel with message templates to manage">
         {hasPermission(session, Permission.CHANNELS_MANAGE)
-          ? 'Add a WhatsApp channel (Twilio or Meta Cloud API) under Connections → Channels; its templates appear here.'
-          : 'Templates belong to WhatsApp channels used by your teams’ virtual agents. None is attached yet — a Platform Tech Admin adds channels and a CS Lead attaches them to an agent.'}
+          ? 'Add a channel whose provider reviews templates (e.g. WhatsApp) under Connections → Channels; its templates appear here.'
+          : 'Templates belong to channels used by your teams’ virtual agents whose provider reviews templates (e.g. WhatsApp). None is attached yet — a Platform Tech Admin adds channels and a CS Lead attaches them to an agent.'}
       </EmptyState>
     );
   }
@@ -45,8 +48,8 @@ export async function TemplatesBody({ searchParams }: { searchParams: Promise<Pa
       <ChannelPicker channels={channels} current={channel.id} />
       {creating ? (
         <>
-          <SecHead title={`New template · ${channel.name}`} desc={`${channel.kindLabel} · submitted to WhatsApp for review`} />
-          <TemplateBuilder channel={channel} listHref={templatesHref(channel.id)} />
+          <SecHead title={`New template · ${channel.name}`} desc={`${channel.kindLabel} · submitted to ${termsOf(channel).reviewer} for review`} />
+          <TemplateBuilder channel={channel} terms={termsOf(channel)} listHref={templatesHref(channel.id)} />
         </>
       ) : (
         <ChannelTemplates channel={channel} refresh={one(params['refresh']) === '1'} submitted={one(params['submitted']) ?? null} />
@@ -58,7 +61,7 @@ export async function TemplatesBody({ searchParams }: { searchParams: Promise<Pa
 function ChannelPicker({ channels, current }: { channels: TemplateChannel[]; current: string }) {
   if (channels.length < 2) return null;
   return (
-    <nav className="tpl-channels" aria-label="WhatsApp channels">
+    <nav className="tpl-channels" aria-label="Channels with templates">
       {channels.map((c) => (
         <Link key={c.id} href={templatesHref(c.id)} className={c.id === current ? 'fchip active' : 'fchip'} aria-current={c.id === current ? 'page' : undefined}>
           {c.name}
@@ -92,7 +95,7 @@ async function ChannelTemplates({ channel, refresh, submitted }: { channel: Temp
       {submitted ? (
         <div className="alert" role="status">
           <span>
-            <b>{submitted}</b> was submitted for WhatsApp approval. Review usually takes minutes (up to 24 hours); this list and your notifications update when WhatsApp decides.
+            <b>{submitted}</b> was submitted for {termsOf(channel).reviewer} approval. Review usually takes minutes (up to 24 hours); this list and your notifications update when {termsOf(channel).reviewer} decides.
           </span>
         </div>
       ) : null}
@@ -103,7 +106,7 @@ async function ChannelTemplates({ channel, refresh, submitted }: { channel: Temp
       ) : null}
       {list.templates.length === 0 ? (
         <EmptyState title="No templates yet">
-          {list.problem ? 'Templates submitted from OCSO still appear here while the provider list is unavailable.' : 'Create one with New template, or in Twilio’s Content Template Builder / WhatsApp Manager — both show up here.'}
+          {list.problem ? 'Templates submitted from OCSO still appear here while the provider list is unavailable.' : 'Create one with New template, or in the provider’s own console — both show up here.'}
         </EmptyState>
       ) : (
         <div className="tpl-list" role="list" aria-label="Templates">

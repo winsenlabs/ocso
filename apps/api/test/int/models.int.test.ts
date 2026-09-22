@@ -38,7 +38,18 @@ describe('model providers API', () => {
     const res = await h.http().get('/v1/model-providers/kinds').set(auth(admin)).expect(200);
     const anthropic = res.body.find((k: { kind: string }) => k.kind === 'ANTHROPIC');
     expect(anthropic.credentials).toEqual([expect.objectContaining({ name: 'apiKey', secret: true, required: true })]);
+    // Everything the UI shows about a kind comes from its definition.
+    expect(anthropic).toMatchObject({ label: 'Anthropic API', mark: 'ANT', cachingSummary: expect.stringContaining('cache_control'), devOnly: false });
     expect(res.body.map((k: { kind: string }) => k.kind)).toContain('DEV_SCRIPTED');
+  });
+
+  it('accepts any well-formed kind at the input but only registered kinds', async () => {
+    const unknown = await h.http().post('/v1/model-providers').set(auth(admin)).send({ kind: 'MISTRAL', name: 'Mistral' }).expect(400);
+    expect(unknown.body.error).toMatchObject({ category: 'validation', code: 'provider_kind_not_available' });
+    await h.http().post('/v1/model-providers').set(auth(admin)).send({ kind: 'not a kind', name: 'Bad' }).expect(400);
+    const price = { providerKind: 'MISTRAL', modelPattern: 'mistral-large', inputPerMTokMicros: 1, outputPerMTokMicros: 1 };
+    const priced = await h.http().post('/v1/model-pricing').set(auth(admin)).send(price).expect(400);
+    expect(priced.body.error.code).toBe('provider_kind_not_available');
   });
 
   it('creates providers and never returns credential values', async () => {
@@ -101,9 +112,13 @@ describe('model profiles API', () => {
     const body = { name: 'support-primary', providerId: devId, model: 'scripted-1', fallbacks: [{ providerId: anthropicId, model: 'claude-haiku-4-5' }] };
     const check = await h.http().post('/v1/model-profiles/validate').set(auth(admin)).send(body).expect(200);
     expect(check.body).toMatchObject({ ok: true, primary: { permitted: true } });
+    // Each target carries its provider's own caching description.
+    expect(check.body.primary.caching).toMatchObject({ mode: 'explicit', mechanism: expect.stringContaining('simulated') });
+    expect(check.body.fallbacks[0].caching).toMatchObject({ mode: 'explicit', mechanism: expect.stringContaining('cache_control'), effect: { '1h': 'breakpoints · 1h TTL' } });
     const created = await h.http().post('/v1/model-profiles').set(auth(admin)).send(body).expect(201);
     profileId = created.body.id;
     expect(created.body).toMatchObject({ name: 'support-primary', providerName: 'Scripted', configVersion: 1, policy: { ok: true } });
+    expect(created.body.targets.map((t: { caching: { mode: string } | null }) => t.caching?.mode)).toEqual(['explicit', 'explicit']);
     // DEV_SCRIPTED is never priced; the Anthropic fallback gets the catalog price.
     expect(created.body.prices).toEqual([expect.objectContaining({ providerKind: 'ANTHROPIC', model: 'claude-haiku-4-5', status: 'added', origin: 'catalog' })]);
     const bad = await h.http().post('/v1/model-profiles').set(auth(admin)).send({ ...body, name: 'Support' }).expect(400);

@@ -6,7 +6,7 @@ import { MemoryQueue } from '@ocso/queue';
 import { ChannelRegistry } from '@ocso/channels';
 import { InMemorySecretRows, LocalSecretStore, parseMasterKey } from '@ocso/secrets';
 import { LocalBlobStore } from '@ocso/blob';
-import { createAjvValidator } from '@ocso/tools';
+import { connectionToolSource, createAjvValidator } from '@ocso/tools';
 import { createLogger } from '@ocso/observability';
 import { randomBytes } from 'node:crypto';
 import {
@@ -19,6 +19,7 @@ import {
   ToolRunner,
   TurnProcessor,
   UsageRecorder,
+  createToolProviderRegistry,
 } from '../src/index.js';
 import { ScriptedAdapter } from '../src/testing/scripted-adapter.js';
 export { ScriptedAdapter, type ScriptStep } from '../src/testing/scripted-adapter.js';
@@ -63,6 +64,11 @@ export async function createRuntimeHarness(): Promise<RuntimeHarness> {
   const settings = new SettingsService(t.db);
   const logger = createLogger({ service: 'test', version: '0', level: 'fatal' });
   const ingress = new IngressService(t.db, queue);
+  // Built-ins + a fake MCP connection source: the same registry shape the worker wires.
+  const tools = createToolProviderRegistry(
+    t.db,
+    connectionToolSource('test-mcp', { forConnection: async (connectionId) => ({ connectionId, invoke: async () => ({ status: 'SUCCEEDED', output: { type: 'json', value: { ok: true } }, latencyMs: 3 }) }) }),
+  );
   let counter = 0;
 
   return {
@@ -87,7 +93,7 @@ export async function createRuntimeHarness(): Promise<RuntimeHarness> {
         context: new ContextBuilder(t.db, hot, { historyWindow: 20, mediaWindow: 6, timezone: 'UTC' }),
         media: new MediaMaterializer(t.db, channelRuntime, blobs),
         toolRunner: (catalog) =>
-          new ToolRunner(t.db, catalog, { forConnection: async () => ({ connectionId: null, invoke: async () => ({ status: 'SUCCEEDED', output: { type: 'json', value: { ok: true } }, latencyMs: 3 }) }) }, createAjvValidator(), null),
+          new ToolRunner(t.db, catalog, tools, createAjvValidator(), null),
         capabilitiesFor: async () => ({ imageInput: true, fileInput: true, audioInput: false }),
         logger,
         summarizeAfter: 40,

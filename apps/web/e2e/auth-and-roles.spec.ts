@@ -53,7 +53,7 @@ test('sign-in shows API errors, then the admin sees Platform navigation and not 
   expect(nav.items).toEqual([
     'Home', 'Search',
     'System', 'Workers', 'Queues & leases', 'Telemetry',
-    'Models', 'Connections', 'Channels', 'WhatsApp templates', 'Secrets', 'Webhooks',
+    'Models', 'Connections', 'Channels', 'Message templates', 'Secrets', 'Webhooks',
     'Alerts', 'Virtual agents', 'Audit log', 'Team & roles',
     'My connections',
     'Settings',
@@ -90,7 +90,7 @@ test('CS Lead sees Operations / Quality / Governance and can create only CS Exec
   expect(nav.groups).toEqual(['Operations', 'Quality', 'Governance']);
   expect(nav.items).toEqual([
     'Home', 'Search',
-    'Conversations', 'Virtual agents', 'Queues', 'Customers', 'WhatsApp templates',
+    'Conversations', 'Virtual agents', 'Queues', 'Customers', 'Message templates',
     'Analytics', 'Reviews', 'Prompt corrections', 'Escalation reasons',
     'Alerts', 'SLA policies', 'Team',
     'My connections',

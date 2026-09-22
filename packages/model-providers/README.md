@@ -6,11 +6,19 @@ keys, reasoning) and its request-id/usage extractors.
 
 ```
 src/
-  contract/types.ts        ModelProviderAdapter, ModelRequest/Result, NormalizedUsage (public contract)
+  contract/types.ts        ModelProviderAdapter, ModelRequest/Result, NormalizedUsage, ProviderKind (public contract)
+  providers/definition.ts  ProviderDefinition: the plugin contract (forms, UI mark, caching wording, catalog mapping)
   core/                    shared AI-SDK path: prompt + tools translation, stream/generate, usage, errors, health
   providers/<name>/        bedrock, vertex, foundry, openai, anthropic, sarvam, dev-scripted
-  registry.ts              ProviderRegistry + createDefaultRegistry({ enableDevProviders })
+  catalog/, pricing/       open-source model catalog + price selection (ADR-027); no provider kind named there
+  registry.ts              ProviderRegistry, FIRST_PARTY_PROVIDERS, createDefaultRegistry({ enableDevProviders })
 ```
+
+Provider kinds are open strings (`PROVIDER_KIND_PATTERN`); the registry, not a union type, decides which kinds a
+deployment accepts. Everything kind-specific lives on the definition: label, `mark`, `cachingSummary`,
+`describeCaching(model, settings)`, `catalog` (catalog keys per model id), `baseModel(model, settings)` and
+`devOnly`. A new provider is one `providers/<name>/definition.ts` plus one line in `FIRST_PARTY_PROVIDERS`
+(see docs/plugins/model-providers.md).
 
 ## Using it
 
@@ -177,7 +185,8 @@ Every provider also accepts two optional settings:
 
 ### Dev scripted (`DEV_SCRIPTED`) — development only (ADR-015)
 
-- **Registration:** registered only with `createDefaultRegistry({ enableDevProviders: true })`. It is a custom
+- **Registration:** `devOnly: true`, so registered only with `createDefaultRegistry({ enableDevProviders: true })`,
+  and its usage is never priced. It is a custom
   `LanguageModelV4`, so it runs through exactly the same core path as the real providers.
 - **Settings:** `latencyMs` (simulated TTFT, default 300), `chunkDelayMs` (default 25) and `simulateError`
   (`RATE_LIMITED` | `UNAVAILABLE`, for demoing retry and fallback).

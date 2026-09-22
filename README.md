@@ -58,21 +58,23 @@ channel name (build rules [§2 and §4](docs/99-BUILD-RULES.md)).
 
 | Extension point | Contract | Shipped implementations | What the core does for you |
 |---|---|---|---|
-| Channels | `ChannelAdapter` — `packages/channels/src/contract/types.ts` | WhatsApp via Twilio, WhatsApp via Meta Cloud API, web chat | Webhook routing, verify-then-persist ingress with dedupe, customer identity, media jobs, customer-safe rendering, delivery retries, admin form from JSON Schema, encrypted secrets |
-| Model providers | `ProviderDefinition` — `packages/model-providers/src/providers/definition.ts` | Bedrock, Vertex AI, Foundry, OpenAI, Anthropic, Sarvam | Shared AI SDK call path, usage and error normalization, health checks, profiles and fallbacks, admin form from schemas, cost telemetry |
-| Tool servers | MCP (runtime, no code); `ToolProvider` — `packages/tools/src/provider.ts` | Any MCP server over Streamable HTTP | OAuth 2.1, discovery, risk classification and approval, authorization, human confirmation, SSRF-guarded egress, audit |
-| Alert destinations | `AlertDeliveryAdapter` — `packages/alerts/src/contract.ts` | In-app, email, Slack, Teams, webhook, PagerDuty | Per-event dispatch, retries, encrypted secrets, test button |
+| Channels | `ChannelAdapter` + `ChannelKindDescriptor` — `packages/channels/src/contract/` | WhatsApp via Twilio, WhatsApp via Meta Cloud API, web chat | Webhook routing, verify-then-persist ingress with dedupe, customer identity, media jobs, customer-safe rendering, delivery retries, SSRF-guarded egress, encrypted secrets; the admin UI (form, mark, setup steps, identity) comes from the descriptor; message templates and the embeddable widget are opt-in capabilities |
+| Model providers | `ProviderDefinition` — `packages/model-providers/src/providers/definition.ts` | Bedrock, Vertex AI, Foundry, OpenAI, Anthropic, Sarvam | Shared AI SDK call path, usage and error normalization, health checks, model listing, catalog prices, profiles and fallbacks, cost telemetry; admin form, mark and caching description come from the definition |
+| Tool servers | MCP (runtime, no code); `ToolProviderSource` — `packages/tools/src/registry.ts` | Any MCP server over Streamable HTTP; OCSO's built-in tools | OAuth 2.1, discovery, risk classification and approval, one authorization and audit path for every tool call, human confirmation, SSRF-guarded egress |
+| Alert destinations | `AlertDeliveryAdapter` — `packages/alerts/src/contract.ts` | In-app, email, Slack, Teams, webhook, PagerDuty | Per-event dispatch (events declared by the adapter), retries, encrypted secrets, test button; the form renders from the adapter's JSON Schema |
 | Alert conditions | `EvaluatorDefinition` — `packages/application/src/alerts/evaluators/contract.ts` | Technical and business conditions | Scheduling, dedupe, open/acknowledged/resolved lifecycle, rule form from JSON Schema |
-| Email | `EmailSender` — `packages/email/src/contract.ts` | Resend, SMTP, log | Templates, start-up validation, test button |
-| Blob, secrets, queue, deployment | `BlobStore`, `SecretStore`, `QueueAdapter`, `DeploymentAdapter` | Volume or S3; local AES-256-GCM or AWS Secrets Manager; PostgreSQL or SQS; Compose or ECS | Chosen by one environment variable each; no product code branches on them |
+| Email | `EmailDriverDefinition` / `EmailSender` — `packages/email/src/` | Resend, SMTP, log | Templates, start-up validation by the driver, test button |
+| Blob, secrets, queue, deployment | Driver definitions for `BlobStore`, `SecretStore`, `QueueAdapter`, `DeploymentAdapter` | Volume or S3; local AES-256-GCM or AWS Secrets Manager; PostgreSQL or SQS; Compose or ECS | Driver registries chosen by one environment variable each; each driver checks its own settings; core asks drivers for capabilities, never their names |
 | Scheduled tasks | `ScheduledTask` — `apps/worker/src/scheduler/scheduler.service.ts` | Lease recovery, auto-assign, alert evaluation, retention and more | Leader election across workers, intervals, error isolation |
 | Ask OCSO tools | `InternalTool` — `packages/internal-agent/src/contract.ts` | 12 read and write tools | Permission filtering, re-authorization, confirmation for writes, audit |
 | Sign-in and SSO | Better Auth plugins; identity providers at runtime | Password, TOTP, passkeys, OIDC, SAML | Endpoint allowlist, MFA policy, audit |
 
 Be clear about what "plugin" means today: plugins are **compiled in and live in this repository**. A new
-kind is a module behind the contract plus one registration line, and for channels, model providers and
-alert destinations also an entry in a kinds constant. There is no runtime loader for third-party npm
-packages yet. Two extension points need no code at all: MCP tool servers and SSO identity providers are
+channel, model provider, alert destination or driver is one module behind its contract plus one registration
+line; `FIRST_PARTY_PLUGINS` (`packages/bootstrap`) assembles every plugin for the api and the worker. Kinds are
+open strings validated by the registries, so nothing in core, the database or the web app changes, and
+`pnpm lint` fails if core code ever names a specific kind (ADR-028). There is no runtime loader for
+third-party npm packages yet. Two extension points need no code at all: MCP tool servers and SSO identity providers are
 added in the web app.
 
 **Next: a plugin SDK.** The next piece after this documentation is `@winsendotai/ocso-plugin-sdk`: a
@@ -275,7 +277,7 @@ Docker or a local PostgreSQL 18 for integration tests.
 pnpm install
 pnpm build          # every package and app (turbo)
 pnpm typecheck      # turbo; builds dependencies first
-pnpm lint           # source guards: file size, import boundaries, package cycles
+pnpm lint           # source guards: file size, import boundaries, package cycles, plugin boundary
 pnpm test           # unit tests (vitest)
 pnpm test:int       # integration tests against PostgreSQL
 ```

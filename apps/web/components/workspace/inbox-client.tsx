@@ -7,6 +7,7 @@ import type { Inbox, InboxView, Option } from '@/lib/api/conversations';
 import { EPHEMERAL_TYPES, REALTIME_EVENT_TYPES } from '@/lib/realtime/events';
 import { useRealtime } from '@/lib/realtime/use-realtime';
 import { InboxRow } from './inbox-row';
+import { channelMark, type KindMarks } from './lib/channel';
 import { InboxTagFilter } from './inbox-tag-filter';
 import { tagParam } from './lib/tags';
 import { WORKSPACE_CHANGED } from './lib/use-action';
@@ -32,10 +33,12 @@ export interface InboxClientProps {
   queues: Option[];
   meId: string;
   timeZone: string;
+  /** Each channel kind's mark, from its descriptor (GET /v1/channels/kinds). */
+  marks: KindMarks;
 }
 
 /** Inbox pane (design/01 left): views with live counts, search, agent/queue filters, live rows. */
-export function InboxClient({ defaultView, agents, queues, meId, timeZone }: InboxClientProps) {
+export function InboxClient({ defaultView, agents, queues, meId, timeZone, marks }: InboxClientProps) {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const selectedId = pathname.startsWith('/conversations/') ? pathname.split('/')[2] : undefined;
@@ -202,7 +205,7 @@ export function InboxClient({ defaultView, agents, queues, meId, timeZone }: Inb
           </div>
         ) : null}
         {items.map((item) => (
-          <InboxRow key={item.id} item={item} href={hrefFor(item.id)} selected={item.id === selectedId} meId={meId} timeZone={timeZone} now={now} activeTag={tag} />
+          <InboxRow key={item.id} item={item} href={hrefFor(item.id)} selected={item.id === selectedId} meId={meId} timeZone={timeZone} now={now} activeTag={tag} mark={channelMark(marks, item.channel.kind)} />
         ))}
         {items.length > 0 && counts ? (
           <div className="stream-foot">

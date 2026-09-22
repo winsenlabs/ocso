@@ -7,7 +7,8 @@ import { LegendKey, LineChart, type LineMarker } from '@/components/ui/line-char
 import { ChartCard } from '@/components/ui/rail-card';
 import { Tiles } from '@/components/ui/tile';
 import type { Overview } from '@/lib/api/analytics';
-import { channelCode } from '@/components/workspace/lib/channel';
+import { channelMark } from '@/components/workspace/lib/channel';
+import { loadChannelKinds } from '@/lib/api/channels';
 import {
   countDelta,
   dayKey,
@@ -223,7 +224,8 @@ export function OverviewCards({ overview: o, refs, aside }: { overview: Overview
   );
 }
 
-function ChanMark({ kind }: { kind: string | null }) {
-  const code = channelCode(kind);
-  return code ? <ChannelMark channel={code} /> : null;
+/** The kind's mark from its descriptor (kinds load once per request). */
+async function ChanMark({ kind }: { kind: string | null }) {
+  const mark = channelMark(await loadChannelKinds(), kind);
+  return mark ? <ChannelMark mark={mark} /> : null;
 }

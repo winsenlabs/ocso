@@ -26,6 +26,8 @@ export interface TemplateComposerProps {
   customerName: string;
   /** Resolved conversation: reopen it and send in one step. */
   reopen: boolean;
+  /** Who approves this channel's templates, in its own words ("WhatsApp"); from the kind's descriptor. */
+  reviewer?: string | undefined;
   onSent?: ((message: string) => void) | undefined;
 }
 
@@ -36,12 +38,13 @@ function newClientMessageId(): string {
 }
 
 /**
- * Composer "Template" mode (docs/07 §3): pick an approved WhatsApp template
+ * Composer "Template" mode (docs/07 §3): pick an approved message template
  * of this channel, fill every variable, check the live preview, send. The
- * only way to reach the customer after the 24-hour window; allowed inside it
- * too. The list loads from the API (cached ~5 min) when the picker opens.
+ * only way to reach the customer after the channel's reply window closes;
+ * allowed inside it too. The list loads from the API (cached ~5 min) when the
+ * picker opens.
  */
-export function TemplateComposer({ conversationId, channelId, customerName, reopen, onSent }: TemplateComposerProps) {
+export function TemplateComposer({ conversationId, channelId, customerName, reopen, reviewer = 'the provider', onSent }: TemplateComposerProps) {
   const [state, setState] = useState<ListState>({ status: 'loading' });
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState('');
@@ -72,7 +75,7 @@ export function TemplateComposer({ conversationId, channelId, customerName, reop
     void load(false);
   }, [load]);
 
-  if (state.status === 'loading') return <p className="mono-sm tplnote">Loading this channel’s WhatsApp templates…</p>;
+  if (state.status === 'loading') return <p className="mono-sm tplnote">Loading this channel’s message templates…</p>;
   if (state.status === 'error') {
     return (
       <div className="alert error" role="alert">
@@ -90,6 +93,7 @@ export function TemplateComposer({ conversationId, channelId, customerName, reop
         conversationId={conversationId}
         customerName={customerName}
         reopen={reopen}
+        reviewer={reviewer}
         onBack={() => setSelectedId(null)}
         onSent={(message) => {
           setSelectedId(null);
@@ -98,7 +102,7 @@ export function TemplateComposer({ conversationId, channelId, customerName, reop
       />
     );
   }
-  return <TemplatePicker list={list} query={query} onQuery={setQuery} refreshing={refreshing} onRefresh={() => void load(true)} onPick={setSelectedId} />;
+  return <TemplatePicker list={list} query={query} onQuery={setQuery} refreshing={refreshing} onRefresh={() => void load(true)} onPick={setSelectedId} reviewer={reviewer} />;
 }
 
 interface PickerProps {
@@ -108,9 +112,10 @@ interface PickerProps {
   refreshing: boolean;
   onRefresh: () => void;
   onPick: (id: string) => void;
+  reviewer?: string | undefined;
 }
 
-export function TemplatePicker({ list, query, onQuery, refreshing, onRefresh, onPick }: PickerProps) {
+export function TemplatePicker({ list, query, onQuery, refreshing, onRefresh, onPick, reviewer = 'the provider' }: PickerProps) {
   const results = useMemo(() => searchTemplates(list.templates, query), [list.templates, query]);
   const approved = list.templates.filter((t) => !templateHint(t)).length;
   return (
@@ -130,7 +135,9 @@ export function TemplatePicker({ list, query, onQuery, refreshing, onRefresh, on
         </div>
       ) : null}
       {!list.problem && list.templates.length === 0 ? (
-        <p className="mono-sm tplnote">No WhatsApp templates on {list.channel.name} yet. A CS Lead creates them under WhatsApp templates; WhatsApp reviews each one (usually minutes, up to 24 hours).</p>
+        <p className="mono-sm tplnote">
+          No message templates on {list.channel.name} yet. A CS Lead creates them under Message templates; {reviewer} reviews each one (usually minutes, up to 24 hours).
+        </p>
       ) : null}
       {list.templates.length > 0 && approved === 0 ? (
         <p className="mono-sm tplnote">None of the {list.templates.length} templates on {list.channel.name} is approved yet, so none can be sent.</p>
@@ -170,11 +177,12 @@ interface FormProps {
   conversationId: string;
   customerName: string;
   reopen: boolean;
+  reviewer?: string | undefined;
   onBack: () => void;
   onSent: (message: string) => void;
 }
 
-export function TemplateForm({ template, conversationId, customerName, reopen, onBack, onSent }: FormProps) {
+export function TemplateForm({ template, conversationId, customerName, reopen, reviewer = 'the provider', onBack, onSent }: FormProps) {
   const [values, setValues] = useState(() => emptyValues(template));
   const [media, setMedia] = useState('');
   const [touched, setTouched] = useState(false);
@@ -233,7 +241,7 @@ export function TemplateForm({ template, conversationId, customerName, reopen, o
         <TemplatePreview rendered={preview} />
       </div>
       <div className="brow">
-        <span className="mono-sm">{reopen ? 'reopens the conversation · you become the handler' : 'sent as an approved WhatsApp template · recorded in the timeline'}</span>
+        <span className="mono-sm">{reopen ? 'reopens the conversation · you become the handler' : `sent as a template ${reviewer} approved · recorded in the timeline`}</span>
         <span className="sp" style={{ flex: 1 }} />
         {error ? (
           <span className="err" role="alert">

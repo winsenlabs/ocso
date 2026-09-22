@@ -4,8 +4,12 @@ import { createTestDatabase, type TestDatabase } from '@ocso/db/testing';
 import { alertDeliveries, alertRules, alerts, loginAttempts, notificationDestinations, uuidv7, virtualAgents } from '@ocso/db';
 import type { Principal } from '@ocso/auth';
 import { MemoryQueue } from '@ocso/queue';
+import { createDefaultDeliveryRegistry } from '@ocso/alerts';
 import { AlertEngine, AlertService, type ActorContext, type AlertRuleRow } from '../src/index.js';
 import { createTeam, ownAgents } from './support/ownership.js';
+
+/** Destination-kind event routing comes from the delivery registry (adapters declare their events). */
+const routing = createDefaultDeliveryRegistry({ fetch: async () => new Response('') });
 
 let t: TestDatabase;
 let queue: MemoryQueue;
@@ -24,7 +28,7 @@ const dest: Record<'inApp' | 'webhook' | 'slack', string> = { inApp: uuidv7(), w
 beforeAll(async () => {
   t = await createTestDatabase();
   queue = new MemoryQueue();
-  engine = new AlertEngine({ db: t.db, queue });
+  engine = new AlertEngine({ db: t.db, queue, destinations: routing });
   await createTeam(t.db, TEAM);
   await t.db.insert(notificationDestinations).values([
     { id: dest.inApp, name: 'In-app', kind: 'IN_APP' },
@@ -161,7 +165,7 @@ describe('alert inbox: audience scoping, acknowledge, resolve', () => {
     ]);
   });
 
-  const listIds = async (p: Principal, query = {}) => (await new AlertService(t.db, queue).list(ctx(p), query)).items.map((a) => a.id).filter((id) => Object.values(ids).includes(id)).sort();
+  const listIds = async (p: Principal, query = {}) => (await new AlertService(t.db, queue, routing).list(ctx(p), query)).items.map((a) => a.id).filter((id) => Object.values(ids).includes(id)).sort();
 
   it('shows an alert only when the role is in its audience AND the kind is readable', async () => {
     expect(await listIds(exec)).toEqual([ids.business]);
@@ -169,7 +173,7 @@ describe('alert inbox: audience scoping, acknowledge, resolve', () => {
     expect(await listIds(admin)).toEqual([ids.technical]);
     expect(await listIds(lead, { agentId })).toEqual([ids.business]);
     expect(await listIds(lead, { severity: 'CRITICAL' })).toEqual([ids.sharedBusiness]);
-    const svc = new AlertService(t.db, queue);
+    const svc = new AlertService(t.db, queue, routing);
     await expect(svc.list(ctx(exec), { kind: 'TECHNICAL' })).rejects.toMatchObject({ category: 'authorization' });
     await expect(svc.get(ctx(exec), ids.technical)).rejects.toMatchObject({ category: 'not_found' });
     await expect(svc.get(ctx(admin), ids.sharedBusiness)).rejects.toMatchObject({ category: 'not_found' });
@@ -177,7 +181,7 @@ describe('alert inbox: audience scoping, acknowledge, resolve', () => {
   });
 
   it('paginates with a keyset cursor', async () => {
-    const svc = new AlertService(t.db, queue);
+    const svc = new AlertService(t.db, queue, routing);
     const page1 = await svc.list(ctx(lead), { limit: 2 });
     expect(page1.items).toHaveLength(2);
     expect(page1.nextCursor).not.toBeNull();
@@ -187,7 +191,7 @@ describe('alert inbox: audience scoping, acknowledge, resolve', () => {
   });
 
   it('counts unresolved visible alerts for nav badges', async () => {
-    const svc = new AlertService(t.db, queue);
+    const svc = new AlertService(t.db, queue, routing);
     const execCounts = await svc.counts(ctx(exec));
     expect(execCounts.byKind).toEqual({ BUSINESS: execCounts.unresolved });
     expect(execCounts.byKind['TECHNICAL']).toBeUndefined();
@@ -196,7 +200,7 @@ describe('alert inbox: audience scoping, acknowledge, resolve', () => {
   });
 
   it('acknowledges and resolves with audit, events and lifecycle deliveries', async () => {
-    const svc = new AlertService(t.db, queue);
+    const svc = new AlertService(t.db, queue, routing);
     await expect(svc.acknowledge(ctx(admin), ids.business)).rejects.toMatchObject({ category: 'not_found' });
 
     const acked = await svc.acknowledge(ctx(exec), ids.business, { note: 'looking into it' });

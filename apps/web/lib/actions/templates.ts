@@ -10,9 +10,9 @@ import { TemplateViewSchema } from '../api/templates';
 import { getSession } from '../session';
 
 /**
- * WhatsApp template management (docs/07 §3): create = submit for WhatsApp
- * approval, and delete. `whatsapp_templates.manage` (CS Lead for their
- * teams' channels, Tech Admin); the API enforces the channel scope.
+ * Message template management (docs/07 §3): create = submit for the
+ * provider's review, and delete. `message_templates.manage` (CS Lead for
+ * their teams' channels, Tech Admin); the API enforces the channel scope.
  */
 
 const Id = z.uuid();
@@ -25,7 +25,7 @@ export type CreateTemplateResult =
 async function denied(): Promise<string | null> {
   const session = await getSession();
   if (!session) return 'Your session has ended. Sign in again.';
-  return session.permissions.has(Permission.WHATSAPP_TEMPLATES_MANAGE) ? null : 'Your role cannot manage WhatsApp templates.';
+  return session.permissions.has(Permission.MESSAGE_TEMPLATES_MANAGE) ? null : 'Your role cannot manage message templates.';
 }
 
 const Created = z.object({ template: TemplateViewSchema, warnings: z.array(z.object({ field: z.string(), message: z.string() })) });

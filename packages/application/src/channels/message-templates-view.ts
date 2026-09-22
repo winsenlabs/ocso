@@ -1,8 +1,8 @@
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { TemplateDraftSchema, draftAsTemplate, type MessageTemplate, type TemplateStatus } from '@ocso/domain';
-import { users, whatsappTemplates, type DbOrTx } from '@ocso/db';
+import { users, messageTemplates, type DbOrTx } from '@ocso/db';
 
-export type TemplateRow = typeof whatsappTemplates.$inferSelect;
+export type TemplateRow = typeof messageTemplates.$inferSelect;
 
 /** OCSO's own record of a template submitted from here. */
 export interface TemplateSubmission {
@@ -22,21 +22,21 @@ export interface TemplateListView {
   templates: TemplateView[];
   /** When the provider list was fetched (cached ~5 minutes); null when it could not be fetched. */
   fetchedAt: string | null;
-  /** Why the provider list is unavailable (credentials, missing WABA id, provider down). */
+  /** Why the provider list is unavailable (credentials, missing account id, provider down). */
   problem: { code: string; message: string } | null;
 }
 
 /** OCSO-submitted rows of a channel (not deleted), with the submitter's name. */
 export async function submittedRows(db: DbOrTx, channelId: string, providerIds?: readonly string[]): Promise<Array<TemplateRow & { submitterName: string | null }>> {
   const rows = await db
-    .select({ t: whatsappTemplates, submitterName: users.name })
-    .from(whatsappTemplates)
-    .leftJoin(users, eq(users.id, whatsappTemplates.submittedBy))
+    .select({ t: messageTemplates, submitterName: users.name })
+    .from(messageTemplates)
+    .leftJoin(users, eq(users.id, messageTemplates.submittedBy))
     .where(
       and(
-        eq(whatsappTemplates.channelId, channelId),
-        isNull(whatsappTemplates.deletedAt),
-        providerIds ? inArray(whatsappTemplates.providerTemplateId, [...providerIds]) : undefined,
+        eq(messageTemplates.channelId, channelId),
+        isNull(messageTemplates.deletedAt),
+        providerIds ? inArray(messageTemplates.providerTemplateId, [...providerIds]) : undefined,
       ),
     );
   return rows.map((r) => ({ ...r.t, submitterName: r.submitterName }));

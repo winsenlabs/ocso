@@ -4,7 +4,7 @@ import { DataTable } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SecHead } from '@/components/ui/sec-head';
 import { StatusChip, type StatusTone } from '@/components/ui/status-chip';
-import { listChannels, type Channel } from '@/lib/api/channels';
+import { listChannelKinds, listChannels, type Channel, type ChannelKind } from '@/lib/api/channels';
 import { getDeploymentSettings } from '@/lib/api/settings';
 import { listDeliveries, listWebhookEventTypes, listWebhooks, type Delivery, type Webhook } from '@/lib/api/webhooks';
 import { formatAge, formatNumber } from '@/lib/format';
@@ -50,7 +50,7 @@ function outbound(h: Webhook): Row {
 }
 
 /** Inbound channel callbacks, derived from the channels' webhook paths (no delivery counters exist for them). */
-function inbound(c: Channel): Row | null {
+function inbound(c: Channel, kinds: readonly ChannelKind[]): Row | null {
   if (!c.webhookPath) return null;
   const live = c.status === 'ACTIVE';
   return {
@@ -58,7 +58,8 @@ function inbound(c: Channel): Row | null {
     endpoint: c.webhookPath,
     caption: `${c.name}${c.lastInboundAt ? ` · last inbound ${formatAge(c.lastInboundAt)} ago` : ' · nothing received yet'}`,
     href: null,
-    events: c.kind === 'WHATSAPP' || c.kind === 'TWILIO_WHATSAPP' ? 'messages, delivery statuses' : 'customer messages',
+    // What the provider posts, as the kind's descriptor says.
+    events: kinds.find((k) => k.kind === c.kind)?.webhookEvents ?? 'customer messages',
     direction: 'inbound',
     volume: '—',
     failures: '—',
@@ -72,15 +73,16 @@ export async function WebhooksTab({ session, params }: { session: Session; param
   const id = idParam(params, 'id');
   const dialog = param(params, 'dialog');
   const status = (['PENDING', 'SENT', 'FAILED'] as const).find((s) => s === param(params, 'deliveries'));
-  const [hooks, eventTypes, channels, settings] = await Promise.all([
+  const [hooks, eventTypes, channels, kinds, settings] = await Promise.all([
     listWebhooks(),
     listWebhookEventTypes(),
     canChannels ? listChannels() : Promise.resolve([] as Channel[]),
+    canChannels ? listChannelKinds().catch((): ChannelKind[] => []) : Promise.resolve([] as ChannelKind[]),
     getDeploymentSettings(),
   ]);
   const editing = dialog === 'webhook-edit' && id ? hooks.find((h) => h.id === id) : undefined;
   const deliveries: Delivery[] = editing ? await listDeliveries(editing.id, status) : [];
-  const rows = [...hooks.map(outbound), ...channels.map(inbound).filter((r): r is Row => r !== null)];
+  const rows = [...hooks.map(outbound), ...channels.map((c) => inbound(c, kinds)).filter((r): r is Row => r !== null)];
   const closeHref = connectionsHref({ tab: 'webhooks' });
 
   return (

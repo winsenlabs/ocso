@@ -62,7 +62,7 @@ export const EMPTY_FORM: BuilderForm = {
   securityRecommendation: true,
 };
 
-/** Common WhatsApp template language codes for the language field's suggestions. */
+/** Common template language codes for the language field's suggestions. */
 export const LANGUAGE_SUGGESTIONS = ['en', 'en_US', 'en_GB', 'hi', 'bn', 'ta', 'te', 'mr', 'gu', 'kn', 'ml', 'pa', 'ur', 'ar', 'es', 'pt_BR', 'fr', 'de', 'id'] as const;
 
 /** Body variable numbers, sorted and unique (one example input each). */
@@ -103,11 +103,16 @@ export function formToDraft(form: BuilderForm): TemplateDraftInput {
   };
 }
 
-/** Rules one provider adds to the common ones (the API reports the same through the adapter). */
-export function providerProblems(channelKind: string, draft: TemplateDraft): DraftCheck['problems'] {
-  if (channelKind === 'WHATSAPP' && draft.header && draft.header.format !== 'TEXT') {
-    return [{ field: 'header', message: 'Meta needs an uploaded sample for media headers: create this one in WhatsApp Manager (it will show up here), or use a text header' }];
-  }
+/** How the channel's kind handles templates (its descriptor `templates`, via GET /v1/message-templates/channels). */
+export interface TemplateRules {
+  placeholderScope: 'template' | 'component';
+  /** Why media headers cannot be created from OCSO on this kind; absent when they can. */
+  mediaHeaderUnsupported?: string | undefined;
+}
+
+/** Rules the channel's kind adds to the common ones (the API reports the same through the adapter). */
+export function providerProblems(rules: TemplateRules, draft: TemplateDraft): DraftCheck['problems'] {
+  if (rules.mediaHeaderUnsupported && draft.header && draft.header.format !== 'TEXT') return [{ field: 'header', message: rules.mediaHeaderUnsupported }];
   return [];
 }
 
@@ -117,7 +122,7 @@ export interface BuilderState {
   preview: RenderedTemplate;
 }
 
-export function builderState(form: BuilderForm, channelKind: string): BuilderState {
+export function builderState(form: BuilderForm, rules: TemplateRules): BuilderState {
   const parsed = TemplateDraftSchema.safeParse(formToDraft(form));
   if (!parsed.success) {
     const problems = parsed.error.issues.map((i) => ({ field: i.path.join('.') || 'template', message: i.message }));
@@ -125,9 +130,8 @@ export function builderState(form: BuilderForm, channelKind: string): BuilderSta
   }
   const draft = parsed.data;
   const check = checkTemplateDraft(draft);
-  const problems = [...check.problems, ...providerProblems(channelKind, draft)];
-  const scope = channelKind === 'WHATSAPP' ? 'component' : 'template';
-  const template = draftAsTemplate(draft, { id: 'preview', status: 'DRAFT', scope });
+  const problems = [...check.problems, ...providerProblems(rules, draft)];
+  const template = draftAsTemplate(draft, { id: 'preview', status: 'DRAFT', scope: rules.placeholderScope });
   const values = Object.fromEntries(template.variables.map((v) => [v.key, v.example ?? '']));
   return { draft, check: { problems, warnings: check.warnings }, preview: renderTemplate(template, values) };
 }

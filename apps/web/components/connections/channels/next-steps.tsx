@@ -2,23 +2,24 @@
 
 import { CopyButton } from '../copy-button';
 import { ChannelTest } from './channel-test';
-import { ProviderSteps } from './provider-steps';
+import { GeneratedSecrets, ProviderSteps } from './provider-steps';
 import { embedSnippet, inboundWebhookUrl } from './settings-form';
 
 interface Props {
   channel: { id: string; kind: string; publicKey: string; webhookPath: string | null; status: string };
-  kind: { inboundWebhook: boolean; embeddable: boolean; label: string; connectionCheck: boolean };
+  /** From the kind's descriptor (GET /v1/channels/kinds). */
+  kind: { inboundWebhook: boolean; embeddable: boolean; label: string; connectionCheck: boolean; setupSteps: readonly string[] };
   publicOrigin: string;
-  /** Verify token generated in this dialog (shown once), if any. */
-  verifyToken?: string | undefined;
+  /** Secrets generated in this dialog for the admin to copy elsewhere (shown once), if any. */
+  generated?: ReadonlyArray<{ label: string; value: string }> | undefined;
   allowedOrigins: string[];
 }
 
 /** What the admin does next: point the provider at the webhook (and test the credentials), or embed the widget. */
-export function ChannelNextSteps({ channel, kind, publicOrigin, verifyToken, allowedOrigins }: Props) {
+export function ChannelNextSteps({ channel, kind, publicOrigin, generated = [], allowedOrigins }: Props) {
   const inactive = channel.status !== 'ACTIVE' ? <p className="mono-sm">The channel is {channel.status.toLowerCase()}: set it to Active before customers use it.</p> : null;
-  if (kind.inboundWebhook) {
-    const url = inboundWebhookUrl(publicOrigin, channel);
+  const url = kind.inboundWebhook ? inboundWebhookUrl(publicOrigin, channel) : null;
+  if (url) {
     return (
       <>
         <section className="conn-fieldset" aria-label="Connect the provider">
@@ -29,7 +30,8 @@ export function ChannelNextSteps({ channel, kind, publicOrigin, verifyToken, all
             </code>
             <CopyButton value={url} what="webhook URL" />
           </div>
-          <ProviderSteps kind={channel.kind} verifyToken={verifyToken} />
+          <ProviderSteps steps={kind.setupSteps} fallback="Configure the provider to call this URL for inbound messages; requests are verified before anything is stored." />
+          <GeneratedSecrets secrets={generated} />
           {inactive}
         </section>
         {kind.connectionCheck ? <ChannelTest channelId={channel.id} /> : null}
@@ -53,6 +55,8 @@ export function ChannelNextSteps({ channel, kind, publicOrigin, verifyToken, all
             ? `Only ${allowedOrigins.join(', ')} may embed it (Allowed origins). Add every site that uses the widget.`
             : 'Allowed origins is empty, so any site may embed the widget. Add your site origins to restrict it.'}
         </p>
+        {kind.setupSteps.length ? <ProviderSteps steps={kind.setupSteps} fallback="" /> : null}
+        <GeneratedSecrets secrets={generated} />
         {inactive}
       </section>
     );

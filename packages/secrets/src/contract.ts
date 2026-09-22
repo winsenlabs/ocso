@@ -1,3 +1,5 @@
+import type { SecretRowStore } from './local-store.js';
+
 /**
  * SecretStore contract (docs/15 §3, ADR-012). Every other table stores only a
  * secret reference. Values are resolved server-side by trusted code and are
@@ -36,7 +38,8 @@ export interface PutSecretInput {
 }
 
 export interface SecretStore {
-  readonly driver: 'local' | 'aws';
+  /** Name of the driver that built it (SECRETS_DRIVER); display and logs only. */
+  readonly driver: string;
   /** Create a secret and return its reference. */
   put(input: PutSecretInput): Promise<SecretMetadata>;
   /** Replace the value (rotation); bumps version. */
@@ -46,6 +49,18 @@ export interface SecretStore {
   describe(ref: string): Promise<SecretMetadata | null>;
   list(): Promise<SecretMetadata[]>;
   delete(ref: string): Promise<void>;
+}
+
+/**
+ * A SecretStore driver: registered by name, selected by SECRETS_DRIVER.
+ * `check` lists missing settings (start-up fails naming every one); `create`
+ * builds the process-wide store over the metadata rows (the `secrets` table).
+ */
+export interface SecretStoreDriverDefinition<Env = Readonly<Record<string, unknown>>> {
+  /** SECRETS_DRIVER value that selects this driver, e.g. `aws`. */
+  readonly name: string;
+  readonly check?: ((env: Env) => readonly string[]) | undefined;
+  readonly create: (env: Env, deps: { rows: SecretRowStore }) => SecretStore;
 }
 
 /** Generate a secret reference like `sec_bdrk_4f81a2`. */

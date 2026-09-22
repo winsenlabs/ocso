@@ -3,12 +3,13 @@ import { ControlState, controlStateKind } from '@/components/ui/control-state';
 import type { ConversationDetail } from '@/lib/api/conversations';
 import { formatTime, initials } from '@/lib/format';
 import { controlLabel } from './lib/labels';
-import { channelLabel } from './lib/channel';
 import type { ConversationTags } from './lib/use-conversation-tags';
 import { TagEditor } from './tag-editor';
 
 export interface ConversationHeaderProps {
   detail: ConversationDetail;
+  /** The channel as its kind names it ("WhatsApp"), else its configured name. */
+  channelLabel: string;
   externalRef: string | null;
   meId: string;
   timeZone: string;
@@ -18,12 +19,12 @@ export interface ConversationHeaderProps {
 }
 
 /** Conversation header (design/01 .chead): who, where, who is in control. */
-export function ConversationHeader({ detail, externalRef, meId, timeZone, tags, canTag, onTransfer }: ConversationHeaderProps) {
+export function ConversationHeader({ detail, channelLabel, externalRef, meId, timeZone, tags, canTag, onTransfer }: ConversationHeaderProps) {
   const name = detail.customer.name ?? detail.customer.identities[0]?.value ?? 'Unknown customer';
   const identity = detail.customer.identities[0]?.value;
   const meta = [
     detail.customer.name ? identity : null,
-    channelLabel(detail.channel?.kind, detail.channel?.name),
+    channelLabel,
     detail.displayId,
     `opened ${formatTime(detail.openedAt, timeZone)}`,
   ].filter(Boolean);

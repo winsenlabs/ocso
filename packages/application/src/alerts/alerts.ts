@@ -1,5 +1,5 @@
 import { and, desc, eq, lt, ne, or, sql, type SQL } from 'drizzle-orm';
-import { ALERT_KINDS, ALERT_SEVERITIES, ALERT_STATUSES, type AlertKind, type AlertSeverity } from '@ocso/alerts';
+import { ALERT_KINDS, ALERT_SEVERITIES, ALERT_STATUSES, type AlertKind, type AlertSeverity, type DestinationEventRouting } from '@ocso/alerts';
 import { Permission, assertCan } from '@ocso/auth';
 import { alertDeliveries, alertRules, alerts, notificationDestinations, type Db, type DbOrTx } from '@ocso/db';
 import { conflict, forbidden, notFound, validation } from '@ocso/domain';
@@ -54,6 +54,8 @@ export class AlertService {
   constructor(
     private readonly db: Db,
     private readonly queue: QueueAdapter,
+    /** The alert delivery registry: which destination kinds receive ACKNOWLEDGED / RESOLVED. */
+    private readonly destinations: DestinationEventRouting,
     private readonly deps: { now?: (() => Date) | undefined } = {},
   ) {}
 
@@ -141,7 +143,7 @@ export class AlertService {
       const alert = await this.loadVisible(tx, actor, id, true);
       if (alert.status === 'RESOLVED') throw conflict('alert_resolved', 'The alert is already resolved');
       if (alert.status === 'ACKNOWLEDGED') return [] as PendingDelivery[];
-      return markAcknowledged(tx, actor, alert, { now, userId: principal.userId, note: input.note ?? null, destinationIds: await ruleDestinations(tx, alert) });
+      return markAcknowledged(tx, actor, alert, { now, userId: principal.userId, note: input.note ?? null, destinationIds: await ruleDestinations(tx, alert), routing: this.destinations });
     });
     await publishDeliveries(this.queue, pending);
     return this.get(actor, id);
@@ -160,6 +162,7 @@ export class AlertService {
         resolvedBy: principal.userId,
         resolution: input.note.trim(),
         destinationIds: await ruleDestinations(tx, alert),
+        routing: this.destinations,
         auditAction: 'alert.resolve',
         auditSummary: `Resolved alert: ${alert.title}`,
       });

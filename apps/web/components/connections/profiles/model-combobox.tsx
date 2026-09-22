@@ -63,8 +63,8 @@ export function ModelCombobox({ id, label, providerId, providerLabel, value, onC
         : state.status === 'loading'
           ? `Loading ${providerLabel} models…`
           : listSummary(state.list, providerLabel);
-  const kind = list?.providerKind;
-  const price = selected ? priceLine(selected, kind) : null;
+  const devOnly = list?.devOnly ?? false;
+  const price = selected ? priceLine(selected, devOnly) : null;
   const describedBy = [`${id}-status`, `${id}-detail`, error ? `${id}-error` : null].filter(Boolean).join(' ');
 
   return (
@@ -116,7 +116,7 @@ export function ModelCombobox({ id, label, providerId, providerLabel, value, onC
             >
               <span className="mpick-id">{m.id}</span>
               {m.displayName && m.displayName !== m.id ? <span className="mpick-name">{m.displayName}</span> : null}
-              <span className="mpick-meta">{optionMeta(m, kind)}</span>
+              <span className="mpick-meta">{optionMeta(m, devOnly)}</span>
             </li>
           ))}
         </ul>

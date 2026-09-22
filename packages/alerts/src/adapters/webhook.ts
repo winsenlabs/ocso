@@ -12,7 +12,8 @@ const WebhookConfig = z
       .max(2048)
       .superRefine((value, ctx) => {
         for (const problem of httpsUrlProblems(value, 'url')) ctx.addIssue({ code: 'custom', message: problem });
-      }),
+      })
+      .meta({ title: 'Endpoint URL', description: 'https only' }),
   })
   .strict();
 export type WebhookConfig = z.infer<typeof WebhookConfig>;
@@ -43,9 +44,13 @@ export function createWebhookAdapter(deps: Pick<DeliveryAdapterDeps, 'fetch' | '
   return {
     kind: 'WEBHOOK',
     label: 'Webhook (HMAC-signed)',
-    secret: { required: true, secretKind: 'WEBHOOK_SECRET', description: 'HMAC-SHA256 signing secret' },
+    description: 'POSTs a versioned JSON envelope signed with HMAC-SHA256 (X-OCSO-Signature) to your endpoint.',
+    events: ['OPENED', 'ACKNOWLEDGED', 'RESOLVED', 'REMINDER'],
+    configSchema: z.toJSONSchema(WebhookConfig, { io: 'input' }) as Record<string, unknown>,
+    secret: { required: true, secretKind: 'WEBHOOK_SECRET', label: 'Signing secret', description: 'HMAC-SHA256 signing secret' },
     validateConfig: (config) => checkConfig(WebhookConfig, config),
     validateSecret: (secret) => (secret.length >= 16 ? [] : ['signing secret must be at least 16 characters']),
+    summary: (config) => config.url,
     async deliver(message, config, secret) {
       if (!secret) return { ok: false, retriable: false, error: 'signing secret not configured' };
       const at = now();

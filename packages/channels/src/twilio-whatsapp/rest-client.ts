@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { isTimeoutError } from '../common/http.js';
 import type { ResolvedTwilioConfig } from './config.js';
+import type { ChannelFetch } from '../contract/types.js';
 
 /**
  * Minimal Twilio REST client (2010-04-01 API). Form-encoded requests, HTTP
@@ -47,7 +48,7 @@ export function basicAuthorization(config: ResolvedTwilioConfig): string {
 export class TwilioRestClient {
   constructor(
     private readonly config: ResolvedTwilioConfig,
-    private readonly fetchImpl: typeof fetch,
+    private readonly fetchImpl: ChannelFetch,
   ) {}
 
   /** `${apiBaseUrl}/2010-04-01/Accounts/{AccountSid}[/…].json` */

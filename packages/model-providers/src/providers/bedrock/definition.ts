@@ -1,6 +1,7 @@
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { validation } from '@ocso/domain';
 import { z } from 'zod';
+import { liteLlmKey, modelsDevKey } from '../../catalog/mapping.js';
 import { createAiSdkAdapter } from '../../core/adapter.js';
 import { listBedrockModels, type BedrockAuth } from '../../discovery/bedrock.js';
 import { listContext } from '../../discovery/context.js';
@@ -11,7 +12,8 @@ import {
   withOverrides,
   type ProviderDefinition,
 } from '../definition.js';
-import { bedrockCachePlan } from '../shared/cache-plans.js';
+import { bedrockCachePlan, MAX_EXPLICIT_BREAKPOINTS } from '../shared/cache-plans.js';
+import { describePromptCaching } from '../shared/caching-description.js';
 import { fetchOption, keepOnlyReportedCounters } from '../shared/sdk-helpers.js';
 import { bedrockAuthOptions } from './credentials.js';
 import { bedrockCapabilities, bedrockSupportsLongCacheTtl } from './models.js';
@@ -44,14 +46,30 @@ type BedrockCredentialFields = z.infer<typeof credentialsSchema>;
 export const bedrockProvider: ProviderDefinition<BedrockSettings, BedrockCredentialFields> = {
   kind: 'BEDROCK',
   label: 'AWS Bedrock',
+  mark: 'AWS',
+  cachingSummary: 'cachePoint breakpoints (Claude, Nova)',
   devOnly: false,
   settingsSchema,
   credentialsSchema,
+  // Model or system inference-profile ids, unchanged: region prefixes (`us.`, `eu.`, `global.`…) are
+  // priced separately by the catalogs, so they are never stripped. Application inference-profile ARNs
+  // say nothing about the model, so they are not priced.
+  catalog: {
+    providers: { 'models.dev': ['amazon-bedrock'], litellm: ['bedrock_converse', 'bedrock'] },
+    listingProvider: 'amazon-bedrock',
+    candidates: (model) =>
+      model.startsWith('arn:') ? [] : [modelsDevKey('amazon-bedrock', model), liteLlmKey('bedrock_converse', model), liteLlmKey('bedrock', model)],
+  },
   capabilities: (model, settings) => withOverrides(bedrockCapabilities(model), model, settings.capabilityOverrides),
   providerOptions: (model, request, settings) =>
     bedrockProvider.capabilities(model, settings).promptCaching === 'EXPLICIT'
       ? bedrockCachePlan(request, bedrockSupportsLongCacheTtl(model))
       : {},
+  describeCaching: (model, settings) =>
+    describePromptCaching(bedrockProvider.capabilities(model, settings), {
+      explicit: `explicit cachePoint breakpoints (≤ ${MAX_EXPLICIT_BREAKPOINTS})`,
+      explicitLongTtl: bedrockSupportsLongCacheTtl(model) ? 'breakpoints · 1h TTL' : 'breakpoints · 5m TTL (1h needs Claude 4.5+)',
+    }),
   create(config, deps) {
     const { settings, credentials } = parseProviderConfig(bedrockProvider, config);
     const region = settings.region ?? config.region;

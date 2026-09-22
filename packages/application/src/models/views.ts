@@ -1,5 +1,7 @@
 import type { deploymentSettings, modelProfiles } from '@ocso/db';
-import type { ModelCapabilities, ProviderKind, ProviderRegistry } from '@ocso/model-providers';
+import type { ModelCapabilities, PromptCachingDescription, ProviderDefinition, ProviderKind, ProviderRegistry } from '@ocso/model-providers';
+import { describeSchemaFields, type ProviderFieldDescriptor } from './field-descriptors.js';
+import type { ModelFacts } from './model-policy.js';
 import type { ProviderRow } from './provider-config.js';
 import type { ProfileAgentRef, ProviderProfileRef } from './references.js';
 import type { ModelUsageStats } from './usage-stats.js';
@@ -11,6 +13,35 @@ import type { ModelUsageStats } from './usage-stats.js';
 
 export type ProfileRow = typeof modelProfiles.$inferSelect;
 type DeploymentPolicyRow = Pick<typeof deploymentSettings.$inferSelect, 'providerAllowlist' | 'residencyZone'>;
+
+/**
+ * One registered provider kind for the admin UI (GET /v1/model-providers/kinds):
+ * everything the web app shows about a kind comes from its definition.
+ */
+export interface ProviderKindView {
+  kind: string;
+  label: string;
+  /** Short mono mark shown instead of a vendor logo. */
+  mark: string;
+  /** One line on the adapter's prompt caching (provider cards). */
+  cachingSummary: string;
+  /** Development only: never for production, never priced. */
+  devOnly: boolean;
+  settings: ProviderFieldDescriptor[];
+  credentials: ProviderFieldDescriptor[];
+}
+
+export function toKindView(d: ProviderDefinition): ProviderKindView {
+  return {
+    kind: d.kind,
+    label: d.label,
+    mark: d.mark,
+    cachingSummary: d.cachingSummary,
+    devOnly: d.devOnly,
+    settings: describeSchemaFields(d.settingsSchema, { secret: false }),
+    credentials: describeSchemaFields(d.credentialsSchema, { secret: true }),
+  };
+}
 
 export interface ProviderPolicyView {
   /** On the deployment allowlist (an empty allowlist admits every provider). */
@@ -64,6 +95,8 @@ export interface ProfileTargetView {
   model: string;
   /** Null when the provider kind is not available in this deployment or its stored settings are invalid. */
   capabilities: ModelCapabilities | null;
+  /** How the provider caches prompts for this model, in its own words (null with `capabilities`). */
+  caching: PromptCachingDescription | null;
 }
 
 export interface ProfileView {
@@ -113,7 +146,8 @@ export function toProviderView(
     id: row.id,
     kind: row.kind,
     kindLabel: definition?.label ?? row.kind,
-    devOnly: definition?.devOnly ?? row.kind === 'DEV_SCRIPTED',
+    // An unregistered kind is unknown here: it shows as not available, not as dev-only.
+    devOnly: definition?.devOnly ?? false,
     available: definition !== undefined,
     name: row.name,
     region: row.region,
@@ -140,7 +174,7 @@ export function toProfileView(
     providers: ReadonlyMap<string, ProviderRow>;
     agents: ProfileAgentRef[];
     stats: ModelUsageStats | null;
-    capabilities: (provider: ProviderRow, model: string) => ModelCapabilities | null;
+    facts: (provider: ProviderRow, model: string) => ModelFacts | null;
   },
 ): ProfileView {
   const primary = extra.providers.get(row.providerId);
@@ -168,13 +202,15 @@ export function toProfileView(
     requiredCapabilities: row.requiredCapabilities,
     targets: [{ providerId: row.providerId, model: row.model }, ...row.fallbacks].map((t, i) => {
       const p = extra.providers.get(t.providerId);
+      const facts = p ? extra.facts(p, t.model) : null;
       return {
         role: i === 0 ? ('PRIMARY' as const) : ('FALLBACK' as const),
         providerId: t.providerId,
         providerName: p?.name ?? null,
         providerKind: p?.kind ?? null,
         model: t.model,
-        capabilities: p ? extra.capabilities(p, t.model) : null,
+        capabilities: facts?.capabilities ?? null,
+        caching: facts?.caching ?? null,
       };
     }),
     configVersion: row.configVersion,

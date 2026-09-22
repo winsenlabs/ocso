@@ -195,6 +195,10 @@ describe('EcsDeploymentAdapter metrics and describe', () => {
       policies: [{ present: true }, { present: true }],
       alarms: [{ name: 'ocso-prod-worker-queue-age-high', state: 'OK' }],
     });
+    // The panel rows come from the driver, so the web app renders ECS without knowing it.
+    expect(status.facts?.map((f) => f.label)).toEqual(['service', 'tasks', 'rollout', 'scalable target', 'policies', 'alarms']);
+    expect(status.facts?.find((f) => f.label === 'tasks')?.value).toBe('desired 2 · running 2 · pending 0');
+    expect(status.facts?.find((f) => f.label === 'alarms')?.states).toEqual([{ name: 'ocso-prod-worker-queue-age-high · ok', tone: 'good' }]);
     expect(aws.mutations()).toHaveLength(4);
   });
 });

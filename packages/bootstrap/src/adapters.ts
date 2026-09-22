@@ -1,57 +1,103 @@
-import { readFileSync } from 'node:fs';
-import { SecretsManagerClient } from '@aws-sdk/client-secrets-manager';
-import { SQSClient } from '@aws-sdk/client-sqs';
-import { LocalBlobStore, S3BlobStore, type BlobStore } from '@ocso/blob';
-import { parseQueueUrls, type ApiEnv, type WorkerEnv } from '@ocso/config';
+import type { BlobDriverDefinition, BlobStore } from '@ocso/blob';
+import type { WorkerEnv } from '@ocso/config';
 import { secrets as secretsTable, type Db } from '@ocso/db';
-import { PgQueue, SqsQueue, type QueueAdapter, type QueueNotifier, type SqlClient } from '@ocso/queue';
-import {
-  AwsSecretStore,
-  LocalSecretStore,
-  parseMasterKey,
-  type SecretMetadata,
-  type SecretRow,
-  type SecretRowStore,
-  type SecretStore,
-} from '@ocso/secrets';
+import type { DeploymentDriverDefinition } from '@ocso/deployment';
+import type { EmailDriverDefinition } from '@ocso/email';
+import type { QueueAdapter, QueueDriverDefinition, QueueNotifier, SqlClient } from '@ocso/queue';
+import type { SecretMetadata, SecretRow, SecretRowStore, SecretStore, SecretStoreDriverDefinition } from '@ocso/secrets';
 import { eq } from 'drizzle-orm';
+import { DriverRegistry, type NamedDriver } from './drivers/registry.js';
+import { FIRST_PARTY_PLUGINS } from './first-party.js';
+import { contributions, type DriverEnv, type OcsoPlugin } from './plugin.js';
 
-type Env = ApiEnv | WorkerEnv;
+/** The infrastructure driver registries of a process, filled from the plugins. */
+export interface DriverRegistries {
+  email: DriverRegistry<EmailDriverDefinition>;
+  blob: DriverRegistry<BlobDriverDefinition<DriverEnv>>;
+  secrets: DriverRegistry<SecretStoreDriverDefinition<DriverEnv>>;
+  queue: DriverRegistry<QueueDriverDefinition<DriverEnv>>;
+  deployment: DriverRegistry<DeploymentDriverDefinition<WorkerEnv>>;
+}
+
+export function createDriverRegistries(plugins: readonly OcsoPlugin[] = FIRST_PARTY_PLUGINS): DriverRegistries {
+  const fill = <D extends NamedDriver>(registry: DriverRegistry<D>, drivers: readonly D[]): DriverRegistry<D> => {
+    for (const driver of drivers) registry.register(driver);
+    return registry;
+  };
+  return {
+    email: fill(new DriverRegistry('EMAIL_DRIVER', 'email'), contributions(plugins, 'emailDrivers')),
+    blob: fill(new DriverRegistry('BLOB_DRIVER', 'blob'), contributions(plugins, 'blobDrivers')),
+    secrets: fill(new DriverRegistry('SECRETS_DRIVER', 'secrets'), contributions(plugins, 'secretsDrivers')),
+    queue: fill(new DriverRegistry('QUEUE_DRIVER', 'queue'), contributions(plugins, 'queueDrivers')),
+    deployment: fill(new DriverRegistry('DEPLOYMENT_DRIVER', 'deployment'), contributions(plugins, 'deploymentDrivers')),
+  };
+}
+
+interface CheckedDriver<E> extends NamedDriver {
+  readonly check?: ((env: E) => readonly string[]) | undefined;
+}
+
+/** Problems with one `*_DRIVER` selection: an unregistered name, or the driver's own settings checks. */
+function selectionProblems<E, D extends CheckedDriver<E>>(registry: DriverRegistry<D>, name: string, env: E): string[] {
+  if (!registry.has(name)) return [registry.unknown(name)];
+  return [...(registry.get(name).check?.(env) ?? [])];
+}
+
+function fail(problems: readonly string[]): void {
+  if (problems.length) throw new Error(`Invalid OCSO configuration:\n${problems.map((p) => `  - ${p}`).join('\n')}`);
+}
+
+/** The driver `name` selects, after its settings checks passed (throws listing every problem). */
+export function selectDriver<E, D extends CheckedDriver<E>>(registry: DriverRegistry<D>, name: string, env: E): D {
+  fail(selectionProblems(registry, name, env));
+  return registry.get(name);
+}
 
 /**
- * Adapter selection by configuration (docs/02 §6, build rule §17). This is the
- * only place that knows which infrastructure the deployment uses.
+ * Start-up check (api and worker): BLOB_DRIVER, SECRETS_DRIVER and
+ * QUEUE_DRIVER each name a registered driver whose settings are complete.
+ * Throws one error listing every problem. EMAIL_DRIVER is checked by
+ * resolveEmailConfig, which also resolves the email secrets.
  */
-export function createSecretStore(env: Env, db: Db): SecretStore {
-  const rows = new DrizzleSecretRows(db);
-  if (env.SECRETS_DRIVER === 'aws') {
-    return new AwsSecretStore(new SecretsManagerClient(awsRegion(env)), rows, { namePrefix: env.SECRETS_NAME_PREFIX });
-  }
-  const raw = env.OCSO_SECRETS_MASTER_KEY ?? readFileSync(env.OCSO_SECRETS_MASTER_KEY_FILE!, 'utf8');
-  return new LocalSecretStore(rows, parseMasterKey('k1', raw));
+export function assertDrivers(env: DriverEnv, drivers: DriverRegistries = createDriverRegistries()): void {
+  fail([
+    ...selectionProblems(drivers.blob, env.BLOB_DRIVER, env),
+    ...selectionProblems(drivers.secrets, env.SECRETS_DRIVER, env),
+    ...selectionProblems(drivers.queue, env.QUEUE_DRIVER, env),
+  ]);
 }
 
-export function createBlobStore(env: Env): BlobStore {
-  if (env.BLOB_DRIVER === 's3') {
-    return new S3BlobStore({
-      bucket: env.S3_BUCKET!,
-      region: env.AWS_REGION ?? 'us-east-1',
-      endpoint: env.S3_ENDPOINT,
-      kmsKeyId: env.S3_KMS_KEY_ID,
-    });
-  }
-  return new LocalBlobStore({
-    rootDir: env.BLOB_LOCAL_DIR,
-    publicApiBaseUrl: env.OCSO_PUBLIC_URL,
-    signingKey: env.BLOB_SIGNING_KEY!,
-  });
+/** The worker also selects a deployment driver (its leader applies scaling). */
+export function assertWorkerDrivers(env: WorkerEnv, drivers: DriverRegistries = createDriverRegistries()): void {
+  fail([
+    ...selectionProblems(drivers.blob, env.BLOB_DRIVER, env),
+    ...selectionProblems(drivers.secrets, env.SECRETS_DRIVER, env),
+    ...selectionProblems(drivers.queue, env.QUEUE_DRIVER, env),
+    ...selectionProblems(drivers.deployment, env.DEPLOYMENT_DRIVER, env),
+  ]);
 }
 
-export function createQueue(env: Env, sql: SqlClient, workerId: string, notifier?: QueueNotifier): QueueAdapter {
-  if (env.QUEUE_DRIVER === 'sqs') {
-    return new SqsQueue(new SQSClient(awsRegion(env)), { queueUrls: parseQueueUrls(env.SQS_QUEUE_URLS) });
-  }
-  return new PgQueue(sql, { workerId, conversationAffinityTopics: ['conversation.turn'], notifier });
+/**
+ * Adapter selection by configuration (docs/02 §6, build rule §17): the
+ * registered driver each `*_DRIVER` names builds the adapter. This package is
+ * the only place that knows which infrastructure the deployment uses.
+ */
+export function createSecretStore(env: DriverEnv, db: Db, drivers: DriverRegistries = createDriverRegistries()): SecretStore {
+  return selectDriver(drivers.secrets, env.SECRETS_DRIVER, env).create(env, { rows: new DrizzleSecretRows(db) });
+}
+
+export function createBlobStore(env: DriverEnv, drivers: DriverRegistries = createDriverRegistries()): BlobStore {
+  return selectDriver(drivers.blob, env.BLOB_DRIVER, env).create(env);
+}
+
+export function createQueue(
+  env: DriverEnv,
+  sql: SqlClient,
+  workerId: string,
+  notifier?: QueueNotifier,
+  drivers: DriverRegistries = createDriverRegistries(),
+): QueueAdapter {
+  return selectDriver(drivers.queue, env.QUEUE_DRIVER, env).create(env, { sql, workerId, notifier });
 }
 
 /** SecretRowStore over the `secrets` table. */
@@ -120,9 +166,4 @@ function fromDb(r: typeof secretsTable.$inferSelect): SecretRow {
     rotatedAt: r.rotatedAt?.toISOString() ?? null,
     expiresAt: r.expiresAt?.toISOString() ?? null,
   };
-}
-
-/** Region config without passing `undefined` (exactOptionalPropertyTypes). */
-function awsRegion(env: Env): { region?: string } {
-  return env.AWS_REGION ? { region: env.AWS_REGION } : {};
 }

@@ -27,7 +27,7 @@ export function ProfileDetails({ profile, closeHref }: { profile: Profile; close
       />
       {profile.targets.length ? (
         <TargetCachingTable
-          targets={profile.targets.map((t, i) => ({ key: `${i}`, role: t.role, providerName: t.providerName, providerKind: t.providerKind, model: t.model, capabilities: t.capabilities }))}
+          targets={profile.targets.map((t, i) => ({ key: `${i}`, role: t.role, providerName: t.providerName, model: t.model, capabilities: t.capabilities, caching: t.caching }))}
           cachePolicy={profile.cachePolicy}
           cacheTtl={profile.cacheTtl}
         />

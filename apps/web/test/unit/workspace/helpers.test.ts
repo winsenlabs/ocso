@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { reconnectDelayMs } from '../../../lib/realtime/backoff';
 import { SseParser, formatBlock, parseBlock } from '../../../lib/realtime/sse';
 import { isRealtimeEventType } from '../../../lib/realtime/events';
-import { channelCode, channelLabel } from '../../../components/workspace/lib/channel';
+import { channelLabel, channelMark } from '../../../components/workspace/lib/channel';
 import { controlLabel, customerDisplayName } from '../../../components/workspace/lib/labels';
 import { pickupSla, resolutionLabel, resolutionSla, slaLabel } from '../../../components/workspace/lib/sla';
 import { factsOf, fileBadge, formatBytes, riskOf, toolDot, toolMeta } from '../../../components/workspace/lib/timeline';
@@ -40,14 +40,21 @@ describe('pickup SLA (design/01 SLA timers)', () => {
 });
 
 describe('channel marks', () => {
-  it('maps API channel kinds to the design codes', () => {
-    expect(channelCode('WHATSAPP')).toBe('WA');
-    expect(channelCode('WEBCHAT')).toBe('WB');
-    expect(channelCode('CUSTOM_APP')).toBe('AP');
-    expect(channelCode(null)).toBeNull();
-    expect(channelCode('CARRIER_PIGEON')).toBeNull();
-    expect(channelLabel('WEBCHAT', 'Site chat')).toBe('Web chat');
-    expect(channelLabel('CARRIER_PIGEON', 'Pigeon')).toBe('Pigeon');
+  // As GET /v1/channels/kinds returns them: each kind's mark comes from its adapter's descriptor.
+  const kinds = [
+    { kind: 'TWILIO_WHATSAPP', mark: { code: 'WA', name: 'WhatsApp', tone: 'wa' } },
+    { kind: 'TELEGRAM', mark: { code: 'TG', name: 'Telegram' } },
+    { kind: 'LEGACY', mark: null },
+  ];
+  it('takes marks and names from the kind descriptors, for any kind', () => {
+    expect(channelMark(kinds, 'TWILIO_WHATSAPP')).toEqual({ code: 'WA', name: 'WhatsApp', tone: 'wa' });
+    expect(channelMark(kinds, 'TELEGRAM')?.code).toBe('TG');
+    expect(channelMark(kinds, null)).toBeNull();
+    expect(channelMark(kinds, 'CARRIER_PIGEON')).toBeNull();
+    expect(channelMark([], 'TWILIO_WHATSAPP')).toBeNull();
+    expect(channelLabel(kinds, 'TELEGRAM', 'Support bot')).toBe('Telegram');
+    expect(channelLabel(kinds, 'CARRIER_PIGEON', 'Pigeon')).toBe('Pigeon');
+    expect(channelLabel(kinds, 'LEGACY', null)).toBe('no channel');
   });
 });
 

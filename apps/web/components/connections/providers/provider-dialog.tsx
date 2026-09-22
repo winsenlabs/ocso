@@ -38,7 +38,8 @@ const FORM_ID = 'provider-form';
 export function ProviderDialog({ kinds, initialKind, provider, closeHref }: Props) {
   const close = useCloseTo(closeHref);
   const editing = provider !== null;
-  const [kind, setKind] = useState<ProviderKind>(provider?.kind ?? initialKind ?? kinds[0]?.kind ?? 'OPENAI');
+  // The first kind the API offers; a stored provider keeps its own kind, even one this deployment no longer registers.
+  const [kind, setKind] = useState<ProviderKind>(provider?.kind ?? initialKind ?? kinds[0]?.kind ?? '');
   const def = kinds.find((k) => k.kind === kind);
   const [name, setName] = useState(provider?.name ?? def?.label ?? '');
   const [region, setRegion] = useState(provider?.region ?? '');
@@ -146,7 +147,7 @@ export function ProviderDialog({ kinds, initialKind, provider, closeHref }: Prop
         {editing ? null : (
           <div className="fld">
             <label htmlFor="pv-kind">Provider</label>
-            <select id="pv-kind" value={kind} onChange={(e) => chooseKind(e.target.value as ProviderKind)}>
+            <select id="pv-kind" value={kind} onChange={(e) => chooseKind(e.target.value)}>
               {kinds.map((k) => (
                 <option key={k.kind} value={k.kind}>
                   {k.label}

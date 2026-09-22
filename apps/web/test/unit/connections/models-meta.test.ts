@@ -1,50 +1,53 @@
 import { describe, expect, it } from 'vitest';
-import type { Capabilities } from '../../../lib/api/models';
-import { cacheSettingEffect, cachingMechanism, cachingMode, providerStatus, providerTone, targetReasonText } from '../../../components/connections/models/meta';
+import type { PromptCaching } from '../../../lib/api/models';
+import {
+  cacheSettingEffect,
+  cachingMechanism,
+  cachingMode,
+  cachingSummary,
+  providerMark,
+  providerStatus,
+  providerTone,
+  targetReasonText,
+} from '../../../components/connections/models/meta';
 import { decimalFromMicros, formatPerMTok, microsFromDecimal } from '../../../components/connections/models/money';
 
-const caps = (promptCaching: Capabilities['promptCaching'], reportsCacheWrites = false): Capabilities => ({
-  imageInput: true,
-  fileInput: false,
-  audioInput: false,
-  toolCalling: true,
-  structuredOutput: true,
-  reasoning: false,
-  streaming: true,
-  promptCaching,
-  reportsCacheWrites,
-});
+/** As the API sends it: each provider definition words its own caching (packages/model-providers). */
+const explicitBedrock: PromptCaching = {
+  mode: 'explicit',
+  mechanism: 'explicit cachePoint breakpoints (≤ 4)',
+  effect: { '5m': 'breakpoints · 5m TTL', '1h': 'breakpoints · 5m TTL (1h needs Claude 4.5+)' },
+};
+const keyBased: PromptCaching = { mode: 'key-based', mechanism: 'automatic + prompt cache key', effect: { '5m': 'cache key · default retention', '1h': 'cache key · 24h retention' } };
 
-describe('prompt caching per target (ADR-006)', () => {
-  it('classifies explicit, implicit, key-based and unverified targets', () => {
-    expect(cachingMode('ANTHROPIC', caps('EXPLICIT'))).toBe('explicit');
-    expect(cachingMode('BEDROCK', caps('EXPLICIT'))).toBe('explicit');
-    expect(cachingMode('VERTEX', caps('AUTOMATIC'))).toBe('implicit');
-    expect(cachingMode('OPENAI', caps('AUTOMATIC'))).toBe('key-based');
-    expect(cachingMode('FOUNDRY', caps('AUTOMATIC'))).toBe('key-based');
-    expect(cachingMode('SARVAM', caps('UNVERIFIED'))).toBe('unverified');
-    expect(cachingMode('BEDROCK', caps('UNSUPPORTED'))).toBe('none');
-    expect(cachingMode('OPENAI', null)).toBe('unknown');
-  });
-
-  it('names the mechanism each adapter uses', () => {
-    expect(cachingMechanism('BEDROCK', caps('EXPLICIT'))).toContain('cachePoint');
-    expect(cachingMechanism('VERTEX', caps('EXPLICIT'))).toContain('cache_control');
-    expect(cachingMechanism('VERTEX', caps('AUTOMATIC'))).toContain('implicit');
-    expect(cachingMechanism('OPENAI', caps('AUTOMATIC'))).toBe('automatic + prompt cache key');
-    expect(cachingMechanism('OPENAI', caps('AUTOMATIC', true))).toContain('GPT-5.6+');
-    expect(cachingMechanism('SARVAM', caps('UNVERIFIED'))).toContain('no documented control');
+describe('prompt caching per target (ADR-006), as the provider describes it', () => {
+  it('shows the mode and mechanism the API sends; unknown when nothing describes the target', () => {
+    expect(cachingMode(explicitBedrock)).toBe('explicit');
+    expect(cachingMode(keyBased)).toBe('key-based');
+    expect(cachingMode({ ...keyBased, mode: 'semantic' })).toBe('semantic');
+    expect(cachingMode(null)).toBe('unknown');
+    expect(cachingMechanism(explicitBedrock)).toContain('cachePoint');
+    expect(cachingMechanism(null)).toMatch(/^unknown/);
   });
 
   it('explains what the profile cache policy and TTL do for each target', () => {
-    expect(cacheSettingEffect('ANTHROPIC', caps('EXPLICIT'), 'OFF', '1h')).toContain('off');
-    expect(cacheSettingEffect('ANTHROPIC', caps('EXPLICIT'), 'PREFIX', '1h')).toBe('breakpoints · 1h TTL');
-    expect(cacheSettingEffect('BEDROCK', caps('EXPLICIT'), 'PREFIX', '1h')).toContain('Claude 4.5+');
-    expect(cacheSettingEffect('ANTHROPIC', caps('EXPLICIT'), 'PREFIX', null)).toBe('breakpoints · 5m TTL');
-    expect(cacheSettingEffect('OPENAI', caps('AUTOMATIC'), 'PREFIX', '1h')).toBe('cache key · 24h retention');
-    expect(cacheSettingEffect('OPENAI', caps('AUTOMATIC', true), 'PREFIX', '1h')).toBe('cache key · 30m implicit retention');
-    expect(cacheSettingEffect('VERTEX', caps('AUTOMATIC'), 'PREFIX', '1h')).toContain('managed by the provider');
-    expect(cacheSettingEffect('SARVAM', caps('UNVERIFIED'), 'PREFIX', null)).toBe('nothing sent');
+    expect(cacheSettingEffect(explicitBedrock, 'OFF', '1h')).toContain('off');
+    expect(cacheSettingEffect(explicitBedrock, 'PREFIX', '1h')).toContain('Claude 4.5+');
+    expect(cacheSettingEffect(explicitBedrock, 'PREFIX', null)).toBe('breakpoints · 5m TTL');
+    expect(cacheSettingEffect(keyBased, 'PREFIX', '1h')).toBe('cache key · 24h retention');
+    expect(cacheSettingEffect(keyBased, 'PREFIX', '5m')).toBe('cache key · default retention');
+    expect(cacheSettingEffect(null, 'PREFIX', null)).toBe('nothing sent');
+  });
+});
+
+describe('provider marks and caching summaries come from the kinds endpoint', () => {
+  it('uses the definition mark, else a generic one derived from the kind', () => {
+    expect(providerMark('OPENAI', { mark: 'OAI' })).toBe('OAI');
+    expect(providerMark('MISTRAL', undefined)).toBe('MIS');
+    expect(providerMark('X_1', {})).toBe('X1');
+    expect(providerMark('__', undefined)).toBe('?');
+    expect(cachingSummary({ cachingSummary: 'automatic · prompt cache key' })).toBe('automatic · prompt cache key');
+    expect(cachingSummary(undefined)).toBe('not described by this deployment');
   });
 });
 

@@ -9,14 +9,13 @@ import { bumpGeneration } from '../cache/generations.js';
 import { emitEvent } from '../events/outbox.js';
 import { nowOf, type ActorContext } from '../shared/context.js';
 import { authorize, isForeignKeyViolation, isUniqueViolation } from './access.js';
-import { describeSchemaFields, type ProviderFieldDescriptor } from './field-descriptors.js';
 import type { ProviderInput, ProviderPatch, ProviderTestInput } from './inputs.js';
 import { NO_MEDIA, resolveCredentials, validateProviderConfig, type ProviderRow } from './provider-config.js';
 import { ProviderCredentialStore, type CredentialChange } from './provider-secrets.js';
 import { runProviderTest, testErrorText, type ProviderTestResult } from './provider-test.js';
 import { profilesByProvider, profilesUsingProvider } from './references.js';
 import { EMPTY_USAGE_STATS, modelUsageStats } from './usage-stats.js';
-import { toProviderView, type ProviderView } from './views.js';
+import { toKindView, toProviderView, type ProviderKindView, type ProviderView } from './views.js';
 
 export interface ModelAdminDeps {
   db: Db;
@@ -25,14 +24,6 @@ export interface ModelAdminDeps {
   /** Adapter dependencies for validation and test calls; media defaults to a resolver that rejects. */
   adapterDeps?: Partial<AdapterDeps> | undefined;
   now?: (() => Date) | undefined;
-}
-
-export interface ProviderKindView {
-  kind: string;
-  label: string;
-  devOnly: boolean;
-  settings: ProviderFieldDescriptor[];
-  credentials: ProviderFieldDescriptor[];
 }
 
 /** Audit-safe snapshot: credential NAMES only (docs/15 §3). */
@@ -59,13 +50,7 @@ export class ProviderService {
 
   kinds(actor: ActorContext): ProviderKindView[] {
     authorize(actor, Permission.PROVIDERS_READ);
-    return this.deps.registry.list().map((d) => ({
-      kind: d.kind,
-      label: d.label,
-      devOnly: d.devOnly,
-      settings: describeSchemaFields(d.settingsSchema, { secret: false }),
-      credentials: describeSchemaFields(d.credentialsSchema, { secret: true }),
-    }));
+    return this.deps.registry.list().map(toKindView);
   }
 
   async list(actor: ActorContext): Promise<ProviderView[]> {

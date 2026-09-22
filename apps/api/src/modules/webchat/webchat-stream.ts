@@ -1,6 +1,6 @@
 import type { MessageEvent } from '@nestjs/common';
 import { Observable, concatMap, from, mergeMap } from 'rxjs';
-import type { ChannelCapabilities, WebChatIdentity } from '@ocso/channels';
+import type { ChannelCapabilities, EmbedVisitor } from '@ocso/channels';
 import type { OcsoEvent } from '@ocso/events';
 import type { RealtimeHub } from '../realtime/realtime.hub.js';
 import type { VisitorConversation, WebChatIdentityService } from './webchat-identity.service.js';
@@ -39,7 +39,7 @@ export interface VisitorStreamDeps {
 
 export interface VisitorStreamInput {
   channelId: string;
-  visitor: WebChatIdentity;
+  visitor: EmbedVisitor;
   capabilities: ChannelCapabilities;
 }
 

@@ -1,7 +1,7 @@
 import type { RenderedTemplate } from '@ocso/domain';
 
 /**
- * WhatsApp-style preview of a template message (workspace composer and the
+ * Chat-bubble preview of a template message (workspace composer and the
  * template builder): header, body, footer and buttons exactly as rendered by
  * @ocso/domain's renderTemplate — the same text OCSO stores and sends.
  */

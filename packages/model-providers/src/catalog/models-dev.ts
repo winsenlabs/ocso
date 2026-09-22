@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { firstPartyCatalogProviders } from '../registry.js';
 import type { CatalogEntry, CatalogPrice, CatalogPriceTier } from './types.js';
 import { isInputKind, opt, positiveInt } from './util.js';
 
@@ -6,10 +7,9 @@ import { isInputKind, opt, positiveInt } from './util.js';
  * models.dev `api.json` (MIT, github.com/sst/models.dev): `{ [providerId]:
  * { id, name, models: { [modelId]: { name, cost, limit, modalities,
  * tool_call, reasoning, status, … } } } }`, costs in USD per 1M tokens.
- * Only the providers OCSO can map a provider kind to are kept.
+ * Only the providers some provider definition maps to are kept
+ * (`ProviderDefinition.catalog.providers['models.dev']`).
  */
-
-export const MODELS_DEV_PROVIDERS = ['openai', 'anthropic', 'amazon-bedrock', 'google-vertex', 'google-vertex-anthropic', 'azure', 'sarvam'] as const;
 
 const price = z.number().finite().min(0);
 const Tier = z
@@ -94,10 +94,10 @@ export function normalizeModelsDevModel(provider: string, key: string, raw: unkn
 }
 
 /** Normalize a parsed api.json document. Malformed models are skipped, never fatal. */
-export function normalizeModelsDev(document: unknown): CatalogEntry[] {
+export function normalizeModelsDev(document: unknown, providers: readonly string[] = firstPartyCatalogProviders('models.dev')): CatalogEntry[] {
   const doc = ModelsDevDocument.parse(document);
   const entries: CatalogEntry[] = [];
-  for (const provider of MODELS_DEV_PROVIDERS) {
+  for (const provider of providers) {
     const p = Provider.safeParse(doc[provider]);
     if (!p.success) continue;
     for (const [key, model] of Object.entries(p.data.models)) {

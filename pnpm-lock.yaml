@@ -693,6 +693,9 @@ importers:
       '@ocso/domain':
         specifier: workspace:*
         version: link:../domain
+      '@ocso/email':
+        specifier: workspace:*
+        version: link:../email
       '@ocso/mcp':
         specifier: workspace:*
         version: link:../mcp

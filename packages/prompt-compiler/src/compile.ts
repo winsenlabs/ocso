@@ -2,6 +2,7 @@ import type { ModelMessage, SystemBlock, ToolSpec } from '@ocso/domain';
 import { BUSINESS_COMPONENT_KEYS, COMPONENT_DESCRIPTORS, type PromptComponents } from './components.js';
 import { canonicalJson, contentHash } from './hash.js';
 import {
+  renderChannel,
   renderConversationFrame,
   renderCustomerContext,
   renderHandover,
@@ -45,6 +46,7 @@ function stableBlocks(components: PromptComponents): SystemBlock[] {
 function conversationBlocks(input: CompileInput): SystemBlock[] {
   const rendered: Array<[string, string | null]> = [
     ['conversation', renderConversationFrame(input)],
+    ['channel', renderChannel(input)],
     ['customer_context', renderCustomerContext(input)],
     ['conversation_summary', renderSummary(input)],
     ['handover', renderHandover(input)],

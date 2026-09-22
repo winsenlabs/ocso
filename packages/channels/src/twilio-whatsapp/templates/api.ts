@@ -6,6 +6,7 @@ import { twilioSecretValues, type ResolvedTwilioConfig } from '../config.js';
 import { TwilioRestClient, type TwilioResult } from '../rest-client.js';
 import { approvalRequestBody, contentCreateBody } from './draft.js';
 import { ContentItem, normalizeContentItem, whatsappApproval } from './normalize.js';
+import type { ChannelFetch } from '../../contract/types.js';
 
 /**
  * WhatsApp templates through Twilio's Content API (content.twilio.com,
@@ -27,7 +28,7 @@ export class TwilioTemplates {
 
   constructor(
     private readonly config: ResolvedTwilioConfig,
-    fetchImpl: typeof fetch,
+    fetchImpl: ChannelFetch,
   ) {
     this.client = new TwilioRestClient(config, fetchImpl);
     this.base = config.settings.contentApiBaseUrl;

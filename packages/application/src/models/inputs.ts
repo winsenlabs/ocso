@@ -1,4 +1,4 @@
-import { PROVIDER_KINDS } from '@ocso/model-providers';
+import { PROVIDER_KIND_PATTERN } from '@ocso/model-providers';
 import { z } from 'zod';
 
 /**
@@ -6,11 +6,14 @@ import { z } from 'zod';
  * Credential values appear only here, on the way into the SecretStore.
  */
 
+/** A provider kind; the services check it against the provider registry (plugins add kinds). */
+export const ProviderKindInput = z.string().regex(PROVIDER_KIND_PATTERN, 'must be an UPPER_SNAKE_CASE provider kind');
+
 const credentialValue = z.string().min(1).max(16_000);
 const zone = z.string().trim().regex(/^[A-Za-z0-9-]{1,20}$/, 'letters, digits and dashes only');
 
 export const ProviderInput = z.object({
-  kind: z.enum(PROVIDER_KINDS),
+  kind: ProviderKindInput,
   name: z.string().trim().min(1).max(80),
   region: z.string().trim().min(1).max(40).nullable().default(null),
   /** Where the provider keeps customer data, e.g. `IN`, `EU`, `GLOBAL` (docs/06 §5). */
@@ -99,7 +102,7 @@ export type ProfilePatch = z.infer<typeof ProfilePatch>;
 const micros = z.number().int().min(0).max(1_000_000_000_000);
 
 export const PricingInput = z.object({
-  providerKind: z.enum(PROVIDER_KINDS),
+  providerKind: ProviderKindInput,
   /** Exact model id, or a prefix ending in `*` (e.g. `claude-sonnet-4-*`). */
   modelPattern: z.string().trim().min(1).max(200),
   currency: z.string().regex(/^[A-Z]{3}$/).default('USD'),
@@ -124,7 +127,7 @@ export type PricingPatch = z.infer<typeof PricingPatch>;
 
 /** "Use the catalog price" for one model (POST /v1/model-pricing/from-catalog). */
 export const CatalogPriceInput = z.object({
-  providerKind: z.enum(PROVIDER_KINDS),
+  providerKind: ProviderKindInput,
   model: z.string().trim().min(1).max(200),
   /** The configured provider, for Foundry deployments (their underlying model comes from its settings). */
   providerId: z.uuid().optional(),

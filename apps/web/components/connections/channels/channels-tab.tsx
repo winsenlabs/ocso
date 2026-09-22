@@ -1,7 +1,7 @@
 import { headers } from 'next/headers';
 import Link from 'next/link';
 import { Permission } from '@ocso/auth';
-import { ChannelMark, type ChannelCode } from '@/components/ui/channel-mark';
+import { ChannelMark } from '@/components/ui/channel-mark';
 import { EmptyState } from '@/components/ui/empty-state';
 import { KeyValue } from '@/components/ui/key-value';
 import { ProviderCard } from '@/components/ui/provider-card';
@@ -13,19 +13,8 @@ import { formatAge } from '@/lib/format';
 import { hasPermission, type Session } from '@/lib/session';
 import { connectionsHref, idParam, param } from '../url';
 import { ChannelDialog } from './channel-dialog';
+import { identitySettingOf } from './settings-form';
 
-/** Kinds with WhatsApp message templates (the adapters implement the template methods). */
-const TEMPLATE_KINDS: ReadonlySet<string> = new Set(['TWILIO_WHATSAPP', 'WHATSAPP']);
-const CODE: Record<string, ChannelCode> = { TWILIO_WHATSAPP: 'WA', WHATSAPP: 'WA', WEBCHAT: 'WB', CUSTOM_APP: 'AP', VOICE: 'VO', SMS: 'SM' };
-const LABEL: Record<string, string> = {
-  TWILIO_WHATSAPP: 'WhatsApp — Twilio',
-  WHATSAPP: 'WhatsApp — Meta Cloud API',
-  WEBCHAT: 'Web chat',
-  CUSTOM_APP: 'Mobile app chat',
-  VOICE: 'Voice',
-  SMS: 'SMS',
-  RCS: 'RCS',
-};
 
 function status(c: Channel): { tone: StatusTone; label: string } {
   if (c.status === 'ACTIVE') return { tone: 'good', label: 'live' };
@@ -33,16 +22,7 @@ function status(c: Channel): { tone: StatusTone; label: string } {
   return { tone: 'muted', label: c.status.toLowerCase() };
 }
 
-/** Non-secret identifying settings worth showing (Twilio sender, WhatsApp number id, web-chat JWT issuer). */
-function identity(c: Channel): { k: string; v: string } | null {
-  const sender = c.settings['from'] ?? c.settings['messagingServiceSid'];
-  if (c.kind === 'TWILIO_WHATSAPP' && typeof sender === 'string') return { k: 'sender', v: sender };
-  const phone = c.settings['phoneNumberId'];
-  if (typeof phone === 'string') return { k: 'number id', v: phone };
-  const issuer = c.settings['hostJwtIssuer'];
-  if (typeof issuer === 'string') return { k: 'host jwt', v: issuer };
-  return null;
-}
+
 
 /** The origin customers and providers reach (OCSO_PUBLIC_URL, else this request's host — ADR-020 one public origin). */
 async function publicOrigin(): Promise<string> {
@@ -63,7 +43,7 @@ type Params = Record<string, string | string[] | undefined>;
  */
 export async function ChannelsTab({ session, params }: { session: Session; params: Params }) {
   const canManage = hasPermission(session, Permission.CHANNELS_MANAGE);
-  const canTemplates = hasPermission(session, Permission.WHATSAPP_TEMPLATES_MANAGE);
+  const canTemplates = hasPermission(session, Permission.MESSAGE_TEMPLATES_MANAGE);
   const [channels, kinds, agents, origin] = await Promise.all([
     listChannels(),
     listChannelKinds(),
@@ -72,7 +52,8 @@ export async function ChannelsTab({ session, params }: { session: Session; param
   ]);
   const dialog = canManage ? param(params, 'dialog') : undefined;
   const editing = dialog === 'channel-edit' ? channels.find((c) => c.id === idParam(params, 'id')) : undefined;
-  const kindLabel = (kind: string) => kinds.find((k) => k.kind === kind)?.label ?? LABEL[kind] ?? kind;
+  const kindOf = (kind: string) => kinds.find((k) => k.kind === kind);
+  const kindLabel = (kind: string) => kindOf(kind)?.label ?? kind;
   const agentName = (id: string | null) => (id ? (agents.find((a) => a.id === id)?.name ?? 'unknown agent') : 'none');
   return (
     <>
@@ -91,19 +72,19 @@ export async function ChannelsTab({ session, params }: { session: Session; param
       {channels.length === 0 ? (
         <EmptyState title="No channels configured yet">
           {canManage
-            ? 'Add a channel: WhatsApp through Twilio needs your Account SID, auth token and WhatsApp sender (or Meta’s number id and tokens for the Cloud API); web chat needs only the sites allowed to embed it.'
+            ? `Add a channel: ${kinds.map((k) => k.label ?? k.kind).join(', ') || 'no channel kinds are installed'}. Each asks for exactly what its provider needs.`
             : 'A Platform Tech Admin adds channels; each appears here with its status, inbound path, credentials (by name) and default agent.'}
         </EmptyState>
       ) : (
         <div className="g g3 conn-grid" role="list" aria-label="Channels">
           {channels.map((c) => {
-            const id = identity(c);
+            const kind = kindOf(c.kind);
+            const id = identitySettingOf(c.settings, kind?.identitySetting ?? null);
             const secrets = Object.keys(c.secretRefs).sort();
-            const code = CODE[c.kind];
             return (
               <div role="listitem" key={c.id} aria-label={c.name}>
                 <ProviderCard
-                  logo={code ? <ChannelMark channel={code} size="lg" /> : c.kind.slice(0, 2)}
+                  logo={kind?.mark ? <ChannelMark mark={kind.mark} size="lg" /> : c.kind.slice(0, 2)}
                   name={c.name}
                   status={status(c)}
                   footer={
@@ -113,8 +94,8 @@ export async function ChannelsTab({ session, params }: { session: Session; param
                           Edit
                         </Link>
                       ) : null}
-                      {canTemplates && TEMPLATE_KINDS.has(c.kind) ? (
-                        <Link className="btn tiny ghost" href={`/whatsapp-templates?channel=${encodeURIComponent(c.id)}`} aria-label={`WhatsApp templates of ${c.name}`}>
+                      {canTemplates && kind?.messageTemplates ? (
+                        <Link className="btn tiny ghost" href={`/templates?channel=${encodeURIComponent(c.id)}`} aria-label={`Message templates of ${c.name}`}>
                           Templates
                         </Link>
                       ) : null}
@@ -129,7 +110,7 @@ export async function ChannelsTab({ session, params }: { session: Session; param
                     items={[
                       { k: 'kind', v: kindLabel(c.kind) },
                       ...(id ? [id] : []),
-                      { k: 'inbound', v: <span className="mono-sm">{c.webhookPath ?? '—'}</span> },
+                      { k: c.embedPath && !c.webhookPath ? 'widget' : 'inbound', v: <span className="mono-sm">{c.webhookPath ?? c.embedPath ?? '—'}</span> },
                       { k: 'credentials', v: secrets.length ? `${secrets.join(', ')} set` : 'none set' },
                       {
                         k: 'agent',

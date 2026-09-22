@@ -8,7 +8,7 @@ import type { DeliveryAdapterDeps } from './deps.js';
 const SlackConfig = z
   .object({
     /** Display only (the channel is fixed by the incoming webhook). */
-    channelLabel: z.string().trim().max(80).optional(),
+    channelLabel: z.string().trim().max(80).optional().meta({ title: 'Channel label', description: 'display only; the webhook fixes the channel' }),
   })
   .strict();
 export type SlackConfig = z.infer<typeof SlackConfig>;
@@ -22,9 +22,13 @@ export function createSlackAdapter(deps: Pick<DeliveryAdapterDeps, 'fetch' | 'ti
   return {
     kind: 'SLACK',
     label: 'Slack',
-    secret: { required: true, secretKind: 'WEBHOOK_SECRET', description: 'Slack incoming webhook URL' },
+    description: 'Posts to one Slack channel through an incoming webhook.',
+    events: ['OPENED', 'RESOLVED', 'REMINDER'],
+    configSchema: z.toJSONSchema(SlackConfig, { io: 'input' }) as Record<string, unknown>,
+    secret: { required: true, secretKind: 'WEBHOOK_SECRET', label: 'Incoming webhook URL', description: 'Slack incoming webhook URL' },
     validateConfig: (config) => checkConfig(SlackConfig, config),
     validateSecret: (secret) => httpsUrlProblems(secret, 'Slack webhook URL'),
+    summary: (config) => config.channelLabel || 'webhook stored as a secret',
     async deliver(message, _config, secret) {
       if (!secret) return { ok: false, retriable: false, error: 'webhook URL not configured' };
       const outcome = await postJson(deps.fetch, { url: secret, body: JSON.stringify(buildSlackPayload(message)), timeoutMs: deps.timeoutMs });

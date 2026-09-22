@@ -6,7 +6,6 @@ import { z } from 'zod';
 import { describeApiError } from '../api/errors';
 import {
   CAPABILITY_KEYS,
-  PROVIDER_KINDS,
   createPricing,
   createProfile,
   createProvider,
@@ -54,9 +53,11 @@ const Zone = z.string().trim().regex(/^[A-Za-z0-9-]{1,20}$/, 'letters, digits an
 const Region = z.string().trim().min(1).max(40).nullable();
 const Settings = z.record(z.string(), z.unknown());
 const Secret = z.string().min(1).max(16_000);
+/** A provider kind; the API checks it against its provider registry. */
+const Kind = z.string().trim().min(1, 'Choose a provider').max(40);
 
 const ProviderCreate = z.object({
-  kind: z.enum(PROVIDER_KINDS),
+  kind: Kind,
   name: z.string().trim().min(1, 'Enter a name').max(80),
   region: Region,
   residencyZone: Zone,
@@ -131,7 +132,7 @@ export async function deleteProfileAction(id: string): Promise<ActionResult> {
 
 const Micros = z.number().int().min(0).max(1_000_000_000_000);
 const PricingInput = z.object({
-  providerKind: z.enum(PROVIDER_KINDS),
+  providerKind: Kind,
   modelPattern: z.string().trim().min(1, 'Enter a model id or a prefix ending in *').max(200),
   currency: z.string().regex(/^[A-Z]{3}$/, 'three-letter currency code, e.g. USD'),
   inputPerMTokMicros: Micros,
@@ -166,7 +167,7 @@ export async function listProviderModelsAction(providerId: string, refresh = fal
   return run(permission, refresh ? 'refresh model lists' : 'read model providers', Input, { providerId, refresh }, (i) => listProviderModels(i.providerId, i.refresh), false);
 }
 
-const CatalogPriceInput = z.object({ providerKind: z.enum(PROVIDER_KINDS), model: z.string().trim().min(1).max(200), providerId: Id.optional() });
+const CatalogPriceInput = z.object({ providerKind: Kind, model: z.string().trim().min(1).max(200), providerId: Id.optional() });
 
 /** Add the model catalog's price for one model (a catalog-origin row the admin can override later). */
 export async function addCatalogPriceAction(input: z.input<typeof CatalogPriceInput>): Promise<ActionResult> {

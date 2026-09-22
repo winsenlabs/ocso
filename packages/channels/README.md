@@ -8,7 +8,9 @@ Channel adapters for OCSO (docs/07, ADR-007). An adapter handles transport only:
 | `WhatsAppChannelAdapter` | `createWhatsAppAdapter({ fetch, now })` | WhatsApp Cloud API, called directly (Graph API version comes from config) |
 | `WebChatChannelAdapter` | `createWebChatAdapter({ now, generateId? })` | OCSO's own widget: JSON in, realtime stream out |
 
-Register adapters with `ChannelRegistry`. Callers look adapters up by `kind`; they never switch on it. The registry also maps a descriptor's `webhookSegment` to its kind (`/channels/<segment>/<publicKey>/webhook`) and gives each channel its public path.
+`fetch` is the only way an adapter reaches the network. The composition root (`packages/bootstrap`) passes the SSRF-guarded channel egress: public https hosts, plus hosts the Tech Admin allowlisted (deployment settings). A factory called without `fetch` gets `NO_NETWORK`, which rejects every call; tests pass a stub.
+
+Register adapters with `ChannelRegistry`. Kinds are open strings, validated by the registry; callers look adapters up by `kind` and never switch on it. Each adapter describes itself (`describe()`: form, label, mark, setup steps, identifying setting, webhook events, template terms — see `src/contract/descriptor.ts` and docs/plugins/channels.md); the registry checks the descriptor at registration, maps its `webhookSegment` to the kind (`/channels/<segment>/<publicKey>/webhook`), and gives each channel its public paths (`webhookPath`, and `embedPath` = `/chat/<publicKey>` for embeddable kinds).
 
 ---
 
@@ -18,9 +20,10 @@ Researched in PM/research/06. Settings: `accountSid` (`AC…`), exactly one of `
 
 - **Verification.** `X-Twilio-Signature` = base64 HMAC-SHA1(auth token, URL + parameters sorted by name as name+value; repeated values de-duplicated and sorted). The URL is `RawHttpRequest.url` — the public origin plus path and query exactly as received — tried without a port and with one, like twilio-node. Missing/malformed header 401, mismatch 403, GET 400.
 - **Inbound.** One URL receives messages and status callbacks (`MessageStatus` present). Messages: idempotency key `MessageSid`; identity `whatsapp_phone` (E.164, the Meta adapter's kind) with the 2026 `ExternalUserId` BSUID as `whatsapp_bsuid`; `MediaUrl{N}` → PENDING media parts (`source.channel = 'TWILIO_WHATSAPP'`, `externalId` = media URL; `text/vcard` → DOCUMENT), `Body` → caption of the first image/video/document or TEXT, `Latitude`/`Longitude` → LOCATION, `ButtonText`/`ButtonPayload` → `button_reply`, `FlowData` → `flow_reply`, `Referral*` → `referral`, `OriginalRepliedMessageSid` → `replyToExternalId`. SMS, other accounts and empty messages are ignored. Statuses: sent/delivered/read, failed/undelivered → FAILED with `ErrorCode`. The API answers with empty TwiML (`webhookAcknowledgement()`).
-- **Outbound.** WhatsApp formatting as for Meta, chunked to 1,600 characters; one `MediaUrl` per message (a short-lived signed blob URL), captions as `Body` for images only; locations as `Body` + `PersistentAction=geo:lat,long|label`; contacts and buttons as text. The 24-hour window is checked first (`requiresTemplate`); `sendTemplate(target, { contentSid, variables }, config)` sends `ContentSid` + `ContentVariables`. `StatusCallback` = the channel's `webhookUrl` when it is https and `statusCallback` is on. Error codes map like Meta's (63016 → `outside_session_window` + `requiresTemplate`, 63018/20429/429 → `rate_limited`, 20003 → `auth_failed`, 63007 → `invalid_sender`, 21610 → `recipient_opted_out`, 5xx → retriable).
+- **Outbound.** WhatsApp formatting as for Meta, chunked to 1,600 characters; one `MediaUrl` per message (a short-lived signed blob URL), captions as `Body` for images only; locations as `Body` + `PersistentAction=geo:lat,long|label`; contacts and buttons as text. The 24-hour window is checked first (`requiresTemplate`); `sendTemplate(target, request, config)` sends an approved template from `listTemplates` as `ContentSid` + `ContentVariables` (`sendContentTemplate(target, { contentSid, variables }, config)` sends one by SID). `StatusCallback` = the channel's `webhookUrl` when it is https and `statusCallback` is on. Error codes map like Meta's (63016 → `outside_session_window` + `requiresTemplate`, 63018/20429/429 → `rate_limited`, 20003 → `auth_failed`, 63007 → `invalid_sender`, 21610 → `recipient_opted_out`, 5xx → retriable).
 - **Media.** Only this account's `…/Accounts/{AC}/Messages/{SID}/Media/{ME}` on the configured API origin; Basic credentials only there; redirects followed manually without credentials to `*.twiliocdn.com`, `*.twilio.com` or S3 over https:443; MIME allowlist, per-kind caps (image 5 MB, audio/video 16 MB, documents 20 MB), Content-Type cross-check.
 - **Test.** `checkConnection(config)` fetches the account (read-only) with the REST credentials and, with an API key, again with the auth token.
+- **Message templates.** Content templates with their WhatsApp approval, through the Content API (`contentApiBaseUrl`, default `https://content.twilio.com`) and the same credentials: `listTemplates`, `createTemplate` (create the content, then submit it for WhatsApp approval), `templateStatus`, `deleteTemplate`. Twilio does not push review results; OCSO's worker polls pending ones.
 
 ---
 
@@ -35,12 +38,13 @@ Researched in PM/research/06. Settings: `accountSid` (`AC…`), exactly one of `
 3. **App secret.** App settings, then Basic, then App secret. This goes in `secrets.appSecret`. It is used to verify `X-Hub-Signature-256`.
 4. **Verify token.** Pick any random string of at least 16 characters, for example `openssl rand -hex 16`. This goes in `secrets.verifyToken`.
 5. **Webhook.** Under WhatsApp, then Configuration, set:
-   - Callback URL: `https://<ocso-public-host>/api/channels/whatsapp/:channelId/webhook`
+   - Callback URL: `https://<ocso-public-host>/channels/whatsapp/<publicKey>/webhook` — the channel's public key, not its id; OCSO shows the exact URL after you save the channel
    - Verify token: the value from step 4
 
    Subscribe to these webhook fields:
    - **`messages`**: this carries inbound messages *and* delivery statuses.
    - **`user_id_update`**: BSUID rotation. It is surfaced as `envelope.identityUpdates`.
+   - **`message_template_status_update`**: template review results. They are surfaced as `envelope.templateUpdates`.
 6. Subscribe the app to the WABA: `POST /{WABA_ID}/subscribed_apps` using the system-user token. The dashboard does this when you use its flow.
 
 ### Channel settings
@@ -74,7 +78,7 @@ return reply.status(200).send();                              // ack ONLY after 
   - Statuses dedupe on `(externalMessageId, status)` and are applied with `nextDeliveryStatus`, so a status never moves backwards and `failed` is terminal.
 - **Batches:** one POST can hold many entries, changes, messages and statuses. The adapter parses each item on its own:
   - one malformed item never drops the rest of the batch;
-  - unsupported events (`order`, `unsupported`, template status updates and similar) are counted in `envelope.ignored`.
+  - unsupported events (`order`, `unsupported` and similar) are counted in `envelope.ignored`; template review results become `envelope.templateUpdates`.
 - **Identity:**
   - Since 2026, Meta sends a business-scoped user id (BSUID, for example `US.1349…`). The adapter uses it as the primary identity (`whatsapp_bsuid`) and keeps the phone as an alternate in E.164 form (`whatsapp_phone`, `+16505551234`).
   - Users with a username may send a BSUID only.
@@ -125,7 +129,8 @@ Failures throw `ChannelMediaError`:
 - `STRUCTURED` with schema `buttons` and data `{ body, buttons: [{ id, title }], header?, footer? }` becomes interactive reply buttons, with at most 3 buttons and titles cut to 20 characters. Otherwise the adapter uses `fallbackText`. For more than 3 buttons with no fallback, it sends a numbered list.
 - `send()` posts to `POST /{phone-number-id}/messages` and returns the `wamid`.
   - It checks the **24-hour window** first, using `target.lastInboundAt`. Outside the window, free-form sends return `{ ok: false, errorCode: 'outside_session_window', requiresTemplate: true }` without calling Meta.
-- Templates can be sent outside the window with `sendTemplate(target, { name, language, components }, channel)`. Use `renderTemplate(...)` to store a template payload in the outbox.
+- Templates can be sent outside the window: `sendTemplate(target, request, channel)` sends an approved template from `listTemplates` with its variable values; `sendRawTemplate(target, { name, language, components }, channel)` sends Cloud API components as given. Use `renderTemplate(...)` to store a template payload in the outbox.
+- Message templates of the WhatsApp Business Account (`businessAccountId` required): `listTemplates`, `createTemplate` (Meta reviews every new one), `templateStatus`, `deleteTemplate`. Media headers need an uploaded sample, so templates with one are created in WhatsApp Manager (the descriptor's `templates.mediaHeaderUnsupported` tells the builder).
 - `markRead(wamid, channel, { typingIndicator: true })` sends blue ticks and a typing indicator for about 25 s.
 
 Error mapping. Meta error codes are checked first; the HTTP status is the fallback:
@@ -156,9 +161,12 @@ A 2xx response that has no message id is reported as non-retriable on purpose.
 
 ## Web chat
 
-OCSO's first-party widget uses AI SDK UI `useChat` with an OCSO transport. It posts JSON through the OCSO API. The API endpoints are:
-- `POST /public/webchat/:channel/messages`
-- `GET /public/webchat/:channel/stream` (SSE)
+OCSO's first-party widget uses AI SDK UI `useChat` with an OCSO transport. It posts JSON through the OCSO API. The descriptor is `embeddable`, so the API serves the widget protocol for it (`/ocso-webchat.js`, the page `/chat/<publicKey>`, and the public API below) and calls the adapter's `embed` hooks (`src/webchat/embed.ts`: `widgetConfig`, `openSession`, `identify`, `attachmentKeyPrefix`) for everything kind-specific. The API endpoints are:
+- `POST /public/webchat/:publicKey/session`
+- `POST /public/webchat/:publicKey/messages`
+- `GET /public/webchat/:publicKey/messages`
+- `POST /public/webchat/:publicKey/attachments`
+- `GET /public/webchat/:publicKey/stream` (SSE)
 
 ### Authentication
 
@@ -174,7 +182,8 @@ OCSO's first-party widget uses AI SDK UI `useChat` with an OCSO transport. It po
   - Alternatively, the API can verify it once and issue a visitor token with `{ externalCustomerRef }`.
   - Identity kind: `webchat_customer_ref`, with the visitor id kept as an alternate when known. Anonymous visitors use `webchat_visitor`.
 - `verifyRequest` returns 401 for a missing or expired token, which tells the widget to refresh. It returns 403 for forged tokens and tokens bound to another channel.
-- `adapter.identify(req, channel)` gives the upload and stream endpoints the same identity.
+- `embed.identify(channel, bearerToken)` gives the upload, history and stream endpoints the same identity.
+- In staff lists an anonymous visitor shows as `web · sess 8f2a` (`displayIdentity`); host-identified customers get the generic masking.
 
 ### Messages
 
@@ -202,7 +211,8 @@ OCSO's first-party widget uses AI SDK UI `useChat` with an OCSO transport. It po
 - **No secrets leave the adapter:**
   - errors carry redacted, length-bounded provider text;
   - `validateConfig` never echoes secret values;
-  - the access token is sent only in the `Authorization` header, and only to Graph or allowlisted Meta CDN hosts.
+  - the access token is sent only in the `Authorization` header, and only to Graph or allowlisted Meta CDN hosts;
+  - every request goes through the injected, SSRF-guarded `fetch`, so a base-URL setting cannot reach the internal network unless the Tech Admin allowlisted that host.
 - **Graph URL construction.** Ids are checked before they are used in a Graph URL, so values like `../me/accounts` are refused. Graph API requests use `redirect: 'error'`.
 - **Customer-facing output.** Only customer-safe parts ever reach a channel. `TOOL_RESULT` parts are dropped in three places: the policy, the capability filter and the renderer.
 - **Web chat tokens:**

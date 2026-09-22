@@ -30,9 +30,9 @@ export interface AuthMailerDeps {
 export class AuthMailer {
   constructor(private readonly deps: AuthMailerDeps) {}
 
-  /** True when email actually leaves the process (resend/smtp), false for the log driver. */
+  /** True when email actually leaves the process; false for a non-delivering driver (log). */
   get delivers(): boolean {
-    return this.deps.sender.driver !== 'log';
+    return this.deps.sender.delivers !== false;
   }
 
   get sender(): EmailSender {

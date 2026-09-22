@@ -3,8 +3,8 @@ import type { ChannelRuntime } from './channel-runtime.js';
 
 /**
  * Binds a channel's adapter template methods to its decrypted config for the
- * application's WhatsAppTemplateService (list, create + submit, status,
- * delete). Methods the adapter lacks stay undefined (e.g. web chat).
+ * application's MessageTemplateService (list, create + submit, status,
+ * delete). Methods the adapter lacks stay undefined (kinds without templates).
  */
 export function templateProviderSource(runtime: ChannelRuntime): TemplateProviderSource {
   return async (channelId): Promise<TemplateProviderPort> => {

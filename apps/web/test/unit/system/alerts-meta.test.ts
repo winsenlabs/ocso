@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { alertsHref, parseAlertsParams, windowLabel } from '../../../components/alerts/alerts-meta';
-import { buildConfig, configSummary, configText } from '../../../components/alerts/destination-form';
 import { buildParams, initialParamText, paramFields, paramLabel } from '../../../components/alerts/rule-params';
 
 const ID = '0192f7a4-5b6c-7d8e-9f01-23456789abcd';
@@ -84,15 +83,3 @@ describe('rule params from the evaluator JSON Schema', () => {
   });
 });
 
-describe('notification destination config', () => {
-  it('builds per-kind config without secrets and omits blanks', () => {
-    expect(buildConfig('IN_APP', {})).toEqual({});
-    const email = buildConfig('EMAIL', { host: 'smtp.example.com', port: '587', from: 'ocso@example.com', to: 'a@x.io, b@x.io', username: '', requireTLS: 'true' });
-    expect(email).toEqual({ host: 'smtp.example.com', port: 587, from: 'ocso@example.com', to: ['a@x.io', 'b@x.io'], requireTLS: true });
-    expect(configText('EMAIL', email)).toMatchObject({ to: 'a@x.io, b@x.io', port: '587', requireTLS: 'true', username: '' });
-    expect(configText('PAGERDUTY', null)).toEqual({ region: 'US', component: '', group: '' });
-    expect(configSummary('EMAIL', email)).toBe('a@x.io, b@x.io via smtp.example.com');
-    expect(configSummary('IN_APP', {})).toBe('OCSO inbox');
-    expect(configSummary('SLACK', null)).toBe('—');
-  });
-});

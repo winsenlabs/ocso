@@ -21,6 +21,7 @@ let h: ApiHarness;
 let admin: string;
 let stub: Server;
 let stubUrl: string;
+let stubCalls = 0;
 let channel: { id: string; publicKey: string; webhookPath: string };
 const auth = (token: string) => ({ authorization: `Bearer ${token}` });
 
@@ -50,6 +51,7 @@ const inbound = (overrides: Record<string, string> = {}): Record<string, string>
 beforeAll(async () => {
   // A local stand-in for api.twilio.com: only the read-only account fetch the Test button uses.
   stub = createServer((req, res) => {
+    stubCalls++;
     const ok = req.method === 'GET' && req.url === `/2010-04-01/Accounts/${ACCOUNT_SID}.json` && req.headers.authorization === `Basic ${Buffer.from(`${ACCOUNT_SID}:${AUTH_TOKEN}`).toString('base64')}`;
     res.writeHead(ok ? 200 : 401, { 'content-type': 'application/json' });
     res.end(JSON.stringify(ok ? { sid: ACCOUNT_SID, friendly_name: 'Meridian Bank', status: 'active' } : { code: 20003, message: 'Authenticate', status: 401 }));
@@ -59,6 +61,8 @@ beforeAll(async () => {
 
   h = await startApi();
   admin = await completeSetup(h);
+  // Channel adapters reach only public https hosts unless the Tech Admin allowlists an internal one (ADR-021).
+  await h.http().patch('/v1/settings/deployment').set(auth(admin)).send({ egressAllowedInternalHosts: ['127.0.0.1'] }).expect(200);
   const leadId = (await h.http().post('/v1/users').set(auth(admin)).send({ email: 'lead@ocso.test', name: 'lead', role: 'CS_LEAD', password: 'a password 12345' }).expect(201)).body.id as string;
   const lead = await h.loginAs('lead@ocso.test', 'a password 12345');
   const team = (await h.http().post('/v1/teams').set(auth(lead)).send({ name: 'Cards' }).expect(201)).body.id;
@@ -107,6 +111,7 @@ describe('channel kinds are plugins', () => {
 
   it('derives the webhook path from the descriptor and refuses kinds without an adapter', async () => {
     expect(channel.webhookPath).toBe(`/channels/twilio-whatsapp/${channel.publicKey}/webhook`);
+    expect(channel).toMatchObject({ embedPath: null });
     const res = await h.http().post('/v1/channels').set(auth(admin)).send({ kind: 'SMS', name: 'SMS' }).expect(400);
     expect(res.body.error.code).toBe('unknown_channel_kind');
   });
@@ -146,9 +151,25 @@ describe('Twilio webhook', () => {
 });
 
 describe('connection test', () => {
+  it('reaches a private provider host only when the Tech Admin allowlisted it (SSRF-guarded channel egress)', async () => {
+    // Same stub, addressed as `localhost`: not on the allowlist, so the adapter's injected fetch refuses it.
+    const unlisted = await h
+      .http()
+      .post('/v1/channels')
+      .set(auth(admin))
+      .send({ kind: 'TWILIO_WHATSAPP', name: 'WhatsApp (unlisted host)', status: 'ACTIVE', settings: { accountSid: ACCOUNT_SID, from: 'whatsapp:+14155238886', apiBaseUrl: stubUrl.replace('127.0.0.1', 'localhost') }, secrets: { authToken: AUTH_TOKEN } })
+      .expect(201);
+    const before = stubCalls;
+    const blocked = await h.http().post(`/v1/channels/${unlisted.body.id}/test`).set(auth(admin)).expect(200);
+    expect(blocked.body.checks[0]).toEqual({ name: 'Account SID + auth token', ok: false, detail: 'could not reach Twilio' });
+    expect(stubCalls).toBe(before);
+  });
+
   it('checks the stored credentials read-only against Twilio', async () => {
+    const before = stubCalls;
     const res = await h.http().post(`/v1/channels/${channel.id}/test`).set(auth(admin)).expect(200);
     expect(res.body.checks[0]).toEqual({ name: 'Account SID + auth token', ok: true, detail: '"Meridian Bank" is active' });
     expect(JSON.stringify(res.body)).not.toContain(AUTH_TOKEN);
+    expect(stubCalls).toBe(before + 1);
   });
 });

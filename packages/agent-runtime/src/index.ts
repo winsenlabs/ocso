@@ -8,6 +8,7 @@ export * from './tools/runner.js';
 export * from './context/turn-cache.js';
 export * from './context/history.js';
 export * from './context/context-builder.js';
+export * from './context/channel-context.js';
 export * from './delivery/channel-runtime.js';
 export * from './delivery/delivery.js';
 export * from './delivery/media.js';

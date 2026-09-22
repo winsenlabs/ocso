@@ -11,13 +11,11 @@ import { api } from './client';
 export const ALERT_KINDS = ['TECHNICAL', 'BUSINESS'] as const;
 export const ALERT_SEVERITIES = ['INFO', 'WARNING', 'CRITICAL'] as const;
 export const ALERT_STATUSES = ['OPEN', 'ACKNOWLEDGED', 'RESOLVED'] as const;
-export const DESTINATION_KINDS = ['IN_APP', 'EMAIL', 'SLACK', 'TEAMS', 'WEBHOOK', 'PAGERDUTY'] as const;
 export const AUDIENCE_ROLES = ['PLATFORM_TECH_ADMIN', 'CS_LEAD', 'CS_EXEC'] as const;
 
 export type AlertKind = (typeof ALERT_KINDS)[number];
 export type AlertSeverity = (typeof ALERT_SEVERITIES)[number];
 export type AlertStatus = (typeof ALERT_STATUSES)[number];
-export type DestinationKind = (typeof DESTINATION_KINDS)[number];
 export type AudienceRole = (typeof AUDIENCE_ROLES)[number];
 
 export const AlertSchema = z.object({
@@ -112,12 +110,31 @@ export const DestinationSchema = z.object({
   name: z.string(),
   kind: z.string(),
   config: z.record(z.string(), z.unknown()).nullable(),
+  /** The adapter's one-line description of the config (managers only). */
+  summary: z.string().nullable().default(null),
   hasSecret: z.boolean(),
   enabled: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
 export type NotificationDestination = z.infer<typeof DestinationSchema>;
+
+/**
+ * A destination kind as its delivery adapter describes itself
+ * (GET /v1/notification-destinations/kinds). Kinds are open strings: the
+ * form renders from `configSchema`, never from a list of known kinds.
+ */
+export const DestinationKindSchema = z.object({
+  kind: z.string(),
+  label: z.string(),
+  description: z.string(),
+  events: z.array(z.string()),
+  configSchema: z.record(z.string(), z.unknown()),
+  secret: z
+    .object({ label: z.string(), description: z.string(), required: z.boolean(), when: z.record(z.string(), z.string()).nullable() })
+    .nullable(),
+});
+export type DestinationKindInfo = z.infer<typeof DestinationKindSchema>;
 
 const TestResultSchema = z.object({ ok: z.boolean(), retriable: z.boolean(), error: z.string().optional() });
 export type DestinationTestResult = z.infer<typeof TestResultSchema>;
@@ -147,7 +164,7 @@ export interface AlertRuleInput {
 
 export interface DestinationInput {
   name: string;
-  kind: DestinationKind;
+  kind: string;
   config: Record<string, unknown>;
   secret?: string | undefined;
   enabled: boolean;
@@ -176,6 +193,7 @@ export const updateAlertRule = (ruleId: string, patch: Partial<AlertRuleInput>) 
 export const deleteAlertRule = (ruleId: string) => api.command('DELETE', `/v1/alert-rules/${id(ruleId)}`);
 
 export const listDestinations = () => api.get('/v1/notification-destinations', z.array(DestinationSchema));
+export const listDestinationKinds = () => api.get('/v1/notification-destinations/kinds', z.array(DestinationKindSchema));
 export const createDestination = (input: DestinationInput) => api.post('/v1/notification-destinations', input, DestinationSchema);
 export const updateDestination = (destinationId: string, patch: Partial<Omit<DestinationInput, 'kind'>>) =>
   api.patch(`/v1/notification-destinations/${id(destinationId)}`, patch, DestinationSchema);

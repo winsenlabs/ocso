@@ -1,11 +1,13 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createAzure } from '@ai-sdk/azure';
 import { validation } from '@ocso/domain';
+import { liteLlmKey, modelsDevKey } from '../../catalog/mapping.js';
 import type { ModelRequest, ProviderModelInfo } from '../../contract/types.js';
 import { createAiSdkAdapter } from '../../core/adapter.js';
 import type { ProviderOptionsPlan } from '../../core/spec.js';
 import { parseProviderConfig, secretValues, type ProviderDefinition } from '../definition.js';
 import { anthropicCachePlan, openAiFamilyPlan } from '../shared/cache-plans.js';
+import { CACHE_CONTROL_WORDING, describePromptCaching, keyBasedCaching, type PromptCachingDescription } from '../shared/caching-description.js';
 import { fetchOption, openAiCompatibleUsage } from '../shared/sdk-helpers.js';
 import { AZURE_AI_SCOPE, AZURE_OPENAI_SCOPE, bearerFetch, entraTokenProvider } from './entra.js';
 import {
@@ -38,6 +40,13 @@ function foundryProviderOptions(deployment: string, request: ModelRequest, setti
     explicitBreakpoints: d.explicitCacheBreakpoints,
     store: responses ? settings.storeResponses : undefined,
   });
+}
+
+function foundryCaching(deployment: string, settings: FoundrySettings): PromptCachingDescription {
+  const d = resolveDeployment(deployment, settings);
+  const caps = foundryCapabilities(deployment, settings);
+  if (d.family === 'openai') return keyBasedCaching(caps, d.explicitCacheBreakpoints);
+  return describePromptCaching(caps, d.family === 'anthropic' ? CACHE_CONTROL_WORDING : {});
 }
 
 function clients(settings: FoundrySettings, creds: FoundryCredentials, fetchImpl: typeof fetch | undefined) {
@@ -80,11 +89,24 @@ export function foundryDeployments(settings: FoundrySettings): ProviderModelInfo
 export const foundryProvider: ProviderDefinition<FoundrySettings, FoundryCredentials> = {
   kind: 'FOUNDRY',
   label: 'Microsoft Foundry',
+  mark: 'MSF',
+  cachingSummary: 'prompt cache key (OpenAI) · cache_control (Claude)',
   devOnly: false,
   settingsSchema: foundrySettingsSchema,
   credentialsSchema: foundryCredentialsSchema,
+  // Priced by the deployment's declared underlying model, else the deployment name (Foundry names
+  // deployments after the model by default). models.dev `azure`; LiteLLM `azure/…` and `azure_ai/…`.
+  catalog: {
+    providers: { 'models.dev': ['azure'], litellm: ['azure', 'azure_ai'] },
+    candidates: (deployment, baseModel) => {
+      const base = baseModel?.trim() || deployment;
+      return [modelsDevKey('azure', base), liteLlmKey('azure', `azure/${base}`), liteLlmKey('azure_ai', `azure_ai/${base}`)];
+    },
+  },
   capabilities: (deployment, settings) => foundryCapabilities(deployment, settings),
   providerOptions: foundryProviderOptions,
+  describeCaching: foundryCaching,
+  baseModel: (deployment, settings) => settings.deployments[deployment]?.model ?? null,
   create(config, deps) {
     const { settings, credentials } = parseProviderConfig(foundryProvider, config);
     const { azure, claude } = clients(settings, credentials, fetchOption(deps).fetch);

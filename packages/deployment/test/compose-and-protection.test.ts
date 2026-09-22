@@ -38,6 +38,7 @@ describe('ComposeDeploymentAdapter', () => {
     await expect(protection.around(async () => protection.holders, { turnTimeoutSeconds: 90 })).resolves.toBe(1);
     expect(protection.holders).toBe(0);
     expect(await compose.describe()).toMatchObject({ driver: 'compose', replicaControl: 'operator', checkedAt: '2026-09-22T00:00:00.000Z' });
+    expect((await compose.describe()).facts?.[0]).toEqual({ label: 'replicas', value: 'managed by the operator (docker compose)' });
   });
 });
 

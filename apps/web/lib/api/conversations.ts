@@ -1,9 +1,10 @@
 import 'server-only';
 import { CONTROL_STATES, type ControlState } from '@ocso/domain';
 import { z } from 'zod';
-import { channelCode } from '@/components/workspace/lib/channel';
+import { channelMark } from '@/components/workspace/lib/channel';
 import { pickupSla, type SlaView } from '@/components/workspace/lib/sla';
-import type { ChannelCode } from '../channels';
+import type { ChannelMarkView } from '../channels';
+import { loadChannelKinds } from './channels';
 import { api } from './client';
 import { ApiError } from './errors';
 import { notYetAvailable } from './pending';
@@ -92,8 +93,8 @@ export const ConversationDetailSchema = z.object({
   handover: z.object({ version: z.number(), text: z.string(), createdAt: z.string() }).nullable().default(null),
   resolvedBy: Ref.nullable().default(null),
   firstHumanResponseAt: z.string().nullable().default(null),
-  /** WhatsApp 24-hour customer-service window; null for channels without one (web chat). */
-  whatsappWindow: z.object({ open: z.boolean(), closesAt: z.string().nullable() }).nullable().default(null),
+  /** The channel's customer-service window (length from its adapter); null for channels without one. */
+  sessionWindow: z.object({ open: z.boolean(), closesAt: z.string().nullable(), hours: z.number().optional() }).nullable().default(null),
 });
 export type ConversationDetail = z.infer<typeof ConversationDetailSchema>;
 
@@ -288,7 +289,8 @@ export interface PickupRow {
   customerName: string;
   /** Channel plus masked identifier, e.g. "whatsapp · +91 98•••41208". */
   customerRef: string;
-  channel: ChannelCode | null;
+  /** The channel kind's mark (from its descriptor). */
+  channel: ChannelMarkView | null;
   agentName: string;
   reason: string;
   waitingSeconds: number;
@@ -325,14 +327,14 @@ export interface ExecMetrics {
 const customerName = (c: ConversationSummary) => c.customer.name ?? c.customer.identity ?? 'Unknown customer';
 
 export async function loadPickupQueue(): Promise<PickupRow[]> {
-  const { items } = await loadInbox({ view: 'waiting', limit: 20 });
+  const [{ items }, kinds] = await Promise.all([loadInbox({ view: 'waiting', limit: 20 }), loadChannelKinds()]);
   const now = Date.now();
   return items
     .map((c) => ({
       conversationId: c.id,
       customerName: customerName(c),
       customerRef: [c.channel.name ?? c.channel.kind?.toLowerCase(), c.customer.identity].filter(Boolean).join(' · '),
-      channel: channelCode(c.channel.kind),
+      channel: channelMark(kinds, c.channel.kind),
       agentName: c.agent.name,
       reason: c.handoff?.reason ?? c.lastPreview ?? '—',
       waitingSeconds: c.waitingSince ? Math.max(0, Math.round((now - Date.parse(c.waitingSince)) / 1000)) : 0,

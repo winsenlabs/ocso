@@ -3,7 +3,6 @@ import type { InteractionPart, MediaRef } from '@ocso/domain';
 import type {
   ChannelAdapter,
   ChannelAdapterDeps,
-  ChannelKindDescriptor,
   ChannelCapabilities,
   ChannelRuntimeConfig,
   FetchedMedia,
@@ -15,11 +14,14 @@ import type {
   SendResult,
   VerificationResult,
 } from '../contract/types.js';
+import type { ChannelKindDescriptor } from '../contract/descriptor.js';
+import type { EmbeddedChat } from '../contract/embed.js';
 import { ChannelMediaError } from '../common/errors.js';
 import { attachmentKeyPrefix } from './attachments.js';
 import { webChatCapabilities } from './capabilities.js';
 import { WEBCHAT_DESCRIPTOR } from './descriptor.js';
 import { resolveWebChatConfig, validateWebChatConfig, type ResolvedWebChatConfig } from './config.js';
+import { webChatEmbed } from './embed.js';
 import { WebChatAuthError } from './errors.js';
 import { identifyRequest, WEBCHAT_IDENTITY, type WebChatIdentity } from './identity.js';
 import { parseWebChatInbound } from './inbound.js';
@@ -46,8 +48,12 @@ const WEBCHAT_IDENTITY_KINDS: ReadonlySet<string> = new Set(Object.values(WEBCHA
 
 export class WebChatChannelAdapter implements ChannelAdapter {
   readonly kind = 'WEBCHAT' as const;
+  /** The public widget protocol OCSO's `/public/webchat/<publicKey>/*` API speaks. */
+  readonly embed: EmbeddedChat;
 
-  constructor(private readonly deps: WebChatAdapterDeps) {}
+  constructor(private readonly deps: WebChatAdapterDeps) {
+    this.embed = webChatEmbed(deps.now);
+  }
 
   capabilities(config?: ChannelRuntimeConfig): ChannelCapabilities {
     return webChatCapabilities(config?.settings);
@@ -59,6 +65,11 @@ export class WebChatChannelAdapter implements ChannelAdapter {
 
   describe(): ChannelKindDescriptor {
     return WEBCHAT_DESCRIPTOR;
+  }
+
+  /** Anonymous visitors show as "web · sess 8f2a"; host-identified customers keep the generic masking. */
+  displayIdentity(identityKind: string, value: string): string | null {
+    return identityKind === WEBCHAT_IDENTITY.VISITOR ? `web · sess ${value.slice(-4)}` : null;
   }
 
   verifyRequest(req: RawHttpRequest, config: ChannelRuntimeConfig): VerificationResult {

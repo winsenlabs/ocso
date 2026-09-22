@@ -86,7 +86,9 @@ export function ChannelDialog({ kinds, channel, initialKind, agents, publicOrigi
     .split('\n')
     .map((s) => s.trim())
     .filter(Boolean);
-  const kindInfo = { inboundWebhook: def?.inboundWebhook ?? false, embeddable: def?.embeddable ?? false, label: kindLabel(def), connectionCheck: def?.connectionCheck ?? false };
+  const kindInfo = { inboundWebhook: def?.inboundWebhook ?? false, embeddable: def?.embeddable ?? false, label: kindLabel(def), connectionCheck: def?.connectionCheck ?? false, setupSteps: def?.setupSteps ?? [] };
+  // Client-generated secrets are for pasting elsewhere (e.g. the provider's console): shown once more with the next steps.
+  const generatedSecrets = (def?.secrets ?? []).filter((f) => generated[f.key]).map((f) => ({ label: f.label, value: generated[f.key]! }));
 
   if (saved) {
     return (
@@ -94,7 +96,7 @@ export function ChannelDialog({ kinds, channel, initialKind, agents, publicOrigi
         <AlertBanner style={{ margin: 0 }} title={channel ? 'Channel updated.' : 'Channel created.'}>
           Secrets were stored by reference; the form no longer holds them.
         </AlertBanner>
-        <ChannelNextSteps channel={saved} kind={kindInfo} publicOrigin={publicOrigin} verifyToken={generated['verifyToken']} allowedOrigins={origins} />
+        <ChannelNextSteps channel={saved} kind={kindInfo} publicOrigin={publicOrigin} generated={generatedSecrets} allowedOrigins={origins} />
       </Modal>
     );
   }

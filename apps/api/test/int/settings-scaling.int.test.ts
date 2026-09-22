@@ -52,7 +52,7 @@ describe('worker settings reflect the deployment apply status (ADR-023)', () => 
   });
 
   it('shows the advisory text and command once applied, and PENDING again after a change', async () => {
-    const worker = new ScalingService({ db: h.db.db, adapter, queue: { driver: 'postgres', stats: async () => ({ depth: 0, inFlight: 0, dead: 0, oldestAgeSeconds: null }) } });
+    const worker = new ScalingService({ db: h.db.db, adapter, queue: { reportsOldestAge: true, stats: async () => ({ depth: 0, inFlight: 0, dead: 0, oldestAgeSeconds: null }) } });
     await worker.reconcile('startup');
 
     const applied = await h.http().get('/v1/settings/workers').set(as('admin')).expect(200);

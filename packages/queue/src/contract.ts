@@ -1,3 +1,5 @@
+import type { SqlClient } from './sql.js';
+
 /**
  * QueueAdapter contract (docs/10 §4, ADR-008). Messages are work signals; all
  * durable state lives in PostgreSQL. Business code depends only on this file.
@@ -73,10 +75,46 @@ export interface QueueStats {
 }
 
 export interface QueueAdapter {
-  readonly driver: 'postgres' | 'sqs' | 'memory';
+  /** Name of the driver that built it (QUEUE_DRIVER); display and logs only. */
+  readonly driver: string;
+  /** True when messages live in OCSO's PostgreSQL `jobs` table, so SQL may read the queue directly. */
+  readonly inDatabase: boolean;
+  /**
+   * False when stats() cannot tell the oldest message's age (SQS exposes it
+   * only as a CloudWatch metric): `oldestAgeSeconds: null` then means
+   * "unknown", not "nothing waiting".
+   */
+  readonly reportsOldestAge: boolean;
   publish<T>(topic: Topic, payload: T, options?: PublishOptions): Promise<void>;
   consume<T>(topic: Topic, handler: MessageHandler<T>, options: ConsumeOptions): QueueSubscription;
   stats(topic: Topic): Promise<QueueStats>;
+}
+
+/** Wake-up hook: PgQueue consumers poll less when publishers notify (pg LISTEN/NOTIFY). */
+export interface QueueNotifier {
+  notify(topic: Topic): Promise<void>;
+  onNotify(listener: (topic: Topic) => void): () => void;
+}
+
+/** What the composition root hands a queue driver besides the environment. */
+export interface QueueDriverDeps {
+  /** The process's PostgreSQL pool (for drivers that keep messages in the database). */
+  sql: SqlClient;
+  /** Stable id of this process (claims, affinity). */
+  workerId: string;
+  notifier?: QueueNotifier | undefined;
+}
+
+/**
+ * A queue driver: registered by name, selected by QUEUE_DRIVER. `check` lists
+ * missing settings (start-up fails naming every one); `create` builds the
+ * process-wide adapter.
+ */
+export interface QueueDriverDefinition<Env = Readonly<Record<string, unknown>>> {
+  /** QUEUE_DRIVER value that selects this driver, e.g. `sqs`. */
+  readonly name: string;
+  readonly check?: ((env: Env) => readonly string[]) | undefined;
+  readonly create: (env: Env, deps: QueueDriverDeps) => QueueAdapter;
 }
 
 /** Exponential backoff with full jitter, capped. */

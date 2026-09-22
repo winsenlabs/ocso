@@ -25,7 +25,7 @@ export const WHATSAPP_CAPABILITIES: ChannelCapabilities = Object.freeze<ChannelC
   inboundParts: ['TEXT', 'IMAGE', 'AUDIO', 'VIDEO', 'DOCUMENT', 'LOCATION', 'CONTACT', 'STRUCTURED'],
   outboundParts: ['TEXT', 'IMAGE', 'AUDIO', 'VIDEO', 'DOCUMENT', 'LOCATION', 'CONTACT', 'STRUCTURED'],
   maxTextLength: WHATSAPP_TEXT_LIMIT,
-  markdown: 'whatsapp',
+  markdown: 'basic',
   streaming: false,
   deliveryReceipts: true,
   interactive: true,

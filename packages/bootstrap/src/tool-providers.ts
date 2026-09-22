@@ -146,3 +146,6 @@ export class McpToolProviderFactory implements ToolProviderFactory {
     return this.hosts.value;
   }
 }
+
+/** Registry key of the MCP connection tool source (the `@ocso/mcp` plugin in FIRST_PARTY_PLUGINS). */
+export const MCP_TOOL_SOURCE = 'mcp';

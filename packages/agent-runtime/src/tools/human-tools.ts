@@ -3,8 +3,8 @@ import { Permission, assertCan, type Principal } from '@ocso/auth';
 import { emitEvent, recordAudit, type ActorContext } from '@ocso/application';
 import { DomainError, notFound, validation } from '@ocso/domain';
 import { conversations, mcpConnections, toolCalls, tools, uuidv7, type Db } from '@ocso/db';
-import { authorizeToolCall, sanitizeForAudit, type ConnectionRecord, type SchemaValidator, type ToolRecord } from '@ocso/tools';
-import { argsHashOf, type ClaimsIssuer, type ToolProviderFactory } from './runner.js';
+import { authorizeToolCall, sanitizeForAudit, type ConnectionRecord, type SchemaValidator, type ToolProviderRegistry, type ToolRecord } from '@ocso/tools';
+import { argsHashOf, type ClaimsIssuer } from './runner.js';
 
 type ToolRow = typeof tools.$inferSelect;
 type ConnectionRow = typeof mcpConnections.$inferSelect;
@@ -41,7 +41,7 @@ const toConnection = (c: ConnectionRow): ConnectionRecord => ({
 export class HumanToolService {
   constructor(
     private readonly db: Db,
-    private readonly providers: ToolProviderFactory,
+    private readonly providers: ToolProviderRegistry,
     private readonly validate: SchemaValidator,
     private readonly claims: ClaimsIssuer | null = null,
   ) {}
@@ -145,7 +145,7 @@ export class HumanToolService {
   }
 
   private async execute(actor: ActorContext, toolCallId: string, conversationId: string | null, tool: ToolRow, connection: ConnectionRow, args: unknown, idempotencyKey: string) {
-    const provider = await this.providers.forConnection(connection.id);
+    const provider = await this.providers.providerFor({ connectionId: connection.id, name: tool.modelName });
     const customerClaims = await this.claimsFor(conversationId, connection, tool);
     const outcome = await provider.invoke({ toolCallId, toolName: tool.name, args, timeoutMs: 30_000, customerClaims, idempotencyKey: tool.riskClass === 'READ' ? undefined : idempotencyKey });
     const ok = outcome.status === 'SUCCEEDED';

@@ -27,13 +27,14 @@ describe('configuration', () => {
     expect(message).not.toContain('secret-value-123');
   });
 
-  it('requires driver-specific settings', () => {
-    expect(() => assertDriverConfig(loadEnv(ApiEnv, { ...base, QUEUE_DRIVER: 'sqs' }))).toThrow(/SQS_QUEUE_URLS/);
-    expect(() => assertDriverConfig(loadEnv(ApiEnv, { ...base, BLOB_DRIVER: 's3' }))).toThrow(/S3_BUCKET/);
-    expect(() => assertDriverConfig(loadEnv(ApiEnv, { DATABASE_URL: base.DATABASE_URL, BLOB_SIGNING_KEY: base.BLOB_SIGNING_KEY }))).toThrow(
-      /OCSO_SECRETS_MASTER_KEY/,
-    );
-    expect(() => assertDriverConfig(loadEnv(ApiEnv, base))).not.toThrow();
+  it('keeps the existing driver names and defaults, and leaves validation to the driver registries', () => {
+    const env = loadEnv(WorkerEnv, base);
+    expect(env).toMatchObject({ QUEUE_DRIVER: 'postgres', BLOB_DRIVER: 'local', SECRETS_DRIVER: 'local', DEPLOYMENT_DRIVER: 'compose' });
+    // Any name parses (a plugin may register it); @ocso/bootstrap's assertDrivers rejects unregistered ones.
+    const custom = loadEnv(WorkerEnv, { ...base, QUEUE_DRIVER: 'sqs', BLOB_DRIVER: ' gcs ', SECRETS_DRIVER: 'vault', DEPLOYMENT_DRIVER: 'nomad' });
+    expect(custom).toMatchObject({ QUEUE_DRIVER: 'sqs', BLOB_DRIVER: 'gcs', SECRETS_DRIVER: 'vault', DEPLOYMENT_DRIVER: 'nomad' });
+    expect(() => loadEnv(ApiEnv, { ...base, BLOB_DRIVER: '' })).toThrow(/BLOB_DRIVER/);
+    expect(() => assertDriverConfig(custom)).not.toThrow();
   });
 
   it('refuses dev providers in production unless explicitly overridden', () => {

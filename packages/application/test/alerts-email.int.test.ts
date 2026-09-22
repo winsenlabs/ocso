@@ -107,7 +107,7 @@ describe('EMAIL destinations · deployment sender', () => {
 });
 
 describe('EmailSettingsService', () => {
-  const status = { driver: 'resend' as const, from: sender.from, replyTo: null, configured: true, warnings: [] };
+  const status = { driver: 'resend', label: 'Resend', from: sender.from, replyTo: null, configured: true, warnings: [] };
   const service = () => new EmailSettingsService(t.db, sender, status);
 
   it('shows the status to the Tech Admin only', () => {
@@ -117,13 +117,15 @@ describe('EmailSettingsService', () => {
 
   it('sends an audited test email and reports failures by category', async () => {
     sent.length = 0;
-    expect(await service().sendTest(ctx(admin), { to: 'tarun@meridian.test' })).toEqual({ ok: true, driver: 'resend', id: 'resend-1' });
+    expect(await service().sendTest(ctx(admin), { to: 'tarun@meridian.test' })).toEqual({ ok: true, driver: 'resend', label: 'Resend', delivers: true, id: 'resend-1' });
     expect(sent[0]).toMatchObject({ to: 'tarun@meridian.test', subject: 'OCSO test email', tags: { kind: 'test' } });
     expect(sent[0]!.idempotencyKey).toMatch(/^email-test\//);
     failNext = new EmailSendError('Resend request timed out', true, null, 'network');
     expect(await service().sendTest(ctx(admin), { to: 'tarun@meridian.test' })).toEqual({
       ok: false,
       driver: 'resend',
+      label: 'Resend',
+      delivers: true,
       id: null,
       error: 'Resend request timed out',
       category: 'network',

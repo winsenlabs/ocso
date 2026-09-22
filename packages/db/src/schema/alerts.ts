@@ -7,7 +7,8 @@ import { users } from './identity.js';
 export const notificationDestinations = pgTable('notification_destinations', {
   id: id(),
   name: text().notNull(),
-  kind: text().$type<'IN_APP' | 'EMAIL' | 'SLACK' | 'TEAMS' | 'WEBHOOK' | 'PAGERDUTY'>().notNull(),
+  /** Delivery adapter kind; open — the alert delivery registry is the authority. */
+  kind: text().notNull(),
   config: jsonb().$type<Record<string, unknown>>().notNull().default({}),
   secretRef: text(),
   enabled: boolean().notNull().default(true),

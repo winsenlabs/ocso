@@ -13,9 +13,13 @@ export function createInAppAdapter(): AlertDeliveryAdapter<InAppConfig> {
   return {
     kind: 'IN_APP',
     label: 'In-app',
+    description: "Opened alerts appear in the OCSO alert inbox for the rule's audience. No configuration needed.",
+    events: ['OPENED'],
+    configSchema: z.toJSONSchema(InAppConfig, { io: 'input' }) as Record<string, unknown>,
     secret: null,
     validateConfig: (config) => checkConfig(InAppConfig, config),
     validateSecret: () => [],
+    summary: () => 'OCSO inbox',
     deliver: async () => delivered(),
   };
 }

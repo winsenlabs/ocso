@@ -14,7 +14,7 @@ export function client(baseUrl) {
   return { get: (p, o) => call('GET', p, o), post: (p, body, o = {}) => call('POST', p, { ...o, body }), patch: (p, body, o = {}) => call('PATCH', p, { ...o, body }), put: (p, body, o = {}) => call('PUT', p, { ...o, body }) };
 }
 
-/** Setup → lead → DEV_SCRIPTED provider/profile (with latency) → LIVE agent → active web chat channel. */
+/** Setup → lead → DEV_SCRIPTED provider/profile (with latency) → the lead's team → LIVE agent → active web chat channel. */
 export async function seedWebChat(baseUrl, setupToken, { latencyMs = 1500, workerSettings = {} } = {}) {
   const api = client(baseUrl);
   await api.post('/v1/setup', { setupToken, orgName: 'Resilience Test', adminName: 'Admin', adminEmail: 'admin@res.test', adminPassword: 'resilience admin 1234', timezone: 'UTC' });
@@ -24,7 +24,9 @@ export async function seedWebChat(baseUrl, setupToken, { latencyMs = 1500, worke
   if (Object.keys(workerSettings).length) await api.patch('/v1/settings/workers', workerSettings, { token: admin });
   const provider = await api.post('/v1/model-providers', { kind: 'DEV_SCRIPTED', name: 'Scripted', settings: { latencyMs, chunkDelayMs: 10 }, maxConcurrency: 500 }, { token: admin });
   const profile = await api.post('/v1/model-profiles', { name: 'support-primary', providerId: provider.id ?? provider.provider?.id, model: 'scripted', retries: 0 }, { token: admin });
-  const agent = await api.post('/v1/agents', { name: 'Maya', purpose: 'customer support', conversationType: 'SUPPORT', modelProfileId: profile.id ?? profile.profile?.id }, { token: lead });
+  // Agents are owned by teams (ADR-026); the lead who creates a team joins it.
+  const team = await api.post('/v1/teams', { name: 'Support' }, { token: lead });
+  const agent = await api.post('/v1/agents', { name: 'Maya', purpose: 'customer support', conversationType: 'SUPPORT', modelProfileId: profile.id ?? profile.profile?.id, teamIds: [team.id] }, { token: lead });
   await api.post(`/v1/agents/${agent.id}/status`, { status: 'LIVE' }, { token: lead });
   const channel = await api.post('/v1/channels', { kind: 'WEBCHAT', name: 'Web chat', status: 'ACTIVE', defaultAgentId: agent.id }, { token: admin });
   return { admin, lead, publicKey: channel.publicKey };

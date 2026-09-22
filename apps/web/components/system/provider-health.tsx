@@ -2,25 +2,12 @@ import Link from 'next/link';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ProviderCard } from '@/components/ui/provider-card';
 import { SecHead } from '@/components/ui/sec-head';
+import type { ProviderKindView } from '@/lib/api/models';
 import type { ProviderHealth } from '@/lib/api/telemetry';
 import { formatCompact, formatLatency, formatPercent } from '@/lib/format';
+import { providerMark } from '../connections/models/meta';
 import { formatCost } from './cost';
 import { cacheLabel, providerChip } from './system-meta';
-
-/** packages/model-providers PROVIDER_KINDS → the design's mono logo text. */
-const LOGO: Record<string, string> = {
-  BEDROCK: 'AWS',
-  VERTEX: 'GCP',
-  FOUNDRY: 'MSF',
-  OPENAI: 'OAI',
-  ANTHROPIC: 'ANT',
-  SARVAM: 'SVM',
-  DEV_SCRIPTED: 'DEV',
-};
-
-function logo(kind: string): string {
-  return LOGO[kind] ?? kind.replace(/[^A-Z]/g, '').slice(0, 3);
-}
 
 function caption(p: ProviderHealth): string {
   const where = p.region ?? 'region not set';
@@ -32,9 +19,12 @@ function caption(p: ProviderHealth): string {
 /**
  * Model provider health (design/03 .pvd grid): last-hour p95 latency and error
  * rate, today's tokens, prompt-cache read share (observed, per provider) and
- * cost. Providers are infrastructure; logical profiles point at them.
+ * cost. Providers are infrastructure; logical profiles point at them. Marks
+ * come from the provider definitions (GET /v1/model-providers/kinds); a kind
+ * without one gets a generic mark.
  */
-export function ProviderHealthGrid({ providers, manageHref }: { providers: ProviderHealth[]; manageHref: string | null }) {
+export function ProviderHealthGrid({ providers, kinds, manageHref }: { providers: ProviderHealth[]; kinds: ProviderKindView[]; manageHref: string | null }) {
+  const byKind = new Map(kinds.map((k) => [k.kind, k]));
   return (
     <>
       <SecHead
@@ -60,7 +50,7 @@ export function ProviderHealthGrid({ providers, manageHref }: { providers: Provi
             return (
               <div role="listitem" aria-label={p.name} key={p.providerId} style={{ display: 'grid' }}>
                 <ProviderCard
-                  logo={logo(p.kind)}
+                  logo={providerMark(p.kind, byKind.get(p.kind))}
                   name={p.name}
                   status={{ tone: chip.tone, label: chip.label }}
                   {...(chip.card ? { tone: chip.card } : {})}

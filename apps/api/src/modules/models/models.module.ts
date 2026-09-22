@@ -1,19 +1,19 @@
 import { Injectable, Module, type OnModuleDestroy } from '@nestjs/common';
 import { createCatalogFetch, ModelCatalogService, ModelListService, PricingService, ProfileService, ProviderService } from '@ocso/application';
-import { CachedProviderAdapterSource, createProviderRegistry } from '@ocso/bootstrap';
+import { CachedProviderAdapterSource } from '@ocso/bootstrap';
 import type { ApiEnv } from '@ocso/config';
 import type { Db } from '@ocso/db';
 import type { GuardedFetch } from '@ocso/mcp';
 import type { ProviderRegistry } from '@ocso/model-providers';
 import type { SecretStore } from '@ocso/secrets';
-import { DB, ENV, SECRET_STORE } from '../../infrastructure/tokens.js';
+import { DB, ENV, PROVIDER_REGISTRY, SECRET_STORE } from '../../infrastructure/tokens.js';
 import { ModelCatalogController } from './model-catalog.controller.js';
 import { ModelPricingController } from './model-pricing.controller.js';
 import { ModelProfilesController } from './model-profiles.controller.js';
 import { ModelProvidersController } from './model-providers.controller.js';
 
-/** Provider registry of this deployment (DEV_SCRIPTED only when OCSO_ENABLE_DEV_PROVIDERS=true). */
-export const PROVIDER_REGISTRY = Symbol('PROVIDER_REGISTRY');
+/** The provider registry is built once by the composition root (InfrastructureModule); re-exported for this module's importers. */
+export { PROVIDER_REGISTRY };
 
 /** Model catalog downloads: SSRF guard + host allowlist (models.dev, raw.githubusercontent.com). */
 @Injectable()
@@ -30,7 +30,6 @@ export class CatalogEgress implements OnModuleDestroy {
   controllers: [ModelProvidersController, ModelProfilesController, ModelPricingController, ModelCatalogController],
   providers: [
     CatalogEgress,
-    { provide: PROVIDER_REGISTRY, inject: [ENV], useFactory: (env: ApiEnv): ProviderRegistry => createProviderRegistry(env) },
     {
       provide: ModelCatalogService,
       inject: [DB, CatalogEgress, ENV],
@@ -48,14 +47,19 @@ export class CatalogEgress implements OnModuleDestroy {
       inject: [DB, PROVIDER_REGISTRY, ModelCatalogService],
       useFactory: (db: Db, registry: ProviderRegistry, catalog: ModelCatalogService) => new ProfileService({ db, registry, catalog }),
     },
-    { provide: PricingService, inject: [DB, ModelCatalogService], useFactory: (db: Db, catalog: ModelCatalogService) => new PricingService(db, catalog) },
+    {
+      provide: PricingService,
+      inject: [DB, PROVIDER_REGISTRY, ModelCatalogService],
+      useFactory: (db: Db, registry: ProviderRegistry, catalog: ModelCatalogService) => new PricingService({ db, registry, catalog }),
+    },
     {
       // Listings go through the same cached, credential-resolving adapters as model calls.
       provide: ModelListService,
-      inject: [DB, CachedProviderAdapterSource, ModelCatalogService],
-      useFactory: (db: Db, adapters: CachedProviderAdapterSource, catalog: ModelCatalogService) => new ModelListService({ db, adapters, catalog }),
+      inject: [DB, CachedProviderAdapterSource, PROVIDER_REGISTRY, ModelCatalogService],
+      useFactory: (db: Db, adapters: CachedProviderAdapterSource, registry: ProviderRegistry, catalog: ModelCatalogService) =>
+        new ModelListService({ db, adapters, registry, catalog }),
     },
   ],
-  exports: [PROVIDER_REGISTRY, ProviderService, ProfileService, PricingService, ModelCatalogService, ModelListService],
+  exports: [ProviderService, ProfileService, PricingService, ModelCatalogService, ModelListService],
 })
 export class ModelsModule {}

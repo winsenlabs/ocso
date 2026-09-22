@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { PROVIDER_KINDS } from '../src/contract/types.js';
+import { PROVIDER_KIND_PATTERN } from '../src/contract/types.js';
+import { promptCachingOf, type ProviderDefinition } from '../src/providers/definition.js';
 import { devScriptedProvider } from '../src/providers/dev-scripted/definition.js';
-import { createDefaultRegistry, PRODUCTION_PROVIDERS, ProviderRegistry } from '../src/registry.js';
+import { foundryProvider } from '../src/providers/foundry/definition.js';
+import { sarvamProvider } from '../src/providers/sarvam/definition.js';
+import { createDefaultRegistry, createRegistry, FIRST_PARTY_PROVIDERS, PRODUCTION_PROVIDERS, ProviderRegistry } from '../src/registry.js';
 import { media, runtimeConfig } from './support/requests.js';
+
+/** A provider this package does not ship: registering it must need nothing but the definition. */
+const mistralLike: ProviderDefinition = { ...sarvamProvider, kind: 'MISTRAL', label: 'Mistral AI', mark: 'MIS', cachingSummary: 'none documented', catalog: undefined };
 
 describe('ProviderRegistry', () => {
   it('registers the six production providers and no dev provider by default', () => {
@@ -16,7 +22,57 @@ describe('ProviderRegistry', () => {
   it('adds DEV_SCRIPTED only when dev providers are enabled', () => {
     const registry = createDefaultRegistry({ enableDevProviders: true });
     expect(registry.get('DEV_SCRIPTED')?.devOnly).toBe(true);
-    expect(registry.list()).toHaveLength(PROVIDER_KINDS.length);
+    expect(registry.has('DEV_SCRIPTED')).toBe(true);
+    expect(registry.list()).toHaveLength(FIRST_PARTY_PROVIDERS.length);
+  });
+
+  it('kinds are open: any well-formed kind registers, dev-only gating comes from the definition', () => {
+    const registry = createRegistry([...PRODUCTION_PROVIDERS, mistralLike, devScriptedProvider], { enableDevProviders: false });
+    expect(registry.has('MISTRAL')).toBe(true);
+    expect(registry.require('MISTRAL').label).toBe('Mistral AI');
+    expect(registry.has('DEV_SCRIPTED')).toBe(false);
+    expect(registry.get('NOT_REGISTERED')).toBeUndefined();
+    for (const bad of ['mistral', 'M', 'MIS-TRAL', '9LIVES', `A${'B'.repeat(40)}`]) {
+      expect(PROVIDER_KIND_PATTERN.test(bad)).toBe(false);
+      expect(() => new ProviderRegistry().register({ ...mistralLike, kind: bad })).toThrow(expect.objectContaining({ code: 'provider_kind_invalid' }));
+    }
+  });
+
+  it('every first-party definition carries its UI knowledge: mark, caching summary and per-model caching wording', () => {
+    for (const d of FIRST_PARTY_PROVIDERS) {
+      expect(d.kind).toMatch(PROVIDER_KIND_PATTERN);
+      expect(d.mark).toMatch(/^[A-Z0-9]{1,4}$/);
+      expect(d.cachingSummary.length).toBeGreaterThan(0);
+    }
+    const caching = (kind: string, model: string, settings: Record<string, unknown> = {}) => {
+      const d = createDefaultRegistry({ enableDevProviders: true }).require(kind);
+      return promptCachingOf(d, model, d.settingsSchema.parse(settings));
+    };
+    expect(caching('BEDROCK', 'us.anthropic.claude-sonnet-4-5-20250929-v1:0')).toMatchObject({ mode: 'explicit', mechanism: expect.stringContaining('cachePoint'), effect: { '1h': 'breakpoints · 1h TTL' } });
+    expect(caching('BEDROCK', 'anthropic.claude-3-7-sonnet-20250219-v1:0').effect['1h']).toContain('Claude 4.5+');
+    expect(caching('BEDROCK', 'meta.llama4-maverick-17b-instruct-v1:0')).toMatchObject({ mode: 'none', effect: { '5m': 'nothing sent' } });
+    expect(caching('VERTEX', 'gemini-2.5-pro')).toMatchObject({ mode: 'implicit', mechanism: expect.stringContaining('implicit prefix') });
+    expect(caching('VERTEX', 'claude-opus-5')).toMatchObject({ mode: 'explicit', mechanism: expect.stringContaining('cache_control') });
+    expect(caching('OPENAI', 'gpt-5.5')).toMatchObject({ mode: 'key-based', mechanism: 'automatic + prompt cache key', effect: { '1h': 'cache key · 24h retention' } });
+    expect(caching('OPENAI', 'gpt-5.6')).toMatchObject({ mode: 'key-based', mechanism: expect.stringContaining('GPT-5.6+'), effect: { '1h': 'cache key · 30m implicit retention' } });
+    expect(caching('SARVAM', 'sarvam-105b')).toMatchObject({ mode: 'unverified', mechanism: expect.stringContaining('no documented control') });
+    expect(caching('DEV_SCRIPTED', 'scripted-1')).toMatchObject({ mode: 'explicit', mechanism: expect.stringContaining('simulated') });
+    const foundry = { resourceName: 'acme', deployments: { claude: { modelFamily: 'anthropic' }, llama: { modelFamily: 'other' } } };
+    expect(caching('FOUNDRY', 'gpt-main', foundry).mode).toBe('key-based');
+    expect(caching('FOUNDRY', 'claude', foundry).mechanism).toContain('cache_control');
+    expect(caching('FOUNDRY', 'llama', foundry).mode).toBe('unverified');
+    // Capability overrides change the wording too: caching turned off for one model.
+    expect(caching('ANTHROPIC', 'claude-x', { capabilityOverrides: { 'claude-x': { promptCaching: 'UNSUPPORTED' } } }).mode).toBe('none');
+    // A definition without its own wording gets the generic one from its capabilities.
+    expect(promptCachingOf(mistralLike, 'm', {})).toMatchObject({ mode: 'unverified', mechanism: expect.stringContaining('no documented control') });
+    const { describeCaching: _own, ...generic } = mistralLike;
+    expect(promptCachingOf(generic, 'm', {})).toMatchObject({ mode: 'unverified', mechanism: 'unverified · no cache directives sent' });
+  });
+
+  it('Foundry names the underlying model of a deployment for catalog lookups', () => {
+    const settings = foundryProvider.settingsSchema.parse({ resourceName: 'acme', deployments: { 'support-main': { modelFamily: 'openai', model: 'gpt-5.4-mini' } } });
+    expect(foundryProvider.baseModel?.('support-main', settings)).toBe('gpt-5.4-mini');
+    expect(foundryProvider.baseModel?.('gpt-5.5', settings)).toBeNull();
   });
 
   it('rejects duplicate registrations', () => {

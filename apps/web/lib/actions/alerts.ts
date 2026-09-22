@@ -7,7 +7,6 @@ import {
   ALERT_KINDS,
   ALERT_SEVERITIES,
   AUDIENCE_ROLES,
-  DESTINATION_KINDS,
   acknowledgeAlert,
   createAlertRule,
   createDestination,
@@ -122,7 +121,8 @@ const DestinationBody = z.object({
 
 export async function createDestinationAction(input: z.input<typeof DestinationBody> & { kind: string }): Promise<AlertActionResult<{ id: string }>> {
   return run(
-    DestinationBody.extend({ kind: z.enum(DESTINATION_KINDS) }),
+    // Kinds are open; the API checks the kind against the delivery registry.
+    DestinationBody.extend({ kind: z.string().trim().min(1, 'Choose a type').max(40) }),
     input,
     async (i) => ({ id: (await createDestination({ name: i.name, kind: i.kind, config: i.config, enabled: i.enabled, ...(i.secret ? { secret: i.secret } : {}) })).id }),
     Permission.NOTIFICATION_DESTINATIONS_MANAGE,

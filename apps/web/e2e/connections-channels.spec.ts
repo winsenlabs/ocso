@@ -39,6 +39,10 @@ test('Tech Admin adds WhatsApp (API problems inline, generated verify token, rea
 
   const cards = page.getByRole('list', { name: 'Channels' });
   await expect(cards.getByRole('listitem', { name: 'WhatsApp Business' })).toContainText('accessToken, appSecret, verifyToken set');
+  // Card details come from the kind's descriptor: its mark, label and identifying setting.
+  await expect(cards.getByRole('listitem', { name: 'WhatsApp Business' }).getByRole('img', { name: 'WhatsApp' })).toHaveText('WA');
+  await expect(cards.getByRole('listitem', { name: 'WhatsApp Business' })).toContainText('WhatsApp — Meta Cloud API');
+  await expect(cards.getByRole('listitem', { name: 'WhatsApp Business' })).toContainText('number id106540352242922');
   await cards.getByRole('link', { name: 'Edit WhatsApp Business' }).click();
   dialog = page.getByRole('dialog', { name: 'Edit WhatsApp Business' });
   await expect(dialog.locator('#ch-sec-verifyToken')).toHaveValue('');
@@ -60,6 +64,15 @@ test('Tech Admin adds WhatsApp (API problems inline, generated verify token, rea
   await expect(webSaved.getByLabel('Embed snippet', { exact: true })).toContainText(`<script src="${baseURL}/ocso-webchat.js" data-key="`);
   await expect(webSaved).toContainText('Only https://shop.example.com, https://*.meridian.example may embed it');
   await webSaved.getByRole('button', { name: 'Done' }).click();
+  // The widget page (not a webhook) is where web chat customers arrive.
+  await expect(cards.getByRole('listitem', { name: 'Web chat' })).toContainText(/widget\/chat\/[A-Za-z0-9_-]+/);
+
+  // The Webhooks tab lists the WhatsApp callback with what its descriptor says Meta posts; web chat has none.
+  await page.goto('/connections?tab=webhooks');
+  const hooks = page.getByRole('table', { name: 'Webhooks' });
+  await expect(hooks).toContainText('messages, delivery statuses, template reviews');
+  await expect(hooks).not.toContainText('/chat/');
+  await page.goto('/connections?tab=channels');
   await cards.getByRole('link', { name: 'Edit Web chat' }).click();
   dialog = page.getByRole('dialog', { name: 'Edit Web chat' });
   await expect(dialog.getByLabel('Title (optional)', { exact: true })).toHaveValue('Meridian help');

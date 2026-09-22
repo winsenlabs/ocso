@@ -1,6 +1,7 @@
 import { ChannelMediaError } from './errors.js';
 import { BodyTooLargeError, declaredContentLength, discardBody, isTimeoutError, readBodyWithLimit } from './http.js';
 import { baseMimeType } from './mime.js';
+import type { ChannelFetch } from '../contract/types.js';
 
 /**
  * SSRF-safe provider media download shared by channel adapters. Redirects are
@@ -16,7 +17,7 @@ const MAX_REDIRECTS = 3;
 const GENERIC_CONTENT_TYPES: ReadonlySet<string> = new Set(['', 'application/octet-stream', 'binary/octet-stream']);
 
 export interface SafeDownloadOptions {
-  fetch: typeof fetch;
+  fetch: ChannelFetch;
   limitBytes: number;
   timeoutMs: number;
   /** Declared MIME type; a specific, different Content-Type is rejected. */

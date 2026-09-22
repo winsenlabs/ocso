@@ -22,10 +22,12 @@ export interface ComposerProps {
   copilot: CopilotState;
   tools: WorkspaceTool[];
   can: { reply: boolean; note: boolean; runTools: boolean };
-  /** WhatsApp 24-hour window (null: the channel has none, e.g. web chat). */
+  /** The channel's customer-service window (null: the channel has none). */
   replyWindow?: WindowState | null | undefined;
   /** Channel whose approved templates the Template mode offers. */
   channelId?: string | null | undefined;
+  /** The channel's kind supports message templates (its descriptor); `reviewer` names who approves them. */
+  templates?: { reviewer: string } | null | undefined;
   /** Server render time, so the window countdown hydrates without a mismatch. */
   renderedAt?: number | undefined;
 }
@@ -39,11 +41,11 @@ function newClientMessageId(): string {
  * sent to the customer), or a tool action. Shown only while this human holds
  * the conversation; otherwise the locked bar explains why.
  */
-export function Composer({ conversationId, customerName, channelLabel, agentName, copilot, tools, can, replyWindow = null, channelId = null, renderedAt }: ComposerProps) {
+export function Composer({ conversationId, customerName, channelLabel, agentName, copilot, tools, can, replyWindow = null, channelId = null, templates: terms = null, renderedAt }: ComposerProps) {
   const now = useNow(30_000, renderedAt);
   const line = windowLine(replyWindow, now);
   const freeReply = canReplyFreely(replyWindow, now);
-  const templates = can.reply && replyWindow !== null && channelId !== null;
+  const templates = can.reply && terms !== null && channelId !== null;
   const [chosen, setMode] = useState<ComposerMode>(can.reply ? (freeReply || !templates ? 'reply' : 'template') : 'note');
   // The window can close while the composer is open: Reply becomes Template.
   const mode: ComposerMode = chosen === 'reply' && !freeReply && templates ? 'template' : chosen;
@@ -125,7 +127,7 @@ export function Composer({ conversationId, customerName, channelLabel, agentName
 
       {mode === 'template' && channelId ? (
         <>
-          <TemplateComposer conversationId={conversationId} channelId={channelId} customerName={customerName} reopen={false} onSent={setSentFlash} />
+          <TemplateComposer conversationId={conversationId} channelId={channelId} customerName={customerName} reopen={false} reviewer={terms?.reviewer} onSent={setSentFlash} />
           {sentFlash ? (
             <p className="mono-sm tplnote" role="status">
               {sentFlash}
@@ -216,7 +218,7 @@ export function Composer({ conversationId, customerName, channelLabel, agentName
 export interface LockedBarProps {
   text: string;
   action: { label: string; onClick: () => void; disabled?: boolean } | null;
-  /** A second way forward, e.g. "Reopen with a template" on a resolved WhatsApp conversation. */
+  /** A second way forward, e.g. "Reopen with a template" on a resolved conversation whose channel has templates. */
   secondary?: { label: string; onClick: () => void; disabled?: boolean } | null | undefined;
 }
 

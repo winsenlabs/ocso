@@ -48,6 +48,9 @@ describe('LocalBlobStore', () => {
     expect(verifyBlobUrl('k', 'media/2026/09/c1/b.jpg', exp, sig, now)).toBe(false);
     expect(verifyBlobUrl('other', 'media/2026/09/c1/a.jpg', exp, sig, now)).toBe(false);
     expect(verifyBlobUrl('k', 'media/2026/09/c1/a.jpg', exp, sig, exp + 1)).toBe(false);
+    // The store verifies its own links for the API's /blobs route (no signing key outside the store).
+    expect(s.verifySignedGet('media/2026/09/c1/a.jpg', exp, sig, now)).toBe(true);
+    expect(s.verifySignedGet('media/2026/09/c1/a.jpg', exp, sig, exp + 1)).toBe(false);
   });
 });
 

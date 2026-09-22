@@ -8,3 +8,4 @@ export * from './ecs/policies.js';
 export * from './ecs/metric-data.js';
 export * from './ecs/task-protection.js';
 export * from './ecs/ecs-adapter.js';
+export * from './ecs/facts.js';

@@ -1,57 +1,33 @@
 import { AlertBanner } from '@/components/ui/alert-banner';
 import { KeyValue, type KeyValueItem } from '@/components/ui/key-value';
 import { StatusChip } from '@/components/ui/status-chip';
-import type { EcsDeploymentStatus, WorkerDeployment } from '@/lib/api/system';
+import type { DeploymentFactView, WorkerDeployment } from '@/lib/api/system';
 import { formatDateTime } from '@/lib/format';
 
-function ecsItems(d: EcsDeploymentStatus): KeyValueItem[] {
-  const count = (v: number | null) => (v === null ? '—' : String(v));
-  return [
-    { k: 'service', v: `${d.cluster} / ${d.service} · ${d.serviceStatus.toLowerCase()}` },
-    { k: 'tasks', v: `desired ${count(d.desiredCount)} · running ${count(d.runningCount)} · pending ${count(d.pendingCount)}` },
-    { k: 'rollout', v: d.rolloutState?.toLowerCase() ?? '—' },
-    {
-      k: 'scalable target',
-      v: d.scalableTarget
-        ? `${d.scalableTarget.minCapacity} – ${d.scalableTarget.maxCapacity}${d.scalableTarget.dynamicScalingSuspended ? ' · dynamic scaling suspended' : ''}`
-        : 'not registered',
-    },
-    {
-      k: 'policies',
-      v: d.policies.length ? (
-        <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {d.policies.map((p) => (
-            <StatusChip key={p.name} tone={p.present ? 'good' : 'danger'} title={p.type}>
-              {p.name}
-              {p.present ? '' : ' · missing'}
-            </StatusChip>
-          ))}
-        </span>
-      ) : (
-        'none'
-      ),
-    },
-    {
-      k: 'alarms',
-      v: d.alarms.length ? (
-        <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {d.alarms.map((a) => (
-            <StatusChip key={a.name} tone={a.state === 'OK' ? 'good' : a.state === 'ALARM' ? 'danger' : 'muted'}>
-              {a.name} · {a.state.toLowerCase().replace(/_/g, ' ')}
-            </StatusChip>
-          ))}
-        </span>
-      ) : (
-        'none'
-      ),
-    },
-  ];
+const CHIP_TONES = new Set(['good', 'danger', 'muted']);
+
+/** A driver's panel rows: plain values, or named states as chips (policies, alarms). */
+function factItems(facts: readonly DeploymentFactView[]): KeyValueItem[] {
+  return facts.map((f) => ({
+    k: f.label,
+    v: f.states?.length ? (
+      <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {f.states.map((st) => (
+          <StatusChip key={st.name} tone={CHIP_TONES.has(st.tone) ? (st.tone as 'good' | 'danger' | 'muted') : 'muted'} {...(st.title ? { title: st.title } : {})}>
+            {st.name}
+          </StatusChip>
+        ))}
+      </span>
+    ) : (
+      f.value
+    ),
+  }));
 }
 
 /**
  * The worker service as the platform reports it (GET /v1/settings/workers/deployment):
- * the worker leader's last describe() — ECS desired/running/pending, scalable
- * target, policies, alarms; Compose reports that replicas are operator-managed.
+ * the worker leader's last describe(), rendered from the rows the deployment
+ * driver writes itself (`facts`), so any driver shows without UI changes.
  */
 export function DeploymentPanel({ data, timeZone }: { data: WorkerDeployment | null; timeZone: string }) {
   const d = data?.deployment ?? null;
@@ -76,18 +52,8 @@ export function DeploymentPanel({ data, timeZone }: { data: WorkerDeployment | n
           The worker leader records the platform&apos;s view of the worker service after it starts; nothing has been recorded yet.
         </p>
       ) : null}
-      {d && d.driver === 'ecs' && 'cluster' in d ? <KeyValue template="minmax(110px,130px) minmax(0,1fr)" items={ecsItems(d as EcsDeploymentStatus)} /> : null}
-      {d && d.driver === 'compose' && 'note' in d ? (
-        <KeyValue
-          template="minmax(110px,130px) minmax(0,1fr)"
-          items={[
-            { k: 'replicas', v: 'managed by the operator (docker compose)' },
-            { k: 'note', v: String(d.note) },
-            { k: 'checked', v: formatDateTime(d.checkedAt ?? null, timeZone) },
-          ]}
-        />
-      ) : null}
-      {d && d.driver !== 'ecs' && d.driver !== 'compose' ? <p className="mono-sm">driver {d.driver} reported; no detailed view for it yet.</p> : null}
+      {d?.facts?.length ? <KeyValue template="minmax(110px,130px) minmax(0,1fr)" items={factItems(d.facts)} /> : null}
+      {d && !d.facts?.length ? <p className="mono-sm">{d.note ?? `driver ${d.driver} reported; its details appear after the next describe.`}</p> : null}
     </section>
   );
 }

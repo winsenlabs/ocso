@@ -1,6 +1,7 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type { JSONObject } from '@ai-sdk/provider';
 import { z } from 'zod';
+import { modelsDevKey } from '../../catalog/mapping.js';
 import type { ModelCapabilities, ModelRequest } from '../../contract/types.js';
 import { createAiSdkAdapter } from '../../core/adapter.js';
 import { listContext } from '../../discovery/context.js';
@@ -15,6 +16,7 @@ import {
   withOverrides,
   type ProviderDefinition,
 } from '../definition.js';
+import { describePromptCaching } from '../shared/caching-description.js';
 import { fetchOption, openAiCompatibleUsage } from '../shared/sdk-helpers.js';
 
 /**
@@ -64,11 +66,21 @@ function sarvamProviderOptions(request: ModelRequest): ProviderOptionsPlan {
 export const sarvamProvider: ProviderDefinition<SarvamSettings, SarvamCredentials> = {
   kind: 'SARVAM',
   label: 'Sarvam AI',
+  mark: 'SVM',
+  cachingSummary: 'no documented control · unverified',
   devOnly: false,
   settingsSchema,
   credentialsSchema,
+  // models.dev lists Sarvam (metadata, not always prices); LiteLLM only through resellers.
+  catalog: {
+    providers: { 'models.dev': ['sarvam'] },
+    listingProvider: 'sarvam',
+    candidates: (model) => [modelsDevKey('sarvam', model)],
+  },
   capabilities: (model, settings) => withOverrides(sarvamCapabilities(), model, settings.capabilityOverrides),
   providerOptions: (_model, request) => sarvamProviderOptions(request),
+  describeCaching: (model, settings) =>
+    describePromptCaching(sarvamProvider.capabilities(model, settings), { unverified: 'no documented control · cached tokens recorded if reported' }),
   create(config, deps) {
     const { settings, credentials } = parseProviderConfig(sarvamProvider, config);
     const base = {

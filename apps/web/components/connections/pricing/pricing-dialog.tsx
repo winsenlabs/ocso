@@ -35,7 +35,7 @@ export function PricingDialog({ kinds, row, closeHref, initial }: Props) {
   const close = useCloseTo(closeHref);
   const offer = row ? null : (initial?.suggestion ?? null);
   const source = row ?? offer;
-  const [kind, setKind] = useState<ProviderKind>(row?.providerKind ?? initial?.kind ?? kinds[0]?.kind ?? 'OPENAI');
+  const [kind, setKind] = useState<ProviderKind>(row?.providerKind ?? initial?.kind ?? kinds[0]?.kind ?? '');
   const [pattern, setPattern] = useState(row?.modelPattern ?? initial?.model ?? '');
   const [currency, setCurrency] = useState(row?.currency ?? offer?.currency ?? 'USD');
   const [prices, setPrices] = useState<Record<PriceKey, string>>({
@@ -57,6 +57,7 @@ export function PricingDialog({ kinds, row, closeHref, initial }: Props) {
       else if (value !== null && Number.isNaN(value)) next[f.key] = 'A decimal amount, e.g. 3 or 0.075';
       micros[f.key] = value;
     }
+    if (!kind) next['kind'] = 'Choose a provider';
     if (!pattern.trim()) next['pattern'] = 'Enter a model id or a prefix ending in *';
     if (!/^[A-Z]{3}$/.test(currency.trim())) next['currency'] = 'Three-letter code, e.g. USD';
     setErrors(next);
@@ -131,13 +132,27 @@ export function PricingDialog({ kinds, row, closeHref, initial }: Props) {
         <div className="fld-row">
           <div className="fld">
             <label htmlFor="pr-kind">Provider</label>
-            <select id="pr-kind" value={kind} disabled={row !== null} onChange={(e) => setKind(e.target.value as ProviderKind)}>
+            <select
+              id="pr-kind"
+              value={kind}
+              disabled={row !== null}
+              onChange={(e) => setKind(e.target.value)}
+              aria-invalid={errors['kind'] ? true : undefined}
+              aria-describedby={errors['kind'] ? 'pr-kind-error' : undefined}
+            >
+              {/* A stored row keeps its kind even when this deployment no longer registers it. */}
+              {row && !kinds.some((k) => k.kind === row.providerKind) ? <option value={row.providerKind}>{row.providerKind}</option> : null}
               {kinds.map((k) => (
                 <option key={k.kind} value={k.kind}>
                   {k.label}
                 </option>
               ))}
             </select>
+            {errors['kind'] ? (
+              <span id="pr-kind-error" className="err" role="alert">
+                {errors['kind']}
+              </span>
+            ) : null}
           </div>
           <Input id="pr-pattern" label="Model" value={pattern} onChange={setPattern} error={errors['pattern']} hint="exact id, or a prefix ending in * (claude-sonnet-4-*)" />
         </div>

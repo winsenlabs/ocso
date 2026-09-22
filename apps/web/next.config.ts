@@ -36,6 +36,10 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async redirects() {
+    // Templates became a channel capability (ADR-028): old links answer with a real 308 (query string kept).
+    return [{ source: '/whatsapp-templates', destination: '/templates', permanent: true }];
+  },
   async rewrites() {
     return {
       beforeFiles: PUBLIC_INGRESS.map((prefix) => ({

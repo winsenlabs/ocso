@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { MediaRef } from '@ocso/domain';
-import type { ChannelCapabilities, FetchedMedia } from '../contract/types.js';
+import type { ChannelCapabilities, FetchedMedia, ChannelFetch } from '../contract/types.js';
 import { normalizeSha256, sha256Hex } from '../common/crypto.js';
 import { ChannelMediaError, type MediaErrorReason } from '../common/errors.js';
 import { mediaKindForMime } from '../common/mime.js';
@@ -24,7 +24,7 @@ type MediaInfo = z.infer<typeof MediaInfo>;
 
 export interface MediaFetchContext {
   graph: GraphClient;
-  fetch: typeof fetch;
+  fetch: ChannelFetch;
   capabilities: ChannelCapabilities;
   downloadTimeoutMs: number;
 }

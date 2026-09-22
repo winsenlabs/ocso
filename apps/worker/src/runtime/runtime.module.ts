@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { CustomerClaimsIssuer, SettingsService } from '@ocso/application';
 import {
   ChannelRuntime,
+  channelContextFrom,
   ContextBuilder,
   ConversationInsightsService,
   CopilotService,
@@ -16,7 +17,6 @@ import {
   TurnProcessor,
   UsageRecorder,
   type ProviderAdapterSource,
-  type ToolProviderFactory,
 } from '@ocso/agent-runtime';
 import type { BlobStore } from '@ocso/blob';
 import type { ChannelRegistry } from '@ocso/channels';
@@ -25,7 +25,7 @@ import type { Db } from '@ocso/db';
 import type { Logger } from '@ocso/observability';
 import type { QueueAdapter } from '@ocso/queue';
 import type { SecretStore } from '@ocso/secrets';
-import { createAjvValidator } from '@ocso/tools';
+import { createAjvValidator, type ToolProviderRegistry } from '@ocso/tools';
 import { BLOB_STORE, CHANNEL_REGISTRY, DB, ENV, LOGGER, PROVIDER_SOURCE, QUEUE, SECRET_STORE, TOOL_PROVIDERS, WORKER_ID } from '../infrastructure/tokens.js';
 import { ADAPTER_PROVIDERS, capabilitiesResolver } from './adapters.providers.js';
 import { WorkerRegistryService } from './worker-registry.service.js';
@@ -66,12 +66,16 @@ export const HISTORY_WINDOW = 20;
     },
     {
       provide: ContextBuilder,
-      inject: [DB, HotContextCache, SettingsService],
-      useFactory: async (db: Db, hot: HotContextCache, settings: SettingsService) =>
-        new ContextBuilder(db, hot, { historyWindow: HISTORY_WINDOW, mediaWindow: 6, timezone: (await settings.deployment()).timezone }),
+      inject: [DB, HotContextCache, SettingsService, CHANNEL_REGISTRY],
+      useFactory: async (db: Db, hot: HotContextCache, settings: SettingsService, channels: ChannelRegistry) =>
+        new ContextBuilder(db, hot, { historyWindow: HISTORY_WINDOW, mediaWindow: 6, timezone: (await settings.deployment()).timezone, channelContext: channelContextFrom(channels) }),
     },
     { provide: ConversationInsightsService, inject: [DB, ModelGateway], useFactory: (db: Db, gateway: ModelGateway) => new ConversationInsightsService(db, gateway) },
-    { provide: EvaluationService, inject: [DB, ModelGateway], useFactory: (db: Db, gateway: ModelGateway) => new EvaluationService(db, gateway, { historyWindow: HISTORY_WINDOW }) },
+    {
+      provide: EvaluationService,
+      inject: [DB, ModelGateway, CHANNEL_REGISTRY],
+      useFactory: (db: Db, gateway: ModelGateway, channels: ChannelRegistry) => new EvaluationService(db, gateway, { historyWindow: HISTORY_WINDOW, channelContext: channelContextFrom(channels) }),
+    },
     {
       provide: CustomerClaimsIssuer,
       inject: [DB, SECRET_STORE, ENV],
@@ -93,7 +97,7 @@ export const HISTORY_WINDOW = 20;
         gateway: ModelGateway,
         context: ContextBuilder,
         media: MediaMaterializer,
-        toolProviders: ToolProviderFactory,
+        toolProviders: ToolProviderRegistry,
         source: ProviderAdapterSource,
         claims: CustomerClaimsIssuer,
         logger: Logger,

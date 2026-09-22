@@ -34,8 +34,8 @@ export interface RealtimePayloads {
   'alert.updated': { alertId: string; status: 'OPEN' | 'ACKNOWLEDGED' | 'RESOLVED' };
   'alert.resolved': { alertId: string };
   'config.changed': { area: string; entityId: string | null };
-  /** A WhatsApp template's review result changed (sent to the submitter and Tech Admins). */
-  'whatsapp_template.status_changed': { templateId: string; channelId: string; name: string; language: string; status: string; previousStatus: string; submittedBy: string | null };
+  /** A message template's review result changed (sent to the submitter and Tech Admins). */
+  'message_template.status_changed': { templateId: string; channelId: string; name: string; language: string; status: string; previousStatus: string; submittedBy: string | null };
 }
 
 export type RealtimeEventType = keyof RealtimePayloads;
@@ -82,7 +82,7 @@ export const REALTIME_EVENT_TYPES = [
   'alert.updated',
   'alert.resolved',
   'config.changed',
-  'whatsapp_template.status_changed',
+  'message_template.status_changed',
 ] as const satisfies readonly RealtimeEventType[];
 
 const KNOWN: ReadonlySet<string> = new Set(REALTIME_EVENT_TYPES);

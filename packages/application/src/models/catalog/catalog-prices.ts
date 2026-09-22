@@ -7,10 +7,12 @@ import {
   type ModelCatalog,
   type PriceTierMicros,
   type ProviderKind,
+  type ProviderRegistry,
 } from '@ocso/model-providers';
 import { recordAudit } from '../../audit/audit.js';
 import { emitEvent } from '../../events/outbox.js';
 import type { ActorContext } from '../../shared/context.js';
+import { parseSettings } from '../provider-config.js';
 
 type PricingRow = typeof modelPricing.$inferSelect;
 
@@ -39,14 +41,25 @@ export function toSuggestion(match: CatalogPriceMatch): CatalogPriceSuggestion {
   };
 }
 
-/** Underlying model of a target for catalog lookups (Foundry deployments declare it in settings). */
-export function baseModelFor(kind: ProviderKind, settings: Readonly<Record<string, unknown>>, model: string): string | null {
-  if (kind !== 'FOUNDRY') return null;
-  const deployments = settings['deployments'];
-  if (!deployments || typeof deployments !== 'object') return null;
-  const d = (deployments as Record<string, unknown>)[model];
-  const base = d && typeof d === 'object' ? (d as Record<string, unknown>)['model'] : undefined;
-  return typeof base === 'string' && base ? base : null;
+/**
+ * Underlying model of a target for catalog lookups, as the provider
+ * definition declares it (e.g. a deployment's model in its settings); null =
+ * the id itself, an unregistered kind, or unreadable settings.
+ */
+export function baseModelFor(registry: ProviderRegistry, provider: { kind: ProviderKind; settings: Readonly<Record<string, unknown>> }, model: string): string | null {
+  const definition = registry.get(provider.kind);
+  if (!definition?.baseModel) return null;
+  try {
+    return definition.baseModel(model, parseSettings(definition, provider.settings)) || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Whether usage of this kind is priced at all: registered here and not a dev-only provider (whose calls cost nothing). */
+export function isPricedKind(registry: ProviderRegistry, kind: ProviderKind): boolean {
+  const definition = registry.get(kind);
+  return definition !== undefined && !definition.devOnly;
 }
 
 export interface PriceTarget {
@@ -113,7 +126,14 @@ export async function insertCatalogPrice(tx: DbOrTx, actor: ActorContext, target
  * For each target without a price row, add one from the catalog when the
  * catalog prices it. Existing rows (catalog or manual) are left alone.
  */
-export async function ensureCatalogPrices(db: Db, catalog: ModelCatalog, actor: ActorContext, targets: readonly PriceTarget[], now: Date): Promise<PriceCheck[]> {
+export async function ensureCatalogPrices(
+  db: Db,
+  catalog: ModelCatalog,
+  registry: ProviderRegistry,
+  actor: ActorContext,
+  targets: readonly PriceTarget[],
+  now: Date,
+): Promise<PriceCheck[]> {
   const rows = await db.select().from(modelPricing);
   const seen = new Set<string>();
   const checks: PriceCheck[] = [];
@@ -126,7 +146,7 @@ export async function ensureCatalogPrices(db: Db, catalog: ModelCatalog, actor: 
       checks.push({ providerKind: t.providerKind, model: t.model, status: 'priced', origin: existing.origin, source: existing.catalogSource, priceId: existing.id });
       continue;
     }
-    const match = catalog.describe(t.providerKind, t.model, t.baseModel).price;
+    const match = catalog.describe(registry.get(t.providerKind)?.catalog, t.model, t.baseModel).price;
     if (!match) {
       checks.push({ providerKind: t.providerKind, model: t.model, status: 'missing', origin: null, source: null, priceId: null });
       continue;

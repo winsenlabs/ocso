@@ -4,7 +4,7 @@
   "license": "Apache-2.0",
   "private": true,
   "type": "module",
-  "description": "Infrastructure composition shared by api and worker: adapter selection by configuration.",
+  "description": "Composition root shared by api and worker: the OCSO plugin list, registries built from it, and driver selection by configuration.",
   "exports": {
     ".": {
       "@ocso/source": "./src/index.ts",
@@ -26,6 +26,7 @@
     "@ocso/queue": "workspace:*",
     "@ocso/secrets": "workspace:*",
     "@ocso/deployment": "workspace:*",
+    "@ocso/email": "workspace:*",
     "@aws-sdk/client-secrets-manager": "catalog:",
     "@aws-sdk/client-sqs": "catalog:",
     "drizzle-orm": "catalog:",

@@ -3,10 +3,12 @@ import { validation } from '@ocso/domain';
 import { deploymentSettings, modelProviders, type DbOrTx } from '@ocso/db';
 import {
   planTargets,
+  promptCachingOf,
   type CapabilityRequirement,
   type DeploymentModelPolicy,
   type ModelCapabilities,
   type ModelTargetCandidate,
+  type PromptCachingDescription,
   type ProviderKind,
   type ProviderRegistry,
 } from '@ocso/model-providers';
@@ -30,6 +32,8 @@ export interface TargetCheck {
   permitted: boolean;
   reason: string | null;
   capabilities: ModelCapabilities | null;
+  /** How the provider caches prompts for this model, in its own words; null with `capabilities`. */
+  caching: PromptCachingDescription | null;
 }
 
 export interface ProfilePolicyCheck {
@@ -67,12 +71,19 @@ const NO_CAPABILITIES: ModelCapabilities = {
   reportsCacheWrites: false,
 };
 
-/** Adapter-declared capabilities of one target; null when the kind is not registered or the stored settings are invalid. */
-export function capabilitiesOf(registry: ProviderRegistry, provider: ProviderRow, model: string): ModelCapabilities | null {
+/** What the provider definition declares about one target's model. */
+export interface ModelFacts {
+  capabilities: ModelCapabilities;
+  caching: PromptCachingDescription;
+}
+
+/** Definition-declared capabilities and caching of one target; null when the kind is not registered or the stored settings are invalid. */
+export function modelFacts(registry: ProviderRegistry, provider: Pick<ProviderRow, 'kind' | 'settings'>, model: string): ModelFacts | null {
   const definition = registry.get(provider.kind);
   if (!definition) return null;
   try {
-    return definition.capabilities(model, parseSettings(definition, provider.settings));
+    const settings = parseSettings(definition, provider.settings);
+    return { capabilities: definition.capabilities(model, settings), caching: promptCachingOf(definition, model, settings) };
   } catch {
     return null;
   }
@@ -110,9 +121,11 @@ export async function checkProfileTargets(db: DbOrTx, registry: ProviderRegistry
   const pricing = policy.maxOutputCostPerMTokMicros !== undefined ? await loadPricing(db) : [];
 
   const unavailable = new Set<ModelTargetCandidate>();
+  const caching = new Map<ModelTargetCandidate, PromptCachingDescription>();
   const toCandidate = (t: { providerId: string; model: string }): ModelTargetCandidate => {
     const provider = providers.get(t.providerId)!;
-    const capabilities = capabilitiesOf(registry, provider, t.model);
+    const facts = modelFacts(registry, provider, t.model);
+    const capabilities = facts?.capabilities ?? null;
     const price = pricing.length ? findPrice(pricing, provider.kind, t.model, now) : undefined;
     const candidate: ModelTargetCandidate = {
       providerId: provider.id,
@@ -125,7 +138,8 @@ export async function checkProfileTargets(db: DbOrTx, registry: ProviderRegistry
       capabilities: capabilities ?? NO_CAPABILITIES,
       ...(price ? { outputCostPerMTokMicros: price.outputPerMTokMicros } : {}),
     };
-    if (!capabilities) unavailable.add(candidate);
+    if (facts) caching.set(candidate, facts.caching);
+    else unavailable.add(candidate);
     return candidate;
   };
   const primary = toCandidate(targets);
@@ -150,6 +164,7 @@ export async function checkProfileTargets(db: DbOrTx, registry: ProviderRegistry
       permitted: reason === null,
       reason,
       capabilities: unavailable.has(c) ? null : c.capabilities,
+      caching: caching.get(c) ?? null,
     };
   };
   const primaryCheck = describe(primary);

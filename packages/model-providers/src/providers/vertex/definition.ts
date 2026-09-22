@@ -2,6 +2,7 @@ import { createGoogleVertex, type GoogleVertexProviderSettings } from '@ai-sdk/g
 import { createGoogleVertexAnthropic } from '@ai-sdk/google-vertex/anthropic';
 import { validation } from '@ocso/domain';
 import { z } from 'zod';
+import { liteLlmKey, modelsDevKey, type CatalogCandidate } from '../../catalog/mapping.js';
 import { createAiSdkAdapter } from '../../core/adapter.js';
 import { listContext } from '../../discovery/context.js';
 import { listVertexModels } from '../../discovery/vertex.js';
@@ -13,6 +14,7 @@ import {
   type ProviderDefinition,
 } from '../definition.js';
 import { anthropicCachePlan } from '../shared/cache-plans.js';
+import { CACHE_CONTROL_WORDING, describePromptCaching } from '../shared/caching-description.js';
 import { claudeCapabilities, geminiCapabilities, isClaudeModel } from '../shared/model-families.js';
 import { fetchOption } from '../shared/sdk-helpers.js';
 import { createAdcTokenProvider, createServiceAccountTokenProvider, parseServiceAccountKey } from './service-account.js';
@@ -65,16 +67,41 @@ function resolveAuth(settings: VertexSettings, creds: VertexCredentials, fetchIm
   };
 }
 
+/**
+ * Gemini ids unchanged. Claude: models.dev spells the dateless (4.6+) ids with
+ * `@default` (`claude-opus-5` → `claude-opus-5@default`); dated ids keep their
+ * `@YYYYMMDD`. LiteLLM prefixes `vertex_ai/`.
+ */
+function vertexCatalogCandidates(model: string): CatalogCandidate[] {
+  if (/^claude-/i.test(model)) {
+    const versioned = model.includes('@') ? model : `${model}@default`;
+    return [
+      modelsDevKey('google-vertex-anthropic', versioned),
+      modelsDevKey('google-vertex', versioned),
+      liteLlmKey('vertex_ai-anthropic_models', `vertex_ai/${model}`),
+    ];
+  }
+  return [modelsDevKey('google-vertex', model), liteLlmKey('vertex_ai-language-models', model), liteLlmKey('vertex_ai-language-models', `vertex_ai/${model}`)];
+}
+
 export const vertexProvider: ProviderDefinition<VertexSettings, VertexCredentials> = {
   kind: 'VERTEX',
   label: 'Google Vertex AI',
+  mark: 'GCP',
+  cachingSummary: 'implicit prefix (Gemini) · cache_control (Claude)',
   devOnly: false,
   settingsSchema,
   credentialsSchema,
+  catalog: {
+    providers: { 'models.dev': ['google-vertex-anthropic', 'google-vertex'], litellm: ['vertex_ai-anthropic_models', 'vertex_ai-language-models'] },
+    candidates: vertexCatalogCandidates,
+  },
   capabilities: (model, settings) =>
     withOverrides(isClaudeModel(model) ? claudeCapabilities(model) : geminiCapabilities(model), model, settings.capabilityOverrides),
   // Gemini: implicit caching only, so no directives at all.
   providerOptions: (model, request) => (isClaudeModel(model) ? anthropicCachePlan(request) : {}),
+  describeCaching: (model, settings) =>
+    describePromptCaching(vertexProvider.capabilities(model, settings), { ...CACHE_CONTROL_WORDING, automatic: 'implicit prefix caching (stable prefix first)' }),
   create(config, deps) {
     const { settings, credentials } = parseProviderConfig(vertexProvider, config);
     const auth = resolveAuth(settings, credentials, deps.fetch);

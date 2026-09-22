@@ -33,11 +33,16 @@ export class ComposeDeploymentAdapter implements DeploymentAdapter {
   }
 
   async describe(): Promise<ComposeDeploymentStatus> {
+    const note = 'Docker Compose does not report replica counts to OCSO; the worker registry shows the workers that are actually running.';
     return {
       driver: 'compose',
       checkedAt: this.now().toISOString(),
       replicaControl: 'operator',
-      note: 'Docker Compose does not report replica counts to OCSO; the worker registry shows the workers that are actually running.',
+      note,
+      facts: [
+        { label: 'replicas', value: 'managed by the operator (docker compose)' },
+        { label: 'note', value: note },
+      ],
     };
   }
 

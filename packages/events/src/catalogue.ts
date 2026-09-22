@@ -44,8 +44,8 @@ export interface OcsoEventPayloads {
   'alert.updated': { alertId: string; status: 'OPEN' | 'ACKNOWLEDGED' | 'RESOLVED' };
   'alert.resolved': { alertId: string };
   'config.changed': { area: string; entityId: string | null };
-  /** A WhatsApp template's review result changed (poller or provider webhook); `submittedBy` gets an in-app notice. */
-  'whatsapp_template.status_changed': {
+  /** A message template's review result changed (poller or provider webhook); `submittedBy` gets an in-app notice. */
+  'message_template.status_changed': {
     templateId: string;
     channelId: string;
     name: string;

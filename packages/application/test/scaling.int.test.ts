@@ -115,13 +115,13 @@ describe('computeScalingSample', () => {
   });
 
   it('SQS: depth from the queue, age from the oldest waiting customer message', async () => {
-    const sqs = { driver: 'sqs' as const, stats: async (): Promise<QueueStats> => ({ depth: 4, inFlight: 1, dead: 0, oldestAgeSeconds: null }) };
+    const sqs = { reportsOldestAge: false, stats: async (): Promise<QueueStats> => ({ depth: 4, inFlight: 1, dead: 0, oldestAgeSeconds: null }) };
     const sample = await computeScalingSample(t.db, sqs, now);
     expect(sample).toMatchObject({ queuedTurns: 4, slotDemand: 6, oldestQueueAgeSeconds: 45, sources: { depth: 'queue', age: 'postgres' } });
   });
 
   it('falls back to PostgreSQL entirely when queue stats fail', async () => {
-    const broken = { driver: 'sqs' as const, stats: async (): Promise<QueueStats> => { throw new Error('throttled'); } };
+    const broken = { reportsOldestAge: false, stats: async (): Promise<QueueStats> => { throw new Error('throttled'); } };
     const sample = await computeScalingSample(t.db, broken, now);
     // Waiting conversations: `waiting` and `expired` (its busy lease has expired).
     expect(sample).toMatchObject({ queuedTurns: 2, slotDemand: 4, oldestQueueAgeSeconds: 45, sources: { depth: 'postgres', age: 'postgres' } });

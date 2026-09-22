@@ -40,9 +40,11 @@ export class ConversationCsatController {
 }
 
 /**
- * Customer CSAT from the web-chat widget. Authenticated by the channel-bound
- * visitor token; the rating always applies to the visitor's own latest
- * conversation on this channel (never a caller-supplied id).
+ * Customer CSAT from the web-chat widget (any embeddable channel kind: the
+ * identity service resolves the channel through the registry's embed hooks).
+ * Authenticated by the channel-bound visitor token; the rating always applies
+ * to the visitor's own latest conversation on this channel (never a
+ * caller-supplied id).
  */
 @Controller('public/webchat/:publicKey/csat')
 export class WebChatCsatController {

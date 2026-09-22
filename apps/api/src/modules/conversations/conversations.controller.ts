@@ -12,7 +12,7 @@ import {
   TagSuggestionQuery,
   TemplateMessageInput,
   TransferInput,
-  WhatsAppTemplateService,
+  MessageTemplateService,
   addNote,
   loadConversationDetail,
   loadTimeline,
@@ -50,7 +50,7 @@ export class ConversationsController {
     @Inject(InboxService) private readonly inbox: InboxService,
     @Inject(HumanControlService) private readonly control: HumanControlService,
     @Inject(ConversationAccessService) private readonly access: ConversationAccessService,
-    @Inject(WhatsAppTemplateService) private readonly templates: WhatsAppTemplateService,
+    @Inject(MessageTemplateService) private readonly templates: MessageTemplateService,
     @Inject(SESSION_WINDOW_HOURS) private readonly windowHours: SessionWindowHours,
   ) {}
 

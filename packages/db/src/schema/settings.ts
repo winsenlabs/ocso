@@ -54,7 +54,8 @@ export const workerScalingState = pgTable(
   'worker_scaling_state',
   {
     id: smallint().primaryKey().default(1),
-    driver: text().$type<'compose' | 'ecs'>().notNull(),
+    /** DEPLOYMENT_DRIVER that recorded it (any registered driver name). */
+    driver: text().notNull(),
     applyStatus: text().$type<'APPLIED' | 'ADVISORY' | 'FAILED'>().notNull(),
     /** Advisory text, summary, or failure reason — operator-facing. */
     applyMessage: text().notNull(),

@@ -15,7 +15,11 @@ import {
   virtualAgents,
 } from '@ocso/db';
 import { MemoryQueue } from '@ocso/queue';
+import { createDefaultDeliveryRegistry } from '@ocso/alerts';
 import { AlertEngine, type AlertRuleRow } from '../src/index.js';
+
+/** Destination-kind event routing comes from the delivery registry (adapters declare their events). */
+const routing = createDefaultDeliveryRegistry({ fetch: async () => new Response('') });
 
 let t: TestDatabase;
 let engine: AlertEngine;
@@ -24,7 +28,7 @@ const ago = (seconds: number) => new Date(NOW.getTime() - seconds * 1000);
 
 beforeAll(async () => {
   t = await createTestDatabase();
-  engine = new AlertEngine({ db: t.db, queue: new MemoryQueue() });
+  engine = new AlertEngine({ db: t.db, queue: new MemoryQueue(), destinations: routing });
 });
 afterAll(async () => {
   await t?.drop();

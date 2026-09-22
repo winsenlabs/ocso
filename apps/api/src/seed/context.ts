@@ -14,7 +14,15 @@ import {
   UserService,
   type ActorContext,
 } from '@ocso/application';
-import { createChannelRegistry, createProviderRegistry, createSecretStore } from '@ocso/bootstrap';
+import {
+  FIRST_PARTY_PLUGINS,
+  assertDrivers,
+  createChannelRegistry,
+  createDriverRegistries,
+  createProviderRegistry,
+  createSecretStore,
+  type OcsoPlugin,
+} from '@ocso/bootstrap';
 import type { Database, Db } from '@ocso/db';
 import type { SecretStore } from '@ocso/secrets';
 import type { SeedConfig } from './config.js';
@@ -49,11 +57,14 @@ export interface SeedContext {
   log: (line: string) => void;
 }
 
-export function createSeedContext(database: Database, config: SeedConfig): SeedContext {
+/** Registries come from the same composition root (plugins) as the api and worker. */
+export function createSeedContext(database: Database, config: SeedConfig, plugins: readonly OcsoPlugin[] = FIRST_PARTY_PLUGINS): SeedContext {
   const db = database.db;
-  const secrets = createSecretStore(config.api, db);
-  const registry = createProviderRegistry(config.api);
-  const channelRegistry = createChannelRegistry();
+  const drivers = createDriverRegistries(plugins);
+  assertDrivers(config.api, drivers);
+  const secrets = createSecretStore(config.api, db, drivers);
+  const registry = createProviderRegistry(config.api, plugins);
+  const channelRegistry = createChannelRegistry({ db }, plugins);
   const validateChannel = (kind: string, settings: unknown, values: Record<string, string>): string[] =>
     channelRegistry.has(kind) ? channelRegistry.get(kind).validateConfig(settings, values) : [`channel kind ${kind} is not available`];
   return {
@@ -74,7 +85,7 @@ export function createSeedContext(database: Database, config: SeedConfig): SeedC
       agents: new AgentService(db),
       prompts: new PromptService(db),
       escalations: new EscalationRuleService(db),
-      channels: new ChannelService(db, secrets, validateChannel, (kind, publicKey) => channelRegistry.publicPath(kind, publicKey)),
+      channels: new ChannelService(db, secrets, validateChannel, (kind, publicKey) => channelRegistry.paths(kind, publicKey)),
       mcp: new McpConnectionService({ db, secrets, publicUrl: config.api.OCSO_PUBLIC_URL }),
       toolGrants: new AgentToolGrantService(db),
     },

@@ -6,7 +6,8 @@
  * Scaling and CloudWatch. Product code never branches on the driver.
  */
 
-export type DeploymentDriver = 'compose' | 'ecs';
+/** Name of a deployment driver (DEPLOYMENT_DRIVER). Open: the composition root validates it against the registry. */
+export type DeploymentDriver = string;
 
 /** The scaling-relevant subset of worker_settings (docs/10 §5). */
 export interface ScalingSettings {
@@ -64,16 +65,31 @@ export interface ScalingApplyResult {
   effective: EffectiveScaling;
 }
 
+/**
+ * One row of the worker deployment panel, in the driver's own words: the web
+ * app renders any driver's status from these without knowing the driver.
+ */
+export interface DeploymentFact {
+  label: string;
+  value: string;
+  /** Named states shown as chips instead of `value` (e.g. scaling policies, alarms). */
+  states?: ReadonlyArray<{ name: string; tone: 'good' | 'danger' | 'muted'; title?: string | undefined }> | undefined;
+}
+
 export interface ComposeDeploymentStatus {
   driver: 'compose';
   checkedAt: string;
   replicaControl: 'operator';
   note: string;
+  /** What the deployment panel shows. Absent in snapshots recorded before facts existed. */
+  facts?: DeploymentFact[] | undefined;
 }
 
 export interface EcsDeploymentStatus {
   driver: 'ecs';
   checkedAt: string;
+  /** What the deployment panel shows. Absent in snapshots recorded before facts existed. */
+  facts?: DeploymentFact[] | undefined;
   cluster: string;
   service: string;
   /** ECS service status (ACTIVE, DRAINING, INACTIVE) or MISSING. */
@@ -121,6 +137,18 @@ export interface DeploymentAdapter {
 export interface DeploymentLogger {
   warn(obj: object, msg: string): void;
   info(obj: object, msg: string): void;
+}
+
+/**
+ * A deployment driver: registered by name, selected by DEPLOYMENT_DRIVER
+ * (worker only: the leader applies scaling). `check` lists missing settings
+ * (start-up fails naming every one); `create` builds the process's adapter.
+ */
+export interface DeploymentDriverDefinition<Env = Readonly<Record<string, unknown>>> {
+  /** DEPLOYMENT_DRIVER value that selects this driver, e.g. `ecs`. */
+  readonly name: string;
+  readonly check?: ((env: Env) => readonly string[]) | undefined;
+  readonly create: (env: Env, deps: { logger?: DeploymentLogger | undefined }) => DeploymentAdapter;
 }
 
 export const silentLogger: DeploymentLogger = { warn: () => {}, info: () => {} };

@@ -1,5 +1,5 @@
 import { asc, eq, sql } from 'drizzle-orm';
-import { DESTINATION_KINDS, secretRequirement, type AlertDeliveryAdapter, type AlertDeliveryRegistry, type AlertMessage, type DeliveryResult } from '@ocso/alerts';
+import { secretRequirement, type AlertDeliveryAdapter, type AlertDeliveryRegistry, type AlertMessage, type DeliveryResult, type DestinationKindInfo } from '@ocso/alerts';
 import { Permission, can } from '@ocso/auth';
 import { alertRules, notificationDestinations, uuidv7, type Db, type DbOrTx } from '@ocso/db';
 import { forbidden, notFound, validation } from '@ocso/domain';
@@ -14,7 +14,8 @@ import { toDestinationView, type NotificationDestinationRow, type NotificationDe
 
 export const DestinationInput = z.object({
   name: z.string().trim().min(1).max(120),
-  kind: z.enum(DESTINATION_KINDS),
+  /** A registered delivery adapter's kind; the registry validates it (kinds are open). */
+  kind: z.string().trim().min(1).max(40),
   config: z.record(z.string(), z.unknown()).default({}),
   /** Plaintext secret entered once (webhook URL, routing key, SMTP password); stored in the SecretStore, never returned. */
   secret: z.string().min(1).max(4096).optional(),
@@ -46,17 +47,20 @@ export class NotificationDestinationService {
 
   /** Rule editors may list destinations to attach them; only managers see configuration. */
   async list(actor: ActorContext): Promise<NotificationDestinationView[]> {
-    const principal = requirePrincipal(actor, 'notification_destinations.read');
-    const manager = can(principal, Permission.NOTIFICATION_DESTINATIONS_MANAGE);
-    const editor = can(principal, Permission.ALERT_RULES_TECHNICAL_MANAGE) || can(principal, Permission.ALERT_RULES_BUSINESS_MANAGE);
-    if (!manager && !editor) throw forbidden(Permission.NOTIFICATION_DESTINATIONS_MANAGE);
+    const manager = this.assertRead(actor);
     const rows = await this.db.select().from(notificationDestinations).orderBy(asc(notificationDestinations.name));
-    return rows.map((r) => toDestinationView(r, manager));
+    return rows.map((r) => this.view(r, manager));
+  }
+
+  /** Registered destination kinds with their form (JSON Schema), secret field and events — for the web form. */
+  kinds(actor: ActorContext): DestinationKindInfo[] {
+    this.assertRead(actor);
+    return this.registry.describe();
   }
 
   async get(actor: ActorContext, id: string): Promise<NotificationDestinationView> {
     this.assertManage(actor);
-    return toDestinationView(await this.load(this.db, id), true);
+    return this.view(await this.load(this.db, id), true);
   }
 
   async create(actor: ActorContext, input: DestinationInput): Promise<NotificationDestinationView> {
@@ -82,7 +86,7 @@ export class NotificationDestinationService {
         await emitEvent(tx, actor, 'config.changed', { area: 'notification_destinations', entityId: id });
         return inserted;
       });
-      return toDestinationView(row!, true);
+      return this.view(row!, true);
     } catch (error) {
       // Never leave an orphaned secret behind a failed insert.
       if (secretRef) await this.secrets.delete(secretRef).catch(() => undefined);
@@ -125,7 +129,7 @@ export class NotificationDestinationService {
       return updated;
     });
     if (dropRef) await this.secrets.delete(dropRef).catch(() => undefined);
-    return toDestinationView(row!, true);
+    return this.view(row!, true);
   }
 
   /** Removes the destination from every rule, then deletes its secret after commit. */
@@ -197,6 +201,19 @@ export class NotificationDestinationService {
     };
   }
 
+  /** Managers, and rule editors (who attach destinations to rules). Returns whether the actor manages destinations. */
+  private assertRead(actor: ActorContext): boolean {
+    const principal = requirePrincipal(actor, 'notification_destinations.read');
+    const manager = can(principal, Permission.NOTIFICATION_DESTINATIONS_MANAGE);
+    const editor = can(principal, Permission.ALERT_RULES_TECHNICAL_MANAGE) || can(principal, Permission.ALERT_RULES_BUSINESS_MANAGE);
+    if (!manager && !editor) throw forbidden(Permission.NOTIFICATION_DESTINATIONS_MANAGE);
+    return manager;
+  }
+
+  private view(row: NotificationDestinationRow, includeConfig: boolean): NotificationDestinationView {
+    return toDestinationView(row, includeConfig, this.registry.find(row.kind));
+  }
+
   private assertManage(actor: ActorContext): void {
     const principal = requirePrincipal(actor, Permission.NOTIFICATION_DESTINATIONS_MANAGE);
     if (!can(principal, Permission.NOTIFICATION_DESTINATIONS_MANAGE)) throw forbidden(Permission.NOTIFICATION_DESTINATIONS_MANAGE, `role ${principal.role} cannot manage notification destinations`);
@@ -240,7 +257,7 @@ function requirementFor(adapter: AlertDeliveryAdapter, config: unknown) {
 function checkSecret(adapter: AlertDeliveryAdapter, config: unknown, secret: string | null): string | null {
   const requirement = requirementFor(adapter, config);
   if (!requirement) {
-    if (secret) throw validation('secret_not_supported', `${adapter.label} destinations${adapter.secretFor ? ' with this configuration' : ''} do not take a secret`);
+    if (secret) throw validation('secret_not_supported', `${adapter.label} destinations${adapter.secret?.when ? ' with this configuration' : ''} do not take a secret`);
     return null;
   }
   if (!secret) {

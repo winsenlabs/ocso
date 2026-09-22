@@ -1,5 +1,5 @@
 import { and, desc, eq, ne, sql } from 'drizzle-orm';
-import { withinDedupeWindow, type AlertKind, type AlertSeverity } from '@ocso/alerts';
+import { withinDedupeWindow, type AlertKind, type AlertSeverity, type DestinationEventRouting } from '@ocso/alerts';
 import { alerts, uuidv7, type DbOrTx } from '@ocso/db';
 import { emitEvent } from '../../events/outbox.js';
 import type { ActorContext } from '../../shared/context.js';
@@ -31,6 +31,7 @@ export async function applyObservations(
   evaluator: Pick<AlertEvaluator, 'condition' | 'method'>,
   observations: readonly Observation[],
   now: Date,
+  routing: DestinationEventRouting,
 ): Promise<RuleOutcome> {
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`alert-rule:${rule.id}`}))`);
   const outcome: RuleOutcome = { opened: [], updated: 0, resolved: 0, suppressed: 0, deliveries: [] };
@@ -74,7 +75,7 @@ export async function applyObservations(
       .returning({ id: alerts.id });
     if (!inserted.length) continue;
     outcome.opened.push({ id, kind: rule.kind, severity: rule.severity });
-    outcome.deliveries.push(...(await createDeliveries(tx, id, rule.destinationIds, 'OPENED', now)));
+    outcome.deliveries.push(...(await createDeliveries(tx, routing, id, rule.destinationIds, 'OPENED', now)));
     const agentId = typeof context['agentId'] === 'string' ? context['agentId'] : null;
     await emitEvent(tx, actor, 'alert.opened', { alertId: id, severity: rule.severity, kind: rule.kind }, { agentId });
   }
@@ -87,6 +88,7 @@ export async function applyObservations(
         resolvedBy: null,
         resolution: 'Auto-resolved: condition no longer met',
         destinationIds: rule.destinationIds,
+        routing,
         auditAction: 'alert.auto_resolve',
         auditSummary: `Auto-resolved alert: ${alert.title}`,
       });

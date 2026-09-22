@@ -11,13 +11,13 @@ import {
   type MessageTemplate,
   type TemplateDraft,
 } from '@ocso/domain';
-import { uuidv7, whatsappTemplates, type Db } from '@ocso/db';
+import { uuidv7, messageTemplates, type Db } from '@ocso/db';
 import { recordAudit } from '../audit/audit.js';
 import { emitEvent } from '../events/outbox.js';
 import { systemActor, type ActorContext } from '../shared/context.js';
-import { loadChannel, loadManageableChannel, type ChannelRow } from './templates-access.js';
-import { applyTemplateStatus } from './templates-status.js';
-import { mergeTemplates, submittedRows, type TemplateListView, type TemplateView } from './templates-view.js';
+import { loadChannel, loadManageableChannel, type ChannelRow } from './message-templates-access.js';
+import { applyTemplateStatus } from './message-templates-status.js';
+import { mergeTemplates, submittedRows, type TemplateListView, type TemplateView } from './message-templates-view.js';
 
 /** What the service needs from the channel's adapter (bound to its config by agent-runtime). */
 export interface TemplateProviderPort {
@@ -29,14 +29,17 @@ export interface TemplateProviderPort {
 export type TemplateProviderSource = (channelId: string) => Promise<TemplateProviderPort>;
 
 export const TEMPLATE_CACHE_TTL_MS = 5 * 60_000;
+/** `config.changed` area announced when a channel's templates change (template lists refresh). */
+export const TEMPLATES_CONFIG_AREA = 'message_templates';
 
 /**
- * WhatsApp message templates of a channel (docs/07 §3): the provider's list
- * (cached ~5 minutes per API instance, `refresh` bypasses it) merged with the
- * templates submitted from OCSO; create + submit for approval, status and
- * delete for CS Leads (their teams' channels) and Tech Admins.
+ * Message templates of a channel (docs/07 §3), for any kind whose adapter
+ * implements the template methods: the provider's list (cached ~5 minutes per
+ * API instance, `refresh` bypasses it) merged with the templates submitted
+ * from OCSO; create + submit for review, status and delete for CS Leads
+ * (their teams' channels) and Tech Admins.
  */
-export class WhatsAppTemplateService {
+export class MessageTemplateService {
   private readonly cache = new Map<string, { at: Date; templates: MessageTemplate[] }>();
 
   constructor(
@@ -49,12 +52,12 @@ export class WhatsAppTemplateService {
     return this.options.now?.() ?? new Date();
   }
 
-  /** Callers hold conversations.reply or whatsapp_templates.manage (checked by the route). */
+  /** Callers hold conversations.reply or message_templates.manage (checked by the route). */
   async list(channelId: string, options: { refresh?: boolean } = {}): Promise<TemplateListView> {
     const channel = await loadChannel(this.db, channelId);
     const port = await this.port(channel);
     const list = port.listTemplates;
-    if (!list) throw validation('templates_unsupported', `${channel.name} has no WhatsApp message templates`);
+    if (!list) throw validation('templates_unsupported', `${channel.name} has no message templates`);
     let cached = this.cache.get(channelId);
     let problem: TemplateListView['problem'] = null;
     const fresh = cached && this.now().getTime() - cached.at.getTime() < (this.options.ttlMs ?? TEMPLATE_CACHE_TTL_MS);
@@ -109,17 +112,17 @@ export class WhatsAppTemplateService {
       throw validation('invalid_template', check.problems.map((p) => p.message).join('; '), { problems: check.problems, warnings: check.warnings });
     }
     const port = await this.port(channel);
-    if (!port.createTemplate) throw validation('templates_unsupported', `${channel.name} cannot create WhatsApp templates`);
+    if (!port.createTemplate) throw validation('templates_unsupported', `${channel.name} cannot create message templates`);
     const [dup] = await this.db
-      .select({ id: whatsappTemplates.id })
-      .from(whatsappTemplates)
-      .where(and(eq(whatsappTemplates.channelId, channelId), eq(whatsappTemplates.name, draft.name), eq(whatsappTemplates.language, draft.language), isNull(whatsappTemplates.deletedAt)));
+      .select({ id: messageTemplates.id })
+      .from(messageTemplates)
+      .where(and(eq(messageTemplates.channelId, channelId), eq(messageTemplates.name, draft.name), eq(messageTemplates.language, draft.language), isNull(messageTemplates.deletedAt)));
     if (dup) throw conflict('template_exists', `${draft.name} (${draft.language}) was already submitted from OCSO`);
     const created = await port.createTemplate(draft);
     const now = this.now();
     const id = uuidv7();
     await this.db.transaction(async (tx) => {
-      await tx.insert(whatsappTemplates).values({
+      await tx.insert(messageTemplates).values({
         id,
         channelId,
         providerTemplateId: created.id,
@@ -134,10 +137,10 @@ export class WhatsAppTemplateService {
         statusCheckedAt: now,
         statusChangedAt: now,
       });
-      const target = { targetType: 'whatsapp_template', targetId: id };
-      await recordAudit(tx, actor, { action: 'whatsapp_template.create', ...target, summary: `Created WhatsApp template ${draft.name} (${draft.language}) on ${channel.name}`, after: { providerTemplateId: created.id, ...draft } });
-      await recordAudit(tx, actor, { action: 'whatsapp_template.submit', ...target, summary: `Submitted ${draft.name} (${draft.language}) for WhatsApp approval as ${draft.category}`, after: { status: created.status } });
-      await emitEvent(tx, actor, 'config.changed', { area: 'whatsapp_templates', entityId: channelId });
+      const target = { targetType: 'message_template', targetId: id };
+      await recordAudit(tx, actor, { action: 'message_template.create', ...target, summary: `Created message template ${draft.name} (${draft.language}) on ${channel.name}`, after: { providerTemplateId: created.id, ...draft } });
+      await recordAudit(tx, actor, { action: 'message_template.submit', ...target, summary: `Submitted ${draft.name} (${draft.language}) for review as ${draft.category}`, after: { status: created.status } });
+      await emitEvent(tx, actor, 'config.changed', { area: TEMPLATES_CONFIG_AREA, entityId: channelId });
     });
     this.cache.delete(channelId);
     const [row] = await submittedRows(this.db, channelId, [created.id]);
@@ -147,21 +150,21 @@ export class WhatsAppTemplateService {
   async remove(actor: ActorContext, channelId: string, templateId: string): Promise<void> {
     const channel = await loadManageableChannel(this.db, actor.principal as Principal, channelId);
     const port = await this.port(channel);
-    if (!port.deleteTemplate) throw validation('templates_unsupported', `${channel.name} cannot delete WhatsApp templates`);
+    if (!port.deleteTemplate) throw validation('templates_unsupported', `${channel.name} cannot delete message templates`);
     const [row] = await submittedRows(this.db, channelId, [templateId]);
     const template = row ? { id: row.providerTemplateId, name: row.name } : await this.find(channelId, templateId);
     if (!template) throw notFound('template', templateId);
     await port.deleteTemplate({ id: template.id, name: template.name });
     await this.db.transaction(async (tx) => {
-      if (row) await tx.update(whatsappTemplates).set({ deletedAt: this.now(), updatedAt: this.now() }).where(eq(whatsappTemplates.id, row.id));
+      if (row) await tx.update(messageTemplates).set({ deletedAt: this.now(), updatedAt: this.now() }).where(eq(messageTemplates.id, row.id));
       await recordAudit(tx, actor, {
-        action: 'whatsapp_template.delete',
-        targetType: 'whatsapp_template',
+        action: 'message_template.delete',
+        targetType: 'message_template',
         targetId: row?.id ?? template.id,
-        summary: `Deleted WhatsApp template ${template.name} from ${channel.name}`,
+        summary: `Deleted message template ${template.name} from ${channel.name}`,
         before: { providerTemplateId: template.id, name: template.name },
       });
-      await emitEvent(tx, actor, 'config.changed', { area: 'whatsapp_templates', entityId: channelId });
+      await emitEvent(tx, actor, 'config.changed', { area: TEMPLATES_CONFIG_AREA, entityId: channelId });
     });
     this.cache.delete(channelId);
   }
@@ -177,10 +180,9 @@ export class WhatsAppTemplateService {
 
   private async deletedIds(channelId: string): Promise<Set<string>> {
     const rows = await this.db
-      .select({ id: whatsappTemplates.providerTemplateId })
-      .from(whatsappTemplates)
-      .where(and(eq(whatsappTemplates.channelId, channelId), isNotNull(whatsappTemplates.deletedAt)));
+      .select({ id: messageTemplates.providerTemplateId })
+      .from(messageTemplates)
+      .where(and(eq(messageTemplates.channelId, channelId), isNotNull(messageTemplates.deletedAt)));
     return new Set(rows.map((r) => r.id));
   }
-
 }

@@ -5,14 +5,12 @@ import { toolCalls, uuidv7, type Db } from '@ocso/db';
 import { canonicalJson } from '@ocso/prompt-compiler';
 import { emitEvent } from '@ocso/application';
 import { currentTraceId, ocsoMetrics } from '@ocso/observability';
-import { authorizeToolCall, sanitizeForAudit, type SchemaValidator, type ToolProvider } from '@ocso/tools';
+import { authorizeToolCall, sanitizeForAudit, type ConnectionToolProviders, type HandoffRequest, type SchemaValidator, type ToolOutcome, type ToolProviderRegistry } from '@ocso/tools';
 import type { ToolCallRequest } from '@ocso/model-providers';
-import type { AgentToolCatalog } from './catalog.js';
-import { HANDOFF_TOOL, HandoffArgs, SEARCH_HISTORY_TOOL, searchHistory, type HandoffArgs as HandoffArgsT } from './builtins.js';
+import type { AgentToolCatalog, CatalogEntry } from './catalog.js';
 
-export interface ToolProviderFactory {
-  forConnection(connectionId: string): Promise<ToolProvider>;
-}
+/** Per-connection MCP provider factory; registered through `connectionToolSource` in a ToolProviderRegistry. */
+export type ToolProviderFactory = ConnectionToolProviders;
 
 /** Issues short-lived customer identity claims for trusted connections (docs/08 §4). */
 export interface ClaimsIssuer {
@@ -33,7 +31,7 @@ export type ToolRunOutcome = {
   toolCallId: string;
   status: 'SUCCEEDED' | 'FAILED' | 'DENIED' | 'AWAITING_CONFIRMATION';
   output: ToolResultOutput;
-  handoff?: HandoffArgsT | undefined;
+  handoff?: HandoffRequest | undefined;
 };
 
 const MAX_OUTPUT_CHARS = 12_000;
@@ -44,24 +42,20 @@ export const argsHashOf = (args: unknown) => createHash('sha256').update(canonic
 /**
  * Executes model-requested tool calls (ADR-014): authorize in code → persist
  * the request before any side effect → execute → persist sanitized result →
- * return a typed, safe result to the model.
+ * return a typed, safe result to the model. Built-in and MCP tools take this
+ * one path; the registry only decides which provider executes an allowed call.
  */
 export class ToolRunner {
   constructor(
     private readonly db: Db,
     private readonly catalog: AgentToolCatalog,
-    private readonly providers: ToolProviderFactory,
+    private readonly providers: ToolProviderRegistry,
     private readonly validate: SchemaValidator,
     private readonly claims: ClaimsIssuer | null,
     private readonly timeoutMs = 20_000,
   ) {}
 
   async run(call: ToolCallRequest, ctx: ToolRunContext): Promise<ToolRunOutcome> {
-    if (call.toolName === HANDOFF_TOOL) return this.handoff(call, ctx);
-    if (call.toolName === SEARCH_HISTORY_TOOL) {
-      const output = await searchHistory(this.db, ctx.customerId, { conversationId: ctx.conversationId, seq: ctx.historyWindowStartSeq }, call.input);
-      return { toolCallId: call.toolCallId, status: output.type === 'error' ? 'FAILED' : 'SUCCEEDED', output };
-    }
     const entry = this.catalog.entries.get(call.toolName) ?? null;
     const argsHash = argsHashOf(call.input);
     const decision = authorizeToolCall(
@@ -81,7 +75,7 @@ export class ToolRunner {
       id,
       conversationId: ctx.conversationId,
       turnId: ctx.turnId,
-      toolId: entry?.tool.id ?? null,
+      toolId: entry?.recordId ?? null,
       toolName: entry?.tool.displayName ?? call.toolName,
       connectionId: entry?.connection?.id ?? null,
       actorType: 'AGENT' as const,
@@ -96,7 +90,12 @@ export class ToolRunner {
     if (decision.outcome === 'DENY') {
       await this.db.insert(toolCalls).values({ ...base, status: 'DENIED', decisionCode: decision.code, decisionReason: decision.reason, completedAt: new Date() });
       ocsoMetrics().toolCalls.add(1, { outcome: 'denied' });
-      return { toolCallId: call.toolCallId, status: 'DENIED', output: { type: 'error', value: `Not permitted: ${decision.reason}. Do not retry this action.` } };
+      // Schema errors are recoverable (a handoff with a too-short summary must still be able to happen); policy denials are not.
+      const value =
+        decision.code === 'invalid_arguments'
+          ? `Invalid arguments: ${decision.reason}. Correct the arguments and call the tool again.`
+          : `Not permitted: ${decision.reason}. Do not retry this action.`;
+      return { toolCallId: call.toolCallId, status: 'DENIED', output: { type: 'error', value } };
     }
     if (decision.outcome === 'REQUIRE_CONFIRMATION') {
       await this.db.transaction(async (tx) => {
@@ -130,14 +129,16 @@ export class ToolRunner {
     return this.execute(id, call, entry!, ctx);
   }
 
-  private async execute(id: string, call: ToolCallRequest, entry: NonNullable<ReturnType<AgentToolCatalog['entries']['get']>>, ctx: ToolRunContext): Promise<ToolRunOutcome> {
-    const connectionId = entry.connection!.id;
+  private async execute(id: string, call: ToolCallRequest, entry: CatalogEntry, ctx: ToolRunContext): Promise<ToolRunOutcome> {
+    const connectionId = entry.connection?.id ?? null;
+    // Registered first-party tools read OCSO state for the conversation and may request a handoff.
+    const firstParty = connectionId === null && this.providers.isFirstParty(entry.tool.modelName);
     const started = performance.now();
-    let outcome;
+    let outcome: ToolOutcome;
     try {
-      const provider = await this.providers.forConnection(connectionId);
+      const provider = await this.providers.providerFor({ connectionId, name: entry.tool.modelName });
       const claims =
-        this.claims && entry.sendCustomerClaims
+        connectionId && this.claims && entry.sendCustomerClaims
           ? await this.claims.issue({ customerId: ctx.customerId, conversationId: ctx.conversationId, agentId: ctx.agentId, connectionId, scopes: entry.tool.requiredScopes })
           : undefined;
       outcome = await provider.invoke({
@@ -147,9 +148,12 @@ export class ToolRunner {
         timeoutMs: this.timeoutMs,
         customerClaims: claims,
         idempotencyKey: entry.tool.riskClass === 'READ' ? undefined : `tool:${ctx.turnId}:${call.toolCallId}`,
+        ...(firstParty
+          ? { scope: { conversationId: ctx.conversationId, customerId: ctx.customerId, agentId: ctx.agentId, historyWindowStartSeq: ctx.historyWindowStartSeq } }
+          : {}),
       });
     } catch {
-      outcome = { status: 'FAILED' as const, errorCategory: 'tool_unavailable' as const, message: 'The tool could not be reached', latencyMs: Math.round(performance.now() - started) };
+      outcome = { status: 'FAILED', errorCategory: 'tool_unavailable', message: 'The tool could not be reached', latencyMs: Math.round(performance.now() - started) };
     }
     const final = outcome;
     const eventCtx = { conversationId: ctx.conversationId, agentId: ctx.agentId };
@@ -178,20 +182,10 @@ export class ToolRunner {
     const m = ocsoMetrics();
     m.toolCalls.add(1, { outcome: label, risk: entry.tool.riskClass });
     m.toolDuration.record(final.latencyMs / 1000, { outcome: label });
-    return final.status === 'SUCCEEDED'
-      ? { toolCallId: call.toolCallId, status: 'SUCCEEDED', output: truncate(final.output) }
-      : { toolCallId: call.toolCallId, status: 'FAILED', output: { type: 'error', value: final.message } };
-  }
-
-  private async handoff(call: ToolCallRequest, ctx: ToolRunContext): Promise<ToolRunOutcome> {
-    const parsed = HandoffArgs.safeParse(call.input);
-    if (!parsed.success) return { toolCallId: call.toolCallId, status: 'FAILED', output: { type: 'error', value: 'reason and summary are required' } };
-    return {
-      toolCallId: call.toolCallId,
-      status: 'SUCCEEDED',
-      handoff: parsed.data,
-      output: { type: 'json', value: { status: 'handoff_requested', instruction: 'Tell the customer a colleague will continue here shortly. Do not promise a time.' } },
-    };
+    if (final.status === 'FAILED') return { toolCallId: call.toolCallId, status: 'FAILED', output: { type: 'error', value: final.message } };
+    // Conversation-control effects are honoured from first-party providers only.
+    const handoff = firstParty && final.effect?.type === 'handoff' ? final.effect.request : undefined;
+    return { toolCallId: call.toolCallId, status: 'SUCCEEDED', output: truncate(final.output), ...(handoff ? { handoff } : {}) };
   }
 }
 

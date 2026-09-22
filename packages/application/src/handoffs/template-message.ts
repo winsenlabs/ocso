@@ -13,8 +13,8 @@ import { conversations, type Db, type DbOrTx } from '@ocso/db';
 import type { QueueAdapter } from '@ocso/queue';
 import { z } from 'zod';
 import { recordAudit } from '../audit/audit.js';
-import type { WhatsAppTemplateService } from '../channels/templates.js';
-import type { TemplateView } from '../channels/templates-view.js';
+import type { MessageTemplateService } from '../channels/message-templates.js';
+import type { TemplateView } from '../channels/message-templates-view.js';
 import { lockConversation } from '../conversations/control.js';
 import { appendInteraction } from '../conversations/interaction-writer.js';
 import { emitEvent } from '../events/outbox.js';
@@ -22,12 +22,12 @@ import type { ActorContext } from '../shared/context.js';
 import { reopenAsHuman } from './human-control.js';
 
 export const TemplateMessageInput = z.object({
-  /** Provider template id (Twilio HX… Content SID, Meta template id) from GET /v1/channels/:id/templates. */
+  /** The provider's template id, from GET /v1/channels/:id/templates. */
   templateId: z.string().trim().min(1).max(200),
   language: z.string().trim().min(2).max(16),
   /** Values keyed by the template's variable keys. */
   variables: z.record(z.string().max(80), z.string().max(1_024)).default({}),
-  /** Media for templates whose header media is chosen at send time (Meta). */
+  /** Media for templates whose header media is chosen at send time. */
   headerMediaUrl: z.string().trim().max(2_000).optional(),
   /** Client-generated key so a double-click never sends twice. */
   clientMessageId: z.string().min(8).max(100),
@@ -57,7 +57,7 @@ function assertSendable(template: TemplateView | null, input: TemplateMessageInp
   if (template.language !== input.language) throw validation('template_language_mismatch', `${template.name} is a ${template.language} template, not ${input.language}`);
   if (template.unsupportedReason) throw validation('template_unsupported', template.unsupportedReason);
   if (!isTemplateSendable(template)) {
-    throw validation('template_not_approved', `${template.name} is ${template.status.toLowerCase()}: only templates WhatsApp approved can be sent`);
+    throw validation('template_not_approved', `${template.name} is ${template.status.toLowerCase()}: only approved templates can be sent`);
   }
   const problems = templateValueProblems(template, input.variables, input.headerMediaUrl);
   if (problems.length) throw validation('template_variables_invalid', problems.map((p) => p.message).join('; '), { problems });
@@ -65,9 +65,9 @@ function assertSendable(template: TemplateView | null, input: TemplateMessageInp
 }
 
 /**
- * Send an approved WhatsApp template to the customer (docs/07 §3, docs/09
- * §4): the only way to reach them after the 24-hour window, and allowed
- * inside it too. Same holder rule as a human reply (HUMAN_ACTIVE, the
+ * Send an approved message template to the customer (docs/07 §3, docs/09
+ * §4): the only way to reach them after the channel's customer-service
+ * window closes, and allowed inside it too. Same holder rule as a human reply (HUMAN_ACTIVE, the
  * assigned human or a lead). A resolved conversation can be reopened and
  * sent to in one step (`reopen: true`), because staff may reopen (REOPEN by a
  * human lands in HUMAN_ACTIVE with them as the handler). The interaction
@@ -81,7 +81,7 @@ export async function sendTemplateMessage(
   actor: ActorContext,
   conversationId: string,
   input: TemplateMessageInput,
-  deps: { templates: WhatsAppTemplateService; now?: (() => Date) | undefined },
+  deps: { templates: MessageTemplateService; now?: (() => Date) | undefined },
 ): Promise<TemplateMessageResult> {
   const p = actor.principal!;
   assertCan(p, Permission.CONVERSATIONS_REPLY);
@@ -132,7 +132,7 @@ export async function sendTemplateMessage(
       action: 'conversation.template_sent',
       targetType: 'conversation',
       targetId: conversationId,
-      summary: `Sent WhatsApp template ${template.name} (${template.language}${template.category ? `, ${template.category.toLowerCase()}` : ''})${reopened ? ' after reopening' : ''}`,
+      summary: `Sent message template ${template.name} (${template.language}${template.category ? `, ${template.category.toLowerCase()}` : ''})${reopened ? ' after reopening' : ''}`,
       // Values can hold customer data: the audit keeps which variables were filled, the timeline keeps the text.
       after: { interactionId: appended.interactionId, templateId: template.id, name: template.name, language: template.language, category: template.category, variables: Object.keys(input.variables) },
     });

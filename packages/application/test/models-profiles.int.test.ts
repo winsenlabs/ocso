@@ -7,6 +7,7 @@ import { createTestDatabase, type TestDatabase } from '@ocso/db/testing';
 import { createDefaultRegistry } from '@ocso/model-providers';
 import { InMemorySecretRows, LocalSecretStore, parseMasterKey } from '@ocso/secrets';
 import {
+  PricingInput,
   PricingService,
   ProfileInput,
   ProfileService,
@@ -50,7 +51,7 @@ beforeAll(async () => {
   const secrets = new LocalSecretStore(new InMemorySecretRows(), parseMasterKey('k1', randomBytes(32).toString('base64')));
   providers = new ProviderService({ db: t.db, secrets, registry });
   profiles = new ProfileService({ db: t.db, registry });
-  pricing = new PricingService(t.db);
+  pricing = new PricingService({ db: t.db, registry });
   settings = new SettingsService(t.db);
   ids.india = (await providers.create(admin, dev('Mumbai', 'ap-south-1', 'IN'))).id;
   ids.india2 = (await providers.create(admin, dev('Hyderabad', 'ap-south-2', 'IN'))).id;
@@ -222,5 +223,13 @@ describe('pricing', () => {
     await expect(pricing.list(lead)).rejects.toMatchObject({ category: 'authorization' });
     await pricing.delete(admin, row.id);
     await expect(pricing.update(admin, row.id, { outputPerMTokMicros: 1 })).rejects.toMatchObject({ category: 'not_found' });
+  });
+
+  it('accepts any well-formed kind at the input, but only kinds registered in this deployment', async () => {
+    expect(PricingInput.safeParse({ ...pricingInput('m-*', 1), providerKind: 'MISTRAL' }).success).toBe(true);
+    expect(PricingInput.safeParse({ ...pricingInput('m-*', 1), providerKind: 'mistral' }).success).toBe(false);
+    await expect(pricing.create(admin, { ...pricingInput('m-*', 1), providerKind: 'MISTRAL' })).rejects.toMatchObject({ code: 'provider_kind_not_available' });
+    await expect(pricing.addFromCatalog(admin, { providerKind: 'MISTRAL', model: 'mistral-large' })).rejects.toMatchObject({ code: 'provider_kind_not_available' });
+    await expect(providers.create(admin, { ...dev('Mistral', 'eu-west-1', 'EU'), kind: 'MISTRAL' })).rejects.toMatchObject({ code: 'provider_kind_not_available' });
   });
 });

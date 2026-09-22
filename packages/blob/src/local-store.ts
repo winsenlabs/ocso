@@ -75,6 +75,10 @@ export class LocalBlobStore implements BlobStore {
     const base = this.options.publicApiBaseUrl.replace(/\/$/, '');
     return `${base}/blobs/${key.split('/').map(encodeURIComponent).join('/')}?exp=${exp}&sig=${sig}`;
   }
+
+  verifySignedGet(key: string, exp: number, sig: string, nowSeconds: number): boolean {
+    return verifyBlobUrl(this.options.signingKey, key, exp, sig, nowSeconds);
+  }
 }
 
 export function signBlobUrl(signingKey: string, key: string, exp: number): string {

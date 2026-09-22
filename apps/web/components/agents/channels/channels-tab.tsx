@@ -1,6 +1,7 @@
 import { EmptyState } from '@/components/ui/empty-state';
 import { SecHead } from '@/components/ui/sec-head';
-import { channelCode } from '@/components/workspace/lib/channel';
+import { channelMark } from '@/components/workspace/lib/channel';
+import { loadChannelKinds } from '@/lib/api/channels';
 import { getAgentAnalytics, listAgents, optional } from '@/lib/api/agents';
 import { formatNumber, formatPercent } from '@/lib/format';
 import type { AgentPageData } from '../detail/load';
@@ -17,7 +18,7 @@ export async function ChannelsTab({ data }: { data: AgentPageData }) {
   const { agent, options, can } = data;
   const channels = options.channelRows;
   if (!channels) return <EmptyState title="Channels are not available for your role">A CS Lead or Tech Admin can see which channels this agent answers on.</EmptyState>;
-  const [analytics, agents] = await Promise.all([can.analytics ? optional(getAgentAnalytics(agent.id, 7)) : Promise.resolve(null), optional(listAgents())]);
+  const [analytics, agents, kinds] = await Promise.all([can.analytics ? optional(getAgentAnalytics(agent.id, 7)) : Promise.resolve(null), optional(listAgents()), loadChannelKinds()]);
   const names = new Map((agents ?? []).map((a) => [a.id, a.name]));
   const byChannel = new Map((analytics?.channels.items ?? []).map((c) => [c.channelId, c]));
   const rows: ChannelRow[] = channels.map((c) => {
@@ -26,7 +27,7 @@ export async function ChannelsTab({ data }: { data: AgentPageData }) {
       id: c.id,
       name: c.name,
       kind: c.kind,
-      code: channelCode(c.kind),
+      mark: channelMark(kinds, c.kind),
       status: c.status,
       defaultAgent: c.defaultAgentId === agent.id ? 'this' : c.defaultAgentId ? 'other' : 'none',
       defaultAgentName: c.defaultAgentId ? (names.get(c.defaultAgentId) ?? null) : null,

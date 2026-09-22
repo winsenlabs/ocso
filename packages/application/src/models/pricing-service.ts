@@ -2,7 +2,7 @@ import { asc, desc, eq } from 'drizzle-orm';
 import { Permission } from '@ocso/auth';
 import { conflict, notFound, validation } from '@ocso/domain';
 import { modelPricing, modelProviders, uuidv7, type Db, type DbOrTx } from '@ocso/db';
-import { selectPrice } from '@ocso/model-providers';
+import { selectPrice, type ProviderRegistry } from '@ocso/model-providers';
 import { recordAudit } from '../audit/audit.js';
 import { emitEvent } from '../events/outbox.js';
 import { nowOf, type ActorContext } from '../shared/context.js';
@@ -27,20 +27,31 @@ export async function loadPricing(db: DbOrTx): Promise<PricingRow[]> {
   return db.select().from(modelPricing).orderBy(desc(modelPricing.effectiveFrom));
 }
 
+export interface PricingServiceDeps {
+  db: Db;
+  /** The provider kinds a price row may name, and their catalog mappings. */
+  registry: ProviderRegistry;
+  /** Default: a read-only catalog service (vendored snapshot or the stored one). */
+  catalog?: ModelCatalogService | undefined;
+  now?: (() => Date) | undefined;
+}
+
 /**
  * Price table used for usage cost metadata (docs/05 §3, ADR-027): rows the
  * Tech Admin enters (manual) and rows pre-filled from the open-source model
  * catalog (catalog). Editing a catalog row makes it manual.
  */
 export class PricingService {
+  private readonly db: Db;
+  private readonly registry: ProviderRegistry;
   private readonly catalog: ModelCatalogService;
+  private readonly now: (() => Date) | undefined;
 
-  constructor(
-    private readonly db: Db,
-    catalog?: ModelCatalogService,
-    private readonly now?: () => Date,
-  ) {
-    this.catalog = catalog ?? new ModelCatalogService({ db });
+  constructor(deps: PricingServiceDeps) {
+    this.db = deps.db;
+    this.registry = deps.registry;
+    this.catalog = deps.catalog ?? new ModelCatalogService({ db: deps.db });
+    this.now = deps.now;
   }
 
   async list(actor: ActorContext): Promise<PricingRow[]> {
@@ -50,6 +61,7 @@ export class PricingService {
 
   async create(actor: ActorContext, input: PricingInput): Promise<PricingRow> {
     authorize(actor, Permission.PRICING_MANAGE);
+    this.registry.require(input.providerKind);
     const id = uuidv7();
     return this.db.transaction(async (tx) => {
       const [row] = await tx
@@ -108,24 +120,25 @@ export class PricingService {
   /** "Prices" action: models profiles or recent usage refer to that no row prices, with the catalog's offer. */
   async missing(actor: ActorContext): Promise<MissingPrice[]> {
     authorize(actor, Permission.PRICING_MANAGE);
-    return modelsWithoutPrice(this.db, await this.catalog.catalog(), nowOf({ now: this.now }));
+    return modelsWithoutPrice(this.db, await this.catalog.catalog(), this.registry, nowOf({ now: this.now }));
   }
 
   /** Add the catalog's price for one model as a catalog-origin row. */
   async addFromCatalog(actor: ActorContext, input: CatalogPriceInput): Promise<PricingRow> {
     authorize(actor, Permission.PRICING_MANAGE);
+    const definition = this.registry.require(input.providerKind);
     const now = nowOf({ now: this.now });
     let baseModel: string | null = null;
     if (input.providerId) {
       const [provider] = await this.db.select().from(modelProviders).where(eq(modelProviders.id, input.providerId));
       if (!provider) throw notFound('model_provider', input.providerId);
       if (provider.kind !== input.providerKind) throw validation('provider_kind_mismatch', 'The provider is of a different kind');
-      baseModel = baseModelFor(provider.kind, provider.settings, input.model);
+      baseModel = baseModelFor(this.registry, provider, input.model);
     }
     if (findPrice(await loadPricing(this.db), input.providerKind, input.model, now)) {
       throw conflict('model_price_exists', `${input.model} already has a price; edit that row instead`);
     }
-    const match = (await this.catalog.catalog()).describe(input.providerKind, input.model, baseModel).price;
+    const match = (await this.catalog.catalog()).describe(definition.catalog, input.model, baseModel).price;
     if (!match) throw notFound('catalog_price', `${input.providerKind}:${input.model}`);
     const target = { providerKind: input.providerKind, model: input.model, baseModel };
     return this.db.transaction((tx) => insertCatalogPrice(tx, actor, target, match, now));

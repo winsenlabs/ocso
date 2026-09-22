@@ -1,5 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { z } from 'zod';
+import { liteLlmKey, modelsDevKey } from '../../catalog/mapping.js';
 import { createAiSdkAdapter } from '../../core/adapter.js';
 import { listOpenAiModels } from '../../discovery/openai.js';
 import { listContext } from '../../discovery/context.js';
@@ -12,6 +13,7 @@ import {
   type ProviderDefinition,
 } from '../definition.js';
 import { openAiFamilyPlan } from '../shared/cache-plans.js';
+import { keyBasedCaching } from '../shared/caching-description.js';
 import { openAiCapabilities, usesOpenAiCacheBreakpoints } from '../shared/model-families.js';
 import { fetchOption } from '../shared/sdk-helpers.js';
 
@@ -43,9 +45,17 @@ const explicitBreakpoints = (model: string, settings: OpenAiSettings) =>
 export const openAiProvider: ProviderDefinition<OpenAiSettings, OpenAiCredentials> = {
   kind: 'OPENAI',
   label: 'OpenAI API',
+  mark: 'OAI',
+  cachingSummary: 'automatic · prompt cache key',
   devOnly: false,
   settingsSchema,
   credentialsSchema,
+  // The API model id, unchanged: a dated snapshot is priced only when the catalog lists that exact id.
+  catalog: {
+    providers: { 'models.dev': ['openai'], litellm: ['openai'] },
+    listingProvider: 'openai',
+    candidates: (model) => [modelsDevKey('openai', model), liteLlmKey('openai', model)],
+  },
   capabilities: (model, settings) =>
     withOverrides(openAiCapabilities(model, explicitBreakpoints(model, settings)), model, settings.capabilityOverrides),
   providerOptions: (model, request, settings) =>
@@ -54,6 +64,7 @@ export const openAiProvider: ProviderDefinition<OpenAiSettings, OpenAiCredential
       explicitBreakpoints: explicitBreakpoints(model, settings),
       store: settings.storeResponses,
     }),
+  describeCaching: (model, settings) => keyBasedCaching(openAiProvider.capabilities(model, settings), explicitBreakpoints(model, settings)),
   create(config, deps) {
     const { settings, credentials } = parseProviderConfig(openAiProvider, config);
     const openai = createOpenAI({

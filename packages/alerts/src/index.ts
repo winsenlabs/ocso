@@ -29,4 +29,4 @@ export {
   PAGERDUTY_SEVERITY,
   type PagerDutyConfig,
 } from './adapters/pagerduty.js';
-export { AlertDeliveryRegistry, createDefaultDeliveryRegistry, type DefaultRegistryOptions } from './registry.js';
+export { AlertDeliveryRegistry, createDefaultDeliveryRegistry, type DefaultRegistryOptions, type DestinationEventRouting } from './registry.js';

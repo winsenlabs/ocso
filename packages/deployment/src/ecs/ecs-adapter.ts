@@ -23,6 +23,7 @@ import {
 import { aws, deploymentMisconfigured, scalableTargetMissing } from '../errors.js';
 import { NoTaskProtection } from '../no-protection.js';
 import { stepScalingFingerprint, targetTrackingFingerprint } from './compare.js';
+import { ecsFacts } from './facts.js';
 import { metricData } from './metric-data.js';
 import { DEFAULT_METRIC_DIMENSION_VALUE, SCALABLE_DIMENSION, SERVICE_NAMESPACE, defaultMetricsNamespace, ecsScalingNames, type EcsScalingNames } from './names.js';
 import { SCALE_OUT_COOLDOWN_SECONDS, queueAgeAlarmPlan, stepScalingConfiguration, targetTrackingConfiguration, type MetricTarget } from './policies.js';
@@ -180,7 +181,7 @@ export class EcsDeploymentAdapter implements DeploymentAdapter {
     ]);
     const svc = services.services?.find((x) => x.serviceName === n.service) ?? services.services?.[0];
     const primary = svc?.deployments?.find((d) => d.status === 'PRIMARY');
-    return {
+    const status: Omit<EcsDeploymentStatus, 'facts'> = {
       driver: 'ecs',
       checkedAt: this.now().toISOString(),
       cluster: n.cluster,
@@ -203,6 +204,7 @@ export class EcsDeploymentAdapter implements DeploymentAdapter {
       ],
       alarms: [{ name: n.queueAgeAlarm, state: alarm?.StateValue ?? 'MISSING' }],
     };
+    return { ...status, facts: ecsFacts(status) };
   }
 
   private async scalableTarget(): Promise<ScalableTarget | undefined> {

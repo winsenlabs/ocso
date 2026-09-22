@@ -474,6 +474,18 @@ Load script (web-chat channel, mock model with latency) measuring turn latency a
 | T11.6.7 | Rate limiting in the database keyed by the web tier's client address; audit of every auth event | COMPLETE |
 | T11.6.8 | Compose (keygen `better_auth_secret`, entrypoint, env), docs (15, setup guide, compose, aws) | COMPLETE — Terraform wiring of `BETTER_AUTH_SECRET` open (aws.md §10) |
 
+### E11.7 The plugin boundary (ADR-028) — COMPLETE — "the plugin boundary is the product"
+| ID | Task | Status |
+|---|---|---|
+| T11.7.1 | Open kinds validated by registries (channels, model providers, alert destinations); DB kind columns stay `text` | COMPLETE |
+| T11.7.2 | Self-describing plugins: channel descriptor (mark, identity, setup steps, embed hook, templates, displayIdentity), provider definition (mark, caching, catalog mapping, baseModel, devOnly), alert adapter (events, JSON Schema form, summary); web renders from `/kinds` | COMPLETE |
+| T11.7.3 | Message templates as a channel capability (migration 0019 renames the table; `/whatsapp-templates` → 308 `/templates`) | COMPLETE |
+| T11.7.4 | Built-in tools through the same authorization + `tool_calls` audit path as MCP (security fix) | COMPLETE — builtin-tools.int.test.ts |
+| T11.7.5 | Channel egress through the SSRF guard (`NO_NETWORK` default) | COMPLETE |
+| T11.7.6 | Driver registries (email, blob, secrets, queue, deployment); one composition root (`OcsoPlugin`, `FIRST_PARTY_PLUGINS`) for api and worker | COMPLETE |
+| T11.7.7 | `pnpm lint` plugin-boundary guard derived from the plugins | COMPLETE — 0 violations, 0 escapes |
+| T11.7.8 | `@winsendotai/ocso-plugin-sdk` (versioned contracts + config-driven loader) | NOT STARTED — next, after v1 |
+
 ---
 
 ## Required test coverage (from the build brief)
@@ -535,3 +547,4 @@ Load script (web-chat channel, mock model with latency) measuring turn latency a
 | 2026-09-22 | All screens landed; full e2e (63 tests), integration (270+) and unit (890) suites green; chaos test passes on the final build. |
 | 2026-09-22 | E7.11 team-scoped virtual-agent ownership (ADR-026): agents owned by teams; lead scope for agents, conversations, analytics, quality and alerts; Tech Admin owner reassignment. |
 | 2026-09-22 | E4.7 model discovery, open-source catalog prices and the monthly spend budget alert (ADR-027, PM/research/09); migration 0017. |
+| 2026-09-22 | E11.7 plugin boundary (ADR-028): open kinds, self-describing plugins, message templates as a capability (migration 0019), built-in tools authorized and audited, guarded channel egress, driver registries, one composition root, lint guard. Demo fixes: partial PATCH defaults, no-agent routing, agent history cut-off. |

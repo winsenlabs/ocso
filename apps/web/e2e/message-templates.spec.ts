@@ -6,13 +6,14 @@ import { ACCOUNTS, E2E, apiUrl, databaseUrl } from './config';
 import { login } from './helpers';
 
 /**
- * WhatsApp templates end to end (docs/07 §3, docs/09 §4) against the real
- * API + worker and a local Twilio stand-in (Messages + Content API) the
- * channel points at: a WhatsApp customer writes, the exec holds the
- * conversation after the 24-hour window, the composer switches to Template,
- * the exec fills and sends an approved template (delivered through Twilio by
- * Content SID); a CS Lead writes a template, submits it for approval, and is
- * notified in-app when WhatsApp approves it.
+ * Message templates end to end (docs/07 §3, docs/09 §4) on a WhatsApp
+ * (Twilio) channel, against the real API + worker and a local Twilio
+ * stand-in (Messages + Content API) the channel points at: a WhatsApp
+ * customer writes, the exec holds the conversation after the adapter's
+ * 24-hour window, the composer switches to Template, the exec fills and
+ * sends an approved template (delivered through Twilio by Content SID); a CS
+ * Lead writes a template, submits it for approval, and is notified in-app
+ * when WhatsApp approves it. The old /whatsapp-templates URL redirects.
  */
 test.describe.configure({ mode: 'serial' });
 
@@ -98,6 +99,8 @@ test.beforeAll(async ({ playwright }) => {
     await call('POST', '/v1/setup', null, { setupToken: E2E.setupToken, orgName: 'E2E Bank', adminName: ACCOUNTS.admin.name, adminEmail: ACCOUNTS.admin.email, adminPassword: ACCOUNTS.admin.password, timezone: 'Asia/Kolkata' });
   }
   tok.admin = await loginApi(ACCOUNTS.admin.email, ACCOUNTS.admin.password);
+  // Channel adapters reach only public https hosts unless the Tech Admin allowlists an internal one (the stub is on loopback).
+  await call('PATCH', '/v1/settings/deployment', tok.admin, { egressAllowedInternalHosts: ['127.0.0.1'] });
   const lead = await call<{ id: string }>('POST', '/v1/users', tok.admin, { name: LEAD.name, email: LEAD.email, role: 'CS_LEAD', password: LEAD.password, teamIds: [], languages: [], maxConcurrent: 5 });
   tok.lead = await loginApi(LEAD.email, LEAD.password);
   const team = (await call<{ id: string }>('POST', '/v1/teams', tok.lead, { name: 'TPL Cards' })).id;
@@ -139,7 +142,7 @@ test('after 24 hours the exec reaches the customer with an approved template', a
 
   await login(page, EXEC);
   await page.goto(`/conversations/${ids.conversation}`);
-  await expect(page.locator('.winline')).toHaveText('24-hour window closed — send an approved template');
+  await expect(page.locator('.winline')).toHaveText('24-hour reply window closed — send an approved template');
   await expect(page.getByRole('tab', { name: 'Template' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('tab', { name: 'Reply to customer' })).toHaveCount(0);
   const picker = page.getByRole('group', { name: 'Templates' });
@@ -154,7 +157,7 @@ test('after 24 hours the exec reaches the customer with an approved template', a
 
   const timeline = page.getByRole('log', { name: 'Conversation timeline' });
   await expect(timeline.locator('.ev.hum')).toContainText('Hi Priya, your order C-2291 is ready for pickup at the front desk.');
-  await expect(timeline.locator('.ev.hum')).toContainText('WhatsApp template · order_ready_pickup · en · utility');
+  await expect(timeline.locator('.ev.hum')).toContainText('message template · order_ready_pickup · en · utility');
   // The worker delivers it through Twilio by Content SID.
   await expect.poll(() => sent.find((m) => m['ContentSid'] === APPROVED)?.['ContentVariables'] ?? null, { timeout: 30_000 }).toBe('{"1":"Priya","2":"C-2291"}');
 });
@@ -162,12 +165,13 @@ test('after 24 hours the exec reaches the customer with an approved template', a
 test('a CS Lead writes a template, submits it, and is told when WhatsApp approves it', async ({ page }) => {
   test.setTimeout(90_000);
   await login(page, LEAD);
-  await page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'WhatsApp templates' }).click();
+  await page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'Message templates' }).click();
+  await expect(page).toHaveURL(/\/templates\?|\/templates$/);
   await expect(page.getByRole('heading', { name: 'Templates · TPL WhatsApp' })).toBeVisible();
   await expect(page.getByRole('list', { name: 'Templates' })).toContainText('order_ready_pickup');
   await page.getByRole('link', { name: 'New template' }).click();
 
-  const form = page.getByRole('form', { name: 'New WhatsApp template' });
+  const form = page.getByRole('form', { name: 'New message template' });
   await form.getByLabel('Name').fill('card_ready');
   await form.getByLabel('Message').fill('Hi {{1}}, your replacement card is ready at the {{2}} branch. Bring an ID.');
   await form.getByLabel('Example for {{1}}').fill('Priya');
@@ -184,6 +188,13 @@ test('a CS Lead writes a template, submits it, and is told when WhatsApp approve
   const sid = [...contents.keys()].find((k) => contents.get(k)?.item['friendly_name'] === 'card_ready')!;
   contents.get(sid)!.approval!['status'] = 'approved';
   await call('GET', `/v1/channels/${ids.channel}/templates/${sid}`, tok.admin);
-  await expect(page.getByRole('status', { name: 'WhatsApp template updates' })).toContainText('Template card_ready (en) was approved by WhatsApp — execs can now send it.');
+  await expect(page.getByRole('status', { name: 'Message template updates' })).toContainText('Template card_ready (en) was approved — execs can now send it.');
   await expect(row).toContainText('approved');
+});
+
+test('the old WhatsApp templates URL redirects to Message templates, keeping the channel', async ({ page }) => {
+  await login(page, LEAD);
+  await page.goto(`/whatsapp-templates?channel=${ids.channel}`);
+  await expect(page).toHaveURL(new RegExp(`/templates\\?channel=${ids.channel}$`));
+  await expect(page.getByRole('heading', { name: 'Message templates' })).toBeVisible();
 });

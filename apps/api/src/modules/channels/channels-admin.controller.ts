@@ -6,7 +6,7 @@ import { ChannelRuntime } from '@ocso/agent-runtime';
 import type { ChannelRegistry, ConnectionCheckResult } from '@ocso/channels';
 import { validation } from '@ocso/domain';
 import { z } from 'zod';
-import { Actor, RequirePermission } from '../../common/decorators.js';
+import { Actor, RequireAnyPermission, RequirePermission } from '../../common/decorators.js';
 import { CHANNEL_REGISTRY } from '../../infrastructure/tokens.js';
 
 const Id = z.uuid();
@@ -26,14 +26,17 @@ export class ChannelsAdminController {
     return this.channels.list();
   }
 
-  /** Channel kinds with their capability declarations, for the "Add channel" form. */
+  /**
+   * Every registered kind's descriptor (docs/plugins/channels.md): the "Add
+   * channel" form, the channel list, setup steps, and the marks and template
+   * wording the workspace, agents and analytics show. Static plugin metadata
+   * (no channel instances, no secrets), so every area that displays channels
+   * may read it.
+   */
   @Get('kinds')
-  @RequirePermission(Permission.CHANNELS_READ)
+  @RequireAnyPermission(Permission.CHANNELS_READ, Permission.CONVERSATIONS_READ, Permission.CONVERSATIONS_READ_TEAM, Permission.AGENTS_READ)
   kinds() {
-    return this.registry.kinds().map((kind) => {
-      const adapter = this.registry.get(kind);
-      return { ...(adapter.describe?.() ?? { kind }), connectionCheck: typeof adapter.checkConnection === 'function' };
-    });
+    return this.registry.describeAll();
   }
 
   @Get(':id')
@@ -64,7 +67,7 @@ export class ChannelsAdminController {
   /** Secrets nobody needs to copy anywhere (e.g. the visitor token key) are generated when left empty. */
   private withGeneratedSecrets(kind: string, secrets: Record<string, string>): Record<string, string> {
     if (!this.registry.has(kind)) return secrets;
-    const fields = this.registry.get(kind).describe?.().secrets ?? [];
+    const fields = this.registry.get(kind).describe().secrets;
     const generated = Object.fromEntries(fields.filter((f) => f.generate === 'server' && !secrets[f.key]).map((f) => [f.key, randomBytes(32).toString('base64url')]));
     return { ...generated, ...secrets };
   }

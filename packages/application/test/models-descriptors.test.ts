@@ -56,7 +56,10 @@ describe('zod → field descriptors', () => {
     expect(byKind['BEDROCK']!.credentials.every((f) => f.secret && !f.required)).toBe(true);
     // Foundry's schema carries a refinement; its fields are still described.
     expect(byKind['FOUNDRY']!.settings.map((f) => f.name)).toEqual(expect.arrayContaining(['resourceName', 'endpoint', 'deployments']));
-    expect(byKind['DEV_SCRIPTED']).toMatchObject({ devOnly: true, credentials: [] });
+    expect(byKind['DEV_SCRIPTED']).toMatchObject({ devOnly: true, credentials: [], mark: 'DEV' });
+    // Per-kind UI knowledge comes from the definitions, never from the web app.
+    for (const k of kinds) expect(k).toMatchObject({ label: expect.any(String), mark: expect.stringMatching(/^[A-Z0-9]{1,4}$/), cachingSummary: expect.any(String) });
+    expect(byKind['BEDROCK']).toMatchObject({ mark: 'AWS', cachingSummary: expect.stringContaining('cachePoint') });
     expect(byKind['DEV_SCRIPTED']!.settings.find((f) => f.name === 'latencyMs')).toMatchObject({ type: 'integer', min: 0, max: 30_000, default: 300 });
     expect(service(false).kinds(actor('CS_LEAD')).map((k) => k.kind)).not.toContain('DEV_SCRIPTED');
   });

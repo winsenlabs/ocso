@@ -7,30 +7,32 @@ import { TEMPLATE_CATEGORIES, TEMPLATE_CATEGORY_GUIDANCE, type DraftIssue, type 
 import { TemplatePreview } from '@/components/workspace/template-preview';
 import { createTemplateAction } from '@/lib/actions/templates';
 import { AuthenticationFields, ButtonFields, HeaderFields } from './builder-parts';
-import { EMPTY_FORM, LANGUAGE_SUGGESTIONS, bodyVariables, builderState, nextVariable, type BuilderForm } from './lib/builder';
+import { EMPTY_FORM, LANGUAGE_SUGGESTIONS, bodyVariables, builderState, nextVariable, type BuilderForm, type TemplateRules } from './lib/builder';
 
 const CATEGORY_TITLES: Readonly<Record<TemplateCategory, string>> = { UTILITY: 'Utility', MARKETING: 'Marketing', AUTHENTICATION: 'Authentication' };
 
 export interface TemplateBuilderProps {
   channel: { id: string; kind: string; name: string };
+  /** The kind's template terms (descriptor): who reviews, variable keys, media-header support. */
+  terms: TemplateRules & { reviewer: string };
   /** Where to go after submitting or cancelling. */
   listHref: string;
 }
 
 /**
- * "New template" (docs/07 §3): write a WhatsApp template, see it as the
- * customer will, and submit it to the provider for WhatsApp's review. The
- * same rules as the API run on every keystroke; advisory warnings (e.g. a
+ * "New template" (docs/07 §3): write a message template, see it as the
+ * customer will, and submit it to the provider for review (e.g. WhatsApp's).
+ * The same rules as the API run on every keystroke; advisory warnings (e.g. a
  * utility template that reads as marketing) do not block submitting.
  */
-export function TemplateBuilder({ channel, listHref }: TemplateBuilderProps) {
+export function TemplateBuilder({ channel, terms, listHref }: TemplateBuilderProps) {
   const router = useRouter();
   const [form, setForm] = useState<BuilderForm>(EMPTY_FORM);
   const [touched, setTouched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const patch = (next: Partial<BuilderForm>) => setForm((cur) => ({ ...cur, ...next }));
-  const state = useMemo(() => builderState(form, channel.kind), [form, channel.kind]);
+  const state = useMemo(() => builderState(form, terms), [form, terms]);
   const auth = form.category === 'AUTHENTICATION';
   const variables = auth ? [] : bodyVariables(form.body);
 
@@ -51,7 +53,7 @@ export function TemplateBuilder({ channel, listHref }: TemplateBuilderProps) {
       <form
         className="form"
         noValidate
-        aria-label="New WhatsApp template"
+        aria-label="New message template"
         onSubmit={(e) => {
           e.preventDefault();
           submit();
@@ -121,7 +123,7 @@ export function TemplateBuilder({ channel, listHref }: TemplateBuilderProps) {
 
         <label className="pass">
           <input type="checkbox" checked={form.allowCategoryChange} onChange={(e) => patch({ allowCategoryChange: e.target.checked })} />
-          let WhatsApp re-categorize it instead of rejecting it
+          let {terms.reviewer} re-categorize it instead of rejecting it
         </label>
 
         <Issues items={touched ? state.check.problems : []} tone="err" />
@@ -133,12 +135,14 @@ export function TemplateBuilder({ channel, listHref }: TemplateBuilderProps) {
         ) : null}
         <span className="rowsplit">
           <button type="submit" className="btn accent" disabled={pending}>
-            {pending ? 'Submitting…' : 'Submit for WhatsApp approval'}
+            {pending ? 'Submitting…' : `Submit for ${terms.reviewer} approval`}
           </button>
           <Link className="btn ghost" href={listHref}>
             Cancel
           </Link>
-          <span className="mono-sm">WhatsApp usually reviews within minutes (up to 24 hours) · sent via {channel.name}</span>
+          <span className="mono-sm">
+            {terms.reviewer} usually reviews within minutes (up to 24 hours) · sent via {channel.name}
+          </span>
         </span>
       </form>
       <TemplatePreview rendered={state.preview} caption="Preview with your example values" />

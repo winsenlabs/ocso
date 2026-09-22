@@ -4,6 +4,7 @@ import { NotPermitted } from '@/components/shell/placeholder-page';
 import { AlertBanner } from '@/components/ui/alert-banner';
 import { SecHead } from '@/components/ui/sec-head';
 import { listAlerts } from '@/lib/api/alerts';
+import { listProviderKinds } from '@/lib/api/models';
 import { loadWorkerSettings } from '@/lib/api/system';
 import { loadLatency, loadMcpHealth, loadPrivilegedChanges, loadProviderHealth, loadTelemetryOverview, loadUsage, loadWorkersTelemetry } from '@/lib/api/telemetry';
 import { formatDuration, formatPercent, formatTime } from '@/lib/format';
@@ -26,7 +27,8 @@ export async function SystemOverview() {
   if (!hasPermission(session, Permission.TELEMETRY_TECHNICAL_READ)) return <NotPermitted role={session.roleLabel} />;
   const tz = session.user.deployment.timezone;
   const canAlerts = hasPermission(session, Permission.ALERTS_TECHNICAL_READ);
-  const [overview, latency, usage, workers, providers, mcp, changes, settings, critical] = await Promise.all([
+  const canProviders = hasPermission(session, Permission.PROVIDERS_READ);
+  const [overview, latency, usage, workers, providers, mcp, changes, settings, critical, kinds] = await Promise.all([
     loadTelemetryOverview(),
     loadLatency(60),
     loadUsage(),
@@ -36,6 +38,8 @@ export async function SystemOverview() {
     loadPrivilegedChanges(8),
     loadWorkerSettings().catch(() => null),
     canAlerts ? listAlerts({ status: 'OPEN', kind: 'TECHNICAL', severity: 'CRITICAL', limit: 1 }).then((p) => p.items[0] ?? null) : Promise.resolve(null),
+    // Provider marks come from the provider definitions; without them the grid shows generic marks.
+    canProviders ? listProviderKinds().catch(() => []) : Promise.resolve([]),
   ]);
   const cfg = workers.config;
   const turnAge = overview.queue.turn.oldestAgeSeconds;
@@ -95,7 +99,7 @@ export async function SystemOverview() {
         <WorkerConfig settings={cfg} lastChange={cfg.lastChange} timeZone={tz} scaling={settings?.scaling} canEdit={canConfigure} />
       </div>
 
-      <ProviderHealthGrid providers={providers} manageHref={hasPermission(session, Permission.PROVIDERS_READ) ? '/connections?tab=providers' : null} />
+      <ProviderHealthGrid providers={providers} kinds={kinds} manageHref={canProviders ? '/connections?tab=providers' : null} />
       <McpHealthTable data={mcp} manageHref={hasPermission(session, Permission.MCP_READ) ? '/connections?tab=mcp' : null} />
 
       <div className="row2 sys-bottom">
