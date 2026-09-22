@@ -7,6 +7,8 @@ import type { Inbox, InboxView, Option } from '@/lib/api/conversations';
 import { EPHEMERAL_TYPES, REALTIME_EVENT_TYPES } from '@/lib/realtime/events';
 import { useRealtime } from '@/lib/realtime/use-realtime';
 import { InboxRow } from './inbox-row';
+import { InboxTagFilter } from './inbox-tag-filter';
+import { tagParam } from './lib/tags';
 import { WORKSPACE_CHANGED } from './lib/use-action';
 import { useNow } from './lib/use-now';
 
@@ -43,6 +45,12 @@ export function InboxClient({ defaultView, agents, queues, meId, timeZone }: Inb
   const [term, setTerm] = useState('');
   const [agentId, setAgentId] = useState('');
   const [queueId, setQueueId] = useState('');
+  // `?tag=` (analytics, rail chips) sets the filter; links without it leave the chosen filter alone.
+  const urlTag = tagParam(searchParams.get('tag'));
+  const [tag, setTag] = useState<string | null>(urlTag);
+  useEffect(() => {
+    if (urlTag) setTag(urlTag);
+  }, [urlTag]);
   const [data, setData] = useState<Inbox | null>(null);
   const [error, setError] = useState<string | null>(null);
   const now = useNow(1_000);
@@ -56,6 +64,7 @@ export function InboxClient({ defaultView, agents, queues, meId, timeZone }: Inb
     if (term) params.set('search', term);
     if (agentId) params.set('agentId', agentId);
     if (queueId) params.set('queueId', queueId);
+    if (tag) params.set('tag', tag);
     try {
       const res = await fetch(`/api/conversations?${params.toString()}`, { cache: 'no-store', signal: ctrl.signal });
       const body = (await res.json()) as Inbox | { error?: { message?: string } };
@@ -68,7 +77,7 @@ export function InboxClient({ defaultView, agents, queues, meId, timeZone }: Inb
     } catch (err) {
       if ((err as Error).name !== 'AbortError') setError('Could not reach OCSO. Retrying when the connection returns.');
     }
-  }, [view, term, agentId, queueId]);
+  }, [view, term, agentId, queueId, tag]);
 
   useEffect(() => {
     void load();
@@ -103,16 +112,30 @@ export function InboxClient({ defaultView, agents, queues, meId, timeZone }: Inb
 
   const live = useRealtime({ types: INBOX_EVENTS, onEvent: scheduleLoad, onReconnect: scheduleLoad });
 
-  const chooseView = (next: InboxView) => {
-    setView(next);
+  const replaceParams = (edit: (params: URLSearchParams) => void) => {
     const params = new URLSearchParams(searchParams.toString());
-    if (next === defaultView) params.delete('view');
-    else params.set('view', next);
+    edit(params);
     const qs = params.toString();
     window.history.replaceState(null, '', qs ? `${pathname}?${qs}` : pathname);
   };
 
-  const hrefFor = (id: string) => `/conversations/${id}${view === defaultView ? '' : `?view=${view}`}`;
+  const chooseView = (next: InboxView) => {
+    setView(next);
+    replaceParams((params) => (next === defaultView ? params.delete('view') : params.set('view', next)));
+  };
+
+  const chooseTag = (next: string | null) => {
+    setTag(next);
+    replaceParams((params) => (next ? params.set('tag', next) : params.delete('tag')));
+  };
+
+  const hrefFor = (id: string) => {
+    const params = new URLSearchParams();
+    if (view !== defaultView) params.set('view', view);
+    if (tag) params.set('tag', tag);
+    const qs = params.toString();
+    return `/conversations/${id}${qs ? `?${qs}` : ''}`;
+  };
   const counts = data?.counts;
   const items = data?.items ?? [];
   const viewLabel = VIEWS.find((v) => v.key === view)?.label ?? view;
@@ -164,6 +187,7 @@ export function InboxClient({ defaultView, agents, queues, meId, timeZone }: Inb
             ))}
           </select>
         ) : null}
+        <InboxTagFilter tag={tag} onChange={chooseTag} />
       </div>
       <div className="list" aria-busy={data === null && !error ? true : undefined}>
         {error ? (
@@ -174,15 +198,16 @@ export function InboxClient({ defaultView, agents, queues, meId, timeZone }: Inb
         {data === null && !error ? <InboxSkeletonRows /> : null}
         {data !== null && items.length === 0 ? (
           <div style={{ padding: 12 }}>
-            <InboxEmpty view={view} term={term} waiting={counts?.waiting ?? 0} onShowWaiting={() => chooseView('waiting')} />
+            <InboxEmpty view={view} term={term} tag={tag} waiting={counts?.waiting ?? 0} onShowWaiting={() => chooseView('waiting')} onClearTag={() => chooseTag(null)} />
           </div>
         ) : null}
         {items.map((item) => (
-          <InboxRow key={item.id} item={item} href={hrefFor(item.id)} selected={item.id === selectedId} meId={meId} timeZone={timeZone} now={now} />
+          <InboxRow key={item.id} item={item} href={hrefFor(item.id)} selected={item.id === selectedId} meId={meId} timeZone={timeZone} now={now} activeTag={tag} />
         ))}
         {items.length > 0 && counts ? (
           <div className="stream-foot">
             {items.length} of {counts[view].toLocaleString('en')} · {viewLabel.toLowerCase()}
+            {tag ? ` · tagged ${tag}` : ''}
           </div>
         ) : null}
       </div>
@@ -190,7 +215,22 @@ export function InboxClient({ defaultView, agents, queues, meId, timeZone }: Inb
   );
 }
 
-function InboxEmpty({ view, term, waiting, onShowWaiting }: { view: InboxView; term: string; waiting: number; onShowWaiting: () => void }) {
+function InboxEmpty({ view, term, tag, waiting, onShowWaiting, onClearTag }: { view: InboxView; term: string; tag: string | null; waiting: number; onShowWaiting: () => void; onClearTag: () => void }) {
+  if (tag && !term) {
+    return (
+      <EmptyState
+        size="sm"
+        title={`No conversations tagged “${tag}” here`}
+        actions={
+          <button type="button" className="btn tiny" onClick={onClearTag}>
+            Clear tag filter
+          </button>
+        }
+      >
+        Try another view, or clear the tag filter.
+      </EmptyState>
+    );
+  }
   if (term) return <EmptyState size="sm" title={`No conversations match “${term}”`}>Search looks at customer names, identities, message previews and conversation ids.</EmptyState>;
   if (view === 'mine') {
     return (

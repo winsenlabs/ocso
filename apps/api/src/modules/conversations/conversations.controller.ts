@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Inject, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Param, Post, Put, Query } from '@nestjs/common';
 import { Permission, type Principal } from '@ocso/auth';
 import {
   HumanControlService,
@@ -8,11 +8,15 @@ import {
   NoteInput,
   ResolveInput,
   ReturnToAiInput,
+  SetTagsInput,
+  TagSuggestionQuery,
   TransferInput,
   addNote,
   loadConversationDetail,
   loadTimeline,
   sendHumanReply,
+  setConversationTags,
+  tagSuggestions,
   type ActorContext,
 } from '@ocso/application';
 import { notFound } from '@ocso/domain';
@@ -47,6 +51,13 @@ export class ConversationsController {
   @RequirePermission(Permission.CONVERSATIONS_READ)
   async list(@CurrentPrincipal() principal: Principal, @Query({ schema: InboxQuery }) q: InboxQuery) {
     return this.inbox.list(principal, await this.access.policy(), q);
+  }
+
+  /** Most used tags on conversations the caller can see (autocomplete). Declared before `:id`. */
+  @Get('tags')
+  @RequirePermission(Permission.CONVERSATIONS_READ)
+  async tags(@CurrentPrincipal() principal: Principal, @Query({ schema: TagSuggestionQuery }) q: TagSuggestionQuery) {
+    return tagSuggestions(this.db, principal, await this.access.policy(), q);
   }
 
   @Get(':id')
@@ -141,6 +152,14 @@ export class ConversationsController {
   async note(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Body({ schema: NoteInput }) body: NoteInput) {
     await this.access.assert(actor.principal!, id);
     return addNote(this.db, actor, id, body);
+  }
+
+  /** Replace the tag set (normalized, de-duplicated, ≤ 20); returns what was stored. */
+  @Put(':id/tags')
+  @RequirePermission(Permission.CONVERSATIONS_NOTE)
+  async setTags(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Body({ schema: SetTagsInput }) body: SetTagsInput) {
+    await this.access.assert(actor.principal!, id);
+    return setConversationTags(this.db, actor, id, body);
   }
 
   @Post(':id/messages')

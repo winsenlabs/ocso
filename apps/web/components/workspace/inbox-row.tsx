@@ -7,6 +7,7 @@ import { formatDateTime, formatTime } from '@/lib/format';
 import { channelCode } from './lib/channel';
 import { controlLabel, customerDisplayName } from './lib/labels';
 import { pickupSla, slaLabel } from './lib/sla';
+import { RowTags } from './row-tags';
 
 export interface InboxRowProps {
   item: ConversationSummary;
@@ -15,6 +16,8 @@ export interface InboxRowProps {
   meId: string;
   timeZone: string;
   now: number;
+  /** The inbox tag filter, highlighted on the row. */
+  activeTag?: string | null;
 }
 
 function when(iso: string, timeZone: string, now: number): string {
@@ -25,7 +28,7 @@ function when(iso: string, timeZone: string, now: number): string {
 const PRIO: Readonly<Record<string, string>> = { P1: 'p1', P2: 'p2' };
 
 /** One inbox row (design/01 .crow). */
-export function InboxRow({ item, href, selected, meId, timeZone, now }: InboxRowProps) {
+export function InboxRow({ item, href, selected, meId, timeZone, now, activeTag = null }: InboxRowProps) {
   const code = channelCode(item.channel.kind);
   const kind = controlStateKind(item.controlState);
   const sla = pickupSla(item.controlState, item.waitingSince, item.slaDueAt, now);
@@ -52,6 +55,7 @@ export function InboxRow({ item, href, selected, meId, timeZone, now }: InboxRow
           ) : null}
         </span>
         <span className="sn">{item.lastPreview ?? item.handoff?.reason ?? 'No messages yet'}</span>
+        <RowTags tags={item.tags} activeTag={activeTag} />
         <span className="l3">
           <ControlState state={kind}>{controlLabel(item, meId)}</ControlState>
           {sla ? (

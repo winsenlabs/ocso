@@ -4,7 +4,9 @@ import { useState } from 'react';
 import { Modal } from '@/components/ui/modal';
 import { resolveAction, returnToAiAction, transferAction } from '@/lib/actions/conversations';
 import type { Option } from '@/lib/api/conversations';
+import { withTag } from './lib/tags';
 import { useActionRunner } from './lib/use-action';
+import { TagInput } from './tag-input';
 
 interface DialogProps {
   conversationId: string;
@@ -57,16 +59,25 @@ export function ReturnToAiDialog({ conversationId, agentName, passedNotes, onClo
   );
 }
 
-export function ResolveDialog({ conversationId, onClose }: DialogProps) {
+/** Resolve with an optional disposition and tags added to the conversation's tags. */
+export function ResolveDialog({ conversationId, currentTags, onClose }: DialogProps & { currentTags: readonly string[] }) {
   const [disposition, setDisposition] = useState('');
+  const [added, setAdded] = useState<string[]>([]);
   const { pending, error, run } = useActionRunner();
+  const addTag = (raw: string) => {
+    const edit = withTag([...currentTags, ...added], raw);
+    if (!edit.ok) return edit.message;
+    const tag = edit.tags[edit.tags.length - 1];
+    if (edit.changed && tag) setAdded((a) => [...a, tag]);
+    return null;
+  };
   return (
     <Modal title="Resolve conversation" onClose={onClose} footer={<Footer pending={pending} label="Resolve" onCancel={onClose} />} maxWidth={480}>
       <form
         id="ws-dialog-form"
         onSubmit={(e) => {
           e.preventDefault();
-          void run(() => resolveAction(conversationId, disposition)).then((ok) => ok && onClose());
+          void run(() => resolveAction(conversationId, disposition, added)).then((ok) => ok && onClose());
         }}
         style={{ display: 'grid', gap: 12 }}
       >
@@ -74,6 +85,28 @@ export function ResolveDialog({ conversationId, onClose }: DialogProps) {
           <label htmlFor="ws-disposition">Disposition (optional)</label>
           <input id="ws-disposition" value={disposition} maxLength={200} onChange={(e) => setDisposition(e.target.value)} placeholder="e.g. duplicate debit reversed" data-autofocus />
           <span className="hint">recorded on the conversation and in the audit log</span>
+        </div>
+        <div className="fld">
+          <label htmlFor="ws-resolve-tags">Tags (optional)</label>
+          {currentTags.length + added.length > 0 ? (
+            <div className="tag-row" role="group" aria-label="Tags after resolving">
+              {currentTags.map((t) => (
+                <span className="chip" key={t} title="already on the conversation">
+                  {t}
+                </span>
+              ))}
+              {added.map((t) => (
+                <span className="chip accent tagchip" key={t}>
+                  {t}
+                  <button type="button" aria-label={`Remove tag ${t}`} onClick={() => setAdded((a) => a.filter((x) => x !== t))}>
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          ) : null}
+          <TagInput id="ws-resolve-tags" label="Add tag on resolve" present={[...currentTags, ...added]} onAdd={addTag} placeholder="add a tag, then Enter" inline />
+          <span className="hint">added to the conversation’s tags when it resolves</span>
         </div>
         {error ? (
           <span role="alert" style={{ color: 'var(--danger)', fontSize: 12 }}>

@@ -5,6 +5,8 @@ import { RiskBadge } from '@/components/ui/risk-badge';
 import type { ConversationDetail, ConversationTools, CustomerProfile, TimelineItem } from '@/lib/api/conversations';
 import { formatDateTime, formatTime, initials } from '@/lib/format';
 import { riskOf } from './lib/timeline';
+import type { ConversationTags } from './lib/use-conversation-tags';
+import { TagsCard } from './tag-editor';
 
 export interface CustomerRailProps {
   detail: ConversationDetail;
@@ -13,12 +15,14 @@ export interface CustomerRailProps {
   tools: ConversationTools;
   meId: string;
   timeZone: string;
+  tags: ConversationTags;
+  canTag: boolean;
 }
 
 const MODE: Readonly<Record<string, string>> = { OPEN_PICKUP: 'Open pickup', AUTO_ASSIGN: 'Auto-assign' };
 
 /** Context rail (design/01 right): only what the API returns about this customer and conversation. */
-export function CustomerRail({ detail, customer, timeline, tools, meId, timeZone }: CustomerRailProps) {
+export function CustomerRail({ detail, customer, timeline, tools, meId, timeZone, tags, canTag }: CustomerRailProps) {
   const name = detail.customer.name ?? customer?.displayName ?? detail.customer.identities[0]?.value ?? 'Unknown customer';
   const identities = customer?.identities.map((i) => ({ kind: i.kind, value: i.display ?? '', verified: i.verified })) ?? detail.customer.identities.map((i) => ({ ...i, verified: false }));
   const facts = Object.entries(customer?.attributes ?? detail.customer.attributes).filter(([, v]) => v !== null && typeof v !== 'object');
@@ -135,18 +139,7 @@ export function CustomerRail({ detail, customer, timeline, tools, meId, timeZone
         </section>
       ) : null}
 
-      {detail.tags.length ? (
-        <section className="rcard" aria-label="Tags">
-          <h3>Tags</h3>
-          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-            {detail.tags.map((t) => (
-              <span className="chip" key={t}>
-                {t}
-              </span>
-            ))}
-          </div>
-        </section>
-      ) : null}
+      <TagsCard state={tags} canEdit={canTag} />
     </aside>
   );
 }

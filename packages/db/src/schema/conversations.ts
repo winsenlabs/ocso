@@ -58,6 +58,8 @@ export const conversations = pgTable(
     index('conversations_resolution_due_idx').on(t.resolutionDueAt).where(sql`${t.controlState} <> 'RESOLVED' AND ${t.resolutionDueAt} IS NOT NULL`),
     index('conversations_agent_idx').on(t.agentId, t.openedAt),
     index('conversations_recent_idx').on(t.lastInteractionAt),
+    // Inbox tag filter (`tags @> ARRAY[tag]`) and tag autocomplete.
+    index('conversations_tags_idx').using('gin', t.tags),
     // At most one open conversation per customer, channel and agent.
     uniqueIndex('conversations_open_uq')
       .on(t.customerId, t.channelId, t.agentId)

@@ -11,8 +11,8 @@ import { login, logout } from './helpers';
  * CS workspace (design/01) end to end against the real API + worker:
  * seeded through the API (setup → lead/exec → scripted model → agent → web
  * chat → queue), a customer talks to the AI over the public web-chat API and
- * asks for a human; the exec claims, replies, notes, returns to AI and
- * resolves in the browser. A second story confirms a sensitive action the AI
+ * asks for a human; the exec claims, replies, notes, tags (and filters the
+ * inbox by tag), returns to AI and resolves in the browser. A second story confirms a sensitive action the AI
  * proposed through an MCP tool (examples/mcp-bank-demo, auth none).
  */
 test.describe.configure({ mode: 'serial' });
@@ -159,6 +159,57 @@ test('an internal note stays internal', async ({ page }) => {
   expect(await historyText(ids.visitor)).not.toContain('Duplicate terminal auth');
 });
 
+test('the exec tags the conversation, filters the inbox by a tag and removes one', async ({ page }) => {
+  const apiTags = async () => (await call<{ tags: string[] }>('GET', `/v1/conversations/${ids.conversation}`, tok.exec)).tags;
+  await login(page, EXEC);
+  await page.goto(`/conversations/${ids.conversation}`);
+  const card = page.getByRole('region', { name: 'Tags' });
+  await expect(card).toContainText('No tags yet.');
+
+  // Add three tags: normalized on the chip at once, then reconciled with what the API stored.
+  await card.getByRole('button', { name: '+ tag' }).click();
+  const input = card.getByRole('combobox', { name: 'Add tag' });
+  for (const raw of ['  Duplicate   Debit ', 'EMI', 'merchant-terminal']) {
+    await input.fill(raw);
+    await input.press('Enter');
+  }
+  await expect(card.locator('.tagchip a')).toHaveText(['duplicate debit', 'emi', 'merchant-terminal']);
+  await expect.poll(apiTags).toEqual(['duplicate debit', 'emi', 'merchant-terminal']);
+  await input.fill('bad!tag');
+  await input.press('Enter');
+  await expect(card.getByRole('alert')).toContainText('1–40 characters');
+  await input.press('Escape');
+  await input.press('Escape');
+  await expect(card.getByRole('button', { name: '+ tag' })).toBeVisible();
+  const row = page.locator(`a.crow[data-conversation-id="${ids.conversation}"]`);
+  await expect(row.locator('.rtags')).toContainText('duplicate debit');
+
+  // Inbox tag filter with autocomplete from the tags in use.
+  const filters = page.getByRole('group', { name: 'Views' });
+  await filters.getByRole('button', { name: '+ tag' }).click();
+  await filters.getByRole('combobox', { name: 'Filter by tag' }).fill('mer');
+  await page.getByRole('option', { name: /^merchant-terminal/ }).click();
+  await expect(filters.getByRole('button', { name: /Tag filter merchant-terminal/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page).toHaveURL(/tag=merchant-terminal/);
+  await expect(row).toBeVisible();
+  await expect(row.locator('.rtags .chip.accent')).toHaveText('merchant-terminal');
+
+  // ?tag= in the URL is honoured; a tag nobody uses shows an empty state that clears the filter.
+  await page.goto(`/conversations/${ids.conversation}?tag=VIP`);
+  await expect(filters.getByRole('button', { name: /Tag filter vip/ })).toBeVisible();
+  await expect(page.getByText('No conversations tagged “vip” here')).toBeVisible();
+  await page.getByRole('button', { name: 'Clear tag filter' }).click();
+  await expect(row).toBeVisible();
+  await expect(page).not.toHaveURL(/tag=/);
+
+  // Remove a tag from the rail.
+  await card.getByRole('button', { name: 'Remove tag emi' }).click();
+  await expect(card.locator('.tagchip a')).toHaveText(['duplicate debit', 'merchant-terminal']);
+  await expect.poll(apiTags).toEqual(['duplicate debit', 'merchant-terminal']);
+  await page.reload();
+  await expect(card.locator('.tagchip a')).toHaveText(['duplicate debit', 'merchant-terminal']);
+});
+
 test('a new customer message and a proactive copilot draft arrive live', async ({ page }) => {
   await login(page, EXEC);
   await page.goto(`/conversations/${ids.conversation}`);
@@ -209,9 +260,14 @@ test('the exec returns control to the AI, cancels, and resolves', async ({ page 
   await page.locator('.takeover').getByRole('button', { name: 'Resolve' }).click();
   const resolve = page.getByRole('dialog', { name: 'Resolve conversation' });
   await resolve.getByLabel(/Disposition/).fill('duplicate debit reversed');
+  const resolveTag = resolve.getByRole('combobox', { name: 'Add tag on resolve' });
+  await resolveTag.fill('Reversal Done');
+  await resolveTag.press('Enter');
+  await expect(resolve.getByRole('group', { name: 'Tags after resolving' })).toContainText('reversal done');
   await resolve.getByRole('button', { name: 'Resolve' }).click();
   await expect(page.locator('.takeover.resolved')).toContainText('Resolved by Esha Exec · duplicate debit reversed');
   await expect(page.locator('.locked').getByRole('button', { name: 'Reopen' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Tags' }).locator('.tagchip a')).toHaveText(['duplicate debit', 'merchant-terminal', 'reversal done']);
   await waitForState(ids.conversation, 'RESOLVED');
   await page.getByRole('button', { name: /^Resolved/ }).click();
   await expect(page.locator(`a.crow[data-conversation-id="${ids.conversation}"]`)).toContainText('Resolved');

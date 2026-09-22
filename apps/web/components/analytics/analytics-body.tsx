@@ -32,6 +32,7 @@ function notesFor(o: Overview, c: AgentComparison, q: QueueAnalytics) {
     ['reopenRate', o.reopenRate.definition],
     ['costPerConversation', o.costPerConversation.definition],
     ['failureTopics', o.failureTopics.definition],
+    ...(o.tags.definition ? ([['tags', o.tags.definition]] as const) : []),
     ['knowledgeGaps', o.knowledgeGaps.definition],
     ...Object.entries(c.definitions).map(([k, d]) => [`agents.${k}`, d] as const),
     ...Object.entries(q.definitions).map(([k, d]) => [`queues.${k}`, d] as const),

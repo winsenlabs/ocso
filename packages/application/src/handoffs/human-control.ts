@@ -6,13 +6,18 @@ import { z } from 'zod';
 import { emitEvent } from '../events/outbox.js';
 import type { ActorContext } from '../shared/context.js';
 import { applyControl, lockConversation } from '../conversations/control.js';
+import { TagListSchema, writeConversationTags } from '../conversations/tags.js';
 import { endOpenAssignment, resolutionDueFor, loadQueue } from './routing.js';
 import { offerToNextExec, openHandoff } from './request.js';
 
 export const ReturnToAiInput = z.object({
   handoverSummary: z.string().trim().min(1).max(4_000),
 });
-export const ResolveInput = z.object({ disposition: z.string().trim().max(200).optional() });
+export const ResolveInput = z.object({
+  disposition: z.string().trim().max(200).optional(),
+  /** Tags added to the conversation's existing tags on resolve (same rules as PUT …/tags). */
+  tags: TagListSchema.optional(),
+});
 export const TransferInput = z.object({ queueId: z.uuid().optional(), userId: z.uuid().optional() }).refine((v) => v.queueId || v.userId, 'queueId or userId required');
 
 const nameOf = (actor: ActorContext) => actor.principal?.displayName ?? 'system';
@@ -212,6 +217,8 @@ export class HumanControlService {
       await endOpenAssignment(tx, conversationId, 'resolved', now);
       const handoff = await openHandoff(tx, conversationId);
       if (handoff) await tx.update(handoffs).set({ status: 'RESOLVED', resolvedAt: now }).where(eq(handoffs.id, handoff.id));
+      const tags = input.tags ? TagListSchema.parse(input.tags) : [];
+      if (tags.length) await writeConversationTags(tx, actor, conversationId, (current) => [...new Set([...current, ...tags])], now);
       await emitEvent(tx, actor, 'conversation.resolved', { disposition: input.disposition ?? null, resolvedBy: actor.principal!.userId }, { conversationId });
     });
   }

@@ -42,3 +42,4 @@ export * from './audit/audit-query.js';
 export * from './webhooks/index.js';
 export * from './scaling/index.js';
 export * from './retention/index.js';
+export * from './conversations/tags.js';

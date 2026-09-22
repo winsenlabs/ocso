@@ -5,6 +5,7 @@ export * from './conversation-kpis.js';
 export * from './agent-side-metrics.js';
 export * from './daily-series.js';
 export * from './escalation-reasons.js';
+export * from './conversation-tags.js';
 export * from './insight-topics.js';
 export * from './channel-and-handling.js';
 export * from './quality-signals.js';

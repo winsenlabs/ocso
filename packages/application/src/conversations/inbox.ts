@@ -1,10 +1,11 @@
-import { and, desc, eq, ilike, inArray, ne, or, sql, type SQL } from 'drizzle-orm';
+import { and, arrayContains, desc, eq, ilike, inArray, ne, or, sql, type SQL } from 'drizzle-orm';
 import type { Principal } from '@ocso/auth';
 import { displayId } from '@ocso/domain';
 import { channels, conversations, customerIdentities, customers, handoffs, queues, users, virtualAgents, type Db } from '@ocso/db';
 import { z } from 'zod';
 import { conversationScope, type VisibilityPolicy } from './access.js';
 import { maskIdentity } from './masking.js';
+import { TagSchema } from './tags.js';
 
 export const INBOX_VIEWS = ['all', 'mine', 'waiting', 'ai', 'human', 'priority', 'resolved'] as const;
 export type InboxView = (typeof INBOX_VIEWS)[number];
@@ -14,6 +15,8 @@ export const InboxQuery = z.object({
   agentId: z.uuid().optional(),
   queueId: z.uuid().optional(),
   search: z.string().trim().max(200).optional(),
+  /** Only conversations carrying this tag (normalized like stored tags; GIN index conversations_tags_idx). */
+  tag: TagSchema.optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
   before: z.iso.datetime().optional(),
 });
@@ -79,6 +82,7 @@ export class InboxService {
       scope ?? undefined,
       q.agentId ? eq(conversations.agentId, q.agentId) : undefined,
       q.queueId ? eq(conversations.queueId, q.queueId) : undefined,
+      q.tag ? arrayContains(conversations.tags, [q.tag]) : undefined,
     ].filter(Boolean) as SQL[];
     const searchFilter = q.search ? this.searchPredicate(q.search) : undefined;
     const beforeFilter = q.before ? sql`${conversations.lastInteractionAt} < ${new Date(q.before)}` : undefined;

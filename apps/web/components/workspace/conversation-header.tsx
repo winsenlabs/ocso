@@ -4,17 +4,21 @@ import type { ConversationDetail } from '@/lib/api/conversations';
 import { formatTime, initials } from '@/lib/format';
 import { controlLabel } from './lib/labels';
 import { channelLabel } from './lib/channel';
+import type { ConversationTags } from './lib/use-conversation-tags';
+import { TagEditor } from './tag-editor';
 
 export interface ConversationHeaderProps {
   detail: ConversationDetail;
   externalRef: string | null;
   meId: string;
   timeZone: string;
+  tags: ConversationTags;
+  canTag: boolean;
   onTransfer: (() => void) | null;
 }
 
 /** Conversation header (design/01 .chead): who, where, who is in control. */
-export function ConversationHeader({ detail, externalRef, meId, timeZone, onTransfer }: ConversationHeaderProps) {
+export function ConversationHeader({ detail, externalRef, meId, timeZone, tags, canTag, onTransfer }: ConversationHeaderProps) {
   const name = detail.customer.name ?? detail.customer.identities[0]?.value ?? 'Unknown customer';
   const identity = detail.customer.identities[0]?.value;
   const meta = [
@@ -42,6 +46,10 @@ export function ConversationHeader({ detail, externalRef, meId, timeZone, onTran
         </span>
       </div>
       <span className="sp" style={{ flex: 1 }} />
+      {/* The rail's Tags card is hidden on narrow screens (workspace.css); the header carries the chips there. */}
+      <div className="ctags" role="group" aria-label="Conversation tags">
+        <TagEditor state={tags} canEdit={canTag} place="header" />
+      </div>
       <ControlState state={controlStateKind(detail.controlState)}>{label}</ControlState>
       {onTransfer ? (
         <button type="button" className="btn tiny ghost" onClick={onTransfer}>

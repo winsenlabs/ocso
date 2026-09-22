@@ -10,6 +10,7 @@ import { conversationKpis, type ConversationKpis } from './conversation-kpis.js'
 import { containmentSeries, promptVersionMarkers, type DailyPoint, type PromptVersionMarker } from './daily-series.js';
 import { DEFINITIONS } from './definitions.js';
 import { escalationReasons, type EscalationReason } from './escalation-reasons.js';
+import { topTags, type TagCountRow } from './conversation-tags.js';
 import { insightMix, knowledgeGaps, salesOutcomes, topInsightLabels, type InsightMix, type KnowledgeGap, type LabelCount, type SalesOutcomeRow } from './insight-topics.js';
 import { correctionOpportunities, reviewedConversations, type CorrectionOpportunity, type ReviewedConversation } from './quality-signals.js';
 import { previousWindow, ratio, windowOf } from './values.js';
@@ -42,6 +43,7 @@ export interface AgentAnalytics {
   };
   series: { days: number; points: DailyPoint[]; promptVersions: PromptVersionMarker[]; definition: string };
   escalationReasons: { total: number; reasons: EscalationReason[]; definition: string };
+  tags: { tagged: number; items: TagCountRow[]; definition: string };
   failureTopics: { items: LabelCount[]; definition: string };
   topics: { items: LabelCount[]; definition: string };
   knowledgeGaps: { items: KnowledgeGap[]; newCount: number; definition: string };
@@ -87,7 +89,7 @@ export class AgentAnalyticsService {
     const k = kpis.total;
     const p = prevKpis.total;
     const seriesStart = new Date(now.getTime() - SERIES_DAYS * 86_400_000);
-    const [points, markers, reasons, failures, topics, gaps, mix, corrections, reviews, channels, handling, sales] = await Promise.all([
+    const [points, markers, reasons, failures, topics, gaps, mix, corrections, reviews, channels, handling, sales, tags] = await Promise.all([
       containmentSeries(this.db, agentId, SERIES_DAYS, now, timezone),
       promptVersionMarkers(this.db, agentId, seriesStart, now),
       escalationReasons(this.db, w),
@@ -100,6 +102,7 @@ export class AgentAnalyticsService {
       channelBreakdown(this.db, w),
       handlingTime(this.db, w),
       !agent || agent.conversationType === 'SALES' ? salesOutcomes(this.db, w) : Promise.resolve(null),
+      topTags(this.db, w),
     ]);
     return {
       agent,
@@ -116,6 +119,7 @@ export class AgentAnalyticsService {
       },
       series: { days: SERIES_DAYS, points, promptVersions: markers, definition: `${DEFINITIONS.containment} ${DEFINITIONS.escalation}` },
       escalationReasons: { ...reasons, definition: DEFINITIONS.escalationReasons },
+      tags: { ...tags, definition: DEFINITIONS.tags },
       failureTopics: { items: failures, definition: DEFINITIONS.insightTopics },
       topics: { items: topics, definition: DEFINITIONS.insightTopics },
       knowledgeGaps: { items: gaps, newCount: gaps.filter((g) => g.isNew).length, definition: DEFINITIONS.knowledgeGapNew },

@@ -30,6 +30,7 @@ export const DEFINITIONS = {
   insightTopics:
     'conversation_insights rows of cohort conversations (classifier output with method_version) grouped by case/whitespace-normalized label. Only analyzed conversations are counted (see coverage).',
   knowledgeGapNew: 'A knowledge gap is new when its normalized label was first seen (min generated_at over all insights of the scope) inside the window.',
+  tags: 'Cohort conversations carrying each tag, as the tags are now (staff set them in the workspace or on resolve); a conversation with several tags counts once per tag. tagged = cohort conversations with at least one tag.',
   corrections: 'prompt_corrections with status OPEN or STAGED, most frequently observed first.',
   insightCandidates: 'Failure topics seen at least 3 times in the window: candidates for a prompt correction.',
   queueAvgWait:

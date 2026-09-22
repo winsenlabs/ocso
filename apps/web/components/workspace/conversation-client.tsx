@@ -14,6 +14,7 @@ import { ConversationHeader } from './conversation-header';
 import { CustomerRail } from './customer-rail';
 import { channelLabel } from './lib/channel';
 import { controlView, type ControlView } from './lib/control';
+import { useConversationTags } from './lib/use-conversation-tags';
 import { useActionRunner } from './lib/use-action';
 import { useNow } from './lib/use-now';
 import { TimelinePane, type StreamingTurn } from './timeline-pane';
@@ -52,6 +53,8 @@ export function ConversationClient(props: ConversationClientProps) {
   const [dialog, setDialog] = useState<DialogKind | null>(null);
   const [stream, setStream] = useState<(StreamingTurn & { done: boolean }) | null>(null);
   const [agentStatus, setAgentStatus] = useState<string | null>(null);
+  const tags = useConversationTags(detail.id, detail.tags);
+  const canTag = perms.has(Permission.CONVERSATIONS_NOTE);
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refresh = useCallback(() => {
@@ -113,7 +116,15 @@ export function ConversationClient(props: ConversationClientProps) {
   return (
     <>
       <section className="center" aria-label="Conversation">
-        <ConversationHeader detail={detail} externalRef={props.customer?.externalRef ?? null} meId={me.id} timeZone={timeZone} onTransfer={canTransfer ? () => setDialog('transfer') : null} />
+        <ConversationHeader
+          detail={detail}
+          externalRef={props.customer?.externalRef ?? null}
+          meId={me.id}
+          timeZone={timeZone}
+          tags={tags}
+          canTag={canTag}
+          onTransfer={canTransfer ? () => setDialog('transfer') : null}
+        />
         <ControlBanner detail={detail} view={view} now={now} timeZone={timeZone} customerTurns={customerTurns} passedNotes={passedNotes} onDialog={setDialog} />
         <TimelinePane
           items={timeline}
@@ -139,10 +150,10 @@ export function ConversationClient(props: ConversationClientProps) {
           <Locked detail={detail} view={view} live={live} />
         )}
       </section>
-      <CustomerRail detail={detail} customer={props.customer} timeline={timeline} tools={props.tools} meId={me.id} timeZone={timeZone} />
+      <CustomerRail detail={detail} customer={props.customer} timeline={timeline} tools={props.tools} meId={me.id} timeZone={timeZone} tags={tags} canTag={canTag} />
 
       {dialog === 'return' ? <ReturnToAiDialog conversationId={detail.id} agentName={detail.agent.name} passedNotes={passedNotes} onClose={() => setDialog(null)} /> : null}
-      {dialog === 'resolve' ? <ResolveDialog conversationId={detail.id} onClose={() => setDialog(null)} /> : null}
+      {dialog === 'resolve' ? <ResolveDialog conversationId={detail.id} currentTags={tags.tags} onClose={() => setDialog(null)} /> : null}
       {dialog === 'transfer' ? (
         <TransferDialog conversationId={detail.id} queues={props.transferQueues} users={props.transferUsers} currentQueueId={detail.queue?.id ?? null} onClose={() => setDialog(null)} />
       ) : null}

@@ -23,6 +23,7 @@ import {
   shortDay,
 } from './metrics';
 import { Fn, MetricTile } from './parts';
+import { TopTags } from './top-tags';
 
 type Refs = Record<string, number>;
 
@@ -134,7 +135,7 @@ export function OverviewCharts({ overview, days, refs }: { overview: Overview; d
   );
 }
 
-/** Channels, handling time, resolution/reopen/cost and classifier topics (design/02 Analytics tab). */
+/** Channels, handling time, resolution/reopen/cost, classifier topics and top tags (design/02 Analytics tab). */
 export function OverviewCards({ overview: o, refs, aside }: { overview: Overview; refs: Refs; aside?: ReactNode }) {
   const buckets = o.handlingTime.buckets;
   const bucketMax = Math.max(0, ...buckets.map((b) => b.total));
@@ -210,11 +211,14 @@ export function OverviewCards({ overview: o, refs, aside }: { overview: Overview
           )}
         </ChartCard>
       </div>
-      {o.failureTopics.items.length ? (
-        <ChartCard title="Common failure topics" meta={<Fn n={refs['failureTopics']} />}>
-          <HBarChart label="Common failure topics" columns="minmax(90px,1fr) minmax(0,1.6fr) 44px" rows={o.failureTopics.items.slice(0, 6).map((f) => ({ label: f.label, share: share(f.count, failMax), display: formatNumber(f.count), tone: 'w' }))} />
-        </ChartCard>
-      ) : null}
+      <div className={o.failureTopics.items.length ? 'g g2' : undefined} style={{ marginBottom: 14 }}>
+        {o.failureTopics.items.length ? (
+          <ChartCard title="Common failure topics" meta={<Fn n={refs['failureTopics']} />}>
+            <HBarChart label="Common failure topics" columns="minmax(90px,1fr) minmax(0,1.6fr) 44px" rows={o.failureTopics.items.slice(0, 6).map((f) => ({ label: f.label, share: share(f.count, failMax), display: formatNumber(f.count), tone: 'w' }))} />
+          </ChartCard>
+        ) : null}
+        <TopTags tags={o.tags} conversations={o.tiles.conversations.value} refs={refs} />
+      </div>
     </>
   );
 }

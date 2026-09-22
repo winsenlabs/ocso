@@ -41,6 +41,8 @@ export const OverviewSchema = z.object({
     definition: z.string(),
   }),
   failureTopics: z.object({ items: z.array(LabelCount), definition: z.string() }),
+  /** Top staff tags on cohort conversations (older APIs omit it → empty). */
+  tags: z.object({ tagged: z.number(), items: z.array(z.object({ tag: z.string(), count: z.number() })), definition: z.string() }).default({ tagged: 0, items: [], definition: '' }),
   knowledgeGaps: z.object({ items: z.array(LabelCount.extend({ isNew: z.boolean() })), newCount: z.number(), definition: z.string() }),
   channels: z.object({
     items: z.array(z.object({ channelId: z.string().nullable(), kind: z.string().nullable(), name: z.string().nullable(), conversations: z.number(), containmentRate: n, csat: n, csatResponses: z.number() })),

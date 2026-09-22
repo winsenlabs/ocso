@@ -2,6 +2,7 @@
 
 import { refresh } from 'next/cache';
 import { z } from 'zod';
+import { MAX_TAGS, TAG_PATTERN, TAG_RULE, normalizeTag } from '@/components/workspace/lib/tags';
 import { api } from '../api/client';
 import { CopilotSuggestionSchema, type CopilotSuggestion } from '../api/conversations';
 import { ApiError, describeApiError } from '../api/errors';
@@ -53,14 +54,34 @@ export async function returnToAiAction(conversationId: string, handoverSummary: 
   return run(() => api.command('POST', `${path(conversationId)}/return-to-ai`, parsed.data));
 }
 
-const ResolveInput = z.object({ disposition: z.string().trim().max(200, 'At most 200 characters') });
+const Tag = z.string().max(200).transform(normalizeTag).pipe(z.string().regex(TAG_PATTERN, `Tags are ${TAG_RULE}`));
+const Tags = z.array(Tag).max(100).transform((t) => [...new Set(t)]).pipe(z.array(z.string()).max(MAX_TAGS, `At most ${MAX_TAGS} tags`));
+const ResolveInput = z.object({ disposition: z.string().trim().max(200, 'At most 200 characters'), tags: Tags });
 
-export async function resolveAction(conversationId: string, disposition: string): Promise<ActionResult> {
-  const parsed = ResolveInput.safeParse({ disposition });
+/** Resolve with an optional disposition; `tags` are added to the conversation's tags in the same transaction. */
+export async function resolveAction(conversationId: string, disposition: string, tags: string[] = []): Promise<ActionResult> {
+  const parsed = ResolveInput.safeParse({ disposition, tags });
   if (!Id.safeParse(conversationId).success) return invalid('Unknown conversation');
   if (!parsed.success) return invalid(parsed.error.issues[0]?.message ?? 'Invalid disposition');
-  const body = parsed.data.disposition ? { disposition: parsed.data.disposition } : {};
+  const body = { ...(parsed.data.disposition ? { disposition: parsed.data.disposition } : {}), ...(parsed.data.tags.length ? { tags: parsed.data.tags } : {}) };
   return run(() => api.command('POST', `${path(conversationId)}/resolve`, body));
+}
+
+export type TagsResult = { ok: true; tags: string[] } | { ok: false; message: string; code?: string };
+
+/** Replace the conversation's tags (PUT …/tags); returns the set the API stored. */
+export async function setTagsAction(conversationId: string, tags: string[]): Promise<TagsResult> {
+  const parsed = Tags.safeParse(tags);
+  if (!Id.safeParse(conversationId).success) return { ok: false, message: 'Unknown conversation', code: 'validation' };
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? 'Invalid tags', code: 'validation' };
+  if (!(await getSession())) return { ok: false, message: 'Your session has ended. Sign in again.', code: 'unauthenticated' };
+  try {
+    const res = await api.put(`${path(conversationId)}/tags`, { tags: parsed.data }, z.object({ tags: z.array(z.string()) }));
+    refresh();
+    return { ok: true, tags: res.tags };
+  } catch (err) {
+    return failure(err);
+  }
 }
 
 const TransferInput = z.object({ queueId: z.uuid().optional(), userId: z.uuid().optional() }).refine((v) => v.queueId || v.userId, 'Choose a queue or a person');

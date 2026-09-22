@@ -47,6 +47,9 @@ export const InboxSchema = z.object({
 });
 export type Inbox = z.infer<typeof InboxSchema>;
 
+export const TagSuggestionsSchema = z.object({ items: z.array(z.object({ tag: z.string(), count: z.number() })) });
+export type TagSuggestions = z.infer<typeof TagSuggestionsSchema>;
+
 export const ConversationDetailSchema = z.object({
   id: z.string(),
   displayId: z.string(),
@@ -211,6 +214,7 @@ export interface InboxQuery {
   search?: string | undefined;
   agentId?: string | undefined;
   queueId?: string | undefined;
+  tag?: string | undefined;
   limit?: number | undefined;
 }
 
@@ -219,7 +223,15 @@ export function loadInbox(q: InboxQuery): Promise<Inbox> {
   if (q.search) params.set('search', q.search);
   if (q.agentId) params.set('agentId', q.agentId);
   if (q.queueId) params.set('queueId', q.queueId);
+  if (q.tag) params.set('tag', q.tag);
   return api.get(`/v1/conversations?${params.toString()}`, InboxSchema);
+}
+
+/** Most used tags on conversations this user can see (autocomplete), optionally by prefix. */
+export function loadTagSuggestions(prefix?: string, limit = 10): Promise<TagSuggestions> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (prefix) params.set('prefix', prefix);
+  return api.get(`/v1/conversations/tags?${params.toString()}`, TagSuggestionsSchema);
 }
 
 export function loadConversation(id: string): Promise<ConversationDetail> {

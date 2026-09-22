@@ -92,6 +92,13 @@
       "when": 1790079710333,
       "tag": "0012_resolution_sla",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790081803843,
+      "tag": "0013_conversation_tags_index",
+      "breakpoints": true
     }
   ]
 }
