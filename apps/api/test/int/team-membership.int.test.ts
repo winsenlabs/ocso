@@ -49,6 +49,16 @@ describe('team membership', () => {
     await h.http().patch(`/v1/users/${ids['exec']}`).set(as('lead')).send({ teamIds: [ids['cards']] }).expect(200);
   });
 
+  it('a lead creates CS Execs only into their own teams', async () => {
+    const exec = (email: string, teamIds: string[]) => ({ email, name: email, role: 'CS_EXEC', password: PASSWORD, teamIds });
+    await h.http().post('/v1/users').set(as('lead2')).send(exec('poacher@ocso.test', [ids['cards']!])).expect(403);
+    await h.http().post('/v1/users').set(as('lead2')).send(exec('poacher@ocso.test', [ids['loans']!, ids['cards']!])).expect(403);
+    const mortgages = (await h.http().post('/v1/teams').set(as('lead2')).send({ name: 'Mortgages' }).expect(201)).body.id as string;
+    const created = await h.http().post('/v1/users').set(as('lead2')).send(exec('mortgages-exec@ocso.test', [mortgages])).expect(201);
+    expect(await members(mortgages)).toContain(created.body.id);
+    expect(await members(ids['cards']!)).not.toContain(created.body.id);
+  });
+
   it('a lead may leave a team, and then no longer manages it; the Tech Admin manages everything', async () => {
     await h.http().delete(`/v1/teams/${ids['cards']}/members/${ids['lead']}`).set(as('lead')).expect(204);
     const lead = await h.loginAs('lead@ocso.test', PASSWORD);

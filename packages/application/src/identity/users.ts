@@ -99,6 +99,8 @@ export class UserService {
     } else if (!this.options.mailer) {
       throw validation('invites_unavailable', 'Invites are not available here: set an initial password');
     }
+    // Same rule as edits: a CS Lead can place a new exec only in teams they belong to.
+    if (input.teamIds.length && !can(actor.principal!, Permission.USERS_MANAGE)) this.assertOwnTeams(actor, [], input.teamIds);
     const id = uuidv7();
     const passwordHash = input.password !== undefined ? await hashPassword(input.password) : null;
     const now = new Date();
