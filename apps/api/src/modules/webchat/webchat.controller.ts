@@ -1,58 +1,84 @@
 import { Body, Controller, Get, Headers, HttpCode, Inject, Param, Post, Query, Req, Sse, SseSignal, type MessageEvent } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { Observable, filter, from, fromEvent, interval, map, merge, mergeMap, of, takeUntil } from 'rxjs';
+import { Observable, fromEvent, interval, map, merge, takeUntil } from 'rxjs';
 import {
   attachmentKeyPrefix,
   isVisitorToken,
   issueVisitorToken,
+  mediaKindForMime,
+  newVisitorId,
+  originAllowed,
   resolveWebChatConfig,
   verifyHostJwt,
   verifyVisitorToken,
-  newVisitorId,
 } from '@ocso/channels';
 import { checkMedia, extensionFor, type BlobStore } from '@ocso/blob';
+import type { ApiEnv } from '@ocso/config';
 import { DomainError, validation } from '@ocso/domain';
 import { z } from 'zod';
 import { Public, type OcsoRequest } from '../../common/decorators.js';
-import { BLOB_STORE } from '../../infrastructure/tokens.js';
+import { BLOB_STORE, ENV } from '../../infrastructure/tokens.js';
 import { ChannelIngressService, toRawRequest } from '../channels/channel-ingress.service.js';
 import { RealtimeHub } from '../realtime/realtime.hub.js';
-import { WebChatIdentityService } from './webchat-identity.service.js';
+import { WebChatIdentityService, type WebChatContext } from './webchat-identity.service.js';
 import { WebChatMessagesService } from './webchat-messages.service.js';
+import { modeOf } from './webchat-notices.js';
+import { visitorStream } from './webchat-stream.js';
 
 const SessionInput = z.object({ visitorToken: z.string().max(2048).optional(), hostToken: z.string().max(4096).optional() });
 type SessionInput = z.infer<typeof SessionInput>;
 const AfterQuery = z.object({ afterSeq: z.coerce.number().int().min(0).default(0) });
 type AfterQuery = z.infer<typeof AfterQuery>;
+/** Declared type for uploads whose real type has no raw body parser (sent as application/octet-stream). */
+const DECLARED_TYPE = /^[a-z]+\/[a-z0-9.+-]{1,120}$/;
 
 /**
  * Public customer web-chat API (docs/07 §4). Authenticated by channel-bound
  * visitor tokens (or host-app JWT exchange); customers only ever see
- * customer-visible messages of their own conversation.
+ * customer-visible messages of their own conversation. Browser calls must come
+ * from OCSO's own origin (the widget iframe) or an allowed host origin.
  */
 @Controller('public/webchat/:publicKey')
 export class WebChatController {
+  private readonly publicOrigin: string;
+
   constructor(
     @Inject(WebChatIdentityService) private readonly identity: WebChatIdentityService,
     @Inject(WebChatMessagesService) private readonly messages: WebChatMessagesService,
     @Inject(ChannelIngressService) private readonly ingress: ChannelIngressService,
     @Inject(RealtimeHub) private readonly hub: RealtimeHub,
     @Inject(BLOB_STORE) private readonly blobs: BlobStore,
-  ) {}
+    @Inject(ENV) env: ApiEnv,
+  ) {
+    this.publicOrigin = new URL(env.OCSO_PUBLIC_URL).origin;
+  }
 
+  /** Public widget configuration: branding, limits and the embedding allowlist (no secrets). */
   @Get('config')
   @Public()
   async config(@Param('publicKey') publicKey: string) {
     const ctx = await this.identity.channel(publicKey);
+    const cfg = resolveWebChatConfig(ctx.config);
     const caps = ctx.adapter.capabilities(ctx.config);
-    return { name: ctx.row.name, inboundParts: caps.inboundParts, maxMediaBytes: caps.maxMediaBytes, allowedMimeTypes: caps.allowedMimeTypes };
+    return {
+      name: ctx.row.name,
+      assistantName: await this.identity.assistantName(ctx),
+      branding: cfg.settings.branding,
+      inboundParts: caps.inboundParts,
+      maxMediaBytes: caps.maxMediaBytes,
+      allowedMimeTypes: caps.allowedMimeTypes,
+      maxTextLength: caps.maxTextLength,
+      maxAttachmentsPerMessage: cfg.settings.maxAttachmentsPerMessage,
+      allowedOrigins: cfg.settings.allowedOrigins,
+      hostIdentity: Boolean(cfg.hostJwtSecret),
+    };
   }
 
   @Post('session')
   @Public()
   @HttpCode(200)
-  async session(@Param('publicKey') publicKey: string, @Body({ schema: SessionInput }) body: SessionInput) {
-    const ctx = await this.identity.channel(publicKey);
+  async session(@Param('publicKey') publicKey: string, @Headers('origin') origin: string | undefined, @Body({ schema: SessionInput }) body: SessionInput) {
+    const ctx = await this.channelFor(publicKey, origin);
     const cfg = resolveWebChatConfig(ctx.config);
     const now = new Date();
     let visitorId = newVisitorId();
@@ -77,8 +103,8 @@ export class WebChatController {
 
   @Post('messages')
   @Public()
-  async send(@Param('publicKey') publicKey: string, @Req() req: OcsoRequest & { rawBody?: Buffer }) {
-    const ctx = await this.identity.channel(publicKey);
+  async send(@Param('publicKey') publicKey: string, @Headers('origin') origin: string | undefined, @Req() req: OcsoRequest & { rawBody?: Buffer }) {
+    const ctx = await this.channelFor(publicKey, origin);
     const raw = toRawRequest('POST', req.headers, {}, req.rawBody);
     const verified = ctx.adapter.verifyRequest(raw, ctx.config);
     if (verified.kind === 'rejected') throw new DomainError(verified.status === 401 ? 'authentication' : 'authorization', 'webchat_token_invalid', verified.reason);
@@ -88,72 +114,91 @@ export class WebChatController {
     return result;
   }
 
+  /** History of the visitor's latest conversation: latest page, or the page after `afterSeq` (gap fill). */
   @Get('messages')
   @Public()
-  async history(@Param('publicKey') publicKey: string, @Headers('authorization') auth: string | undefined, @Query({ schema: AfterQuery }) q: AfterQuery) {
-    const ctx = await this.identity.channel(publicKey);
+  async history(
+    @Param('publicKey') publicKey: string,
+    @Headers('origin') origin: string | undefined,
+    @Headers('authorization') auth: string | undefined,
+    @Query({ schema: AfterQuery }) q: AfterQuery,
+  ) {
+    const ctx = await this.channelFor(publicKey, origin);
     const visitor = this.identity.identify(ctx, auth);
     const conversation = await this.identity.conversationFor(ctx.config.id, visitor);
-    if (!conversation) return { conversationId: null, messages: [] };
+    if (!conversation) return { conversationId: null, agentName: await this.identity.assistantName(ctx), messages: [], notices: [], status: { mode: 'ai', humanName: null } };
     const caps = ctx.adapter.capabilities(ctx.config);
-    return { conversationId: conversation.id, agentName: conversation.agentName, messages: await this.messages.list(conversation.id, caps, q.afterSeq, conversation.agentName) };
+    const messages = await this.messages.list(conversation.id, caps, q.afterSeq, conversation.agentName);
+    const fromSeq = q.afterSeq > 0 ? q.afterSeq + 1 : (messages[0]?.seq ?? 0);
+    const mode = modeOf(conversation.controlState);
+    return {
+      conversationId: conversation.id,
+      agentName: conversation.agentName,
+      messages,
+      notices: await this.messages.notices(conversation.id, fromSeq, conversation.agentName),
+      status: { mode, humanName: mode === 'human' ? await this.messages.firstNameOf(conversation.assignedUserId) : null },
+    };
   }
 
   /** Upload an attachment (raw body) into the visitor's own key prefix. */
   @Post('attachments')
   @Public()
-  async upload(@Param('publicKey') publicKey: string, @Headers('authorization') auth: string | undefined, @Headers('content-type') contentType: string | undefined, @Req() req: OcsoRequest & { body: unknown }) {
-    const ctx = await this.identity.channel(publicKey);
+  async upload(
+    @Param('publicKey') publicKey: string,
+    @Headers('origin') origin: string | undefined,
+    @Headers('authorization') auth: string | undefined,
+    @Headers('content-type') contentType: string | undefined,
+    @Headers('x-ocso-content-type') declaredType: string | undefined,
+    @Req() req: OcsoRequest & { body: unknown },
+  ) {
+    const ctx = await this.channelFor(publicKey, origin);
     const visitor = this.identity.identify(ctx, auth);
     const data = Buffer.isBuffer(req.body) ? new Uint8Array(req.body) : null;
     if (!data) throw validation('attachment_body_required', 'Send the file as the raw request body');
     const caps = ctx.adapter.capabilities(ctx.config);
     const allowed = Object.values(caps.allowedMimeTypes).flat();
-    const max = Math.max(...Object.values(caps.maxMediaBytes));
-    const check = checkMedia(data, contentType ?? 'application/octet-stream', allowed, max);
-    if (!check.ok) throw validation('attachment_rejected', `Attachment rejected: ${check.reason}`);
+    const octet = (contentType ?? '').split(';')[0]?.trim().toLowerCase() === 'application/octet-stream';
+    const declared = octet && declaredType && DECLARED_TYPE.test(declaredType.toLowerCase()) ? declaredType.toLowerCase() : (contentType ?? 'application/octet-stream');
+    const check = checkMedia(data, declared, allowed, Math.max(...Object.values(caps.maxMediaBytes)));
+    if (!check.ok) throw validation('attachment_rejected', `Attachment rejected: ${check.reason}`, { reason: check.reason });
+    const kind = mediaKindForMime(caps, check.mimeType);
+    if (!kind || !caps.inboundParts.includes(kind) || data.byteLength > caps.maxMediaBytes[kind]) {
+      throw validation('attachment_rejected', 'Attachment rejected: too_large', { reason: 'too_large', limitBytes: kind ? caps.maxMediaBytes[kind] : 0 });
+    }
     const key = `${attachmentKeyPrefix(ctx.config.id, visitor)}${randomUUID()}.${extensionFor(check.mimeType)}`;
     const stored = await this.blobs.put({ key, data, contentType: check.mimeType, retention: 'CONVERSATION_MEDIA' });
     return { uploadId: stored.key, mimeType: stored.contentType, sizeBytes: stored.sizeBytes, sha256: stored.sha256 };
   }
 
-  /** Customer stream: new messages, streamed AI text and typing status for this visitor only. */
+  /** Customer stream: this visitor's messages, streamed AI text, typing and customer-safe notices (see webchat-stream.ts). */
   @Sse('stream')
   @Public()
-  async stream(@Param('publicKey') publicKey: string, @Headers('authorization') auth: string | undefined, @SseSignal() signal: AbortSignal): Promise<Observable<MessageEvent>> {
-    const ctx = await this.identity.channel(publicKey);
+  async stream(
+    @Param('publicKey') publicKey: string,
+    @Headers('origin') origin: string | undefined,
+    @Headers('authorization') auth: string | undefined,
+    @SseSignal() signal: AbortSignal,
+  ): Promise<Observable<MessageEvent>> {
+    const ctx = await this.channelFor(publicKey, origin);
     const visitor = this.identity.identify(ctx, auth);
-    const caps = ctx.adapter.capabilities(ctx.config);
-    // Resolve the visitor's conversation once; re-check at most once per second
-    // (a first message creates it after the stream opened).
-    let current = await this.identity.conversationFor(ctx.config.id, visitor);
-    let lastLookup = Date.now();
-    const mine = async (conversationId: string | undefined) => {
-      if (!conversationId) return false;
-      if (current?.id !== conversationId && Date.now() - lastLookup > 1_000) {
-        lastLookup = Date.now();
-        current = await this.identity.conversationFor(ctx.config.id, visitor);
-      }
-      return current?.id === conversationId ? current : false;
-    };
-    const events = this.hub.stream((e) => ['interaction.sent', 'human.message_sent', 'agent.response_delta', 'agent.status', 'handoff.requested', 'conversation.control_changed'].includes(e.type)).pipe(
-      mergeMap((e) => from(mine(e.conversationId)).pipe(mergeMap((conv) => (conv ? of({ e, conv }) : [])))),
-      mergeMap(({ e, conv }) => from(this.toCustomerEvent(e, caps, conv.agentName))),
-      filter((m): m is MessageEvent => m !== null),
+    const events = visitorStream(
+      { hub: this.hub, identity: this.identity, messages: this.messages },
+      { channelId: ctx.config.id, visitor, capabilities: ctx.adapter.capabilities(ctx.config) },
     );
     const keepalive = interval(20_000).pipe(map((): MessageEvent => ({ type: 'ping', data: {} })));
-    return merge(of<MessageEvent>({ type: 'ready', data: {} }), events, keepalive).pipe(takeUntil(fromEvent(signal, 'abort')));
+    return merge(events, keepalive).pipe(takeUntil(fromEvent(signal, 'abort')));
   }
 
-  private async toCustomerEvent(e: { type: string; payload: unknown }, caps: Parameters<WebChatMessagesService['one']>[1], agentName: string): Promise<MessageEvent | null> {
-    const p = e.payload as Record<string, unknown>;
-    if (e.type === 'interaction.sent' || e.type === 'human.message_sent') {
-      const message = await this.messages.one(String(p['interactionId']), caps, agentName);
-      return message ? { type: 'message', data: message } : null;
-    }
-    if (e.type === 'agent.response_delta') return { type: 'delta', data: { turnId: p['turnId'], text: p['delta'] } };
-    if (e.type === 'agent.status') return { type: 'typing', data: { turnId: p['turnId'] } };
-    if (e.type === 'conversation.control_changed' && p['to'] === 'HUMAN_ACTIVE') return { type: 'notice', data: { text: 'A colleague has joined the conversation.' } };
-    return null;
+  /**
+   * Resolve the channel and enforce the embedding allowlist for browser calls:
+   * requests without an Origin (server-side, same-origin GET) pass; otherwise
+   * the origin must be OCSO's own (the widget iframe) or an allowed host site.
+   */
+  private async channelFor(publicKey: string, origin: string | undefined): Promise<WebChatContext> {
+    const ctx = await this.identity.channel(publicKey);
+    if (!origin || origin === this.publicOrigin) return ctx;
+    const { allowedOrigins } = resolveWebChatConfig(ctx.config).settings;
+    if (allowedOrigins.length === 0 || originAllowed(origin, allowedOrigins)) return ctx;
+    throw new DomainError('authorization', 'webchat_origin_not_allowed', 'This site is not allowed to use this chat');
   }
 }

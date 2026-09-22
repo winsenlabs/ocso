@@ -23,6 +23,19 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   // Don't let `next dev` write AGENTS.md / CLAUDE.md into the app.
   agentRules: false,
+  async headers() {
+    return [
+      {
+        // Customer web chat embed loader, loaded cross-site by host pages (public/ocso-webchat.js).
+        source: '/ocso-webchat.js',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=300, stale-while-revalidate=3600' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Cross-Origin-Resource-Policy', value: 'cross-origin' },
+        ],
+      },
+    ];
+  },
   async rewrites() {
     return {
       beforeFiles: PUBLIC_INGRESS.map((prefix) => ({

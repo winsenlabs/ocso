@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ChannelRuntimeConfig } from '../contract/types.js';
 import { channelConfigError } from '../common/errors.js';
+import { WebChatOrigin } from './origins.js';
 
 /** OCSO web chat channel settings and secrets. */
 
@@ -20,6 +21,27 @@ export const WebChatSettings = z.object({
   /** When set, host-app JWTs must carry this `aud` (string or array member). */
   hostJwtAudience: z.string().min(1).max(256).optional(),
   maxAttachmentsPerMessage: z.number().int().min(0).max(10).default(5),
+  /**
+   * Host-site origins that may embed the widget (CSP frame-ancestors, widget
+   * postMessage checks, API Origin check). Empty = any site may embed it.
+   */
+  allowedOrigins: z.array(WebChatOrigin).max(50).default([]),
+  /** Accept audio attachments (mp3/m4a/ogg) from customers; off by default. */
+  audioAttachments: z.boolean().default(false),
+  /** Customer-facing look of the widget; every field is optional. */
+  branding: z
+    .object({
+      /** Header title; defaults to the channel's virtual agent name. */
+      title: z.string().trim().min(1).max(60).optional(),
+      subtitle: z.string().trim().max(120).optional(),
+      /** Shown above the composer before the first message; never stored as a message. */
+      greeting: z.string().trim().max(500).optional(),
+      accentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'must be a #rrggbb colour').optional(),
+      theme: z.enum(['light', 'dark', 'auto']).default('light'),
+      position: z.enum(['right', 'left']).default('right'),
+      launcherLabel: z.string().trim().max(40).optional(),
+    })
+    .default({ theme: 'light', position: 'right' }),
 });
 export type WebChatSettings = z.infer<typeof WebChatSettings>;
 

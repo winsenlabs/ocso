@@ -33,3 +33,18 @@ export const WEBCHAT_CAPABILITIES: ChannelCapabilities = Object.freeze<ChannelCa
   },
   sessionWindowHours: null,
 });
+
+/** Audio types accepted when a channel opts in (`settings.audioAttachments`); all are content-sniffable. */
+export const WEBCHAT_AUDIO_TYPES: readonly string[] = ['audio/mpeg', 'audio/mp4', 'audio/ogg'];
+
+export const WEBCHAT_AUDIO_CAPABILITIES: ChannelCapabilities = Object.freeze<ChannelCapabilities>({
+  ...WEBCHAT_CAPABILITIES,
+  inboundParts: [...WEBCHAT_CAPABILITIES.inboundParts, 'AUDIO'],
+  maxMediaBytes: { ...WEBCHAT_CAPABILITIES.maxMediaBytes, AUDIO: 16 * MB },
+  allowedMimeTypes: { ...WEBCHAT_CAPABILITIES.allowedMimeTypes, AUDIO: [...WEBCHAT_AUDIO_TYPES] },
+});
+
+/** Capabilities of one web chat channel: the defaults, plus inbound audio when the channel opts in. */
+export function webChatCapabilities(settings: Readonly<Record<string, unknown>> | undefined): ChannelCapabilities {
+  return settings?.['audioAttachments'] === true ? WEBCHAT_AUDIO_CAPABILITIES : WEBCHAT_CAPABILITIES;
+}

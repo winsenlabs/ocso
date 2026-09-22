@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, or } from 'drizzle-orm';
 import { ChannelRuntime } from '@ocso/agent-runtime';
 import {
   identifyToken,
@@ -11,6 +11,14 @@ import {
 import { DomainError, notFound } from '@ocso/domain';
 import { channels, conversations, customerIdentities, virtualAgents, type Db } from '@ocso/db';
 import { DB } from '../../infrastructure/tokens.js';
+
+export interface VisitorConversation {
+  id: string;
+  customerId: string;
+  agentName: string;
+  controlState: string;
+  assignedUserId: string | null;
+}
 
 export interface WebChatContext {
   adapter: ChannelAdapter;
@@ -32,6 +40,13 @@ export class WebChatIdentityService {
     return this.runtime.load(row.id);
   }
 
+  /** Name of the channel's default virtual agent (the assistant the customer talks to). */
+  async assistantName(ctx: WebChatContext): Promise<string | null> {
+    if (!ctx.row.defaultAgentId) return null;
+    const [row] = await this.db.select({ name: virtualAgents.name }).from(virtualAgents).where(eq(virtualAgents.id, ctx.row.defaultAgentId));
+    return row?.name ?? null;
+  }
+
   identify(ctx: WebChatContext, authorization: string | undefined): WebChatIdentity {
     const token = /^Bearer\s+(\S+)$/i.exec(authorization ?? '')?.[1];
     if (!token) throw new DomainError('authentication', 'webchat_token_missing', 'Visitor token required');
@@ -39,23 +54,39 @@ export class WebChatIdentityService {
   }
 
   /** The visitor's latest conversation on this channel, if any. */
-  async conversationFor(channelId: string, identity: WebChatIdentity): Promise<{ id: string; customerId: string; agentName: string; controlState: string } | null> {
+  async conversationFor(channelId: string, identity: WebChatIdentity): Promise<VisitorConversation | null> {
+    const customerId = await this.customerIdFor(identity);
+    if (!customerId) return null;
     const [row] = await this.db
-      .select({ id: conversations.id, customerId: conversations.customerId, agentName: virtualAgents.name, controlState: conversations.controlState })
-      .from(customerIdentities)
-      .innerJoin(conversations, and(eq(conversations.customerId, customerIdentities.customerId), eq(conversations.channelId, channelId)))
+      .select({
+        id: conversations.id,
+        customerId: conversations.customerId,
+        agentName: virtualAgents.name,
+        controlState: conversations.controlState,
+        assignedUserId: conversations.assignedUserId,
+      })
+      .from(conversations)
       .innerJoin(virtualAgents, eq(virtualAgents.id, conversations.agentId))
-      .where(and(eq(customerIdentities.kind, identity.identityKind), eq(customerIdentities.value, identity.identityValue)))
+      .where(and(eq(conversations.customerId, customerId), eq(conversations.channelId, channelId)))
       .orderBy(desc(conversations.lastInteractionAt))
       .limit(1);
     return row ?? null;
   }
 
+  /**
+   * The customer this caller maps to, with the same precedence as inbound
+   * resolution (packages/application identity-resolver): the primary identity's
+   * customer, else an alternate's — so a guest who is then identified by the
+   * host site keeps seeing the conversation their next message will join.
+   */
   async customerIdFor(identity: WebChatIdentity): Promise<string | null> {
-    const [row] = await this.db
-      .select({ customerId: customerIdentities.customerId })
+    const claims = [{ kind: identity.identityKind, value: identity.identityValue }, ...identity.alternateIdentities];
+    const rows = await this.db
+      .select({ kind: customerIdentities.kind, value: customerIdentities.value, customerId: customerIdentities.customerId })
       .from(customerIdentities)
-      .where(and(eq(customerIdentities.kind, identity.identityKind), eq(customerIdentities.value, identity.identityValue)));
-    return row?.customerId ?? null;
+      .where(or(...claims.map((c) => and(eq(customerIdentities.kind, c.kind), eq(customerIdentities.value, c.value)))));
+    const primary = rows.find((r) => r.kind === identity.identityKind && r.value === identity.identityValue);
+    const alternate = identity.alternateIdentities.map((a) => rows.find((r) => r.kind === a.kind && r.value === a.value)).find(Boolean);
+    return primary?.customerId ?? alternate?.customerId ?? null;
   }
 }

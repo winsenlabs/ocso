@@ -16,7 +16,7 @@ import type {
 } from '../contract/types.js';
 import { ChannelMediaError } from '../common/errors.js';
 import { attachmentKeyPrefix } from './attachments.js';
-import { WEBCHAT_CAPABILITIES } from './capabilities.js';
+import { webChatCapabilities } from './capabilities.js';
 import { resolveWebChatConfig, validateWebChatConfig, type ResolvedWebChatConfig } from './config.js';
 import { WebChatAuthError } from './errors.js';
 import { identifyRequest, WEBCHAT_IDENTITY, type WebChatIdentity } from './identity.js';
@@ -47,8 +47,8 @@ export class WebChatChannelAdapter implements ChannelAdapter {
 
   constructor(private readonly deps: WebChatAdapterDeps) {}
 
-  capabilities(_config?: ChannelRuntimeConfig): ChannelCapabilities {
-    return WEBCHAT_CAPABILITIES;
+  capabilities(config?: ChannelRuntimeConfig): ChannelCapabilities {
+    return webChatCapabilities(config?.settings);
   }
 
   validateConfig(settings: unknown, secrets: Readonly<Record<string, string>>): string[] {
