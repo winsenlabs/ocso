@@ -9,6 +9,7 @@ import {
   PromptService,
   type ActorContext,
 } from '@ocso/application';
+import { loadAgentToolCatalog } from '@ocso/agent-runtime';
 import { users, type Db } from '@ocso/db';
 import { COMPONENT_DESCRIPTORS, compilePrompt, estimateTokens, type PromptComponents } from '@ocso/prompt-compiler';
 import { inArray } from 'drizzle-orm';
@@ -61,7 +62,8 @@ export class PromptsController {
     const compiled = compilePrompt({
       agent: { id: agent.id, name: agent.name, conversationType: agent.conversationType },
       promptVersion: { id: 'draft', version: 0, components: draft.components },
-      tools: [],
+      // The agent's real tool definitions, so the prefix hash matches what turns send.
+      tools: (await loadAgentToolCatalog(this.db, agentId)).specs,
       channel: { kind: 'WHATSAPP', label: 'WhatsApp' },
       customer: null,
       summary: null,

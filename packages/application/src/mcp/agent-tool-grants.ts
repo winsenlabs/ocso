@@ -21,6 +21,8 @@ export interface AgentToolEntry {
   modelName: string;
   description: string;
   riskClass: ToolRow['riskClass'];
+  /** Tool input schema, so argument rules can offer valid paths. */
+  inputSchema: Record<string, unknown>;
   /** False when a grant exists but the tool is no longer grantable (un-approved, removed, connection no longer allows the agent). */
   eligible: boolean;
   grant: { enabled: boolean; alwaysConfirm: boolean; argumentRules: ArgumentRule[] } | null;
@@ -135,6 +137,7 @@ export class AgentToolGrantService {
         modelName: t.modelName,
         description: t.description,
         riskClass: t.riskClass,
+        inputSchema: t.inputSchema,
         eligible,
         grant: g ? { enabled: g.enabled, alwaysConfirm: g.alwaysConfirm, argumentRules: g.argumentRules } : null,
       });
