@@ -1,19 +1,23 @@
 import type { Metadata } from 'next';
-import { Permission } from '@ocso/auth';
-import { PlaceholderPage } from '@/components/shell/placeholder-page';
+import { AlertsBody } from '@/components/alerts/alerts-body';
+import { AppTopbar } from '@/components/shell/app-topbar';
+import { PageBody } from '@/components/shell/page-body';
+import { PageHead } from '@/components/ui/page-head';
+import '@/app/styles/system.css';
 
 export const metadata: Metadata = { title: 'Alerts' };
 
-export default function Page() {
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+/** Alerts addressed to the user's role, their rules and (Tech Admin) delivery destinations (docs/11 §6–7). */
+export default function Page({ searchParams }: { searchParams: SearchParams }) {
   return (
-    <PlaceholderPage
-      title="Alerts"
-      sub="Alerts addressed to your role, from open to acknowledged to resolved."
-      requires={[Permission.ALERTS_BUSINESS_READ, Permission.ALERTS_TECHNICAL_READ]}
-      emptyTitle="No alerts yet"
-      searchLabel="Search alerts"
-    >
-      Alerts for your audience — rule, severity, source, age and lifecycle (open, acknowledged, resolved), correlated to the conversations or telemetry that fired them — will appear here once alert rules are evaluated by the API.
-    </PlaceholderPage>
+    <>
+      <AppTopbar searchLabel="Search alerts" />
+      <PageHead title="Alerts" sub="Alerts addressed to your role, from open to acknowledged to resolved, and the rules that raise them." />
+      <PageBody>
+        <AlertsBody searchParams={searchParams} />
+      </PageBody>
+    </>
   );
 }

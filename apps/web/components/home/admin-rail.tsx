@@ -1,32 +1,21 @@
 import Link from 'next/link';
-import { EmptyState } from '@/components/ui/empty-state';
 import { KeyValue } from '@/components/ui/key-value';
 import { DayList, RailCard } from '@/components/ui/rail-card';
-import type { WorkerSettings } from '@/lib/api/settings';
-import type { CapacityNow, ConnectionsSummary, PrivilegedChange } from '@/lib/api/system';
-import { formatDuration, formatPercent, formatTime } from '@/lib/format';
+import type { AdminHomeData } from '@/lib/api/home';
+import { formatDuration, formatPercent } from '@/lib/format';
 
-const NO_DATA = <span className="mono-sm">no data yet</span>;
-
-/** Live capacity (not reported yet) next to the configured worker limits (real, GET /v1/settings/workers). */
-export function CapacityCard({ workers, capacity }: { workers: WorkerSettings | null; capacity: CapacityNow | null }) {
-  const used = capacity && capacity.slotsTotal > 0 ? capacity.slotsUsed / capacity.slotsTotal : null;
+/** Live capacity (design/06 admin): healthy-worker slots, queue, and the configured floor/ceiling. */
+export function CapacityCard({ capacity }: { capacity: AdminHomeData['capacity'] }) {
+  const used = capacity.utilization;
   return (
     <RailCard title="Capacity" count="now">
       <KeyValue
         template="minmax(86px,100px) minmax(0,1fr)"
         items={[
-          {
-            k: 'slots used',
-            v: capacity ? `${capacity.slotsUsed} of ${capacity.slotsTotal} · ${formatPercent(used, 0)}` : NO_DATA,
-          },
-          {
-            k: 'queue depth',
-            v: capacity ? `${capacity.queueDepth} · oldest ${formatDuration(capacity.oldestQueueAgeSeconds)}` : NO_DATA,
-          },
-          { k: 'warm floor', v: workers ? `${workers.minWarmWorkers} workers` : NO_DATA },
-          { k: 'ceiling', v: workers ? `${workers.maxWorkers} workers` : NO_DATA },
-          { k: 'autoscaling', v: workers ? (workers.autoscalingEnabled ? 'on' : 'off') : NO_DATA },
+          { k: 'slots used', v: capacity.slotsTotal ? `${capacity.slotsUsed} of ${capacity.slotsTotal} · ${formatPercent(used, 0)}` : 'no healthy worker' },
+          { k: 'queue depth', v: `${capacity.queueDepth} · oldest ${formatDuration(capacity.oldestAgeSeconds ?? 0)}` },
+          { k: 'warm floor', v: `${capacity.warmFloor} workers` },
+          { k: 'ceiling', v: `${capacity.ceiling} workers` },
         ]}
       />
       {used !== null ? (
@@ -43,69 +32,42 @@ export function CapacityCard({ workers, capacity }: { workers: WorkerSettings | 
   );
 }
 
-export function ConnectionsCard({ summary }: { summary: ConnectionsSummary | null }) {
+/** Connection health counts (design/06 admin "Connections"). */
+export function ConnectionsCard({ connections }: { connections: AdminHomeData['connections'] }) {
+  const { mcp, providers, channels } = connections;
+  const inactive = channels.channels - channels.active;
   return (
     <RailCard title="Connections">
-      {summary ? (
-        <DayList
-          rows={[
-            {
-              key: 'mcp',
-              time: 'MCP',
-              label: `${summary.mcp.servers} servers`,
-              who: `${summary.mcp.tools} tools · ${summary.mcp.degraded} degraded`,
-              flag: summary.mcp.degraded ? '!' : 'ok',
-            },
-            {
-              key: 'llm',
-              time: 'LLM',
-              label: `${summary.llm.providers} providers`,
-              who: `${summary.llm.profiles} profiles · ${summary.llm.elevated} elevated`,
-              flag: summary.llm.elevated ? '!' : 'ok',
-            },
-            {
-              key: 'chan',
-              time: 'CHAN',
-              label: `${summary.channels.count} channels`,
-              who: summary.channels.unverified ? `${summary.channels.unverified} unverified` : 'all verified',
-              flag: summary.channels.unverified ? '!' : 'ok',
-            },
-          ]}
-        />
-      ) : (
-        <EmptyState size="sm" title="No connection health yet">
-          MCP servers, model providers and channels with their health.
-        </EmptyState>
-      )}
+      <DayList
+        rows={[
+          {
+            key: 'mcp',
+            time: 'MCP',
+            label: `${mcp.servers} server${mcp.servers === 1 ? '' : 's'}`,
+            who: `${mcp.tools} tools · ${mcp.degraded} degraded`,
+            flag: mcp.degraded ? '!' : mcp.servers ? 'ok' : '—',
+          },
+          {
+            key: 'llm',
+            time: 'LLM',
+            label: `${providers.providers} provider${providers.providers === 1 ? '' : 's'}`,
+            who: `${providers.profiles} profiles · ${providers.degraded} degraded`,
+            flag: providers.degraded ? '!' : providers.providers ? 'ok' : '—',
+          },
+          {
+            key: 'chan',
+            time: 'CHAN',
+            label: `${channels.channels} channel${channels.channels === 1 ? '' : 's'}`,
+            who: [inactive ? `${inactive} inactive` : 'all active', channels.failedDeliveries1h ? `${channels.failedDeliveries1h} failed deliveries 1h` : null]
+              .filter(Boolean)
+              .join(' · '),
+            flag: inactive || channels.failedDeliveries1h ? '!' : channels.channels ? 'ok' : '—',
+          },
+        ]}
+      />
       <div className="rowsplit" style={{ marginTop: 10 }}>
         <Link className="btn tiny ghost" href="/connections">
           Manage
-        </Link>
-      </div>
-    </RailCard>
-  );
-}
-
-export function PrivilegedChangesCard({ changes, timeZone }: { changes: PrivilegedChange[] | null; timeZone: string }) {
-  return (
-    <RailCard title="Recent privileged changes">
-      {changes ? (
-        <DayList
-          rows={changes.map((c) => ({
-            key: c.id,
-            time: formatTime(c.at, timeZone),
-            label: c.summary,
-            who: `${c.actorName} · ${c.auditRef}`,
-          }))}
-        />
-      ) : (
-        <EmptyState size="sm" title="No audit feed yet">
-          Configuration and role changes, attributed to the person who made them.
-        </EmptyState>
-      )}
-      <div className="rowsplit" style={{ marginTop: 10 }}>
-        <Link className="btn tiny ghost" href="/audit">
-          Audit log
         </Link>
       </div>
     </RailCard>

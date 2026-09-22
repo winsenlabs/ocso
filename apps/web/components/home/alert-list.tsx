@@ -1,23 +1,35 @@
+import Link from 'next/link';
+import type { ReactNode } from 'react';
 import { AlertBanner } from '@/components/ui/alert-banner';
-import { EmptyState } from '@/components/ui/empty-state';
-import type { AlertRow } from '@/lib/api/alerts';
+
+export interface RailAlert {
+  key: string;
+  title: string;
+  body: ReactNode;
+  tone: 'warn' | 'info' | 'error';
+  href?: string | undefined;
+}
 
 /** Compact alert stack for rail cards ("For you", "Needs a decision"). */
-export function AlertList({ alerts, emptyText, limit = 3 }: { alerts: AlertRow[] | null; emptyText: string; limit?: number }) {
-  if (alerts === null) {
-    return (
-      <EmptyState size="sm" title="No alert feed yet">
-        {emptyText}
-      </EmptyState>
-    );
-  }
-  if (alerts.length === 0) return <span className="mono-sm">nothing open</span>;
-  const shown = alerts.slice(0, limit);
+export function AlertList({ items, empty, limit = 4 }: { items: RailAlert[]; empty: string; limit?: number }) {
+  if (items.length === 0) return <span className="mono-sm">{empty}</span>;
   return (
     <div style={{ display: 'grid', gap: 10 }}>
-      {shown.map((a) => (
-        <AlertBanner key={a.id} tone={a.severity === 'info' ? 'info' : 'warn'} title={a.title} style={{ margin: 0 }}>
-          {a.detail}
+      {items.slice(0, limit).map((a) => (
+        <AlertBanner
+          key={a.key}
+          tone={a.tone}
+          title={a.title}
+          style={{ margin: 0 }}
+          action={
+            a.href ? (
+              <Link className="mono-sm" href={a.href} aria-label={`Open: ${a.title}`}>
+                open →
+              </Link>
+            ) : undefined
+          }
+        >
+          {a.body}
         </AlertBanner>
       ))}
     </div>

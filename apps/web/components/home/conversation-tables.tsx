@@ -34,9 +34,8 @@ const PICKUP_COLUMNS: Column<PickupRow>[] = [
 export function PickupQueueTable({ rows }: { rows: PickupRow[] | null }) {
   if (rows === null) {
     return (
-      <EmptyState title="No pickup data yet">
-        Conversations waiting for a human in your queues will be listed here, oldest first, with their SLA clock — once the conversations API
-        is connected.
+      <EmptyState title="Pickup queue could not be loaded">
+        Conversations waiting for a human in your queues are listed here, oldest first, with their SLA clock. Reload to try again.
       </EmptyState>
     );
   }
@@ -82,8 +81,8 @@ export function assignmentColumns(timeZone: string): Column<AssignmentRow>[] {
 export function AssignmentsTable({ rows, timeZone }: { rows: AssignmentRow[] | null; timeZone: string }) {
   if (rows === null) {
     return (
-      <EmptyState title="No assignment data yet">
-        Conversations you have claimed or been assigned — with who is in control and time to SLA — will appear here.
+      <EmptyState title="Assignments could not be loaded">
+        Conversations you have claimed or been assigned — with who is in control and time to SLA — are listed here. Reload to try again.
       </EmptyState>
     );
   }

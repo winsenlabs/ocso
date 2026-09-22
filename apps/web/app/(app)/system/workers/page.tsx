@@ -1,22 +1,25 @@
 import type { Metadata } from 'next';
-import { Permission } from '@ocso/auth';
-import { PlaceholderPage } from '@/components/shell/placeholder-page';
-import { WorkerConfigSection } from '@/components/system/worker-config-section';
+import { Suspense } from 'react';
+import { AppTopbar } from '@/components/shell/app-topbar';
+import { PageBody } from '@/components/shell/page-body';
+import { SystemHead } from '@/components/system/system-head';
+import { WorkersBody } from '@/components/system/workers-body';
+import { PageHead } from '@/components/ui/page-head';
+import '@/app/styles/system.css';
 
 export const metadata: Metadata = { title: 'Workers' };
 
+/** Agent worker capacity: the fleet, how the platform applied the scaling settings, and the settings themselves. */
 export default function WorkersPage() {
   return (
-    <PlaceholderPage
-      title="Workers"
-      sub="Agent worker capacity: the scaling configuration and the running instances."
-      requires={[Permission.SYSTEM_READ]}
-      emptyTitle="No worker instances reported yet"
-      searchLabel="Search workers, traces, connections"
-      before={<WorkerConfigSection />}
-    >
-      Each worker instance — status, conversations held, utilisation, memory and CPU, start time and heartbeat — plus active conversation leases will
-      appear here once workers report their heartbeats to the API.
-    </PlaceholderPage>
+    <>
+      <AppTopbar searchLabel="Search workers, traces, connections" />
+      <Suspense fallback={<PageHead title="Workers" />}>
+        <SystemHead title="Workers" tail="fleet and scaling" />
+      </Suspense>
+      <PageBody>
+        <WorkersBody />
+      </PageBody>
+    </>
   );
 }

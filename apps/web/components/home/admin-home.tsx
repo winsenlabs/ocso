@@ -1,39 +1,53 @@
 import Link from 'next/link';
+import { Permission } from '@ocso/auth';
+import { ChangesCard } from '@/components/system/changes-card';
 import { AlertBanner } from '@/components/ui/alert-banner';
 import { SecHead } from '@/components/ui/sec-head';
 import { Tile, Tiles } from '@/components/ui/tile';
-import { loadOpenAlerts } from '@/lib/api/alerts';
-import { getWorkerSettings } from '@/lib/api/settings';
-import { loadAdminMetrics, loadCapacityNow, loadConnectionsSummary, loadPrivilegedChanges } from '@/lib/api/system';
-import { firstName, formatCompact, formatLatency, formatNumber, formatPercent } from '@/lib/format';
-import type { Session } from '@/lib/session';
+import type { AdminHomeData } from '@/lib/api/home';
+import { firstName, formatCompact, formatLatency, formatNumber, formatPercent, formatTime } from '@/lib/format';
+import { hasPermission, type Session } from '@/lib/session';
+import { CapacityCard, ConnectionsCard } from './admin-rail';
 import { AlertsTable } from './alerts-table';
-import { CapacityCard, ConnectionsCard, PrivilegedChangesCard } from './admin-rail';
 import { Greeting } from './greeting';
+import { adminTail } from './home-copy';
 
-/** Platform Tech Admin home (design/06): capacity, incidents, connections, privileged changes. */
-export async function AdminHome({ session, facts }: { session: Session; facts: string[] }) {
-  const [metrics, alerts, workers, capacity, connections, changes] = await Promise.all([
-    loadAdminMetrics(),
-    loadOpenAlerts(),
-    getWorkerSettings().catch(() => null),
-    loadCapacityNow(),
-    loadConnectionsSummary(),
-    loadPrivilegedChanges(),
-  ]);
-  const critical = alerts?.find((a) => a.severity === 'critical' && a.state !== 'resolved');
-  const tail = metrics ? 'here is the runtime right now.' : 'runtime telemetry appears here once workers report.';
+/** Platform Tech Admin home (design/06): uptime, capacity, incidents, connections, privileged changes — no conversation content. */
+export function AdminHome({ session, data }: { session: Session; data: AdminHomeData }) {
+  const { tiles, incidents, capacity, connections } = data;
+  const tz = session.user.deployment.timezone;
+  const d = session.user.deployment;
+  const critical = incidents.items.find((a) => a.severity === 'CRITICAL');
+  const tail = adminTail({
+    healthy: tiles.healthyWorkers.healthy,
+    minWarm: tiles.healthyWorkers.minWarm,
+    openIncidents: incidents.open,
+    critical: incidents.critical,
+    providersDegraded: connections.providers.degraded,
+    mcpDegraded: connections.mcp.degraded,
+  });
+  const strip = [
+    'Single-tenant',
+    d.region ?? 'region not set',
+    d.label,
+    `${tiles.healthyWorkers.healthy} worker${tiles.healthyWorkers.healthy === 1 ? '' : 's'}`,
+    `${incidents.open} open incident${incidents.open === 1 ? '' : 's'}`,
+  ];
 
   return (
     <>
-      <Greeting name={firstName(session.user.name)} tail={tail} strip={facts} />
+      <Greeting name={firstName(session.user.name)} tail={tail} strip={strip} />
       <Tiles>
-        <Tile label="uptime 30d" value={metrics ? formatPercent(metrics.uptime30d, 2) : null} />
-        <Tile label="healthy workers" value={metrics ? `${metrics.healthyWorkers} of ${metrics.totalWorkers}` : null} />
-        <Tile label="active conversations" value={metrics ? formatNumber(metrics.activeConversations) : null} />
-        <Tile label="ttft p95" value={metrics ? formatLatency(metrics.ttftP95Ms) : null} />
-        <Tile label="tokens today" value={metrics ? formatCompact(metrics.tokensToday) : null} />
-        <Tile label="open incidents" value={metrics ? formatNumber(metrics.openIncidents) : null} {...(metrics && metrics.openIncidents > 0 ? { tone: 'warn' as const } : {})} />
+        <Tile label="uptime 30d" value={data.uptime.ratio === null ? null : formatPercent(data.uptime.ratio, 2)} />
+        <Tile
+          label="healthy workers"
+          value={`${tiles.healthyWorkers.healthy} of ${tiles.healthyWorkers.max}`}
+          {...(tiles.healthyWorkers.healthy < tiles.healthyWorkers.minWarm ? { tone: 'warn' as const } : {})}
+        />
+        <Tile label="active conversations" value={formatNumber(tiles.activeConversations)} />
+        <Tile label="ttft p95" value={tiles.ttftP95Ms === null ? null : formatLatency(tiles.ttftP95Ms)} />
+        <Tile label="tokens today" value={formatCompact(tiles.tokensToday)} />
+        <Tile label="open incidents" value={formatNumber(tiles.openIncidents)} {...(tiles.openIncidents > 0 ? { tone: 'warn' as const } : {})} />
       </Tiles>
 
       {critical ? (
@@ -46,19 +60,29 @@ export async function AdminHome({ session, facts }: { session: Session; facts: s
             </Link>
           }
         >
-          {critical.detail}
+          opened {formatTime(critical.openedAt, tz)}
+          {critical.value ? ` · ${critical.value}` : ''} · {critical.source}
+          {critical.occurrences > 1 ? ` · seen ${critical.occurrences}×` : ''}
         </AlertBanner>
       ) : null}
 
       <div className="row2">
         <div>
-          <SecHead title="Open incidents and alerts" count={alerts ? alerts.length : 'no data yet'} />
-          <AlertsTable rows={alerts} />
+          <SecHead
+            title="Open incidents and alerts"
+            count={`${incidents.critical} critical · ${incidents.open} open`}
+            actions={
+              <Link className="btn tiny ghost" href="/alerts">
+                All alerts
+              </Link>
+            }
+          />
+          <AlertsTable rows={incidents.items} />
         </div>
         <div className="rail">
-          <CapacityCard workers={workers} capacity={capacity} />
-          <ConnectionsCard summary={connections} />
-          <PrivilegedChangesCard changes={changes} timeZone={session.user.deployment.timezone} />
+          <CapacityCard capacity={capacity} />
+          <ConnectionsCard connections={connections} />
+          <ChangesCard changes={data.recentChanges} timeZone={tz} canAudit={hasPermission(session, Permission.AUDIT_READ)} />
         </div>
       </div>
     </>

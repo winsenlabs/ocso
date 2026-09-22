@@ -1,46 +1,67 @@
 import Link from 'next/link';
 import { Permission } from '@ocso/auth';
-import { EmptyState } from '@/components/ui/empty-state';
 import { HBarChart } from '@/components/ui/hbar-chart';
 import { RailCard } from '@/components/ui/rail-card';
 import { SecHead } from '@/components/ui/sec-head';
 import { Tile, Tiles } from '@/components/ui/tile';
-import { loadAgentSummaries, loadEscalationReasons, loadLeadMetrics, type EscalationReason } from '@/lib/api/agents';
-import { loadOpenAlerts } from '@/lib/api/alerts';
-import { loadQueueSummaries } from '@/lib/api/queues';
+import type { Alert } from '@/lib/api/alerts';
+import type { LeadHomeData } from '@/lib/api/home';
 import { firstName, formatNumber, formatPercent } from '@/lib/format';
 import { hasPermission, type Session } from '@/lib/session';
 import { AgentCards } from './agent-cards';
-import { AlertList } from './alert-list';
+import { AlertList, type RailAlert } from './alert-list';
 import { Greeting } from './greeting';
+import { decisionCopy, leadTail, reasonLabel } from './home-copy';
 import { QueuesTable } from './queues-table';
 
-/** CS Lead home (design/06): business metrics, virtual agents, queues and decisions. */
-export async function LeadHome({ session, facts }: { session: Session; facts: string[] }) {
-  const [metrics, agents, queues, alerts, reasons] = await Promise.all([
-    loadLeadMetrics(),
-    loadAgentSummaries(),
-    loadQueueSummaries(),
-    loadOpenAlerts(),
-    loadEscalationReasons(),
-  ]);
-  const tail = metrics ? 'here is how your agents are doing this week.' : 'agent performance appears here once conversations are flowing.';
+const warn = (on: boolean) => (on ? { tone: 'warn' as const } : {});
+
+/** CS Lead home (design/06): 7-day business tiles, virtual agents, queues, decisions and escalation reasons. */
+export function LeadHome({ session, data, alerts }: { session: Session; data: LeadHomeData; alerts: Alert[] | null }) {
+  const t = data.tiles;
+  const spike = data.decisions.find((d) => d.kind === 'escalation_spike');
+  const understaffed = data.decisions.find((d) => d.kind === 'understaffed_queue');
+  const live = data.agents.filter((a) => a.status === 'LIVE').length;
+  const tail = leadTail({
+    conversations: t.conversations,
+    spike: spike ? { agentName: spike.agentName, escalationRate: spike.escalationRate, previousRate: spike.previousRate } : null,
+    understaffed: understaffed ? understaffed.queueName : null,
+    slaBreaches: t.slaBreaches,
+  });
+  const strip = [
+    `${live} live agent${live === 1 ? '' : 's'}`,
+    `${formatNumber(t.conversations)} conversations this week`,
+    `${formatNumber(t.slaBreaches)} SLA breaches`,
+    `${formatNumber(t.correctionsStaged)} prompt corrections staged`,
+  ];
+  const decisions: RailAlert[] = data.decisions.map((d, i) => {
+    const copy = decisionCopy(d);
+    return { key: `${d.kind}-${i}`, title: copy.title, body: copy.body, tone: copy.tone, href: copy.href };
+  });
+  const businessAlerts: RailAlert[] = (alerts ?? []).map((a) => ({
+    key: a.id,
+    title: a.title,
+    body: [a.value, a.source].filter(Boolean).join(' · '),
+    tone: a.severity === 'CRITICAL' ? 'error' : a.severity === 'WARNING' ? 'warn' : 'info',
+    href: `/alerts?alert=${a.id}`,
+  }));
+  const maxReason = Math.max(1, ...data.escalationReasons.map((r) => r.count));
 
   return (
     <>
-      <Greeting name={firstName(session.user.name)} tail={tail} strip={facts} />
+      <Greeting name={firstName(session.user.name)} tail={tail} strip={strip} />
       <Tiles>
-        <Tile label="conversations 7d" value={metrics ? formatNumber(metrics.conversations7d) : null} />
-        <Tile label="ai containment" value={metrics ? formatPercent(metrics.containmentRate) : null} />
-        <Tile label="escalation rate" value={metrics ? formatPercent(metrics.escalationRate) : null} />
-        <Tile label="sla breaches" value={metrics ? formatNumber(metrics.slaBreaches) : null} {...(metrics && metrics.slaBreaches > 0 ? { tone: 'warn' as const } : {})} />
-        <Tile label="csat" value={metrics ? formatNumber(metrics.csat, 2) : null} />
-        <Tile label="corrections staged" value={metrics ? formatNumber(metrics.correctionsStaged) : null} />
+        <Tile label="conversations 7d" value={formatNumber(t.conversations)} />
+        <Tile label="ai containment" value={t.containmentRate === null ? null : formatPercent(t.containmentRate)} />
+        <Tile label="escalation rate" value={t.escalationRate === null ? null : formatPercent(t.escalationRate)} {...warn(spike !== undefined)} />
+        <Tile label="sla breaches" value={formatNumber(t.slaBreaches)} {...warn(t.slaBreaches > 0)} />
+        <Tile label="csat" value={t.csat.average === null ? null : formatNumber(t.csat.average, 2)} />
+        <Tile label="corrections staged" value={formatNumber(t.correctionsStaged)} />
       </Tiles>
 
       <SecHead
         title="Virtual agents"
-        count={agents ? `${agents.filter((a) => a.state !== 'paused').length} live` : 'no data yet'}
+        count={`${live} live`}
         actions={
           hasPermission(session, Permission.AGENTS_MANAGE) ? (
             <Link className="btn tiny" href="/agents">
@@ -49,42 +70,40 @@ export async function LeadHome({ session, facts }: { session: Session; facts: st
           ) : null
         }
       />
-      <AgentCards agents={agents} />
+      <AgentCards agents={data.agents} />
 
       <div className="row2">
         <div>
-          <SecHead title="Queues" count={queues ? queues.length : 'no data yet'} />
-          <QueuesTable rows={queues} />
+          <SecHead title="Queues" count={data.queues.length} />
+          <QueuesTable rows={data.queues} />
         </div>
         <div className="rail">
-          <RailCard title="Needs a decision" count={alerts ? alerts.length : undefined}>
-            <AlertList alerts={alerts} emptyText="Business alerts that need a lead's decision — escalation spikes, SLA breaches, staged corrections — will appear here." />
+          <RailCard title="Needs a decision" count={decisions.length || undefined}>
+            <AlertList items={decisions} empty="nothing needs a decision right now" />
           </RailCard>
+          {alerts !== null ? (
+            <RailCard title="Business alerts" count={businessAlerts.length || undefined}>
+              <AlertList items={businessAlerts} empty="no open business alert" limit={3} />
+            </RailCard>
+          ) : null}
           <RailCard title="Escalation reasons · 7d">
-            <EscalationReasons reasons={reasons} />
+            {data.escalationReasons.length ? (
+              <HBarChart
+                label="Escalation reasons, last 7 days"
+                columns="minmax(90px,1fr) minmax(0,1.3fr) 44px"
+                rows={data.escalationReasons.map((r, i) => ({
+                  label: data.escalationReasons.filter((o) => o.reasonCode === r.reasonCode).length > 1 ? `${reasonLabel(r.reasonCode)} · ${r.trigger.toLowerCase()}` : reasonLabel(r.reasonCode),
+                  share: r.count / maxReason,
+                  display: formatNumber(r.count),
+                  tone: r.trigger === 'TOOL_FAILURE' ? 'd' : i < 2 ? 'w' : 'default',
+                }))}
+              />
+            ) : (
+              <span className="mono-sm">no agent handoffs in the last 7 days</span>
+            )}
           </RailCard>
         </div>
       </div>
     </>
-  );
-}
-
-function EscalationReasons({ reasons }: { reasons: EscalationReason[] | null }) {
-  if (reasons === null) {
-    return (
-      <EmptyState size="sm" title="No data yet">
-        Why agents hand off to humans, ranked by volume.
-      </EmptyState>
-    );
-  }
-  if (reasons.length === 0) return <span className="mono-sm">no handoffs in the last 7 days</span>;
-  const max = Math.max(...reasons.map((r) => r.count));
-  const tone = { default: 'default', warn: 'w', danger: 'd' } as const;
-  return (
-    <HBarChart
-      label="Escalation reasons, last 7 days"
-      columns="minmax(90px,1fr) minmax(0,1.3fr) 44px"
-      rows={reasons.map((r) => ({ label: r.reason, share: max ? r.count / max : 0, display: formatNumber(r.count), tone: tone[r.tone] }))}
-    />
   );
 }

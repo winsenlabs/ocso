@@ -4,53 +4,87 @@ import { KeyValue } from '@/components/ui/key-value';
 import { DayList, RailCard } from '@/components/ui/rail-card';
 import { SecHead } from '@/components/ui/sec-head';
 import { Tile, Tiles } from '@/components/ui/tile';
-import { loadOpenAlerts } from '@/lib/api/alerts';
-import { loadExecMetrics, loadMyAssignments, loadPickupQueue, loadRecentlyResolved } from '@/lib/api/conversations';
-import { firstName, formatDuration, formatNumber, formatTime, formatZoneName } from '@/lib/format';
+import { loadMyAssignments, loadPickupQueue, loadRecentlyResolved } from '@/lib/api/conversations';
+import type { ExecHomeData, ForYouItem } from '@/lib/api/home';
+import { firstName, formatAge, formatDuration, formatNumber, formatTime, formatZoneName } from '@/lib/format';
 import type { Session } from '@/lib/session';
-import { AlertList } from './alert-list';
+import { AlertList, type RailAlert } from './alert-list';
 import { AvailabilityPicker } from './availability-picker';
 import { AssignmentsTable, PickupQueueTable } from './conversation-tables';
 import { Greeting } from './greeting';
+import { execTail } from './home-copy';
 
-/** CS Exec home (design/06): pickup queue, own workload and shift. */
-export async function ExecHome({ session, teamLabel }: { session: Session; teamLabel: string | null }) {
-  const [metrics, pickup, assigned, resolved, alerts] = await Promise.all([
-    loadExecMetrics(),
-    loadPickupQueue(),
-    loadMyAssignments(),
-    loadRecentlyResolved(),
-    loadOpenAlerts(),
+const warnIf = (value: number) => (value > 0 ? { tone: 'warn' as const } : {});
+
+function forYou(item: ForYouItem): RailAlert {
+  switch (item.kind) {
+    case 'offer':
+      return {
+        key: `offer-${item.conversationId}`,
+        title: `Offered to you: ${item.customerName ?? 'a customer'}`,
+        body: `${item.priority}${item.waitingSince ? ` · waiting ${formatAge(item.waitingSince)}` : ''} · accept or decline in the workspace`,
+        tone: 'warn',
+        href: `/conversations/${item.conversationId}`,
+      };
+    case 'urgent_pickup':
+      return {
+        key: `urgent-${item.conversationId}`,
+        title: `${item.priority} unclaimed${item.waitingSince ? ` ${formatAge(item.waitingSince)}` : ''}: ${item.customerName ?? 'a customer'}`,
+        body: item.reason ?? 'waiting in your queues',
+        tone: 'warn',
+        href: `/conversations/${item.conversationId}`,
+      };
+    case 'alert':
+      return {
+        key: `alert-${item.alertId}`,
+        title: item.title,
+        body: `${item.severity.toLowerCase()} · opened ${formatAge(item.openedAt)} ago`,
+        tone: item.severity === 'CRITICAL' ? 'error' : item.severity === 'WARNING' ? 'warn' : 'info',
+        href: `/alerts?alert=${item.alertId}`,
+      };
+  }
+}
+
+/** CS Exec home (design/06): tiles, shift and "for you" from GET /v1/home; the conversation tables from the inbox API. */
+export async function ExecHome({ session, data }: { session: Session; data: ExecHomeData }) {
+  const [pickup, assigned, resolved] = await Promise.all([
+    loadPickupQueue().catch(() => null),
+    loadMyAssignments().catch(() => null),
+    loadRecentlyResolved().catch(() => null),
   ]);
   const tz = session.user.deployment.timezone;
-  const tail =
-    pickup === null
-      ? 'your pickup queue appears here once conversations are connected.'
-      : pickup.length === 0
-        ? 'nobody is waiting on a human.'
-        : `${pickup.length} ${pickup.length === 1 ? 'customer is' : 'customers are'} waiting on a human.`;
+  const t = data.tiles;
+  const shift = data.shift;
+  const queues = shift.queues.map((q) => q.name).join(', ');
+  const items = data.forYou.map(forYou);
 
   return (
     <>
       <Greeting
         name={firstName(session.user.name)}
-        tail={tail}
-        strip={[session.roleLabel, teamLabel ?? 'no team assigned', `times in ${tz} (${formatZoneName(tz)})`]}
+        tail={execTail(t.waitingForHuman)}
+        strip={[
+          `${t.assignedToMe} assigned`,
+          `${t.waitingForHuman} in pickup`,
+          `${t.slaBreached} SLA breached`,
+          queues || 'no team queue',
+          `times in ${formatZoneName(tz)}`,
+        ]}
       />
       <Tiles>
-        <Tile label="assigned to me" value={metrics ? formatNumber(metrics.assignedToMe) : null} />
-        <Tile label="waiting for human" value={metrics ? formatNumber(metrics.waitingForHuman) : null} {...warnIf(metrics?.waitingForHuman)} />
-        <Tile label="sla breached" value={metrics ? formatNumber(metrics.slaBreached) : null} {...warnIf(metrics?.slaBreached)} />
-        <Tile label="resolved today" value={metrics ? formatNumber(metrics.resolvedToday) : null} />
-        <Tile label="my first response" value={metrics ? formatDuration(metrics.firstResponseSeconds) : null} />
-        <Tile label="my csat · 7d" value={metrics ? formatNumber(metrics.csat7d, 1) : null} />
+        <Tile label="assigned to me" value={formatNumber(t.assignedToMe)} />
+        <Tile label="waiting for human" value={formatNumber(t.waitingForHuman)} {...warnIf(t.waitingForHuman)} />
+        <Tile label="sla breached" value={formatNumber(t.slaBreached)} {...warnIf(t.slaBreached)} />
+        <Tile label="resolved today" value={formatNumber(t.resolvedToday)} />
+        <Tile label="my first response" value={t.myFirstResponseMedianSeconds === null ? null : formatDuration(t.myFirstResponseMedianSeconds)} />
+        <Tile label="my csat · 7d" value={t.myCsat7d.average === null ? null : formatNumber(t.myCsat7d.average, 1)} />
       </Tiles>
 
       <div className="row2">
         <div>
           <SecHead
             title="Pickup queue"
-            count={pickup ? `${pickup.length} waiting${teamLabel ? ` · ${teamLabel}` : ''}` : 'no data yet'}
+            count={pickup ? `${pickup.length} waiting${queues ? ` · ${queues}` : ''}` : undefined}
             actions={
               <Link className="btn tiny accent" href="/conversations">
                 Open workspace
@@ -58,7 +92,7 @@ export async function ExecHome({ session, teamLabel }: { session: Session; teamL
             }
           />
           <PickupQueueTable rows={pickup} />
-          <SecHead title="Assigned to me" count={assigned ? assigned.length : 'no data yet'} style={{ marginTop: 18 }} />
+          <SecHead title="Assigned to me" count={assigned ? assigned.length : undefined} style={{ marginTop: 18 }} />
           <AssignmentsTable rows={assigned} timeZone={tz} />
         </div>
 
@@ -67,20 +101,23 @@ export async function ExecHome({ session, teamLabel }: { session: Session; teamL
             <KeyValue
               template="minmax(86px,96px) minmax(0,1fr)"
               items={[
-                { k: 'availability', v: <AvailabilityPicker /> },
-                { k: 'queues', v: teamLabel ?? 'no team assigned' },
-                { k: 'timezone', v: tz },
+                { k: 'availability', v: <AvailabilityPicker initial={shift.availability} /> },
+                { k: 'capacity', v: `${shift.activeConversations} of ${shift.maxConcurrent} concurrent` },
+                { k: 'queues', v: queues || 'no team queue' },
+                { k: 'languages', v: shift.languages.length ? shift.languages.join(', ') : '—' },
               ]}
             />
           </RailCard>
-          <RailCard title="For you" count={alerts ? alerts.length : undefined}>
-            <AlertList alerts={alerts} emptyText="Alerts addressed to CS Execs — unclaimed hardship cases, policy updates — will appear here." />
+          <RailCard title="For you" count={items.length || undefined}>
+            <AlertList items={items} empty="nothing needs you right now" />
           </RailCard>
           <RailCard title="Recently resolved">
             {resolved === null ? (
-              <EmptyState size="sm" title="No data yet">
-                Conversations you resolve today will be listed here with their CSAT.
+              <EmptyState size="sm" title="Could not load">
+                Your recently resolved conversations could not be loaded.
               </EmptyState>
+            ) : resolved.length === 0 ? (
+              <span className="mono-sm">nothing resolved yet</span>
             ) : (
               <DayList
                 rows={resolved.map((r) => ({
@@ -97,8 +134,4 @@ export async function ExecHome({ session, teamLabel }: { session: Session; teamL
       </div>
     </>
   );
-}
-
-function warnIf(value: number | undefined): { tone?: 'warn' } {
-  return value !== undefined && value > 0 ? { tone: 'warn' } : {};
 }

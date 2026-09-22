@@ -1,19 +1,27 @@
 import type { Metadata } from 'next';
-import { Permission } from '@ocso/auth';
-import { PlaceholderPage } from '@/components/shell/placeholder-page';
+import { Suspense } from 'react';
+import { AppTopbar } from '@/components/shell/app-topbar';
+import { PageBody } from '@/components/shell/page-body';
+import { SystemHead } from '@/components/system/system-head';
+import { TelemetryBody } from '@/components/system/telemetry-body';
+import { PageHead } from '@/components/ui/page-head';
+import '@/app/styles/system.css';
 
 export const metadata: Metadata = { title: 'Telemetry' };
 
-export default function Page() {
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+/** Latency, tokens, prompt cache and provider error rates across the runtime. */
+export default function Page({ searchParams }: { searchParams: SearchParams }) {
   return (
-    <PlaceholderPage
-      title="Telemetry"
-      sub="Latency, tokens, cache and provider error rates across the runtime."
-      requires={[Permission.TELEMETRY_TECHNICAL_READ]}
-      emptyTitle="No telemetry yet"
-      searchLabel="Search workers, traces, connections"
-    >
-      Turn latency and time to first token, request rate, input/output tokens, prompt-cache reads and writes, provider error rates and traces will appear here once the runtime exports telemetry to the API.
-    </PlaceholderPage>
+    <>
+      <AppTopbar searchLabel="Search workers, traces, connections" />
+      <Suspense fallback={<PageHead title="Telemetry" />}>
+        <SystemHead title="Telemetry" tail="latency, tokens and prompt cache" />
+      </Suspense>
+      <PageBody>
+        <TelemetryBody searchParams={searchParams} />
+      </PageBody>
+    </>
   );
 }

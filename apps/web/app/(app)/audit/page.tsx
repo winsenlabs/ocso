@@ -1,19 +1,23 @@
 import type { Metadata } from 'next';
-import { Permission } from '@ocso/auth';
-import { PlaceholderPage } from '@/components/shell/placeholder-page';
+import { AuditBody } from '@/components/audit/audit-body';
+import { AppTopbar } from '@/components/shell/app-topbar';
+import { PageBody } from '@/components/shell/page-body';
+import { PageHead } from '@/components/ui/page-head';
+import '@/app/styles/system.css';
 
 export const metadata: Metadata = { title: 'Audit log' };
 
-export default function Page() {
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+/** Every privileged change and sensitive action, attributed to a person (docs/15 §7). */
+export default function Page({ searchParams }: { searchParams: SearchParams }) {
   return (
-    <PlaceholderPage
-      title="Audit log"
-      sub="Every privileged change and sensitive action, attributed to a person."
-      requires={[Permission.AUDIT_READ]}
-      emptyTitle="No audit feed yet"
-      searchLabel="Search audit events"
-    >
-      The audit log — configuration changes, role changes, sensitive tool confirmations and internal-agent actions, each with actor, target, before/after and correlation ID — will appear here once the audit API is connected.
-    </PlaceholderPage>
+    <>
+      <AppTopbar searchLabel="Search audit events" />
+      <PageHead title="Audit log" sub="Every privileged change and sensitive action, attributed to a person — with what changed." />
+      <PageBody>
+        <AuditBody searchParams={searchParams} />
+      </PageBody>
+    </>
   );
 }

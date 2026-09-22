@@ -9,13 +9,9 @@ const OPTIONS = [
   { key: 'OFFLINE', label: 'Offline' },
 ] as const;
 
-/**
- * Sets the exec's availability for new assignments (PUT /v1/me/availability).
- * The API does not report the current value to the user yet, so nothing is
- * pre-selected until they choose.
- */
-export function AvailabilityPicker() {
-  const [value, setValue] = useState<string | null>(null);
+/** The exec's availability for new assignments: current value from GET /v1/home, changed via PUT /v1/me/availability. */
+export function AvailabilityPicker({ initial }: { initial: string }) {
+  const [value, setValue] = useState<string>(initial);
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -48,9 +44,11 @@ export function AvailabilityPicker() {
           </button>
         ))}
       </div>
-      <span className="mono-sm" aria-live="polite">
-        {pending ? 'saving…' : (message ?? 'not reported yet · choose to set')}
-      </span>
+      {pending || message ? (
+        <span className="mono-sm" aria-live="polite">
+          {pending ? 'saving…' : message}
+        </span>
+      ) : null}
     </div>
   );
 }
