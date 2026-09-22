@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared/base.css" />
+<link rel="stylesheet" href="shared/one.css" />
+<link rel="stylesheet" href="shared/charts.css" />
+<link rel="stylesheet" href="shared/mock.css" />
+<link rel="stylesheet" href="shared/ocso.css" />
+<style>
+.dt-h .dt-head,.dt-h .dt-row{grid-template-columns:minmax(0,1.5fr) 104px 118px 92px 96px}
+.dt-q .dt-head,.dt-q .dt-row{grid-template-columns:minmax(0,1fr) 72px 76px 84px 84px 80px}
+.agcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;display:grid;gap:10px;align-content:start;min-width:0}
+.agcard .h{display:flex;align-items:center;gap:10px}
+.agcard .nm{font-size:14px;font-weight:600;letter-spacing:-0.01em}
+.agcard .rl{font-family:var(--font-mono);font-size:10.5px;color:var(--ink-3)}
+</style>
+<title>Home — OCSO</title>
+</helmet>
+
+<div class="state-sw" role="tablist" aria-label="Role">
+  <button class="{{ s_exec }}" onClick="{{ go_exec }}">CS Exec</button>
+  <button class="{{ s_lead }}" onClick="{{ go_lead }}">CS Lead</button>
+  <button class="{{ s_admin }}" onClick="{{ go_admin }}">Tech Admin</button>
+</div>
+
+<div class="app" data-screen-label="06 · Role home dashboards">
+  <dc-import name="OCSONav" role="{{ role }}" active="home" hint-size="240px,100vh"></dc-import>
+
+  <main class="main" style="padding:22px 26px 60px">
+    <div class="topbar" style="margin-bottom:18px">
+      <div class="topbar-search"><span>Search customers, conversations, agents</span><span class="topbar-search-shortcut">⌘K</span></div>
+      <span class="topbar-spacer"></span>
+      <button class="topbar-btn">{{ shiftChip }}</button>
+      <button class="topbar-btn">Alerts <span class="sb-badge" style="background:var(--warn-soft);color:var(--warn)">{{ alertCount }}</span></button>
+      <button class="btn tiny accent">Ask OCSO ⌘J</button>
+    </div>
+
+    <div class="greeting">
+      <h1>{{ greetName }} <em>{{ greetTail }}</em></h1>
+      <div class="greeting-strip">{{ stripText }}</div>
+    </div>
+
+    <!-- ══ CS EXEC ══ -->
+    <sc-if value="{{ isExec }}" hint-placeholder-val="{{ true }}">
+      <div class="tiles" style="grid-template-columns:repeat(auto-fit,minmax(146px,1fr))">
+        <div class="tile"><div class="v">7</div><div class="k">assigned to me</div></div>
+        <div class="tile warn"><div class="v">4</div><div class="k">waiting for human</div></div>
+        <div class="tile warn"><div class="v">1</div><div class="k">sla breached</div></div>
+        <div class="tile"><div class="v">18</div><div class="k">resolved today</div></div>
+        <div class="tile"><div class="v">1m 12s</div><div class="k">my first response</div></div>
+        <div class="tile"><div class="v">4.6</div><div class="k">my csat · 7d</div></div>
+      </div>
+
+      <div class="row2">
+        <div>
+          <div class="sec-head"><h2>Pickup queue</h2><span class="count">4 waiting · Cards &amp; EMI · Tier 2</span><div class="sec-head-actions"><a class="btn tiny accent" href="01 Conversation workspace.dc.html">Open workspace</a></div></div>
+          <div class="dtable dt-h">
+            <div class="dt-head"><span>Customer</span><span>Agent</span><span>Reason</span><span>Waiting</span><span>SLA</span></div>
+            <div class="dt-row"><span><b style="font-size:12.5px">Farida Sheikh</b><span class="mono-sm" style="display:block">voice · +91 90•••77315</span></span><span class="mono-sm">Riya</span><span class="mono-sm">hardship language</span><span class="mono">16:38</span><span><span class="sla breach"><span class="sbar"><i style="width:100%"></i></span>breached</span></span></div>
+            <div class="dt-row"><span><b style="font-size:12.5px">Priya Deshmukh</b><span class="mono-sm" style="display:block">whatsapp · +91 98•••41208</span></span><span class="mono-sm">Maya</span><span class="mono-sm">refund above authority</span><span class="mono">02:14</span><span><span class="sla risk"><span class="sbar"><i style="width:78%"></i></span>04:12</span></span></div>
+            <div class="dt-row"><span><b style="font-size:12.5px">Suresh Pillai</b><span class="mono-sm" style="display:block">web · sess 1c44</span></span><span class="mono-sm">Maya</span><span class="mono-sm">asked for a human</span><span class="mono">01:02</span><span><span class="sla"><span class="sbar"><i style="width:30%"></i></span>10:40</span></span></div>
+            <div class="dt-row"><span><b style="font-size:12.5px">Nandini Shah</b><span class="mono-sm" style="display:block">app · cif 51902</span></span><span class="mono-sm">Arjun</span><span class="mono-sm">2 tool failures</span><span class="mono">00:41</span><span><span class="sla"><span class="sbar"><i style="width:18%"></i></span>13:20</span></span></div>
+          </div>
+
+          <div class="sec-head" style="margin-top:18px"><h2>Assigned to me</h2><span class="count">7</span></div>
+          <div class="dtable dt-h">
+            <div class="dt-head"><span>Customer</span><span>Agent</span><span>Control</span><span>Last turn</span><span>SLA</span></div>
+            <div class="dt-row"><span><b style="font-size:12.5px">Priya Deshmukh</b><span class="mono-sm" style="display:block">duplicate EMI debit</span></span><span class="mono-sm">Maya</span><span><span class="cstate human"><span class="dot"></span>you</span></span><span class="mono-sm">09:56</span><span class="mono-sm">04:12</span></div>
+            <div class="dt-row"><span><b style="font-size:12.5px">Arvind Nair</b><span class="mono-sm" style="display:block">replacement card courier</span></span><span class="mono-sm">Maya</span><span><span class="cstate human"><span class="dot"></span>you</span></span><span class="mono-sm">09:44</span><span class="mono-sm">12:05</span></div>
+            <div class="dt-row"><span><b style="font-size:12.5px">Sneha Kulkarni</b><span class="mono-sm" style="display:block">statement re-sent</span></span><span class="mono-sm">Maya</span><span><span class="cstate returning"><span class="dot"></span>returning</span></span><span class="mono-sm">09:41</span><span class="mono-sm">—</span></div>
+            <div class="dt-row"><span><b style="font-size:12.5px">Deepa Raman</b><span class="mono-sm" style="display:block">address change · docs pending</span></span><span class="mono-sm">Maya</span><span><span class="cstate ai"><span class="dot"></span>ai active</span></span><span class="mono-sm">09:18</span><span class="mono-sm">1d 04h</span></div>
+          </div>
+        </div>
+
+        <div class="rail">
+          <div class="rail-card">
+            <h3>My shift<span class="count">08:00 – 17:00 IST</span></h3>
+            <div class="kv" style="grid-template-columns:minmax(86px,96px) minmax(0,1fr)">
+              <span class="k">availability</span><span><span class="presence working"><span class="dot"></span>available</span></span>
+              <span class="k">capacity</span><span>7 of 8 concurrent</span>
+              <span class="k">queues</span><span>Cards &amp; EMI Tier 2, Disputes</span>
+              <span class="k">languages</span><span>English, Marathi</span>
+            </div>
+            <div class="rowsplit" style="margin-top:10px"><button class="btn tiny">Pause new assignments</button></div>
+          </div>
+          <div class="rail-card">
+            <h3>For you<span class="count">2</span></h3>
+            <div class="alert warn" style="margin:0 0 10px"><span><b>Hardship case unclaimed 16m</b><span class="a-body" style="display:block">Farida Sheikh · you are eligible</span></span></div>
+            <div class="alert" style="margin:0"><span><b>Policy CRD-114 updated</b><span class="a-body" style="display:block">fee waiver wording · read before quoting</span></span></div>
+          </div>
+          <div class="rail-card">
+            <h3>Recently resolved</h3>
+            <div class="day-list">
+              <div class="day-row"><span class="day-time">10:14</span><span class="day-label">Priya Deshmukh<span class="day-who">reversal ₹12,480</span></span><span class="day-flag">4.6</span></div>
+              <div class="day-row"><span class="day-time">09:32</span><span class="day-label">Mohit Bansal<span class="day-who">fee waiver query</span></span><span class="day-flag">4.0</span></div>
+              <div class="day-row"><span class="day-time">09:06</span><span class="day-label">Kiran Rao<span class="day-who">EMI foreclosure quote</span></span><span class="day-flag">5.0</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ══ CS LEAD ══ -->
+    <sc-if value="{{ isLead }}" hint-placeholder-val="{{ false }}">
+      <div class="tiles" style="grid-template-columns:repeat(auto-fit,minmax(146px,1fr))">
+        <div class="tile"><div class="v">7,204</div><div class="k">conversations 7d</div></div>
+        <div class="tile"><div class="v">79.8%</div><div class="k">ai containment</div></div>
+        <div class="tile warn"><div class="v">20.2%</div><div class="k">escalation rate</div></div>
+        <div class="tile warn"><div class="v">31</div><div class="k">sla breaches</div></div>
+        <div class="tile"><div class="v">4.33</div><div class="k">csat</div></div>
+        <div class="tile"><div class="v">6</div><div class="k">corrections staged</div></div>
+      </div>
+
+      <div class="sec-head"><h2>Virtual agents</h2><span class="count">3 live</span><div class="sec-head-actions"><button class="btn tiny">New agent</button></div></div>
+      <div class="g g3" style="margin-bottom:18px">
+        <a class="agcard" href="02 Agent overview.dc.html">
+          <div class="h"><span class="avatar lg indigo">MA</span><span><span class="nm">Maya</span><span class="rl" style="display:block">customer support · prompt v14</span></span><span style="margin-left:auto"><span class="presence working"><span class="dot"></span>live</span></span></div>
+          <div class="mtx" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div><span class="n">4,812</span><span class="l">convs</span></div><div><span class="n">81.4%</span><span class="l">contained</span></div><div><span class="n">4.41</span><span class="l">csat</span></div></div>
+          <div class="rowsplit"><span class="schip warn">3 alerts</span><span class="mono-sm">WhatsApp · Web · App · Email</span></div>
+        </a>
+        <a class="agcard" href="02 Agent overview.dc.html">
+          <div class="h"><span class="avatar lg sky">AR</span><span><span class="nm">Arjun</span><span class="rl" style="display:block">sales · prompt v9</span></span><span style="margin-left:auto"><span class="presence working"><span class="dot"></span>live</span></span></div>
+          <div class="mtx" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div><span class="n">1,604</span><span class="l">convs</span></div><div><span class="n">86.2%</span><span class="l">contained</span></div><div><span class="n">4.18</span><span class="l">csat</span></div></div>
+          <div class="rowsplit"><span class="schip muted">no alerts</span><span class="mono-sm">Web · Instagram</span></div>
+        </a>
+        <a class="agcard" href="02 Agent overview.dc.html">
+          <div class="h"><span class="avatar lg amber">RI</span><span><span class="nm">Riya</span><span class="rl" style="display:block">collections · prompt v6</span></span><span style="margin-left:auto"><span class="presence blocked"><span class="dot"></span>sla risk</span></span></div>
+          <div class="mtx" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div><span class="n">788</span><span class="l">convs</span></div><div><span class="n">68.1%</span><span class="l">contained</span></div><div><span class="n">3.90</span><span class="l">csat</span></div></div>
+          <div class="rowsplit"><span class="schip danger">14 breaches</span><span class="mono-sm">Voice · WhatsApp</span></div>
+        </a>
+      </div>
+
+      <div class="row2">
+        <div>
+          <div class="sec-head"><h2>Queues</h2><span class="count">5</span></div>
+          <div class="dtable dt-q">
+            <div class="dt-head"><span>Queue</span><span>Waiting</span><span>On shift</span><span>Avg wait</span><span>Breaches</span><span>State</span></div>
+            <div class="dt-row"><span>Cards &amp; EMI · Tier 2</span><span class="mono">4</span><span class="mono">9 / 14</span><span class="mono">02:40</span><span class="mono">6</span><span><span class="schip good">ok</span></span></div>
+            <div class="dt-row"><span>Hardship desk</span><span class="mono">3</span><span class="mono">2 / 6</span><span class="mono">14:10</span><span class="mono" style="color:var(--danger);font-weight:600">14</span><span><span class="schip danger">understaffed</span></span></div>
+            <div class="dt-row"><span>Disputes</span><span class="mono">2</span><span class="mono">4 / 5</span><span class="mono">06:20</span><span class="mono">7</span><span><span class="schip warn">watch</span></span></div>
+            <div class="dt-row"><span>Sales callback</span><span class="mono">1</span><span class="mono">3 / 4</span><span class="mono">03:05</span><span class="mono">2</span><span><span class="schip good">ok</span></span></div>
+            <div class="dt-row"><span>Cards &amp; EMI · Tier 1</span><span class="mono">0</span><span class="mono">6 / 8</span><span class="mono">01:10</span><span class="mono">2</span><span><span class="schip good">ok</span></span></div>
+          </div>
+        </div>
+        <div class="rail">
+          <div class="rail-card">
+            <h3>Needs a decision<span class="count">3</span></h3>
+            <div class="alert warn" style="margin:0 0 10px"><span><b>Raise Maya's refund authority?</b><span class="a-body" style="display:block">₹5,000 → ₹10,000 would remove ≈180 handoffs/week</span></span></div>
+            <div class="alert warn" style="margin:0 0 10px"><span><b>Hardship desk night cover</b><span class="a-body" style="display:block">2 execs after 20:00 · 14 breaches this week</span></span></div>
+            <div class="alert" style="margin:0"><span><b>6 prompt corrections staged</b><span class="a-body" style="display:block">review before v15 activation</span></span></div>
+          </div>
+          <div class="rail-card">
+            <h3>Escalation reasons · 7d</h3>
+            <div class="hb" style="grid-template-columns:minmax(90px,1fr) minmax(0,1.3fr) 44px">
+              <span>Above authority</span><span class="bar"><i class="w" style="width:88%"></i></span><span class="n">312</span>
+              <span>Hardship</span><span class="bar"><i class="w" style="width:52%"></i></span><span class="n">184</span>
+              <span>Dispute</span><span class="bar"><i style="width:41%"></i></span><span class="n">146</span>
+              <span>Tool failure</span><span class="bar"><i class="d" style="width:28%"></i></span><span class="n">99</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ══ TECH ADMIN ══ -->
+    <sc-if value="{{ isAdmin }}" hint-placeholder-val="{{ false }}">
+      <div class="tiles" style="grid-template-columns:repeat(auto-fit,minmax(146px,1fr))">
+        <div class="tile"><div class="v">99.94%</div><div class="k">uptime 30d</div></div>
+        <div class="tile"><div class="v">6 of 10</div><div class="k">healthy workers</div></div>
+        <div class="tile"><div class="v">312</div><div class="k">active conversations</div></div>
+        <div class="tile warn"><div class="v">2.9s</div><div class="k">ttft p95</div></div>
+        <div class="tile"><div class="v">41.2M</div><div class="k">tokens today</div></div>
+        <div class="tile warn"><div class="v">2</div><div class="k">open incidents</div></div>
+      </div>
+
+      <div class="alert error"><span><b>Bedrock ap-south-1 throttling · TTFT SLO breached</b><span class="a-body" style="display:block">opened 09:40 · 3 turns fell back to Anthropic · no customer impact recorded</span></span><a class="btn tiny" style="margin-left:auto;align-self:center" href="03 System control center.dc.html">Open control center</a></div>
+
+      <div class="row2">
+        <div>
+          <div class="sec-head"><h2>Open incidents and alerts</h2><span class="count">2 incidents · 5 alerts</span></div>
+          <div class="dtable dt-h">
+            <div class="dt-head"><span>Alert</span><span>Severity</span><span>Source</span><span>Age</span><span>State</span></div>
+            <div class="dt-row"><span><b style="font-size:12.5px">TTFT above SLO · support-primary</b><span class="mono-sm" style="display:block">p95 2.9s vs 1.2s objective</span></span><span><span class="schip danger">critical</span></span><span class="mono-sm">AWS Bedrock</span><span class="mono">22m</span><span><span class="schip warn">unacked</span></span></div>
+            <div class="dt-row"><span><b style="font-size:12.5px">meridian-crm degraded</b><span class="mono-sm" style="display:block">disputes.raise_case 409 on 6.4%</span></span><span><span class="schip danger">critical</span></span><span class="mono-sm">MCP</span><span class="mono">2d</span><span><span class="schip accent">investigating</span></span></div>
+            <div class="dt-row"><span><b style="font-size:12.5px">ops-jira token expiring</b><span class="mono-sm" style="display:block">refresh token expires 22 Mar</span></span><span><span class="schip warn">warning</span></span><span class="mono-sm">Secrets</span><span class="mono">3h</span><span><span class="schip muted">acked</span></span></div>
+            <div class="dt-row"><span><b style="font-size:12.5px">Slack delivery retrying</b><span class="mono-sm" style="display:block">2 of 18 alert posts failed</span></span><span><span class="schip warn">warning</span></span><span class="mono-sm">Webhooks</span><span class="mono">5h</span><span><span class="schip muted">acked</span></span></div>
+            <div class="dt-row"><span><b style="font-size:12.5px">Sarvam error rate elevated</b><span class="mono-sm" style="display:block">1.8% over 24h · voice-marathi</span></span><span><span class="schip warn">warning</span></span><span class="mono-sm">Provider</span><span class="mono">1d</span><span><span class="schip muted">acked</span></span></div>
+          </div>
+        </div>
+        <div class="rail">
+          <div class="rail-card">
+            <h3>Capacity<span class="count">now</span></h3>
+            <div class="kv" style="grid-template-columns:minmax(86px,100px) minmax(0,1fr)">
+              <span class="k">slots used</span><span>36 of 60 · 60%</span>
+              <span class="k">queue depth</span><span>7 · oldest 3s</span>
+              <span class="k">warm floor</span><span>2 workers</span>
+              <span class="k">ceiling</span><span>10 workers</span>
+            </div>
+            <div class="pbar" style="margin-top:10px"><div style="width:60%"></div></div>
+            <div class="rowsplit" style="margin-top:10px"><a class="btn tiny" href="03 System control center.dc.html#workers">Worker config</a></div>
+          </div>
+          <div class="rail-card">
+            <h3>Connections</h3>
+            <div class="day-list">
+              <div class="day-row"><span class="day-time">MCP</span><span class="day-label">5 servers<span class="day-who">34 tools · 1 degraded</span></span><span class="day-flag">!</span></div>
+              <div class="day-row"><span class="day-time">LLM</span><span class="day-label">6 providers<span class="day-who">5 profiles · 1 elevated</span></span><span class="day-flag">!</span></div>
+              <div class="day-row"><span class="day-time">CHAN</span><span class="day-label">7 channels<span class="day-who">all verified</span></span><span class="day-flag">ok</span></div>
+            </div>
+            <div class="rowsplit" style="margin-top:10px"><a class="btn tiny ghost" href="04 Connections and models.dc.html">Manage</a></div>
+          </div>
+          <div class="rail-card">
+            <h3>Recent privileged changes</h3>
+            <div class="day-list">
+              <div class="day-row"><span class="day-time">09:12</span><span class="day-label">Max workers 8 → 10<span class="day-who">T. Shetty · aud_88e2</span></span></div>
+              <div class="day-row"><span class="day-time">08:40</span><span class="day-label">core-cards tools re-synced<span class="day-who">T. Shetty · aud_88d9</span></span></div>
+              <div class="day-row"><span class="day-time">Yest</span><span class="day-label">sec_claim_31 rotated<span class="day-who">automation · aud_88b1</span></span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = { role: 'exec' };
+  renderVals() {
+    const r = this.state.role;
+    const set = (v) => () => this.setState({ role: v });
+    const copy = {
+      exec: { name: 'Nikhil,', tail: 'four customers are waiting on a human.', strip: 'Shift 08:00–17:00 IST · 7 assigned · 4 in pickup · 1 SLA breached · Cards & EMI Tier 2', shift: 'Available', alerts: '2' },
+      lead: { name: 'Anjali,', tail: 'Maya is escalating more than she should.', strip: '3 live agents · 7,204 conversations this week · 31 SLA breaches · 6 prompt corrections staged', shift: 'Last 7 days', alerts: '3' },
+      admin: { name: 'Tejas,', tail: 'the runtime is healthy, the provider is not.', strip: 'Single-tenant · ap-south-1 · build 2026.03.18-a · 6 workers · 2 open incidents', shift: 'Last 1h', alerts: '5' }
+    }[r];
+    return {
+      role: r,
+      s_exec: r === 'exec' ? 'active' : '', s_lead: r === 'lead' ? 'active' : '', s_admin: r === 'admin' ? 'active' : '',
+      go_exec: set('exec'), go_lead: set('lead'), go_admin: set('admin'),
+      isExec: r === 'exec', isLead: r === 'lead', isAdmin: r === 'admin',
+      greetName: copy.name, greetTail: copy.tail, stripText: copy.strip, shiftChip: copy.shift, alertCount: copy.alerts
+    };
+  }
+}
+</script>
+</body>
+</html>
