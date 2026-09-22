@@ -6,6 +6,7 @@ export * from './identity/sessions.js';
 export * from './identity/users.js';
 export * from './identity/setup.js';
 export * from './identity/teams.js';
+export * from './identity/customer-claims.js';
 export * from './settings/settings.js';
 export * from './cache/generations.js';
 export * from './customers/identity-resolver.js';

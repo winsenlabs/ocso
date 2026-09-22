@@ -5,7 +5,9 @@ import { createMeridianApp, type MeridianAuth } from './app.js';
  *   PORT (default 4100), HOST (default 0.0.0.0)
  *   DEMO_MCP_AUTH = bearer (default) | none
  *   DEMO_MCP_TOKEN        required for bearer mode (>= 16 chars); never logged
- *   DEMO_CLAIMS_SECRET    optional HS256 secret to verify X-OCSO-Customer-Claims
+ *   DEMO_CLAIMS_JWKS_URL  OCSO's JWKS (e.g. https://support.example.com/.well-known/jwks.json) to verify X-OCSO-Customer-Claims
+ *   DEMO_CLAIMS_ISSUER    expected claims issuer (OCSO public URL), checked with the JWKS
+ *   DEMO_CLAIMS_SECRET    optional HS256 secret (tests) to verify X-OCSO-Customer-Claims
  *   DEMO_ALLOWED_HOSTS    optional comma-separated Host allowlist (DNS-rebinding protection)
  */
 function authFromEnv(): MeridianAuth {
@@ -28,7 +30,13 @@ try {
 const port = Number(process.env.PORT ?? 4100);
 const host = process.env.HOST ?? '0.0.0.0';
 const allowedHosts = process.env.DEMO_ALLOWED_HOSTS?.split(',').map((h) => h.trim()).filter(Boolean);
-const { app } = createMeridianApp({ auth, claimsSecret: process.env.DEMO_CLAIMS_SECRET, allowedHosts });
+const { app } = createMeridianApp({
+  auth,
+  claimsSecret: process.env.DEMO_CLAIMS_SECRET,
+  claimsJwksUrl: process.env.DEMO_CLAIMS_JWKS_URL,
+  claimsIssuer: process.env.DEMO_CLAIMS_ISSUER,
+  allowedHosts,
+});
 
 const server = app.listen(port, host, () => {
   console.log(`meridian-core MCP server on http://${host}:${port}/mcp (auth: ${auth.mode})`);

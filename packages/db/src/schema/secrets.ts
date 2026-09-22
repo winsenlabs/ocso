@@ -1,4 +1,5 @@
-import { integer, jsonb, pgTable, text } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { integer, jsonb, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
 import { ts } from './columns.js';
 
 /**
@@ -17,3 +18,25 @@ export const secrets = pgTable('secrets', {
   rotatedAt: ts('rotated_at'),
   expiresAt: ts('expires_at'),
 });
+
+/**
+ * Asymmetric signing keys (customer identity claims, docs/08 §4). The private
+ * key lives in the SecretStore; only the public JWK is stored here. RETIRING
+ * keys stay in the JWKS so recently issued tokens still verify.
+ */
+export const signingKeys = pgTable(
+  'signing_keys',
+  {
+  kid: text().primaryKey(),
+  purpose: text().$type<'customer_claims'>().notNull(),
+  alg: text().$type<'ES256'>().notNull(),
+  publicJwk: jsonb().$type<Record<string, string>>().notNull(),
+  privateKeyRef: text().notNull(),
+  status: text().$type<'ACTIVE' | 'RETIRING' | 'RETIRED'>().notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  retiringAt: ts('retiring_at'),
+  retiredAt: ts('retired_at'),
+  },
+  // At most one active key per purpose.
+  (t) => [uniqueIndex('signing_keys_one_active_uq').on(t.purpose).where(sql`${t.status} = 'ACTIVE'`)],
+);

@@ -1,4 +1,4 @@
-import { McpConnectionService, type AlertDeliveryService, type AlertEngine } from '@ocso/application';
+import { McpConnectionService, type AlertDeliveryService, type AlertEngine, type CustomerClaimsIssuer } from '@ocso/application';
 import type { WorkerEnv } from '@ocso/config';
 import type { Db } from '@ocso/db';
 import type { QueueAdapter } from '@ocso/queue';
@@ -12,6 +12,7 @@ export interface SubsystemDeps {
   queue: QueueAdapter;
   alerts: AlertEngine;
   alertDelivery: AlertDeliveryService;
+  claims: CustomerClaimsIssuer;
 }
 
 /**
@@ -26,5 +27,6 @@ export function subsystemTasks(deps: SubsystemDeps): ScheduledTask[] {
     { name: 'alert-evaluation', everySeconds: 30, run: () => deps.alerts.evaluate() },
     // Deliveries whose publish failed (crash between commit and publish) are re-queued.
     { name: 'alert-redispatch', everySeconds: 120, run: () => deps.alertDelivery.redispatchPending(deps.queue) },
+    { name: 'retire-signing-keys', everySeconds: 3600, run: () => deps.claims.retireExpired() },
   ];
 }

@@ -8,7 +8,8 @@ import {
 } from '@modelcontextprotocol/express';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import { createMcpHandler, OAuthError, OAuthErrorCode, type OAuthMetadata, type OAuthTokenVerifier } from '@modelcontextprotocol/server';
-import { readRequestContext } from './request-context.js';
+import { JwksClaimsVerifier } from './claims-jwks.js';
+import { readRequestContext, verifiedClaims } from './request-context.js';
 import { buildMeridianServer, SERVER_INFO } from './server.js';
 import { MeridianStore } from './store.js';
 
@@ -30,8 +31,12 @@ export type MeridianAuth =
 export interface MeridianAppOptions {
   auth: MeridianAuth;
   store?: MeridianStore;
-  /** HS256 secret for verifying `X-OCSO-Customer-Claims`; claims are ignored when unset. */
+  /** HS256 secret for verifying `X-OCSO-Customer-Claims` (tests). */
   claimsSecret?: string | undefined;
+  /** OCSO's JWKS URL: verifies the ES256 claims OCSO issues. Takes precedence over `claimsSecret`. */
+  claimsJwksUrl?: string | undefined;
+  /** Expected claims issuer (OCSO public URL) when verifying via JWKS. */
+  claimsIssuer?: string | undefined;
   /** DNS-rebinding protection: allowed `Host` names (recommended when not bound to localhost). */
   allowedHosts?: string[] | undefined;
 }
@@ -85,8 +90,17 @@ export function createMeridianApp(options: MeridianAppOptions): { app: Express; 
   app.use(express.json({ limit: '256kb' }));
   const guards = authGuards(app, options.auth);
   // express.json() consumed the stream: the parsed body MUST be passed explicitly (research/03 §4).
+  const jwks = options.claimsJwksUrl ? new JwksClaimsVerifier({ jwksUrl: options.claimsJwksUrl, issuer: options.claimsIssuer }) : null;
   app.all('/mcp', ...guards, (req, res) => {
-    void node(req, res, req.body);
+    const raw = req.headers['x-ocso-customer-claims'];
+    if (!jwks || typeof raw !== 'string') {
+      void node(req, res, req.body);
+      return;
+    }
+    void jwks.verify(raw).then(
+      (claims) => verifiedClaims.run({ claims, claimsError: null }, () => node(req, res, req.body)),
+      () => verifiedClaims.run({ claims: null, claimsError: 'Customer claims could not be verified.' }, () => node(req, res, req.body)),
+    );
   });
   return { app, store };
 }

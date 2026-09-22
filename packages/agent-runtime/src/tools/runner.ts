@@ -16,7 +16,7 @@ export interface ToolProviderFactory {
 
 /** Issues short-lived customer identity claims for trusted connections (docs/08 §4). */
 export interface ClaimsIssuer {
-  issue(input: { customerId: string; conversationId: string; agentId: string; scopes: readonly string[] }): Promise<string>;
+  issue(input: { customerId: string; conversationId: string; agentId: string; connectionId: string; scopes: readonly string[] }): Promise<string>;
 }
 
 export interface ToolRunContext {
@@ -27,7 +27,6 @@ export interface ToolRunContext {
   controlState: ControlState;
   correlationId: string;
   historyWindowStartSeq: number;
-  sendCustomerClaims: (connectionId: string) => boolean;
 }
 
 export type ToolRunOutcome = {
@@ -138,8 +137,8 @@ export class ToolRunner {
     try {
       const provider = await this.providers.forConnection(connectionId);
       const claims =
-        this.claims && ctx.sendCustomerClaims(connectionId)
-          ? await this.claims.issue({ customerId: ctx.customerId, conversationId: ctx.conversationId, agentId: ctx.agentId, scopes: entry.tool.requiredScopes })
+        this.claims && entry.sendCustomerClaims
+          ? await this.claims.issue({ customerId: ctx.customerId, conversationId: ctx.conversationId, agentId: ctx.agentId, connectionId, scopes: entry.tool.requiredScopes })
           : undefined;
       outcome = await provider.invoke({
         toolCallId: id,

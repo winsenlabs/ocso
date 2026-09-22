@@ -1,13 +1,15 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
 /**
  * Per-request context read from HTTP headers set by the MCP client (OCSO):
  * - `Idempotency-Key`: write tools replay the first result for a key.
- * - `X-OCSO-Customer-Claims`: short-lived HS256 JWT naming the customer the
- *   conversation is about (docs/08 §4). Verified only when a shared secret is
- *   configured; customer-scoped tools then refuse other customers' data.
- *   Without a secret the header is ignored (demo convenience — a real system
- *   must always verify, preferably with an asymmetric key).
+ * - `X-OCSO-Customer-Claims`: short-lived JWT naming the customer the
+ *   conversation is about (docs/08 §4). OCSO signs ES256 and publishes its
+ *   JWKS; configure `claimsJwksUrl` to verify (see claims-jwks.ts). An HS256
+ *   shared secret is also accepted for tests. Customer-scoped tools then refuse
+ *   other customers' data. With no verifier configured the header is ignored
+ *   (demo convenience — a real system must always verify).
  */
 export interface CustomerClaims {
   sub: string;
@@ -41,13 +43,17 @@ export function verifyClaims(token: string, secret: string, nowSeconds: number):
   return { sub: payload.sub, ...(typeof payload.exp === 'number' ? { exp: payload.exp } : {}) };
 }
 
+/** Claims verified asynchronously (JWKS) by middleware before the MCP handler runs. */
+export const verifiedClaims = new AsyncLocalStorage<{ claims: CustomerClaims | null; claimsError: string | null }>();
+
 export function readRequestContext(req: Request | undefined, claimsSecret: string | undefined): RequestContext {
   if (!req) return EMPTY_CONTEXT;
   const key = req.headers.get('idempotency-key');
   const rawClaims = req.headers.get('x-ocso-customer-claims');
-  let claims: CustomerClaims | null = null;
-  let claimsError: string | null = null;
-  if (rawClaims && claimsSecret) {
+  const preVerified = verifiedClaims.getStore();
+  let claims: CustomerClaims | null = preVerified?.claims ?? null;
+  let claimsError: string | null = preVerified?.claimsError ?? null;
+  if (!preVerified && rawClaims && claimsSecret) {
     try {
       claims = verifyClaims(rawClaims, claimsSecret, Math.floor(Date.now() / 1000));
     } catch {

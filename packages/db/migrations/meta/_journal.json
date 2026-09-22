@@ -36,6 +36,13 @@
       "when": 1790071747067,
       "tag": "0004_copilot_suggestion_basis",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790072105720,
+      "tag": "0005_signing_keys",
+      "breakpoints": true
     }
   ]
 }

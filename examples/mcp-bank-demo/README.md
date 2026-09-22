@@ -35,8 +35,8 @@ it matches the OCSO design walkthrough:
 **Per-request headers:**
 - `Idempotency-Key`: write tools replay the first result for a key and return `replayed: true`
   instead of acting twice.
-- `X-OCSO-Customer-Claims`: the claims are verified as HS256 when `DEMO_CLAIMS_SECRET` is set.
-  Customer-scoped tools then refuse other customers' data. Without the secret, the header is
+- `X-OCSO-Customer-Claims`: OCSO sends these only for connections marked trusted. They are ES256 JWTs verified against OCSO's JWKS when `DEMO_CLAIMS_JWKS_URL` is set (HS256 with `DEMO_CLAIMS_SECRET` is accepted for tests).
+  Customer-scoped tools then refuse other customers' data. With neither configured, the header is
   ignored. That is a demo convenience; a real system must always verify the claims.
 
 ## Run
@@ -54,7 +54,9 @@ DEMO_MCP_AUTH=none node examples/mcp-bank-demo/dist/main.js
 | `PORT` / `HOST` | `4100` / `0.0.0.0` | Listen address. MCP is at `POST /mcp`; `GET /healthz` needs no auth |
 | `DEMO_MCP_AUTH` | `bearer` | `bearer` or `none` |
 | `DEMO_MCP_TOKEN` | — | Required in bearer mode, at least 16 characters. It is compared in constant time and never logged |
-| `DEMO_CLAIMS_SECRET` | — | Optional HS256 secret for `X-OCSO-Customer-Claims` |
+| `DEMO_CLAIMS_JWKS_URL` | — | OCSO JWKS URL (`<OCSO public URL>/.well-known/jwks.json`) to verify `X-OCSO-Customer-Claims` |
+| `DEMO_CLAIMS_ISSUER` | — | Expected claims issuer (OCSO public URL) |
+| `DEMO_CLAIMS_SECRET` | — | Optional HS256 secret for `X-OCSO-Customer-Claims` (tests) |
 | `DEMO_ALLOWED_HOSTS` | — | Optional comma-separated `Host` allowlist, for DNS-rebinding protection |
 
 **Bearer mode.** A missing or invalid token gets a 401 with `WWW-Authenticate: Bearer`. The server

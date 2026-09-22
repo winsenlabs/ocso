@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { SettingsService } from '@ocso/application';
+import { CustomerClaimsIssuer, SettingsService } from '@ocso/application';
 import {
   ChannelRuntime,
   ContextBuilder,
@@ -18,12 +18,13 @@ import {
 } from '@ocso/agent-runtime';
 import type { BlobStore } from '@ocso/blob';
 import type { ChannelRegistry } from '@ocso/channels';
+import type { WorkerEnv } from '@ocso/config';
 import type { Db } from '@ocso/db';
 import type { Logger } from '@ocso/observability';
 import type { QueueAdapter } from '@ocso/queue';
 import type { SecretStore } from '@ocso/secrets';
 import { createAjvValidator } from '@ocso/tools';
-import { BLOB_STORE, CHANNEL_REGISTRY, DB, LOGGER, PROVIDER_SOURCE, QUEUE, SECRET_STORE, TOOL_PROVIDERS, WORKER_ID } from '../infrastructure/tokens.js';
+import { BLOB_STORE, CHANNEL_REGISTRY, DB, ENV, LOGGER, PROVIDER_SOURCE, QUEUE, SECRET_STORE, TOOL_PROVIDERS, WORKER_ID } from '../infrastructure/tokens.js';
 import { ADAPTER_PROVIDERS, capabilitiesResolver } from './adapters.providers.js';
 import { WorkerRegistryService } from './worker-registry.service.js';
 
@@ -66,6 +67,11 @@ export const HISTORY_WINDOW = 20;
         new ContextBuilder(db, hot, { historyWindow: HISTORY_WINDOW, mediaWindow: 6, timezone: (await settings.deployment()).timezone }),
     },
     {
+      provide: CustomerClaimsIssuer,
+      inject: [DB, SECRET_STORE, ENV],
+      useFactory: (db: Db, secrets: SecretStore, env: WorkerEnv) => new CustomerClaimsIssuer({ db, secrets, issuer: env.OCSO_PUBLIC_URL }),
+    },
+    {
       provide: CopilotService,
       inject: [DB, ModelGateway, ContextBuilder, PROVIDER_SOURCE],
       useFactory: (db: Db, gateway: ModelGateway, context: ContextBuilder, source: ProviderAdapterSource) =>
@@ -73,7 +79,7 @@ export const HISTORY_WINDOW = 20;
     },
     {
       provide: TurnProcessor,
-      inject: [DB, QUEUE, LeaseManager, ModelGateway, ContextBuilder, MediaMaterializer, TOOL_PROVIDERS, PROVIDER_SOURCE, LOGGER],
+      inject: [DB, QUEUE, LeaseManager, ModelGateway, ContextBuilder, MediaMaterializer, TOOL_PROVIDERS, PROVIDER_SOURCE, CustomerClaimsIssuer, LOGGER],
       useFactory: (
         db: Db,
         queue: QueueAdapter,
@@ -83,6 +89,7 @@ export const HISTORY_WINDOW = 20;
         media: MediaMaterializer,
         toolProviders: ToolProviderFactory,
         source: ProviderAdapterSource,
+        claims: CustomerClaimsIssuer,
         logger: Logger,
       ) => {
         const validate = createAjvValidator();
@@ -93,7 +100,7 @@ export const HISTORY_WINDOW = 20;
           gateway,
           context,
           media,
-          toolRunner: (catalog) => new ToolRunner(db, catalog, toolProviders, validate, null),
+          toolRunner: (catalog) => new ToolRunner(db, catalog, toolProviders, validate, claims),
           capabilitiesFor: capabilitiesResolver(db, source),
           logger,
           summarizeAfter: HISTORY_WINDOW * 2,
@@ -101,6 +108,6 @@ export const HISTORY_WINDOW = 20;
       },
     },
   ],
-  exports: [WorkerRegistryService, CopilotService, HotContextCache, LeaseManager, ModelGateway, TurnProcessor, DeliveryService, MediaMaterializer, SummaryService, PROVIDER_SOURCE, TOOL_PROVIDERS],
+  exports: [WorkerRegistryService, CopilotService, CustomerClaimsIssuer, HotContextCache, LeaseManager, ModelGateway, TurnProcessor, DeliveryService, MediaMaterializer, SummaryService, PROVIDER_SOURCE, TOOL_PROVIDERS],
 })
 export class RuntimeModule {}

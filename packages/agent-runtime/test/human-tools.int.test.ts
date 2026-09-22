@@ -3,11 +3,14 @@ import { and, desc, eq } from 'drizzle-orm';
 import { toolCalls } from '@ocso/db';
 import { createAjvValidator } from '@ocso/tools';
 import type { Principal } from '@ocso/auth';
+import { randomBytes } from 'node:crypto';
+import { CustomerClaimsIssuer } from '@ocso/application';
+import { InMemorySecretRows, LocalSecretStore, parseMasterKey } from '@ocso/secrets';
 import { HumanToolService, expireToolConfirmations } from '../src/index.js';
 import { createRuntimeHarness, turnMessage, type RuntimeHarness } from './harness.js';
 
 let h: RuntimeHarness;
-const invoked: Array<{ toolName: string; args: unknown }> = [];
+const invoked: Array<{ toolName: string; args: unknown; customerClaims?: string | undefined }> = [];
 let service: HumanToolService;
 let toolId: string;
 let exec: Principal;
@@ -29,8 +32,9 @@ beforeAll(async () => {
   exec = { userId: execId, role: 'CS_EXEC', displayName: 'Nikhil Menon', teamIds: [], via: 'UI' };
   service = new HumanToolService(
     h.t.db,
-    { forConnection: async () => ({ connectionId, invoke: async (call) => { invoked.push({ toolName: call.toolName, args: call.args }); return { status: 'SUCCEEDED', output: { type: 'json', value: { reference: 'RVSL-5521904' } }, latencyMs: 12 }; } }) },
+    { forConnection: async () => ({ connectionId, invoke: async (call) => { invoked.push({ toolName: call.toolName, args: call.args, customerClaims: call.customerClaims }); return { status: 'SUCCEEDED', output: { type: 'json', value: { reference: 'RVSL-5521904' } }, latencyMs: 12 }; } }) },
     createAjvValidator(),
+    new CustomerClaimsIssuer({ db: h.t.db, secrets: new LocalSecretStore(new InMemorySecretRows(), parseMasterKey('k', randomBytes(32).toString('base64'))), issuer: 'https://ocso.test' }),
   );
 });
 afterAll(async () => {
@@ -101,5 +105,20 @@ describe('sensitive tool confirmation (docs/08 §7)', () => {
     expect(done.status).toBe('SUCCEEDED');
     const [row] = await h.t.db.select().from(toolCalls).where(eq(toolCalls.id, done.toolCallId));
     expect(row).toMatchObject({ actorType: 'HUMAN', actorId: exec.userId, confirmedBy: exec.userId });
+  });
+
+  it('attaches signed customer claims only for trusted connections', async () => {
+    const plain = await proposeReversal();
+    await service.confirm({ principal: exec, correlationId: 'c' }, plain);
+    expect(invoked.at(-1)!.customerClaims).toBeUndefined();
+
+    await h.t.pool.query(`UPDATE mcp_connections SET send_customer_claims = true`);
+    const trusted = await proposeReversal();
+    await service.confirm({ principal: exec, correlationId: 'c' }, trusted);
+    const token = invoked.at(-1)!.customerClaims!;
+    const payload = JSON.parse(Buffer.from(token.split('.')[1]!, 'base64url').toString());
+    const [call] = await h.t.db.select().from(toolCalls).where(eq(toolCalls.id, trusted));
+    const { rows } = await h.t.pool.query(`SELECT customer_id, agent_id FROM conversations WHERE id = $1`, [call!.conversationId]);
+    expect(payload).toMatchObject({ iss: 'https://ocso.test', sub: `ocso:customer:${rows[0].customer_id}`, cid: call!.conversationId, agt: rows[0].agent_id });
   });
 });

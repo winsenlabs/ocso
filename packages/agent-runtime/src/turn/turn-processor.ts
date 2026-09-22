@@ -151,7 +151,6 @@ export class TurnProcessor {
               controlState: state,
               correlationId,
               historyWindowStartSeq: ctx.windowStartSeq,
-              sendCustomerClaims: () => false,
             },
           },
           {

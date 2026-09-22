@@ -10,6 +10,8 @@ export interface CatalogEntry {
   grant: AgentToolGrant | null;
   /** Name on the MCP server (differs from the model-facing name). */
   serverName: string;
+  /** Trusted connection: calls carry short-lived customer identity claims (docs/08 §4). */
+  sendCustomerClaims: boolean;
 }
 
 export interface AgentToolCatalog {
@@ -45,6 +47,7 @@ export async function loadAgentToolCatalog(db: DbOrTx, agentId: string): Promise
   for (const { t, c, g } of rows) {
     entries.set(t.modelName, {
       serverName: t.name,
+      sendCustomerClaims: c.sendCustomerClaims,
       tool: {
         id: t.id,
         connectionId: t.connectionId,

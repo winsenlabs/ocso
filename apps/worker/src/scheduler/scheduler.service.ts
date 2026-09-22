@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
-import { AlertDeliveryService, AlertEngine, autoAssignUnclaimed, expireOffers, repairStuckEscalations } from '@ocso/application';
+import { AlertDeliveryService, AlertEngine, CustomerClaimsIssuer, autoAssignUnclaimed, expireOffers, repairStuckEscalations } from '@ocso/application';
 import { cleanupExpiredLeases, expireToolConfirmations, reapLostWorkers, relayScheduledJobs, sweepStrandedTurns } from '@ocso/agent-runtime';
 import type { WorkerEnv } from '@ocso/config';
 import { healthSamples, uuidv7, type Db } from '@ocso/db';
@@ -38,6 +38,7 @@ export class SchedulerService {
     @Inject(SECRET_STORE) secrets: SecretStore,
     @Inject(AlertEngine) alerts: AlertEngine,
     @Inject(AlertDeliveryService) alertDelivery: AlertDeliveryService,
+    @Inject(CustomerClaimsIssuer) claims: CustomerClaimsIssuer,
   ) {
     this.leader = new LeaderElection(env.DATABASE_URL, 'ocso:scheduler');
     this.tasks = [
@@ -51,7 +52,7 @@ export class SchedulerService {
       { name: 'relay-scheduled-jobs', everySeconds: 5, run: ({ db, queue }) => relayScheduledJobs(db, queue) },
       { name: 'health-sample', everySeconds: 60, run: ({ db }) => sampleDatabaseHealth(db) },
       { name: 'purge-done-jobs', everySeconds: 3600, run: ({ db }) => db.execute(sql`DELETE FROM jobs WHERE status = 'done' AND completed_at < now() - interval '1 day'`) },
-      ...subsystemTasks({ db, env, secrets, queue, alerts, alertDelivery }),
+      ...subsystemTasks({ db, env, secrets, queue, alerts, alertDelivery, claims }),
     ];
   }
 

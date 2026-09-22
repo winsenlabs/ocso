@@ -2,9 +2,9 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { Permission, assertCan, type Principal } from '@ocso/auth';
 import { emitEvent, recordAudit, type ActorContext } from '@ocso/application';
 import { DomainError, notFound, validation } from '@ocso/domain';
-import { mcpConnections, toolCalls, tools, uuidv7, type Db } from '@ocso/db';
+import { conversations, mcpConnections, toolCalls, tools, uuidv7, type Db } from '@ocso/db';
 import { authorizeToolCall, sanitizeForAudit, type ConnectionRecord, type SchemaValidator, type ToolRecord } from '@ocso/tools';
-import { argsHashOf, type ToolProviderFactory } from './runner.js';
+import { argsHashOf, type ClaimsIssuer, type ToolProviderFactory } from './runner.js';
 
 type ToolRow = typeof tools.$inferSelect;
 type ConnectionRow = typeof mcpConnections.$inferSelect;
@@ -43,6 +43,7 @@ export class HumanToolService {
     private readonly db: Db,
     private readonly providers: ToolProviderFactory,
     private readonly validate: SchemaValidator,
+    private readonly claims: ClaimsIssuer | null = null,
   ) {}
 
   /** Tools the principal may run from the workspace (approved, role-allowed, usable connections). */
@@ -145,7 +146,8 @@ export class HumanToolService {
 
   private async execute(actor: ActorContext, toolCallId: string, conversationId: string | null, tool: ToolRow, connection: ConnectionRow, args: unknown, idempotencyKey: string) {
     const provider = await this.providers.forConnection(connection.id);
-    const outcome = await provider.invoke({ toolCallId, toolName: tool.name, args, timeoutMs: 30_000, idempotencyKey: tool.riskClass === 'READ' ? undefined : idempotencyKey });
+    const customerClaims = await this.claimsFor(conversationId, connection, tool);
+    const outcome = await provider.invoke({ toolCallId, toolName: tool.name, args, timeoutMs: 30_000, customerClaims, idempotencyKey: tool.riskClass === 'READ' ? undefined : idempotencyKey });
     const ok = outcome.status === 'SUCCEEDED';
     await this.db.transaction(async (tx) => {
       await tx
@@ -161,6 +163,14 @@ export class HumanToolService {
       }
     });
     return outcome.status === 'SUCCEEDED' ? { status: 'SUCCEEDED' as const, output: outcome.output } : { status: 'FAILED' as const, error: outcome.message };
+  }
+
+  /** Trusted connections get the conversation's customer claims, exactly as on the agent path. */
+  private async claimsFor(conversationId: string | null, connection: ConnectionRow, tool: ToolRow): Promise<string | undefined> {
+    if (!this.claims || !connection.sendCustomerClaims || !conversationId) return undefined;
+    const [conv] = await this.db.select({ customerId: conversations.customerId, agentId: conversations.agentId }).from(conversations).where(eq(conversations.id, conversationId));
+    if (!conv) return undefined;
+    return this.claims.issue({ customerId: conv.customerId, conversationId, agentId: conv.agentId, connectionId: connection.id, scopes: tool.requiredScopes });
   }
 
   private async pending(toolCallId: string) {

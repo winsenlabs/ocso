@@ -7,7 +7,7 @@ import { ConversationsController } from './conversations.controller.js';
 import { ConversationToolsController } from './conversation-tools.controller.js';
 import { HumanToolService } from '@ocso/agent-runtime';
 import { McpToolProviderFactory } from '@ocso/bootstrap';
-import { SettingsService } from '@ocso/application';
+import { CustomerClaimsIssuer, SettingsService } from '@ocso/application';
 import type { SecretStore } from '@ocso/secrets';
 import { createAjvValidator } from '@ocso/tools';
 import { SECRET_STORE } from '../../infrastructure/tokens.js';
@@ -20,8 +20,9 @@ import { SECRET_STORE } from '../../infrastructure/tokens.js';
     { provide: HumanControlService, inject: [DB], useFactory: (db: Db) => new HumanControlService(db) },
     {
       provide: HumanToolService,
-      inject: [DB, SECRET_STORE, SettingsService],
-      useFactory: (db: Db, secrets: SecretStore, settings: SettingsService) => new HumanToolService(db, new McpToolProviderFactory(db, secrets, settings), createAjvValidator()),
+      inject: [DB, SECRET_STORE, SettingsService, CustomerClaimsIssuer],
+      useFactory: (db: Db, secrets: SecretStore, settings: SettingsService, claims: CustomerClaimsIssuer) =>
+        new HumanToolService(db, new McpToolProviderFactory(db, secrets, settings), createAjvValidator(), claims),
     },
   ],
   exports: [ConversationAccessService],
