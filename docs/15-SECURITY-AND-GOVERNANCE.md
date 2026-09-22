@@ -86,3 +86,11 @@ Audit requirements may differ from conversation retention.
 ## 9. Encryption
 
 Use TLS in transit and appropriate encryption at rest for PostgreSQL, blob storage and secret stores in production.
+
+## Implementation notes (as built)
+
+- Retention (§8) is configured per class in Settings: conversation content (resolved conversations; structure and analytics kept), media bytes, tool payloads, Ask OCSO history, model usage, operational records and audit events. The worker applies it hourly in bounded batches and audits each run. Audit rows can only be deleted past a cutoff the database itself refuses to set below 365 days. Logs and traces are retained by their backends.
+- Audit events are append-only at the database level; prompt versions are immutable once activated.
+- Sessions: random tokens stored hashed, idle and absolute expiry, httpOnly `SameSite=Lax` cookie held by the web tier (ADR-020); cookie-authenticated POST routes also require a same-origin request. Sign-in is throttled per account and per verified client address (the web tier forwards the address from its trusted proxy hop).
+- Secrets live only in the secret store (local AES-GCM or AWS Secrets Manager) and are never returned by the API; the Tech Admin sees an inventory of names, usage and expiry.
+- Outbound calls to admin-configured endpoints (MCP servers, alert and webhook destinations) go through an SSRF guard; webhook payloads carry identifiers and metadata only and are signed (`X-OCSO-Signature`).

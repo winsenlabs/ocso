@@ -99,3 +99,10 @@ Persist:
 - error classification
 
 Do not log secrets.
+
+## Implementation notes (as built)
+
+- OAuth 2.1 client registration order: Client ID Metadata Document → pre-registered client → dynamic registration; PKCE S256, `state` (stored hashed, single use) and RFC 9207 `iss` checks; every MCP/metadata/token request goes through an SSRF-guarded fetch (ADR-021).
+- Connection names are slugs because they prefix model-facing tool names; plain `http://` only for allowlisted internal hosts; a changed tool definition (schema, description, annotations) is un-approved until reviewed.
+- Customer identity claims (§4): ES256 JWT, 120 s lifetime, claims `iss sub aud iat nbf exp jti cid agt scope` only, `sub` = the business customer reference when known; public keys at `/.well-known/jwks.json`; rotation keeps the previous key published for 24 h. Sent only to connections marked trusted, on both the agent path and human-confirmed calls.
+- Sensitive-action confirmation executes exactly the arguments shown (held server-side, hash-checked, cleared on decision/expiry) and is attributed to the confirming human.

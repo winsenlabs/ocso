@@ -79,3 +79,9 @@ Apply:
 ## 7. Future voice
 
 Voice should be implemented as another channel adapter plus streaming media capabilities, not by rewriting the core conversation model.
+
+## Implementation notes (as built)
+
+- Web chat is built on AI SDK UI (`useChat` with an OCSO transport over the public web chat API) inside an iframe served at `/chat/<channel key>` and embedded with `<script src="…/ocso-webchat.js" data-key="…">`; Chat SDK is deferred (ADR-007). The page's CSP `frame-ancestors` and the API's Origin check come from the channel's `allowedOrigins`.
+- Channel kinds describe their settings (JSON Schema) and secrets for the admin form (`GET /v1/channels/kinds`); secrets are write-only.
+- Media: inbound bytes are fetched by the worker (WhatsApp: allowlisted Meta hosts only, redirects re-checked), size/MIME-checked and stored in the blob store; staff reply attachments are uploaded per conversation and replies may only reference those keys. Retention can expire stored bytes (status `EXPIRED`, docs/15 notes).

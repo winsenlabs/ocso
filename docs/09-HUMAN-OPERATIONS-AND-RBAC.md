@@ -102,3 +102,9 @@ A correction should ideally capture:
 - optional evaluation before activation
 
 Do not mutate prompts invisibly.
+
+## Implementation notes (as built)
+
+- Roles map to permission sets in `packages/auth/src/roles.ts`; every API route declares its permission (checked by a unit test) and conversation-scoped routes also check conversation access. The web navigation is derived from permissions, never role names.
+- Copilot: drafts for the human handling a conversation, on request or proactively when a customer writes while `HUMAN_ACTIVE`; never sent automatically; policy identifiers are shown only if they exist in the agent's active prompt.
+- Team management is a CS Lead capability (§6); the Tech Admin manages users and system settings.

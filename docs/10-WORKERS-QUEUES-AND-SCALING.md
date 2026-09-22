@@ -100,3 +100,8 @@ A replacement worker can reconstruct execution from:
 - derived summary/cache if valid
 
 No sticky machine may be required for correctness.
+
+## Implementation notes (as built)
+
+- Leases carry a fencing version (ADR-008); a worker is declared lost after three missed heartbeats (≥ 15 s), its leases are dropped and its running Postgres-queue jobs are returned immediately; SQS messages return after their visibility timeout (turn timeout + 30 s). A stranded-turn sweeper covers everything else. Verified by `tests/resilience/chaos-worker-kill.mjs` (docs/operations/resilience-testing.md).
+- Scaling signals (ADR-023): the leader publishes `SlotDemand`, `Workers`, oldest queue age, turns in flight and turn latency; on ECS the deployment adapter applies the Tech Admin's min/max/target/cooldown to the Terraform-named scalable target and policies and protects tasks while turns run; on Compose the settings are advisory (docs/operations/worker-scaling.md).
