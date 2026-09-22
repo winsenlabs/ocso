@@ -1,0 +1,27 @@
+/* Chart-first layout primitives shared across Rho screens. */
+a{color:inherit}a:hover{color:var(--ink)}
+.g{display:grid;gap:14px}.g2{grid-template-columns:repeat(2,minmax(0,1fr))}.g3{grid-template-columns:repeat(3,minmax(0,1fr))}.g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media (max-width:1100px){.g3,.g4{grid-template-columns:repeat(2,minmax(0,1fr))}.g2{grid-template-columns:minmax(0,1fr)}}@media (max-width:700px){.g2,.g3,.g4{grid-template-columns:minmax(0,1fr)}}
+.ch{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;display:grid;gap:10px;min-width:0;align-content:start}
+.ch.warn{border-color:color-mix(in oklab,var(--warn) 45%,var(--border))}.ch.danger{border-color:color-mix(in oklab,var(--danger) 45%,var(--border))}
+.ch .t{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}.ch .t h3{margin:0;font-size:12.5px;font-weight:600;color:var(--ink-2)}
+.ch .big{font-size:30px;font-weight:600;letter-spacing:-0.03em;line-height:1;font-variant-numeric:tabular-nums}
+.ch .foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:2px}.ch>svg,.ch>div>svg{width:100%;display:block;overflow:visible}
+.hb{display:grid;grid-template-columns:minmax(120px,1.2fr) minmax(0,2fr) 64px;gap:10px;align-items:center;font-size:12.5px}
+.hb .bar{height:14px;background:var(--bg-3);border-radius:3px;overflow:hidden;position:relative}.hb .bar i{position:absolute;left:0;top:0;bottom:0;background:var(--ink-3);border-radius:3px}
+.hb .bar i.w{background:var(--warn)}.hb .bar i.d{background:var(--danger)}.hb .bar i.a{background:var(--accent)}.hb .bar i.g{background:var(--good)}
+.hb .n{font-family:var(--font-mono);font-size:11px;text-align:right;font-variant-numeric:tabular-nums}
+.lg{display:inline-flex;align-items:center;gap:5px;font-family:var(--font-mono);font-size:10px;color:var(--ink-3)}.lg i{width:8px;height:8px;border-radius:2px;display:inline-block}
+.row2{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:14px}.row2r{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr);gap:14px}@media (max-width:1100px){.row2,.row2r{grid-template-columns:minmax(0,1fr)}}
+.mtx{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.mtx div{border-radius:var(--radius-sm);padding:12px;background:var(--bg-2);display:grid;gap:2px}
+.mtx .n{font-size:20px;font-weight:600;letter-spacing:-0.02em;font-variant-numeric:tabular-nums}.mtx .l{font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-4)}
+.kv{display:grid;grid-template-columns:minmax(110px,150px) minmax(0,1fr);gap:8px 16px;font-size:12.5px;align-items:baseline}.kv .k{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-4)}.kv>span{min-width:0;overflow-wrap:anywhere}
+.heat{display:grid;gap:3px}.heat i{display:block;aspect-ratio:1;border-radius:2px;background:var(--good-soft)}.heat i.w{background:var(--warn)}.heat i.d{background:var(--danger)}.heat i.x{background:var(--bg-3)}
+.ax{display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:10px;color:var(--ink-4)}
+
+/* vertical stepper — do not use base.css .vstep (it is horizontal) */
+.stepper{display:grid;gap:0}
+.stepper .stp{display:grid;grid-template-columns:22px minmax(0,1fr);gap:0 10px;padding:7px 0;align-items:start}
+.stepper .stp .dot{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-family:var(--font-mono);font-size:10px;font-weight:600;border:1px solid var(--border-2);background:var(--surface);color:var(--ink-3)}
+.stepper .stp .dot.done{background:var(--good-soft);color:var(--good)}.stepper .stp .dot.now{background:var(--ink);color:var(--bg);border-color:var(--ink)}.stepper .stp .dot.fail{background:var(--danger-soft);color:var(--danger)}
+.stepper .stp .st{min-width:0}.stepper .stp .st .h{font-size:12.5px;font-weight:500;line-height:22px;color:var(--ink)}.stepper .stp .st .h.now{font-weight:600}.stepper .stp .st .s{font-family:var(--font-mono);font-size:10.5px;color:var(--ink-4);line-height:1.5;overflow-wrap:anywhere}
