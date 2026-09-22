@@ -1,0 +1,78 @@
+/* 02 Virtual agent overview — page styles (design/02 inline <style>) plus the pieces the screen adds. */
+
+.ahead{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:16px;align-items:start;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;margin-bottom:16px}
+.ahead h1{margin:0;font-size:20px;font-weight:600;letter-spacing:-0.02em}
+.ahead .desc{margin:5px 0 0;font-size:13px;color:var(--ink-2);max-width:700px;text-wrap:pretty}
+.ahead .facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:9px 18px;margin-top:11px}
+.ahead .facts .k{font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-4)}
+.ahead .facts .v{font-size:12.5px;color:var(--ink);font-weight:500;margin-top:1px;overflow-wrap:anywhere}
+.ahead .facts .v a{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
+.ahead .side{display:grid;gap:6px;justify-items:end}
+.ahead .side .alert{margin:8px 0 0;max-width:270px}
+.agent-portrait{width:52px;height:52px;border-radius:14px;background:var(--tone-indigo);color:#fff;display:grid;place-items:center;font-size:18px;font-weight:600;font-family:var(--font-mono);flex:none}
+@media (max-width:900px){.ahead{grid-template-columns:auto minmax(0,1fr)}.ahead .side{grid-column:1/-1;justify-items:start}}
+
+.prompt-grid{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px}
+@media (max-width:1240px){.prompt-grid{grid-template-columns:minmax(0,1fr)}}
+.prompt-grid aside{display:grid;gap:14px;align-content:start}
+
+/* Component editor */
+.pcomp textarea{width:100%;box-sizing:border-box;min-height:120px;resize:vertical;border:none;background:var(--surface);padding:12px 14px;font:inherit;font-size:13px;line-height:1.6;color:var(--ink);outline:none;display:block}
+.pcomp textarea:focus{box-shadow:inset 0 0 0 2px var(--accent-ring)}
+.pcomp .pb.empty-text{color:var(--ink-4);font-style:italic}
+.pcomp .help{padding:6px 14px 0;font-family:var(--font-mono);font-size:10px;color:var(--ink-4)}
+.pcomp .ph2{cursor:default}
+.prompt-foot{margin-top:14px;flex-wrap:wrap}
+.hashes{display:grid;grid-template-columns:minmax(80px,96px) minmax(0,1fr);gap:5px 12px;font-size:12px}
+.hashes .k{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-4)}
+.hashes .mono-sm{overflow-wrap:anywhere}
+.compiled{margin-top:14px}
+.compiled summary{cursor:pointer;font-size:12.5px;color:var(--ink-2)}
+.compiled pre{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--font-mono);font-size:11.5px;line-height:1.55;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin:8px 0 0;max-height:520px;overflow:auto;color:var(--ink-2)}
+.compiled .bp{display:block;margin:6px 0;font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.07em;color:var(--accent)}
+
+/* Version rows with actions */
+.vrow.act{grid-template-columns:18px 52px minmax(0,1fr) auto auto auto}
+.vrow .vacts{display:flex;gap:4px;justify-content:flex-end}
+.vlist{padding:0;gap:0;overflow:hidden}
+.vlist .vhead{padding:12px 14px;border-bottom:1px solid var(--border)}
+
+/* Diff */
+.diff{border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:var(--surface)}
+.diff+.diff{margin-top:10px}
+.diff .dh{display:flex;gap:10px;align-items:center;padding:8px 12px;background:var(--bg-2);border-bottom:1px solid var(--border);font-size:12.5px;font-weight:600}
+.diff .dl{font-family:var(--font-mono);font-size:11.5px;line-height:1.55;padding:1px 12px 1px 26px;white-space:pre-wrap;overflow-wrap:anywhere;position:relative;color:var(--ink-2)}
+.diff .dl::before{position:absolute;left:10px;color:var(--ink-4)}
+.diff .dl.add{background:var(--good-soft);color:var(--ink)}.diff .dl.add::before{content:"+";color:var(--good)}
+.diff .dl.del{background:var(--danger-soft);color:var(--ink-2);text-decoration:line-through;text-decoration-color:color-mix(in oklab,var(--danger) 40%,transparent)}.diff .dl.del::before{content:"−";color:var(--danger)}
+.compare{display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin:14px 0 10px}
+.compare .fld{min-width:160px}
+
+/* Definitions: every number is explainable (docs/11 §3) */
+.def{cursor:help;text-decoration:underline dotted color-mix(in oklab,var(--ink-4) 60%,transparent);text-underline-offset:3px}
+.defs{margin-top:14px;font-size:12px;color:var(--ink-3)}
+.defs summary{cursor:pointer;font-family:var(--font-mono);font-size:10.5px;color:var(--ink-3)}
+.defs dl{display:grid;grid-template-columns:minmax(120px,180px) minmax(0,1fr);gap:6px 14px;margin:10px 0 0}
+.defs dt{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-4)}
+.defs dd{margin:0;line-height:1.5}
+.ch .big{font-size:26px;font-weight:600;letter-spacing:-0.02em;font-variant-numeric:tabular-nums}
+
+/* Forms and editors */
+.agent-form{display:grid;gap:14px}
+.agent-form .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.rule-grid{display:grid;grid-template-columns:minmax(0,1.2fr) 110px minmax(0,1fr) 150px auto;gap:8px;align-items:end}
+@media (max-width:760px){.rule-grid{grid-template-columns:minmax(0,1fr)}}
+.grant-cell{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2)}
+.grant-cell input{accent-color:var(--accent);margin:0}
+.row-note{display:block;margin-top:2px}
+.tabs .sp{flex:1}
+.agent-list-name{display:flex;align-items:center;gap:10px;min-width:0;text-decoration:none;color:inherit}
+.agent-list-name:hover b{color:var(--accent)}
+.dtable .reply{display:block;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;color:var(--ink-2)}
+.dtable .reply.customer{color:var(--ink);font-weight:500}
+.err-text{font-size:11.5px;color:var(--danger)}
+.cell-link{text-decoration:none;color:inherit;display:block;min-width:0}
+.cell-link:hover b{color:var(--accent)}
+.agent-fieldset{border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin:0;display:grid;gap:12px;min-width:0}
+.agent-fieldset>legend{font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.07em;color:var(--ink-4);padding:0 4px}
+.fld textarea{resize:vertical}

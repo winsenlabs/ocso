@@ -9,9 +9,12 @@ import {
   PromptService,
   type ActorContext,
 } from '@ocso/application';
+import { users, type Db } from '@ocso/db';
 import { COMPONENT_DESCRIPTORS, compilePrompt, estimateTokens, type PromptComponents } from '@ocso/prompt-compiler';
+import { inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { Actor, RequirePermission } from '../../common/decorators.js';
+import { DB } from '../../infrastructure/tokens.js';
 
 const Id = z.uuid();
 const DiffQuery = z.object({ from: z.uuid(), to: z.uuid() });
@@ -27,12 +30,16 @@ export class PromptsController {
     @Inject(PromptService) private readonly prompts: PromptService,
     @Inject(AgentService) private readonly agents: AgentService,
     @Inject(EscalationRuleService) private readonly rules: EscalationRuleService,
+    @Inject(DB) private readonly db: Db,
   ) {}
 
   @Get('prompt')
   @RequirePermission(Permission.AGENTS_READ)
   async prompt(@Param('agentId', { schema: Id }) agentId: string) {
     const [draft, versions] = await Promise.all([this.prompts.draft(agentId), this.prompts.versions(agentId)]);
+    const authorIds = [...new Set(versions.flatMap((v) => (v.authorId ? [v.authorId] : [])))];
+    const authors = authorIds.length ? await this.db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, authorIds)) : [];
+    const authorName = new Map(authors.map((a) => [a.id, a.name]));
     return {
       components: COMPONENT_DESCRIPTORS.map((d) => ({
         ...d,
@@ -41,7 +48,8 @@ export class PromptsController {
       })),
       dirty: draft.dirty,
       baseVersionId: draft.baseVersionId,
-      versions,
+      // Attribution for the version list (docs/05 §2: author); names only, readable with agents.read.
+      versions: versions.map((v) => ({ ...v, authorName: v.authorId ? (authorName.get(v.authorId) ?? null) : null })),
     };
   }
 

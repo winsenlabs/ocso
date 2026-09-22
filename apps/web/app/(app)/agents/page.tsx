@@ -1,19 +1,23 @@
 import type { Metadata } from 'next';
-import { Permission } from '@ocso/auth';
-import { PlaceholderPage } from '@/components/shell/placeholder-page';
+import { Suspense } from 'react';
+import { AgentsHead, AgentsList, PAGE_SUB, PAGE_TITLE } from '@/components/agents/list/agents-list';
+import { AppTopbar } from '@/components/shell/app-topbar';
+import { PageBody } from '@/components/shell/page-body';
+import { PageHead } from '@/components/ui/page-head';
 
 export const metadata: Metadata = { title: 'Virtual agents' };
 
-export default function Page() {
+/** Virtual agents list (design/02 back-link target): every named AI employee with 7-day performance. */
+export default function AgentsPage() {
   return (
-    <PlaceholderPage
-      title="Virtual agents"
-      sub="Named AI employees: their prompts, tools, channels and performance."
-      requires={[Permission.AGENTS_READ]}
-      emptyTitle="No virtual agents yet"
-      searchLabel="Search agents, prompts, conversations"
-    >
-      Each virtual agent — its prompt version, model profile, channels, tools and operating metrics — will appear here once the agents API is connected.
-    </PlaceholderPage>
+    <>
+      <AppTopbar searchLabel="Search agents, prompts, conversations" />
+      <Suspense fallback={<PageHead title={PAGE_TITLE} sub={PAGE_SUB} />}>
+        <AgentsHead />
+      </Suspense>
+      <PageBody>
+        <AgentsList />
+      </PageBody>
+    </>
   );
 }
