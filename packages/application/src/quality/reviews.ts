@@ -90,12 +90,13 @@ export class ReviewService {
         .select({ agentId: conversations.agentId })
         .from(conversations)
         .where(and(eq(conversations.id, input.conversationId), sql`${conversations.agentId} IN (${manageableAgentsSql(principal)})`));
-      if (!conv) throw notFound('conversation', input.conversationId);
+      if (!conv?.agentId) throw notFound('conversation', input.conversationId);
+      const agentId = conv.agentId;
       const score = rubricScore(input.rubric);
       await tx.insert(conversationReviews).values({
         id,
         conversationId: input.conversationId,
-        agentId: conv.agentId,
+        agentId,
         reviewerId: principal.userId,
         outcomeTag: input.outcomeTag,
         score,

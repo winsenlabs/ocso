@@ -9,7 +9,9 @@ import { CONVERSATION_TYPE_LABELS, agentPresence, formatDay } from '../lib/label
 import { ownerLabel } from '../lib/owners';
 import { agentHref } from '../lib/tabs';
 import type { AgentPageData } from './load';
+import { PendingBadge } from '@/components/approvals/pending-badge';
 import { AgentStatusButton } from './status-button';
+import { DeleteAgentButton } from './delete-button';
 
 const TONES = new Set(['indigo', 'violet', 'rose', 'amber', 'emerald', 'sky', 'teal']);
 
@@ -30,6 +32,7 @@ export function AgentHeader({ data }: { data: AgentPageData }) {
         <div className="rowsplit" style={{ flexWrap: 'wrap' }}>
           <h1>{agent.name}{agent.purpose ? ` — ${agent.purpose}` : ''}</h1>
           <Presence state={presence.state}>{presence.label}</Presence>
+          <PendingBadge state={agent.approval} />
           <StatusChip tone="muted">{(CONVERSATION_TYPE_LABELS[agent.conversationType] ?? agent.conversationType).toUpperCase()}</StatusChip>
           <span className="mono-sm">
             {agent.slug} · created {formatDay(agent.createdAt, timeZone, true)}
@@ -74,9 +77,10 @@ export function AgentHeader({ data }: { data: AgentPageData }) {
         </div>
       </div>
       <div className="side">
-        {can.manage || can.editPrompt ? (
-          <div style={{ display: 'flex', gap: 6 }}>
-            {can.manage ? <AgentStatusButton agentId={agent.id} name={agent.name} status={agent.status} /> : null}
+        {can.manage || can.editPrompt || can.pause ? (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <AgentStatusButton agentId={agent.id} name={agent.name} status={agent.status} canPause={can.pause} canManage={can.manage} pending={Boolean(agent.approval?.pending)} />
+            {can.remove && agent.status !== 'LIVE' ? <DeleteAgentButton agentId={agent.id} name={agent.name} pending={Boolean(agent.approval?.pending)} /> : null}
             {can.editPrompt ? (
               <Link className="btn tiny accent" href={agentHref(agent.id, { tab: 'prompt' })}>
                 Create new version
@@ -84,7 +88,7 @@ export function AgentHeader({ data }: { data: AgentPageData }) {
             ) : null}
           </div>
         ) : null}
-        <span className="mono-sm">changes are versioned and attributable</span>
+        <span className="mono-sm">{agent.approval?.approved ? 'live configuration · changes need a checker' : 'draft · changes apply directly until approved'}</span>
         {openAlerts.length ? (
           <AlertBanner tone={openAlerts.some((a) => a.severity === 'CRITICAL') ? 'error' : 'warn'} title={`${openAlerts.length} open alert${openAlerts.length === 1 ? '' : 's'}`}>
             {openAlerts

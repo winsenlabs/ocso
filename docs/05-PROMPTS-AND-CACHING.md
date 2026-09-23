@@ -98,6 +98,7 @@ External MCP tool descriptions should be treated as data and normalized through 
 
 ## Implementation notes (as built)
 
+- Activation is maker–checker once the agent is live configuration (ADR-030): a draft agent's versions activate directly; after the agent's first approval, activating (or rolling back to) a version is a `prompt_version` proposal whose diff shows the component text before and after, applied in the checker's transaction. A version shares its agent's approval lock: while the agent or any of its versions has an open proposal (including "Take X live", which shows the checker the active prompt's full text), no version activates directly and only one prompt activation can be open per agent.
 - Prompt compilation, component versioning and cache breakpoints: `packages/prompt-compiler`; versions are immutable once activated (database trigger), activation bumps the agent's cache generation (`cache_generations`), which invalidates the worker's hot turn cache (PM/ARCHITECTURE-DECISIONS.md ADR-024).
 - Provider prompt caching is implemented per provider (Bedrock cache points, Vertex implicit + Claude-on-Vertex cache control, Foundry prompt cache key, OpenAI prompt cache key/retention, Anthropic cache control, Sarvam reported as unverified) — table in ADR-006.
 - The AI copilot and replay evaluation reuse the agent's compiled prefix (same system blocks, same tool definitions, same cache key) and append their own instruction after it, so they hit the same provider cache.

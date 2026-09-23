@@ -12,6 +12,10 @@ describe('SSO provisioning policy (ADR-025)', () => {
     expect(decideProvisioning({ ...base, existing: { id: 'u1', status: 'DISABLED' } })).toMatchObject({ action: 'reject', code: 'account_disabled' });
   });
 
+  it('refuses a user whose creation still waits for approval', () => {
+    expect(decideProvisioning({ ...base, existing: { id: 'u1', status: 'PENDING_APPROVAL' } })).toMatchObject({ action: 'reject', code: 'account_pending_approval' });
+  });
+
   it('refuses strangers unless auto-provisioning is on', () => {
     expect(decideProvisioning(base)).toMatchObject({ action: 'reject', code: 'sso_not_invited' });
     expect(decideProvisioning({ ...base, autoProvision: true })).toEqual({ action: 'continue' });

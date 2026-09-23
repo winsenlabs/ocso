@@ -30,6 +30,12 @@ locals {
     DATABASE_SSL        = "true"
     DATABASE_POOL_SIZE  = tostring(var.database_pool_size)
     NODE_EXTRA_CA_CERTS = local.rds_ca_bundle
+    # Audit store (ADR-032): postgres driver on the same RDS instance, TLS like the main database.
+    AUDIT_DRIVER             = "postgres"
+    AUDIT_DATABASE_SSL       = "true"
+    AUDIT_MIN_RETENTION_DAYS = tostring(var.audit_store.min_retention_days)
+    # Retired signing public keys (not secret): older checkpoints and exports still verify.
+    AUDIT_TRUSTED_PUBLIC_KEYS = var.audit_trusted_public_keys
   }
 
   otel_env = var.otel_collector.enabled ? {
@@ -70,9 +76,21 @@ locals {
     # Must be stable across API tasks: a per-task generated token would make
     # first-run setup fail on every other request.
     OCSO_SETUP_TOKEN = "${local.bootstrap_arn}:OCSO_SETUP_TOKEN::"
+    # The api reads the audit store through the SELECT-only reader.
+    AUDIT_DATABASE_URL = "${local.bootstrap_arn}:AUDIT_READER_URL::"
+    AUDIT_SIGNING_KEY  = var.audit_signing_key_secret_arn
   }
   worker_secrets = {
-    DATABASE_URL = "${local.bootstrap_arn}:DATABASE_URL::"
+    DATABASE_URL       = "${local.bootstrap_arn}:DATABASE_URL::"
+    AUDIT_DATABASE_URL = "${local.bootstrap_arn}:AUDIT_DATABASE_URL::"
+    AUDIT_SIGNING_KEY  = var.audit_signing_key_secret_arn
+  }
+  # The migrate task also provisions the audit store: owner credentials exist only here.
+  migrate_secrets = {
+    DATABASE_URL             = "${local.bootstrap_arn}:DATABASE_URL::"
+    AUDIT_DATABASE_URL       = "${local.bootstrap_arn}:AUDIT_DATABASE_URL::"
+    AUDIT_READER_URL         = "${local.bootstrap_arn}:AUDIT_READER_URL::"
+    AUDIT_DATABASE_OWNER_URL = "${local.bootstrap_arn}:AUDIT_DATABASE_OWNER_URL::"
   }
 
   worker_capacity = var.worker.use_spot ? [

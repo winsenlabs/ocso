@@ -3,7 +3,7 @@ import { eq, sql } from 'drizzle-orm';
 import { createTestDatabase, type TestDatabase } from '@ocso/db/testing';
 import { authSessions, users } from '@ocso/db';
 import { LogEmailSender } from '@ocso/email';
-import { AuthMailer, AuthPolicyService, DEFAULT_SESSION_POLICY, SetupService, UserService, type ActorContext } from '../src/index.js';
+import { AuthMailer, AuthPolicyService, DEFAULT_SESSION_POLICY, SetupService, UserService, activateUser, type ActorContext } from '../src/index.js';
 import { HTTP_AUTH_ENDPOINTS, createAuthServer, type AuthServer } from '../src/identity/auth/index.js';
 
 const ORIGIN = 'http://localhost:3999';
@@ -72,8 +72,16 @@ describe('Better Auth server (ADR-025)', () => {
     const [admin] = await t.db.select().from(users).where(eq(users.email, 'tejas@meridian.test'));
     const actor: ActorContext = { principal: { userId: admin!.id, role: 'TECH', displayName: 'Tejas', teamIds: [], via: 'UI' }, correlationId: 'c' };
     const mailer = new AuthMailer({ db: t.db, sender, publicUrl: ORIGIN });
-    const created = await new UserService(t.db, { mailer, allowInitialPasswords: false }).create(actor, { email: 'Lead@Meridian.test', name: 'Lead', role: 'HEAD' });
-    expect(created.invite.status).toBe('pending');
+    const service = new UserService(t.db, { mailer, allowInitialPasswords: false });
+    const mailsBefore = sender.sent.length;
+    // A new user waits for approval (PM/research/11 §3.4): inert, and no invite until approved.
+    const created = await service.create(actor, { email: 'Lead@Meridian.test', name: 'Lead', role: 'HEAD' });
+    expect(created).toMatchObject({ status: 'PENDING_APPROVAL', onboarding: { kind: 'pending_approval' }, approvalRequired: { objectKind: 'user', action: 'CREATE', objectId: created.id } });
+    expect(sender.sent.length).toBe(mailsBefore);
+    // What approving the user does: activate in the approval's transaction, then send the invite.
+    await t.db.transaction((tx) => activateUser(tx, actor, created.id));
+    expect((await service.sendActivationInvite(actor, created.id)).kind).toBe('invite');
+    expect((await service.get(created.id)).invite.status).toBe('pending');
     const mail = sender.sent.at(-1)!;
     expect(mail.to).toBe('lead@meridian.test');
     const link = /http:\/\/localhost:3999\/invite\?token=([\w-]+)/.exec(mail.text)?.[1];

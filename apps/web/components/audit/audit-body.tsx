@@ -6,7 +6,8 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { KeyValue } from '@/components/ui/key-value';
 import { SecHead } from '@/components/ui/sec-head';
 import { StatusChip } from '@/components/ui/status-chip';
-import { listAudit, type AuditEvent } from '@/lib/api/audit';
+import { AlertBanner } from '@/components/ui/alert-banner';
+import { readAuditLog, type AuditEvent } from '@/lib/api/audit';
 import { listUsers } from '@/lib/api/users';
 import { formatDateTime } from '@/lib/format';
 import { hasPermission, requireSession } from '@/lib/session';
@@ -30,8 +31,8 @@ export async function AuditBody({ searchParams }: { searchParams: SearchParams }
   if (!hasPermission(session, Permission.AUDIT_READ)) return <NotPermitted role={session.roleLabel} />;
   const params = parseAuditParams(raw);
   const tz = session.user.deployment.timezone;
-  const [rows, users] = await Promise.all([
-    listAudit(toApiFilter(params, PAGE)),
+  const [{ rows, source }, users] = await Promise.all([
+    readAuditLog(toApiFilter(params, PAGE)),
     hasPermission(session, Permission.USERS_READ) ? listUsers().catch(() => []) : Promise.resolve([]),
   ]);
   const selected = params.entry ? rows.find((r) => r.id === params.entry) : undefined;
@@ -40,6 +41,12 @@ export async function AuditBody({ searchParams }: { searchParams: SearchParams }
 
   return (
     <>
+      {source === 'local' ? (
+        <AlertBanner tone="warn" title="Showing the local copy only" style={{ margin: '0 0 12px' }}>
+          The audit store did not answer, so these entries come from the main database&apos;s local window. Older events are safe in the store but are not listed
+          until it answers again.
+        </AlertBanner>
+      ) : null}
       <AuditFilters params={params} actors={users.map((u) => ({ id: u.id, name: u.name }))} />
       <SecHead
         title="Entries"

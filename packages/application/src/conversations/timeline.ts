@@ -1,14 +1,16 @@
 import { and, asc, eq, gt, inArray } from 'drizzle-orm';
 import type { InteractionPart } from '@ocso/domain';
-import { internalNotes, interactionParts, interactions, toolCalls, tools, users, mcpConnections, type Db } from '@ocso/db';
+import { internalNotes, interactionParts, interactions, toolCalls, tools, users, mcpConnections, virtualAgents, type Db } from '@ocso/db';
 
 export type TimelineItem =
   | {
       kind: 'message';
       id: string;
       seq: number;
-      actorType: 'CUSTOMER' | 'AGENT' | 'HUMAN';
+      /** ROUTER: a router's question (PM/research/11 §5). */
+      actorType: 'CUSTOMER' | 'AGENT' | 'HUMAN' | 'ROUTER';
       actorId: string | null;
+      /** The human's name; the agent's name for AGENT messages (a conversation can change agent on transfers). */
       actorName: string | null;
       direction: string;
       deliveryStatus: string;
@@ -64,6 +66,10 @@ export async function loadTimeline(db: Db, conversationId: string, options: { af
   const names = new Map(
     humanIds.length ? (await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, humanIds))).map((u) => [u.id, u.name]) : [],
   );
+  const agentIds = [...new Set(rows.filter((r) => r.actorType === 'AGENT' && r.actorId && /^[0-9a-f-]{36}$/i.test(r.actorId)).map((r) => r.actorId!))];
+  const agentNames = new Map(
+    agentIds.length ? (await db.select({ id: virtualAgents.id, name: virtualAgents.name }).from(virtualAgents).where(inArray(virtualAgents.id, agentIds))).map((a) => [a.id, a.name]) : [],
+  );
 
   const items: TimelineItem[] = rows.map((r) => {
     const p = partsBy.get(r.id) ?? [];
@@ -76,9 +82,9 @@ export async function loadTimeline(db: Db, conversationId: string, options: { af
       kind: 'message',
       id: r.id,
       seq: r.seq,
-      actorType: r.actorType as 'CUSTOMER' | 'AGENT' | 'HUMAN',
+      actorType: r.actorType as 'CUSTOMER' | 'AGENT' | 'HUMAN' | 'ROUTER',
       actorId: r.actorId,
-      actorName: r.actorType === 'HUMAN' && r.actorId ? (names.get(r.actorId) ?? null) : null,
+      actorName: !r.actorId ? null : r.actorType === 'HUMAN' ? (names.get(r.actorId) ?? null) : r.actorType === 'AGENT' ? (agentNames.get(r.actorId) ?? null) : null,
       direction: r.direction,
       deliveryStatus: r.deliveryStatus,
       deliveryError: r.deliveryError,

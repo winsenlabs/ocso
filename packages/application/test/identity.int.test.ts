@@ -57,8 +57,9 @@ describe('user management', () => {
     expect(rows).toEqual([{ email: 'tejas@meridian.test', email_verified: true, provider_id: 'credential', password: expect.stringMatching(/^scrypt\$15\$8\$1\$/) }]);
   });
 
-  it('lets a Lead manage only Service members, and revokes sessions on role change', async () => {
-    const users = new UserService(t.db, { allowInitialPasswords: true });
+  it('lets a Lead manage only colleagues within their rights, and revokes sessions on role change', async () => {
+    // Development mode: users are created active and increases apply (the governed path: permissions.int.test.ts).
+    const users = new UserService(t.db, { allowInitialPasswords: true, skipAccessApproval: true });
     const team = await new TeamService(t.db).create(ctx({ ...admin, role: 'HEAD' }), { name: 'Cards & EMI', description: null });
     const lead = await users.create(ctx(admin), {
       email: 'anjali@meridian.test', name: 'Anjali Rao', role: 'HEAD', password: 'lead password 1234',
@@ -81,7 +82,7 @@ describe('user management', () => {
     expect((await t.pool.query(`SELECT count(*)::int AS n FROM auth_sessions WHERE user_id = $1`, [exec.id])).rows[0].n).toBe(0);
 
     const { rows } = await t.pool.query(`SELECT action FROM audit_events WHERE target_id = $1 ORDER BY occurred_at`, [exec.id]);
-    expect(rows.map((r) => r.action)).toEqual(['user.create', 'user.role_change']);
+    expect(rows.map((r) => r.action)).toEqual(['user.create', 'user.activate', 'user.permissions_increased']);
   });
 
   it('refuses admin-set passwords when invites can be emailed', async () => {

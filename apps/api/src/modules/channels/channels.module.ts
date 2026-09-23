@@ -1,4 +1,4 @@
-import { Global, Module } from '@nestjs/common';
+import { Global, Logger, Module } from '@nestjs/common';
 import { ChannelService, IngressService, MessageTemplateService, setIdentityDisplay } from '@ocso/application';
 import { ChannelRuntime } from '@ocso/agent-runtime';
 import type { ChannelRegistry } from '@ocso/channels';
@@ -30,7 +30,15 @@ const IDENTITY_DISPLAY = Symbol('IDENTITY_DISPLAY');
       },
     },
     ChannelIngressService,
-    { provide: IngressService, inject: [DB, QUEUE], useFactory: (db: Db, queue: QueueAdapter) => new IngressService(db, queue, { reopenWindowHours: 72 }) },
+    {
+      provide: IngressService,
+      inject: [DB, QUEUE],
+      useFactory: (db: Db, queue: QueueAdapter) => {
+        const logger = new Logger('ChannelIngress');
+        // Loud on purpose: the customer is not answered until the channel gets an active router.
+        return new IngressService(db, queue, { reopenWindowHours: 72, onRejected: (r) => logger.error(`customer message rejected (${r.reason}): ${r.detail} [channel ${r.channelId}]`) });
+      },
+    },
     {
       provide: ChannelRuntime,
       inject: [DB, CHANNEL_REGISTRY, SECRET_STORE, ENV],

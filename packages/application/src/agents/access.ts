@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, sql, type Column, type SQL } from 'drizzle-orm';
 import { Permission, can, type Principal } from '@ocso/auth';
 import { notFound } from '@ocso/domain';
-import { agentTeams, escalationRules, queueTeams, teams, virtualAgents, type DbOrTx } from '@ocso/db';
+import { agentTeams, escalationRules, queueTeams, queues, teams, virtualAgents, type DbOrTx } from '@ocso/db';
 
 /**
  * Team-scoped virtual-agent ownership (ADR-026). Agents are owned by teams
@@ -46,6 +46,7 @@ export function readableAgentsSql(principal: Principal): SQL | null {
   const served = queuesServedBy(principal.teamIds);
   return sql`${owned}
     UNION SELECT ${virtualAgents.id} FROM ${virtualAgents} WHERE ${virtualAgents.defaultQueueId} IN (${served})
+    UNION SELECT ${queues.agentId} FROM ${queues} WHERE ${queues.agentId} IS NOT NULL AND ${queues.id} IN (${served})
     UNION SELECT ${escalationRules.agentId} FROM ${escalationRules} WHERE ${escalationRules.agentId} IS NOT NULL AND ${escalationRules.targetQueueId} IN (${served})`;
 }
 

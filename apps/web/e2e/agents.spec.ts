@@ -45,10 +45,12 @@ test.beforeAll(async ({ playwright }) => {
   tok.lead = await loginApi(LEAD.email, LEAD.password);
   // Agents belong to teams: each lead creates a team and the Tech admin puts them in it.
   ids.cards = (await call<{ id: string }>('POST', '/v1/teams', tok.lead, { name: 'AG Cards' })).id;
+  ids.loans = (await call<{ id: string }>('POST', '/v1/teams', tok.lead, { name: 'AG Loans' })).id;
   await call('PATCH', `/v1/users/${lead.id}`, tok.admin, { teamIds: [ids.cards] });
-  const lead2 = await call<{ id: string }>('POST', '/v1/users', tok.admin, { name: LEAD2.name, email: LEAD2.email, role: 'HEAD', password: LEAD2.password, teamIds: [], languages: [], maxConcurrent: 5 });
+  // Lou is a Lead (no check permission): Ada stays the only possible checker in this deployment, so her
+  // own changes are recorded bootstrap approvals (another Head anywhere would be the fallback checker).
+  const lead2 = await call<{ id: string }>('POST', '/v1/users', tok.admin, { name: LEAD2.name, email: LEAD2.email, role: 'LEAD', password: LEAD2.password, teamIds: [], languages: [], maxConcurrent: 5 });
   tok.lead2 = await loginApi(LEAD2.email, LEAD2.password);
-  ids.loans = (await call<{ id: string }>('POST', '/v1/teams', tok.lead2, { name: 'AG Loans' })).id;
   await call('PATCH', `/v1/users/${lead2.id}`, tok.admin, { teamIds: [ids.loans] });
   await call('POST', '/v1/users', tok.lead, { name: EXEC.name, email: EXEC.email, role: 'SERVICE', password: EXEC.password, teamIds: [ids.cards], languages: [], maxConcurrent: 5 });
   const provider = await call<{ id: string }>('POST', '/v1/model-providers', tok.admin, { kind: 'DEV_SCRIPTED', name: 'AG Scripted', settings: { latencyMs: 50, chunkDelayMs: 15 } });
@@ -91,8 +93,14 @@ test('a Lead creates a virtual agent and takes it live', async ({ page }) => {
   await expect(header(page)).toContainText('ag-support');
   await expect(header(page)).toContainText('AG Cards');
 
+  // Going live is a maker–checker approval (PM/research/11 §4). Ada is the only holder of the check permission
+  // in this deployment, so nobody else could check it: the modal offers a recorded bootstrap approval.
   await header(page).getByRole('button', { name: 'Go live' }).click();
-  await page.getByRole('dialog', { name: 'Take Maya live' }).getByRole('button', { name: 'Go live' }).click();
+  const submit = page.getByRole('dialog', { name: 'Submit for approval' });
+  await expect(submit).toContainText('Take Maya live');
+  await expect(submit.getByLabel('checker')).toHaveValue('self');
+  await submit.getByLabel('reason').fill('Ready for customers');
+  await submit.getByRole('button', { name: 'Approve as the only checker' }).click();
   await expect(header(page).locator('.presence')).toHaveText('live');
   await expect(header(page).getByRole('button', { name: 'Pause agent' })).toBeVisible();
 });
@@ -123,7 +131,11 @@ test('edits a prompt component, sees the prefix hash change, creates and activat
   await create.getByRole('button', { name: 'Create v2' }).click();
   const created = page.getByRole('dialog', { name: 'v2 created' });
   await expect(created).toContainText('Not live yet');
+  // Maya is live configuration now, so activating continues into the approval modal.
   await created.getByRole('button', { name: 'Activate v2 now' }).click();
+  const approve = page.getByRole('dialog', { name: 'Submit for approval' });
+  await approve.getByLabel('reason').fill('Shorter duplicate-debit path');
+  await approve.getByRole('button', { name: 'Approve as the only checker' }).click();
   await expect(created).toContainText('v2 is live');
   await created.getByRole('button', { name: 'Close', exact: true }).click();
 
@@ -148,6 +160,9 @@ test('views the diff between versions and rolls back', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Roll back to v1' }).click();
   await page.getByRole('dialog', { name: 'Roll back to v1' }).getByRole('button', { name: 'Roll back to v1' }).click();
+  const approve = page.getByRole('dialog', { name: 'Submit for approval' });
+  await approve.getByLabel('reason').fill('Back to v1 while we check v2');
+  await approve.getByRole('button', { name: 'Approve as the only checker' }).click();
   await expect(versions.locator('[data-version="1"]')).toHaveClass(/live/);
   await expect(versions.locator('[data-version="2"]')).not.toHaveClass(/live/);
   await expect(header(page)).toContainText('v1');
@@ -219,6 +234,10 @@ test('sets human business hours; an invalid span shows the API error inline', as
   await days.getByLabel('Monday closes').fill('23:00');
   await days.getByLabel('Tuesday', { exact: true }).check();
   await form.getByRole('button', { name: 'Save business hours' }).click();
+  // Maya is live configuration: the change is a proposal; Ada, the only possible checker, bootstraps it.
+  const approve = page.getByRole('dialog', { name: 'Submit for approval' });
+  await approve.getByLabel('reason').fill('Humans on evenings for cards');
+  await approve.getByRole('button', { name: 'Approve as the only checker' }).click();
   await expect(form).toContainText('Business hours saved');
   await expect(form.locator('#bh-mon-err')).toHaveCount(0);
   await expect(header(page)).toContainText('humans varies by day (2 days, Asia/Kolkata)');

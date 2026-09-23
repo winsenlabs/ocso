@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
-import { AlertDeliveryService, AlertEngine, CustomerClaimsIssuer, ScalingService, autoAssignUnclaimed, recordWorkerHealthSample, expireOffers, pollPendingTemplates, repairStuckEscalations, RetentionService, SettingsService } from '@ocso/application';
+import { AlertDeliveryService, AlertEngine, CustomerClaimsIssuer, RoutingEngine, ScalingService, autoAssignUnclaimed, recordWorkerHealthSample, expireOffers, pollPendingTemplates, repairStuckEscalations, RetentionService, SettingsService } from '@ocso/application';
 import { ChannelRuntime, cleanupExpiredLeases, expireToolConfirmations, lostWorkerTimeoutSeconds, reapLostWorkers, relayScheduledJobs, requestResolvedInsights, sweepStrandedTurns, templateProviderSource } from '@ocso/agent-runtime';
 import type { BlobStore } from '@ocso/blob';
 import type { WorkerEnv } from '@ocso/config';
@@ -10,6 +10,8 @@ import type { Logger } from '@ocso/observability';
 import type { QueueAdapter } from '@ocso/queue';
 import type { SecretStore } from '@ocso/secrets';
 import { BLOB_STORE, DB, ENV, LOGGER, QUEUE, SECRET_STORE } from '../infrastructure/tokens.js';
+import { ApprovalsWorker } from '../approvals/approvals.module.js';
+import { AuditWorker } from '../audit/audit.module.js';
 import { LeaderElection } from './leader.js';
 import { subsystemTasks } from './tasks.registry.js';
 
@@ -43,6 +45,9 @@ export class SchedulerService {
     @Inject(ScalingService) scaling: ScalingService,
     @Inject(BLOB_STORE) blobs: BlobStore,
     @Inject(ChannelRuntime) channels: ChannelRuntime,
+    @Inject(ApprovalsWorker) approvals: ApprovalsWorker,
+    @Inject(AuditWorker) audit: AuditWorker,
+    @Inject(RoutingEngine) routing: RoutingEngine,
   ) {
     this.leader = new LeaderElection(env.DATABASE_URL, 'ocso:scheduler');
     this.tasks = [
@@ -57,11 +62,11 @@ export class SchedulerService {
       { name: 'health-sample', everySeconds: 60, run: ({ db }) => sampleDatabaseHealth(db) },
       { name: 'worker-health-sample', everySeconds: 60, run: ({ db }) => recordWorkerHealthSample(db) },
       { name: 'request-insights', everySeconds: 30, run: ({ db, queue }) => requestResolvedInsights(db, queue) },
-      { name: 'retention', everySeconds: 3600, run: ({ db }) => new RetentionService(db, blobs, (msg, err) => logger.warn({ err }, msg)).run() },
+      { name: 'retention', everySeconds: 3600, run: ({ db }) => new RetentionService(db, blobs, (msg, err) => logger.warn({ err }, msg), audit.store).run() },
       // Message templates in review: ask the provider, record + announce status changes (docs/07 §3).
       { name: 'message-template-status', everySeconds: 180, run: ({ db, correlationId }) => pollPendingTemplates(db, templateProviderSource(channels), { correlationId }) },
       { name: 'purge-done-jobs', everySeconds: 3600, run: ({ db }) => db.execute(sql`DELETE FROM jobs WHERE status = 'done' AND completed_at < now() - interval '1 day'`) },
-      ...subsystemTasks({ db, env, secrets, queue, alerts, alertDelivery, claims, scaling }),
+      ...subsystemTasks({ db, env, secrets, queue, alerts, alertDelivery, claims, scaling, approvals, audit, routing }),
     ];
   }
 

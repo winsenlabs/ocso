@@ -18,7 +18,7 @@ export const TeamMemberSchema = z.object({
   name: z.string(),
   email: z.string(),
   role: z.enum(ROLES),
-  status: z.enum(['ACTIVE', 'DISABLED']),
+  status: z.enum(['ACTIVE', 'DISABLED', 'PENDING_APPROVAL']),
   availability: z.enum(['AVAILABLE', 'AWAY', 'OFFLINE']),
   addedAt: z.string(),
 });

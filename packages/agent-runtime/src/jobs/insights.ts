@@ -98,6 +98,8 @@ export class ConversationInsightsService {
   async analyze(conversationId: string, correlationId = `insights:${conversationId}`): Promise<InsightResult> {
     const [conv] = await this.db.select().from(conversations).where(eq(conversations.id, conversationId));
     if (!conv) return { status: 'skipped', reason: 'not_found' };
+    // Resolved while a router was still deciding: no agent to attribute insights to.
+    if (!conv.agentId) return { status: 'skipped', reason: 'no_profile' };
     const [agent] = await this.db.select().from(virtualAgents).where(eq(virtualAgents.id, conv.agentId));
     const profileId = agent?.summarizerProfileId ?? agent?.modelProfileId;
     if (!agent || !profileId) return { status: 'skipped', reason: 'no_profile' };
@@ -144,7 +146,7 @@ export class ConversationInsightsService {
     });
     const out = parseInsightOutput(result.structured, result.text);
     const values = {
-      agentId: conv.agentId,
+      agentId: agent.id,
       topic: out.topic,
       outcome: out.outcome,
       escalationReason: out.escalationReason,

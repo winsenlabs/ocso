@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { expect, test, type APIRequestContext } from '@playwright/test';
 import { ACCOUNTS, E2E, apiUrl } from './config';
 import { login, logout } from './helpers';
+import { routeChannelToAgent } from './routing';
+import { goLiveApproved } from './approval-setup';
 
 /**
  * CS workspace (design/01) end to end against the real API + worker:
@@ -79,15 +81,17 @@ test.beforeAll(async ({ playwright }) => {
   ids.provider = (await call<{ id: string }>('POST', '/v1/model-providers', tok.admin, { kind: 'DEV_SCRIPTED', name: 'WS Scripted', settings: { latencyMs: 50, chunkDelayMs: 15 } })).id;
   ids.profile = (await call<{ id: string }>('POST', '/v1/model-profiles', tok.admin, { name: 'ws-support', providerId: ids.provider, model: 'scripted-1', retries: 0 })).id;
   ids.agent = (await call<{ id: string }>('POST', '/v1/agents', tok.lead, { name: 'Maya', slug: 'maya-ws', purpose: 'customer support', conversationType: 'SUPPORT', modelProfileId: ids.profile, defaultQueueId: ids.queue, teamIds: [owners] })).id;
-  await call('POST', `/v1/agents/${ids.agent}/status`, tok.lead, { status: 'LIVE' });
-  const channel = await call<{ publicKey: string }>('POST', '/v1/channels', tok.admin, {
+  // Going live is a maker–checker approval (PM/research/11 §4): a second Head of the owning team checks it.
+  await goLiveApproved(api, { adminToken: tok.admin, makerToken: tok.lead, agentId: ids.agent, ownerTeamId: owners, checker: { name: 'WS Checker', email: 'ws.checker@e2e.ocso.test', password: 'correct-horse-battery-wschecker' } });
+  const channel = await call<{ id: string; publicKey: string }>('POST', '/v1/channels', tok.admin, {
     kind: 'WEBCHAT',
     name: 'WS Web chat',
     status: 'ACTIVE',
-    defaultAgentId: ids.agent,
     secrets: { visitorTokenSecret: randomBytes(32).toString('hex') },
   });
   ids.webchatKey = channel.publicKey;
+  // channel → pass-through router → Maya's queue (PM/research/11 §5).
+  routeChannelToAgent({ channelId: channel.id, agentId: ids.agent, queueId: ids.queue, name: 'WS Web chat' });
 });
 
 test.afterAll(async () => {

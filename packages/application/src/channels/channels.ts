@@ -1,8 +1,9 @@
 import { randomBytes } from 'node:crypto';
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, inArray } from 'drizzle-orm';
 import { Permission, assertCan } from '@ocso/auth';
 import { notFound, validation } from '@ocso/domain';
-import { agentChannels, channels, uuidv7, type Db } from '@ocso/db';
+import { channels, routers, uuidv7, type Db } from '@ocso/db';
+import { passThroughAgentOf } from '../routing/reach.js';
 import type { SecretStore } from '@ocso/secrets';
 import { z } from 'zod';
 import { recordAudit } from '../audit/audit.js';
@@ -17,7 +18,6 @@ export const ChannelInput = z.object({
   settings: z.record(z.string(), z.unknown()).default({}),
   /** Plaintext secrets entered once by the admin; stored in the SecretStore, never returned. */
   secrets: z.record(z.string(), z.string().min(1).max(8_000)).default({}),
-  defaultAgentId: z.uuid().nullable().default(null),
   status: z.enum(['ACTIVE', 'DISABLED', 'DRAFT']).default('DRAFT'),
 });
 export type ChannelInput = z.infer<typeof ChannelInput>;
@@ -33,6 +33,12 @@ export interface ChannelView {
   settings: Record<string, unknown>;
   /** Names of configured secrets and their refs — never values. */
   secretRefs: Record<string, string>;
+  /** The router customers of this channel go through (PM/research/11 §5); set by router approval. */
+  router: { id: string; name: string; status: string } | null;
+  /**
+   * Derived, read-only: the agent a pass-through router answers as (null for routers that ask first, or none).
+   * The deprecated `channels.default_agent_id` column is no longer read or written.
+   */
   defaultAgentId: string | null;
   lastInboundAt: string | null;
   /** Where the provider posts inbound messages (`/channels/<segment>/<publicKey>/webhook`), for webhook kinds. */
@@ -56,13 +62,22 @@ export class ChannelService {
 
   async list(): Promise<ChannelView[]> {
     const rows = await this.db.select().from(channels).orderBy(asc(channels.name));
-    return rows.map((row) => this.toView(row));
+    return this.views(rows);
   }
 
   async get(id: string): Promise<ChannelView> {
     const [row] = await this.db.select().from(channels).where(eq(channels.id, id));
     if (!row) throw notFound('channel', id);
-    return this.toView(row);
+    return (await this.views([row]))[0]!;
+  }
+
+  private async views(rows: Array<typeof channels.$inferSelect>): Promise<ChannelView[]> {
+    const routerIds = [...new Set(rows.flatMap((r) => (r.routerId ? [r.routerId] : [])))];
+    const [routerRows, agents] = await Promise.all([
+      routerIds.length ? this.db.select({ id: routers.id, name: routers.name, status: routers.status }).from(routers).where(inArray(routers.id, routerIds)) : Promise.resolve([]),
+      passThroughAgentOf(this.db, rows.map((r) => r.id)),
+    ]);
+    return rows.map((row) => this.toView(row, routerRows.find((r) => r.id === row.routerId) ?? null, agents.get(row.id) ?? null));
   }
 
   /** Resolve a channel's secret values for trusted adapter code. */
@@ -88,7 +103,6 @@ export class ChannelService {
           publicKey: randomBytes(12).toString('base64url'),
           settings: input.settings,
           secretRefs,
-          defaultAgentId: input.defaultAgentId,
         })
         .returning();
       await recordAudit(tx, actor, {
@@ -100,7 +114,7 @@ export class ChannelService {
       });
       return inserted;
     });
-    return this.toView(row!);
+    return (await this.views([row!]))[0]!;
   }
 
   async update(actor: ActorContext, id: string, patch: ChannelPatch): Promise<ChannelView> {
@@ -121,7 +135,6 @@ export class ChannelService {
         .update(channels)
         .set({
           ...(patch.name !== undefined ? { name: patch.name } : {}),
-          ...(patch.defaultAgentId !== undefined ? { defaultAgentId: patch.defaultAgentId } : {}),
           settings,
           status,
           secretRefs,
@@ -129,12 +142,6 @@ export class ChannelService {
         })
         .where(eq(channels.id, id))
         .returning();
-      // A channel answers as exactly one agent: keep its attachment (agent_channels, the agent's
-      // Channels tab) in step with the agent chosen here.
-      if (patch.defaultAgentId !== undefined && patch.defaultAgentId !== before.defaultAgentId) {
-        await tx.delete(agentChannels).where(eq(agentChannels.channelId, id));
-        if (patch.defaultAgentId) await tx.insert(agentChannels).values({ agentId: patch.defaultAgentId, channelId: id });
-      }
       await recordAudit(tx, actor, {
         action: 'channel.update',
         targetType: 'channel',
@@ -150,7 +157,7 @@ export class ChannelService {
     for (const [key, ref] of Object.entries(before.secretRefs)) {
       if (newRefs[key] && newRefs[key] !== ref) await this.secrets.delete(ref).catch(() => {});
     }
-    return this.toView(row!);
+    return (await this.views([row!]))[0]!;
   }
 
   private async storeSecrets(channelName: string, values: Record<string, string>): Promise<Record<string, string>> {
@@ -162,7 +169,7 @@ export class ChannelService {
     return refs;
   }
 
-  private toView(row: typeof channels.$inferSelect): ChannelView {
+  private toView(row: typeof channels.$inferSelect, router: ChannelView['router'], passThroughAgentId: string | null): ChannelView {
     return {
       id: row.id,
       kind: row.kind,
@@ -171,7 +178,8 @@ export class ChannelService {
       publicKey: row.publicKey,
       settings: row.settings,
       secretRefs: row.secretRefs,
-      defaultAgentId: row.defaultAgentId,
+      router,
+      defaultAgentId: passThroughAgentId,
       lastInboundAt: row.lastInboundAt?.toISOString() ?? null,
       ...this.paths(row.kind, row.publicKey),
     };

@@ -61,7 +61,7 @@ export function visitorStream(deps: VisitorStreamDeps, input: VisitorStreamInput
         return [];
       }
       if (!current || e.conversationId !== current.id) return [];
-      return toCustomerEvents(deps, e, current, input.capabilities);
+      return toCustomerEvents(deps, e, current, input);
     };
 
     const sub = deps.hub
@@ -84,7 +84,8 @@ export function visitorStream(deps: VisitorStreamDeps, input: VisitorStreamInput
   });
 }
 
-async function toCustomerEvents(deps: VisitorStreamDeps, e: OcsoEvent, conv: VisitorConversation, caps: ChannelCapabilities): Promise<MessageEvent[]> {
+async function toCustomerEvents(deps: VisitorStreamDeps, e: OcsoEvent, conv: VisitorConversation, input: VisitorStreamInput): Promise<MessageEvent[]> {
+  const caps = input.capabilities;
   const p = e.payload as Record<string, unknown>;
   switch (e.type) {
     case 'interaction.received': // the customer's own message (e.g. sent from another tab)
@@ -103,6 +104,11 @@ async function toCustomerEvents(deps: VisitorStreamDeps, e: OcsoEvent, conv: Vis
     case 'conversation.control_changed': {
       const to = String(p['to']);
       conv.controlState = to;
+      // Routed or transferred: the assistant may now be (another) agent.
+      if (p['from'] === 'ROUTING' || p['command'] === 'TRANSFER_QUEUE') {
+        const fresh = await deps.identity.conversationFor(input.channelId, input.visitor);
+        if (fresh?.id === conv.id) conv.agentName = fresh.agentName;
+      }
       conv.assignedUserId = to === 'HUMAN_ACTIVE' && typeof p['actorId'] === 'string' ? p['actorId'] : conv.assignedUserId;
       const notice = await deps.messages.latestNotice(conv.id, { from: p['from'], to }, conv.agentName);
       const humanName = to === 'HUMAN_ACTIVE' ? await deps.messages.firstNameOf(conv.assignedUserId) : null;

@@ -5,7 +5,7 @@ import { toolCalls, uuidv7, type Db } from '@ocso/db';
 import { canonicalJson } from '@ocso/prompt-compiler';
 import { emitEvent } from '@ocso/application';
 import { currentTraceId, ocsoMetrics } from '@ocso/observability';
-import { authorizeToolCall, sanitizeForAudit, type ConnectionToolProviders, type HandoffRequest, type SchemaValidator, type ToolOutcome, type ToolProviderRegistry } from '@ocso/tools';
+import { authorizeToolCall, sanitizeForAudit, type ConnectionToolProviders, type HandoffRequest, type QueueTransferRequest, type SchemaValidator, type ToolOutcome, type ToolProviderRegistry } from '@ocso/tools';
 import type { ToolCallRequest } from '@ocso/model-providers';
 import type { AgentToolCatalog, CatalogEntry } from './catalog.js';
 
@@ -32,6 +32,7 @@ export type ToolRunOutcome = {
   status: 'SUCCEEDED' | 'FAILED' | 'DENIED' | 'AWAITING_CONFIRMATION';
   output: ToolResultOutput;
   handoff?: HandoffRequest | undefined;
+  transfer?: QueueTransferRequest | undefined;
 };
 
 const MAX_OUTPUT_CHARS = 12_000;
@@ -185,7 +186,8 @@ export class ToolRunner {
     if (final.status === 'FAILED') return { toolCallId: call.toolCallId, status: 'FAILED', output: { type: 'error', value: final.message } };
     // Conversation-control effects are honoured from first-party providers only.
     const handoff = firstParty && final.effect?.type === 'handoff' ? final.effect.request : undefined;
-    return { toolCallId: call.toolCallId, status: 'SUCCEEDED', output: truncate(final.output), ...(handoff ? { handoff } : {}) };
+    const transfer = firstParty && final.effect?.type === 'transfer' ? final.effect.request : undefined;
+    return { toolCallId: call.toolCallId, status: 'SUCCEEDED', output: truncate(final.output), ...(handoff ? { handoff } : {}), ...(transfer ? { transfer } : {}) };
   }
 }
 

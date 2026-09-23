@@ -95,6 +95,11 @@ export const api = {
   async get<S extends z.ZodType>(path: string, schema: S, options: ApiCallOptions = {}): Promise<z.infer<S>> {
     return parse(await send('GET', path, undefined, options), schema);
   },
+  /** GET that also returns the response headers (e.g. x-ocso-audit-source). */
+  async getWithHeaders<S extends z.ZodType>(path: string, schema: S, options: ApiCallOptions = {}): Promise<{ data: z.infer<S>; headers: Headers }> {
+    const res = await send('GET', path, undefined, options);
+    return { data: await parse(res, schema), headers: res.headers };
+  },
   async post<S extends z.ZodType>(path: string, body: unknown, schema: S, options: ApiCallOptions = {}): Promise<z.infer<S>> {
     return parse(await send('POST', path, body, options), schema);
   },
@@ -103,6 +108,10 @@ export const api = {
   },
   async put<S extends z.ZodType>(path: string, body: unknown, schema: S, options: ApiCallOptions = {}): Promise<z.infer<S>> {
     return parse(await send('PUT', path, body, options), schema);
+  },
+  /** DELETE with a body and a typed answer (e.g. 202 `{ proposal }` when the delete needs approval). */
+  async delete<S extends z.ZodType>(path: string, body: unknown, schema: S, options: ApiCallOptions = {}): Promise<z.infer<S>> {
+    return parse(await send('DELETE', path, body, options), schema);
   },
   /** For endpoints that answer 204 / an ignorable body. */
   async command(method: Method, path: string, body?: unknown, options: ApiCallOptions = {}): Promise<void> {

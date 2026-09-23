@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { boolean, index, integer, pgTable, primaryKey, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, check, index, integer, pgTable, primaryKey, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { createdAt, id, ts, updatedAt } from './columns.js';
 
 export const users = pgTable(
@@ -9,7 +9,8 @@ export const users = pgTable(
     email: text().notNull(),
     name: text().notNull(),
     role: text().$type<'TECH' | 'HEAD' | 'LEAD' | 'SERVICE'>().notNull(),
-    status: text().$type<'ACTIVE' | 'DISABLED'>().notNull().default('ACTIVE'),
+    /** PENDING_APPROVAL: created, inert and unable to sign in until the user proposal is approved (PM/research/11 §3.4). */
+    status: text().$type<'ACTIVE' | 'DISABLED' | 'PENDING_APPROVAL'>().notNull().default('ACTIVE'),
     /** Better Auth fields (ADR-025). An accepted invite or SSO sign-in verifies the address. */
     emailVerified: boolean().notNull().default(false),
     image: text(),
@@ -26,7 +27,10 @@ export const users = pgTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [uniqueIndex('users_email_uq').on(sql`lower(${t.email})`)],
+  (t) => [
+    uniqueIndex('users_email_uq').on(sql`lower(${t.email})`),
+    check('users_status_ck', sql`${t.status} IN ('ACTIVE','DISABLED','PENDING_APPROVAL')`),
+  ],
 );
 
 /**

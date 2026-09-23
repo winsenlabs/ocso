@@ -4,6 +4,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { expect, test, type APIRequestContext } from '@playwright/test';
 import { ACCOUNTS, E2E, apiUrl, databaseUrl } from './config';
 import { login } from './helpers';
+import { routeChannelToAgent } from './routing';
 
 /**
  * Message templates end to end (docs/07 §3, docs/09 §4) on a WhatsApp
@@ -116,11 +117,12 @@ test.beforeAll(async ({ playwright }) => {
     kind: 'TWILIO_WHATSAPP',
     name: 'TPL WhatsApp',
     status: 'ACTIVE',
-    defaultAgentId: agent,
     settings: { accountSid: ACCOUNT_SID, from: 'whatsapp:+14155238886', apiBaseUrl: stubUrl, contentApiBaseUrl: stubUrl, statusCallback: false },
     secrets: { authToken: AUTH_TOKEN },
   });
   ids.channel = channel.id;
+  // channel → pass-through router → Maya's queue (PM/research/11 §5).
+  routeChannelToAgent({ channelId: channel.id, agentId: agent, queueId: ids.queue, name: 'TPL WhatsApp' });
   ids.webhookPath = channel.webhookPath;
 });
 
@@ -134,7 +136,8 @@ test('after 24 hours the exec reaches the customer with an approved template', a
   await inbound('Is my replacement card ready?');
   await expect.poll(async () => (await call<{ items: Array<{ id: string }> }>('GET', '/v1/conversations?view=all', tok.lead)).items.length, { timeout: 20_000 }).toBeGreaterThan(0);
   ids.conversation = (await call<{ items: Array<{ id: string }> }>('GET', '/v1/conversations?view=all', tok.lead)).items[0]!.id;
-  await call('POST', `/v1/conversations/${ids.conversation}/take-over`, tok.lead);
+  // Maya is a draft (she does not answer), so routing handed the customer straight to a person: it waits in the queue.
+  expect((await call<{ controlState: string }>('GET', `/v1/conversations/${ids.conversation}`, tok.lead)).controlState).toBe('WAITING_FOR_HUMAN');
   await call('POST', `/v1/conversations/${ids.conversation}/transfer`, tok.lead, { queueId: ids.queue, userId: ids.execId });
   await call('POST', `/v1/conversations/${ids.conversation}/accept`, tok.exec);
   // The customer's last message was 25 hours ago.

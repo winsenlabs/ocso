@@ -4,12 +4,14 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { eq } from 'drizzle-orm';
 import type { INestApplication } from '@nestjs/common';
-import { createTestDatabase, type TestDatabase } from '@ocso/db/testing';
+import { createTestAuditDatabase, createTestDatabase, type TestAuditDatabase, type TestDatabase } from '@ocso/db/testing';
 import { conversations, jobs, teamMembers, teams, users, uuidv7 } from '@ocso/db';
 import type { Principal } from '@ocso/auth';
+import { routeChannel } from './routing.js';
 
 const PASSWORD = 'a password 12345';
 let db: TestDatabase;
+let auditDb: TestAuditDatabase;
 let app: INestApplication;
 const http = () => request(app.getHttpServer());
 const auth = (token: string) => ({ authorization: `Bearer ${token}` });
@@ -49,9 +51,13 @@ async function bootApi(): Promise<INestApplication> {
 
 beforeAll(async () => {
   db = await createTestDatabase();
+  auditDb = await createTestAuditDatabase();
   Object.assign(process.env, {
     NODE_ENV: 'test',
     DATABASE_URL: db.url,
+    // The audit store (ADR-032) the infrastructure module requires; no signing key file = an ephemeral test key.
+    AUDIT_DRIVER: 'postgres',
+    AUDIT_DATABASE_URL: auditDb.url,
     BLOB_SIGNING_KEY: 'test-blob-signing-key-0123456789',
     OCSO_SECRETS_MASTER_KEY: randomBytes(32).toString('base64'),
     OCSO_SETUP_TOKEN: 'integration-setup-token-1',
@@ -82,7 +88,8 @@ beforeAll(async () => {
   const principal = (key: 'admin' | 'lead'): Principal => ({ userId: ids[key]!, role: key === 'admin' ? 'TECH' : 'HEAD', displayName: key, teamIds: key === 'lead' ? [ids.team!] : [], via: 'UI' });
   ids.agent = (await new AgentService(db.db).create({ principal: principal('lead'), correlationId: 't' }, { name: 'Maya', purpose: 'customer support', conversationType: 'SUPPORT', description: '', teamIds: [ids.team!] })).id;
   ids.secret = randomBytes(32).toString('hex');
-  const channel = await app.get(ChannelService).create({ principal: principal('admin'), correlationId: 't' }, { kind: 'WEBCHAT', name: 'Web chat', status: 'ACTIVE', settings: {}, secrets: { visitorTokenSecret: ids.secret }, defaultAgentId: ids.agent });
+  const channel = await app.get(ChannelService).create({ principal: principal('admin'), correlationId: 't' }, { kind: 'WEBCHAT', name: 'Web chat', status: 'ACTIVE', settings: {}, secrets: { visitorTokenSecret: ids.secret } });
+  await routeChannel({ db }, channel.id, ids.agent);
   ids.channel = channel.id;
   ids.publicKey = channel.publicKey;
   const { issueVisitorToken } = await import('@ocso/channels');
@@ -97,6 +104,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await app?.close();
   await db?.drop();
+  await auditDb?.drop();
 });
 
 describe('telemetry API (Tech admin only)', () => {

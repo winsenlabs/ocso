@@ -7,6 +7,7 @@ import { recordAudit } from '../audit/audit.js';
 import { bumpGeneration } from '../cache/generations.js';
 import { emitEvent } from '../events/outbox.js';
 import { assertAgentManageable, assertAgentReadable } from '../agents/access.js';
+import { assertAgentUnlocked } from '../agents/approval-lock.js';
 import type { ActorContext } from '../shared/context.js';
 import { requirePermission } from './access.js';
 import { SetAgentToolGrantsInput } from './inputs.js';
@@ -76,6 +77,8 @@ export class AgentToolGrantService {
 
     return this.db.transaction(async (tx) => {
       await this.assertAgent(tx, agentId, true);
+      // Maker–checker: the grants are part of what an open agent proposal shows its checker (11b).
+      await assertAgentUnlocked(tx, agentId);
       const eligible = ids.length
         ? await tx
             .select({ t: tools })

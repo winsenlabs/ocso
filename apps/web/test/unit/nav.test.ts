@@ -19,7 +19,7 @@ describe('buildNav (design/OCSONav.dc.html, derived from permissions)', () => {
       'Home', 'Search',
       'Conversations', 'Virtual agents', 'Queues', 'Customers', 'Message templates',
       'Analytics', 'Reviews', 'Prompt corrections', 'Escalation reasons',
-      'Alerts', 'SLA policies', 'Team',
+      'Alerts', 'SLA policies', 'Team', 'Approvals',
       'My connections', 'Settings',
     ]);
   });
@@ -30,6 +30,14 @@ describe('buildNav (design/OCSONav.dc.html, derived from permissions)', () => {
     expect(items('TECH')).toContain('Team & roles');
     expect(items('TECH')).toContain('Message templates');
     expect(items('SERVICE')).not.toContain('Message templates');
+  });
+
+  it('shows Approvals to maker–checker readers in Governance (Head, Lead) and Oversight (Tech), and hides it without approvals.read', () => {
+    expect(navFor('HEAD').find((g) => g.key === 'governance')?.items.map((i) => i.key)).toContain('approvals');
+    expect(navFor('LEAD').find((g) => g.key === 'governance')?.items.map((i) => i.key)).toContain('approvals');
+    expect(navFor('TECH').find((g) => g.key === 'oversight')?.items.map((i) => i.key)).toContain('approvals');
+    const withoutRead = new Set(permissionsForRole('HEAD').filter((p) => p !== 'approvals.read'));
+    expect(buildNav(withoutRead).flatMap((g) => g.items.map((i) => i.key))).not.toContain('approvals');
   });
 
   it('drops items whose permission is missing and empty groups', () => {

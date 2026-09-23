@@ -32,7 +32,7 @@ let publicKey = values.key;
 if (!baseUrl) {
   stack = await startStack({ dbName: 'ocso_load', apiPort: 4495, workers: Number(values.workers) });
   baseUrl = stack.baseUrl;
-  ({ publicKey } = await seedWebChat(baseUrl, stack.setupToken, { latencyMs: Number(values.latency), workerSettings: { conversationsPerWorker: Number(values['per-worker']) } }));
+  ({ publicKey } = await seedWebChat(baseUrl, stack.setupToken, { databaseUrl: stack.databaseUrl, latencyMs: Number(values.latency), workerSettings: { conversationsPerWorker: Number(values['per-worker']) } }));
   await new Promise((r) => setTimeout(r, 4_000));
 } else if (!publicKey) {
   throw new Error('--key (web chat channel public key) is required with --base-url');

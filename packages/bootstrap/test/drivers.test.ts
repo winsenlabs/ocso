@@ -22,7 +22,7 @@ import {
 } from '../src/index.js';
 
 const MASTER_KEY = randomBytes(32).toString('base64');
-const base = { DATABASE_URL: 'postgres://u:pw@db:5432/ocso', BLOB_SIGNING_KEY: 'x'.repeat(32), OCSO_SECRETS_MASTER_KEY: MASTER_KEY };
+const base = { DATABASE_URL: 'postgres://u:pw@db:5432/ocso', BLOB_SIGNING_KEY: 'x'.repeat(32), OCSO_SECRETS_MASTER_KEY: MASTER_KEY, AUDIT_DATABASE_URL: 'postgres://w:pw@audit-db:5432/ocso_audit' };
 const sql: SqlClient = { query: async () => ({ rows: [], rowCount: 0 }) };
 
 describe('driver registries (composition root)', () => {
@@ -33,6 +33,7 @@ describe('driver registries (composition root)', () => {
     expect(drivers.secrets.names()).toEqual(['local', 'aws']);
     expect(drivers.queue.names()).toEqual(['postgres', 'sqs']);
     expect(drivers.deployment.names()).toEqual(['compose', 'ecs']);
+    expect(drivers.audit.names()).toEqual(['postgres', 'clickhouse']);
   });
 
   it('keeps the live Compose configuration working: resend via RESEND_API_KEY_FILE, local blobs and secrets, postgres queue, compose', () => {
@@ -44,6 +45,10 @@ describe('driver registries (composition root)', () => {
       RESEND_API_KEY: '',
       RESEND_API_KEY_FILE: '/run/secrets/ocso/resend_api_key',
       BLOB_DRIVER: 'local',
+      // Compose hands the audit store's writer URL and signing key over as files (ADR-032).
+      AUDIT_DATABASE_URL: '',
+      AUDIT_DATABASE_URL_FILE: '/run/secrets/ocso/audit_database_url',
+      AUDIT_SIGNING_KEY_FILE: '/run/secrets/ocso/audit_signing_key',
     });
     const drivers = createDriverRegistries();
     expect(() => assertWorkerDrivers(env, drivers)).not.toThrow();
@@ -91,6 +96,7 @@ describe('driver registries (composition root)', () => {
       '  - SECRETS_DRIVER=local requires OCSO_SECRETS_MASTER_KEY or OCSO_SECRETS_MASTER_KEY_FILE',
       '  - QUEUE_DRIVER=sqs requires SQS_QUEUE_URLS and AWS_REGION',
       '  - DEPLOYMENT_DRIVER=ecs requires ECS_CLUSTER and ECS_WORKER_SERVICE',
+      '  - AUDIT_DRIVER=postgres requires AUDIT_DATABASE_URL (or AUDIT_DATABASE_URL_FILE)',
     ]);
     // The API does not select a deployment driver.
     expect(() => assertDrivers(loadEnv(ApiEnv, { ...base, DEPLOYMENT_DRIVER: 'ecs' }), drivers)).not.toThrow();

@@ -22,6 +22,10 @@ export const deploymentSettings = pgTable('deployment_settings', {
   /** Require explicit confirmation for LOW_WRITE internal-agent actions too. */
   internalAgentConfirmLowWrites: boolean().notNull().default(false),
   setupCompletedAt: ts('setup_completed_at'),
+  /** Open approvals older than this carry the `aged` warning and appear in the exception report (0023). */
+  approvalAgeWarningHours: integer().notNull().default(72),
+  /** Audit events verified in the audit store are pruned from the main database after this many days (≥ 90, the widest analytics window; CHECK in 0026). */
+  auditLocalWindowDays: integer().notNull().default(90),
   updatedAt: updatedAt(),
   updatedBy: uuid(),
 });

@@ -1,16 +1,18 @@
 import { Global, Inject, Module, type OnApplicationShutdown } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
-import { SettingsService } from '@ocso/application';
+import { SettingsService, type AuditStore } from '@ocso/application';
 import {
   FIRST_PARTY_PLUGINS,
   PgListener,
   assertWorkerDrivers,
+  createAuditStore,
   createBlobStore,
   createChannelRegistry,
   createDriverRegistries,
   createProviderRegistry,
   createQueue,
   createSecretStore,
+  loadAuditSigner,
   pgQueueNotifier,
   type DriverRegistries,
   type OcsoPlugin,
@@ -23,6 +25,8 @@ import { shutdownOtel } from '@ocso/observability/otel';
 import { EVENTS_CHANNEL } from '@ocso/application';
 import { JOBS_CHANNEL } from '@ocso/bootstrap';
 import {
+  AUDIT_SIGNER,
+  AUDIT_STORE,
   BLOB_STORE,
   CHANNEL_REGISTRY,
   DATABASE,
@@ -95,6 +99,14 @@ function loadWorkerEnv(drivers: DriverRegistries): WorkerEnv {
     },
     { provide: SECRET_STORE, inject: [ENV, DB, DRIVERS], useFactory: createSecretStore },
     { provide: BLOB_STORE, inject: [ENV, DRIVERS], useFactory: createBlobStore },
+    // The audit store (ADR-032): the leader ships the outbox to it, seals, checkpoints and exports.
+    {
+      provide: AUDIT_STORE,
+      inject: [ENV, LOGGER, DRIVERS],
+      useFactory: (env: WorkerEnv, logger: Logger, drivers: DriverRegistries) =>
+        createAuditStore(env, { info: (msg, fields) => logger.info(fields ?? {}, msg), warn: (msg, fields) => logger.warn(fields ?? {}, msg) }, drivers),
+    },
+    { provide: AUDIT_SIGNER, inject: [ENV, LOGGER], useFactory: (env: WorkerEnv, logger: Logger) => loadAuditSigner(env, { warn: (msg) => logger.warn(msg) }) },
     { provide: CHANNEL_REGISTRY, inject: [PLUGINS, DB], useFactory: (plugins: readonly OcsoPlugin[], db: Db) => createChannelRegistry({ db }, plugins) },
     {
       provide: PROVIDER_REGISTRY,
@@ -126,6 +138,8 @@ function loadWorkerEnv(drivers: DriverRegistries): WorkerEnv {
     QUEUE,
     SECRET_STORE,
     BLOB_STORE,
+    AUDIT_STORE,
+    AUDIT_SIGNER,
     CHANNEL_REGISTRY,
     PROVIDER_REGISTRY,
     SettingsService,
@@ -137,11 +151,13 @@ export class WorkerInfrastructureModule implements OnApplicationShutdown {
   constructor(
     @Inject(DATABASE) private readonly database: Database,
     @Inject(LISTENER) private readonly listener: PgListener,
+    @Inject(AUDIT_STORE) private readonly auditStore: AuditStore,
   ) {}
 
   async onApplicationShutdown(): Promise<void> {
     await shutdownOtel();
     await this.listener.stop();
+    await this.auditStore.close().catch(() => {});
     await this.database.close();
   }
 }

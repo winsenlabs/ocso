@@ -28,6 +28,29 @@ Suggested modules/routes:
 - system/worker configuration
 - internal-agent tools
 
+*As built — approvals (PM/research/11 §4, ADR-030):* approvable write endpoints accept `approval:
+{checkerId, reason}` (or `{bootstrap: true, reason?}` when nobody else could check it). A draft object is
+written directly (as before). When the write needs approval they answer **409 `approval_required`** with
+`details: {objectKind, objectId, action}` without `approval`, and **202 `{proposal}`** with it; an object
+with an open proposal answers **409 `approval_open`** (`details.proposalId`). Wave 1 wires `PATCH
+/v1/agents/:id`, `POST /v1/agents/:id/status {LIVE}` (PAUSED stays immediate, `agents.pause`), `DELETE
+/v1/agents/:id` (`agents.delete`, always a proposal) and `POST
+/v1/agents/:agentId/prompt/versions/:id/activate` (a proposal once the agent is approved). The queue is
+`/v1/approvals`: `GET /` (`box=AWAITING_ME|SENT_BY_ME|OPEN|DECIDED`, keyset `before`+`beforeId`),
+`GET /counts`, `GET /kinds`, `GET /checkers?objectKind&objectId`, `GET /state?objectKind&objectId`,
+`GET /:id`, `GET /:id/checkers`, `POST /` (kinds without their own write endpoint), `PATCH /:id` (maker
+edits: revision+1; also how a maker refreshes a proposal whose dependencies changed), `POST /:id/withdraw`,
+`POST /:id/decision {decision, reason, contentHash, dependencyHash?}` (approve: 409 `content_changed`,
+409 `dependency_changed` against the dependency hash stored at submit; reject never needs matching hashes;
+403 `self_review`/`not_checker`/`checker_invalid`), `POST /bulk-decision` (approve only, ≤ 50, per-item
+outcome), `POST /:id/checker` (reassign), `POST /:id/void {reason}` (`approvals.reassign_any`: closes an
+open proposal nobody can decide, audited). An ineligible checker is 400 `checker_not_eligible`; an UPDATE
+that changes nothing is 400 `no_changes`. `GET /checkers` needs a make permission for the kind and write
+scope on the object; candidates carry `email`/`role` only for callers with `users.read`. Proposing is
+write-scoped like the direct write (an agent: an owning team's member), so `agents.read_all` alone never
+lets someone propose. While an agent or any of its prompt versions has an open proposal, the agent's
+owners, tool grants and escalation rules answer 409 `approval_open` too.
+
 ## 3. Realtime
 
 Use WebSocket or SSE for CS/admin live updates.
@@ -44,6 +67,10 @@ Possible stream events:
 - conversation.resolved
 
 The canonical backend event is separate from how a specific UI renders it.
+
+*As built:* `approval.requested`, `approval.decided` and `approval.checker_invalid` reach the maker, the
+named checker and holders of `approvals.reassign_any` only; the web app shows them as notices and
+re-reads the approvals screen.
 
 *As built:* SSE only (no WebSocket endpoint). Staff streams (`GET /v1/realtime/stream`, Ask OCSO chat)
 authenticate like every `/v1` route and re-check their session every minute, closing when it was

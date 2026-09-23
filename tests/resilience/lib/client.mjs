@@ -1,3 +1,7 @@
+import { execFileSync } from 'node:child_process';
+
+const psql = (databaseUrl, statement) => execFileSync('psql', [databaseUrl, '-v', 'ON_ERROR_STOP=1', '-qc', statement], { stdio: 'pipe' });
+
 // Minimal HTTP helpers against the OCSO API (staff routes) and the public web chat API.
 export function client(baseUrl) {
   const call = async (method, path, { token, body } = {}) => {
@@ -14,8 +18,13 @@ export function client(baseUrl) {
   return { get: (p, o) => call('GET', p, o), post: (p, body, o = {}) => call('POST', p, { ...o, body }), patch: (p, body, o = {}) => call('PATCH', p, { ...o, body }), put: (p, body, o = {}) => call('PUT', p, { ...o, body }) };
 }
 
-/** Setup → lead → DEV_SCRIPTED provider/profile (with latency) → the lead's team → LIVE agent → active web chat channel. */
-export async function seedWebChat(baseUrl, setupToken, { latencyMs = 1500, workerSettings = {} } = {}) {
+/**
+ * Setup → lead → DEV_SCRIPTED provider/profile (with latency) → the lead's team → LIVE agent → active web chat
+ * channel routed to the agent: channel → pass-through router → queue with the agent (PM/research/11 §5).
+ * Router activation is an approval over HTTP, so it is done in SQL on the stack's throwaway database.
+ */
+export async function seedWebChat(baseUrl, setupToken, { latencyMs = 1500, workerSettings = {}, databaseUrl } = {}) {
+  if (!databaseUrl) throw new Error('seedWebChat needs the stack databaseUrl to activate the channel router');
   const api = client(baseUrl);
   await api.post('/v1/setup', { setupToken, orgName: 'Resilience Test', adminName: 'Admin', adminEmail: 'admin@res.test', adminPassword: 'resilience admin 1234', timezone: 'UTC' });
   const admin = (await api.post('/v1/auth/login', { email: 'admin@res.test', password: 'resilience admin 1234' })).token;
@@ -27,8 +36,14 @@ export async function seedWebChat(baseUrl, setupToken, { latencyMs = 1500, worke
   // Agents are owned by teams (ADR-026); the lead who creates a team joins it.
   const team = await api.post('/v1/teams', { name: 'Support' }, { token: lead });
   const agent = await api.post('/v1/agents', { name: 'Maya', purpose: 'customer support', conversationType: 'SUPPORT', modelProfileId: profile.id ?? profile.profile?.id, teamIds: [team.id] }, { token: lead });
-  await api.post(`/v1/agents/${agent.id}/status`, { status: 'LIVE' }, { token: lead });
-  const channel = await api.post('/v1/channels', { kind: 'WEBCHAT', name: 'Web chat', status: 'ACTIVE', defaultAgentId: agent.id }, { token: admin });
+  // Going live is a maker–checker approval; the lead is the team's only Head, so bootstrap.
+  await api.post(`/v1/agents/${agent.id}/status`, { status: 'LIVE', approval: { bootstrap: true, reason: 'Resilience setup: sole Head of the team' } }, { token: lead });
+  const queue = await api.post('/v1/queues', { name: 'Support', teamIds: [team.id] }, { token: lead });
+  await api.patch(`/v1/queues/${queue.id}`, { agentId: agent.id }, { token: lead });
+  const channel = await api.post('/v1/channels', { kind: 'WEBCHAT', name: 'Web chat', status: 'ACTIVE' }, { token: admin });
+  const router = await api.post('/v1/routers', { name: 'Web chat', definition: { steps: [], rules: [], fallbackQueueId: queue.id, returning: null, timeoutMinutes: 10 } }, { token: lead });
+  const version = await api.post(`/v1/routers/${router.id}/versions`, { reason: 'resilience' }, { token: lead });
+  psql(databaseUrl, `UPDATE routers SET status = 'ACTIVE', active_version_id = '${version.id}' WHERE id = '${router.id}'; UPDATE channels SET router_id = '${router.id}' WHERE id = '${channel.id}'`);
   return { admin, lead, publicKey: channel.publicKey };
 }
 

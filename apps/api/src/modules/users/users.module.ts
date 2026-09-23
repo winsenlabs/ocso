@@ -1,15 +1,29 @@
-import { Module } from '@nestjs/common';
-import { AuthMailer, TeamService, UserService } from '@ocso/application';
+import { Logger, Module } from '@nestjs/common';
+import { AuthMailer, PermissionService, TeamService, UserService, type IdentityApprovals, type IdentityGovernance } from '@ocso/application';
+import type { ApiEnv } from '@ocso/config';
 import type { Db } from '@ocso/db';
-import { DB } from '../../infrastructure/tokens.js';
+import { DB, ENV } from '../../infrastructure/tokens.js';
+import { IDENTITY_APPROVALS, IDENTITY_GOVERNANCE, identityGovernance } from './identity-governance.js';
+import { PermissionsController } from './permissions.controller.js';
 import { UsersController } from './users.controller.js';
 
 @Module({
-  controllers: [UsersController],
+  controllers: [UsersController, PermissionsController],
   providers: [
-    { provide: UserService, inject: [DB, AuthMailer], useFactory: (db: Db, mailer: AuthMailer) => new UserService(db, { mailer }) },
-    { provide: TeamService, inject: [DB], useFactory: (db: Db) => new TeamService(db) },
+    { provide: IDENTITY_APPROVALS, useValue: null },
+    {
+      provide: IDENTITY_GOVERNANCE,
+      inject: [ENV, IDENTITY_APPROVALS],
+      useFactory: (env: ApiEnv, approvals: IdentityApprovals | null) => identityGovernance(env, approvals, (m) => new Logger('Identity').warn(m)),
+    },
+    {
+      provide: UserService,
+      inject: [DB, AuthMailer, IDENTITY_GOVERNANCE],
+      useFactory: (db: Db, mailer: AuthMailer, governance: IdentityGovernance) => new UserService(db, { mailer, ...governance }),
+    },
+    { provide: TeamService, inject: [DB, IDENTITY_GOVERNANCE], useFactory: (db: Db, governance: IdentityGovernance) => new TeamService(db, governance) },
+    { provide: PermissionService, inject: [DB, IDENTITY_GOVERNANCE], useFactory: (db: Db, governance: IdentityGovernance) => new PermissionService(db, governance) },
   ],
-  exports: [UserService, TeamService],
+  exports: [UserService, TeamService, PermissionService],
 })
 export class UsersModule {}

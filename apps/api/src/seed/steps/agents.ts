@@ -78,18 +78,26 @@ export async function seedAgents(ctx: SeedContext, leads: Record<LeadKey, ActorC
   return ids;
 }
 
-/** Link channels and go live (requires an active prompt and a model profile), as the owning team's lead. */
-export async function publishAgents(ctx: SeedContext, leads: Record<LeadKey, ActorContext>, agentIds: Record<AgentKey, string>, webchatChannelId: string): Promise<void> {
+/**
+ * Go live (requires an active prompt and a model profile) through an approval: the owning team's Head proposes
+ * it and the other Head checks it — each demo team has one Head, so the platform-wide fallback makes the
+ * other team's Head the eligible checker (never a self-approval). Channels reach agents through routers.
+ */
+export async function publishAgents(ctx: SeedContext, leads: Record<LeadKey, ActorContext>, agentIds: Record<AgentKey, string>): Promise<void> {
   for (const agent of AGENTS) {
     const id = agentIds[agent.slug];
-    const lead = leads[agent.lead];
-    const current = await ctx.services.agents.get(lead.principal!, id);
-    if (agent.webchat && !current.channelIds.includes(webchatChannelId)) {
-      await ctx.services.agents.update(lead, id, { channelIds: [...current.channelIds, webchatChannelId] });
-    }
-    if (current.status !== 'LIVE') {
-      await ctx.services.agents.setStatus(lead, id, 'LIVE');
-      ctx.log(`${agent.name} is live`);
-    }
+    const maker = leads[agent.lead];
+    const checker = leads[agent.lead === 'lead' ? 'lead2' : 'lead'];
+    const current = await ctx.services.agents.get(maker.principal!, id);
+    if (current.status === 'LIVE') continue;
+    const proposal = await ctx.services.approvals.submit(maker, {
+      objectKind: 'agent',
+      objectId: id,
+      action: 'ACTIVATE',
+      checkerId: checker.principal!.userId,
+      reason: 'Demo seed: take the agent live',
+    });
+    await ctx.services.approvalDecisions.decide(checker, proposal.id, { decision: 'APPROVE', reason: 'Demo seed: reviewed', contentHash: proposal.contentHash });
+    ctx.log(`${agent.name} is live (approved by ${checker.principal!.displayName})`);
   }
 }

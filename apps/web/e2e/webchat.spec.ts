@@ -4,6 +4,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type APIRequestContext, type BrowserContext, type FrameLocator, type Page } from '@playwright/test';
 import { ACCOUNTS, E2E, apiUrl, webUrl } from './config';
+import { routeChannelToAgent } from './routing';
+import { goLiveApproved } from './approval-setup';
 
 /**
  * Customer web chat end to end: a host site (examples/webchat-host) embeds
@@ -93,16 +95,18 @@ test.beforeAll(async ({ playwright, browser }) => {
   const provider = (await call<{ id: string }>('POST', '/v1/model-providers', tok.admin, { kind: 'DEV_SCRIPTED', name: 'WC Scripted', settings: { latencyMs: 100, chunkDelayMs: 80 } })).id;
   const profile = (await call<{ id: string }>('POST', '/v1/model-profiles', tok.admin, { name: 'wc-support', providerId: provider, model: 'scripted-1', retries: 0 })).id;
   const agent = (await call<{ id: string }>('POST', '/v1/agents', tok.lead, { name: 'Ava', slug: 'ava-wc', purpose: 'order support', conversationType: 'SUPPORT', modelProfileId: profile, defaultQueueId: queue, teamIds: [owners] })).id;
-  await call('POST', `/v1/agents/${agent}/status`, tok.lead, { status: 'LIVE' });
-  const channel = await call<{ publicKey: string }>('POST', '/v1/channels', tok.admin, {
+  // Going live is a maker–checker approval (PM/research/11 §4): a second Head of the owning team checks it.
+  await goLiveApproved(api, { adminToken: tok.admin, makerToken: tok.lead, agentId: agent, ownerTeamId: owners, checker: { name: 'WC Checker', email: 'wc.checker@e2e.ocso.test', password: 'correct-horse-battery-wcchecker' } });
+  const channel = await call<{ id: string; publicKey: string }>('POST', '/v1/channels', tok.admin, {
     kind: 'WEBCHAT',
     name: CHANNEL,
     status: 'ACTIVE',
-    defaultAgentId: agent,
     settings: { allowedOrigins: [HOST], branding: { title: 'Example Store help', accentColor: '#0f766e', greeting: 'Hi! Ask us anything about your order.' } },
     secrets: { visitorTokenSecret: randomBytes(32).toString('hex'), hostJwtSecret: HOST_JWT_SECRET },
   });
   ids.key = channel.publicKey;
+  // channel → pass-through router → the agent's queue (PM/research/11 §5).
+  routeChannelToAgent({ channelId: channel.id, agentId: agent, queueId: queue, name: CHANNEL });
   host = await startHost();
 });
 

@@ -82,7 +82,9 @@ Other types you will use:
   its public `webhookUrl` when the kind has one.
 - `ChannelCapabilities`: part types in and out, text length limit, `markdown` (`none`, `basic` — emphasis
   and lists, converted by the adapter — or `commonmark`), media size and MIME allowlists,
-  `sessionWindowHours` (WhatsApp: 24, others `null`) and the `identityKinds` the channel can address.
+  `sessionWindowHours` (WhatsApp: 24, others `null`), the `identityKinds` the channel can address, and
+  optionally `choices: { buttons, list }` — how many options the channel can show as native buttons and
+  as a list picker (see "Choice questions" below).
 - `InboundEnvelope`: `messages`, delivery `statuses`, optional `identityUpdates` and `templateUpdates`,
   and an `ignored` count.
 - `SendResult`: `{ ok: true, externalMessageId }`, or a failure with `errorCode`, `retriable` and
@@ -131,12 +133,27 @@ stops the internal network, your allowlist stops credentials going to the wrong 
 
 ## What the core does for you
 
-**Routing to an agent.** A channel answers as exactly one virtual agent: `channels.default_agent_id`
-(who new conversations go to) and `agent_channels` (the agent's Channels tab) are two records of that
-one fact and are kept in step — assigning the channel to a second agent is refused with
-`channel_in_use` until the first releases it, and releasing it stops the channel routing. One agent may
-answer on many channels. A channel nobody answers on rejects inbound messages as `no_agent`, logged with
-the reason.
+**Routing to an agent.** `channel → router → queue → agent` (PM/research/11 §5, ADR-031). A channel
+points at a router (`channels.router_id`); the router's active version decides the queue — at once for a
+pass-through router, or after asking the customer (menus), classifying their messages with a model, or
+both — and the queue's one AI agent answers. Your adapter does nothing for this: it only delivers the
+router's questions (below) and normalizes the replies. A channel with no active router rejects inbound
+messages as `no_router`, logged loudly with the reason. `channels.default_agent_id` and `agent_channels`
+are deprecated, no longer read or written, and are dropped in a later release.
+
+**Choice questions (CHOICES).** A router asks with one outbound part: `STRUCTURED` with
+`schema: 'ocso.choices'` and `data: { text, options: [{ id, label }] }` (`CHOICES_SCHEMA`, `choicesOf`
+from `@ocso/domain`). Its `fallbackText` is the numbered text, so a renderer that knows nothing about
+choices still sends something the customer can answer ("2" or "Loans"). To render natively, declare
+`capabilities.choices` and, in `render`, turn the part into your buttons or list; keep each option's
+`id` as the button/row id so a tap can be matched exactly. `choicesPresentation(data, capabilities)`
+says which form fits and `renderChoicesAsText(data)` gives the numbered text. As built: WhatsApp
+(Meta) sends up to 3 options as reply buttons and up to 10 as a list message (falling back to text when
+cut titles would collide), Twilio sends the numbered text (interactive messages need Content Templates
+there), and the web chat widget draws buttons. Inbound, normalize a tap to a `STRUCTURED` reply whose
+`data.id` is the option id and whose `fallbackText` is its title (the WhatsApp adapters already produce
+`button_reply` / `list_reply` parts this way); typed answers need nothing — the router matches the
+number, the label, the value or a synonym. Core never names your kind for any of this.
 
 **Webhook routing.** Every inbound-webhook kind shares one route in
 `apps/api/src/modules/channels/channel-webhook.controller.ts`:
@@ -295,5 +312,7 @@ All channel tests run offline with a fake `fetch` and provider-shaped fixtures.
 - Audit rows written before the rename keep their `whatsapp_template.*` actions; new rows use
   `message_template.*`. Template messages stored as `ocso.whatsapp_template` parts are still read and
   delivered; new ones are `ocso.message_template`.
+- The WhatsApp list message's opening button reads "Choose" (Meta requires one); router messages carry no
+  per-language button text yet.
 - Outbound sends are at-least-once. If the provider has no idempotency key, a crash between the provider
   accepting a message and OCSO recording its id can send a duplicate (ADR-007).

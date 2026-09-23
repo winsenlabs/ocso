@@ -26,6 +26,8 @@ export const DeploymentSettingsInput = z.object({
   egressAllowedInternalHosts: z.array(z.string().max(253)).max(200).optional(),
   internalAgentProfileId: z.uuid().nullable().optional(),
   internalAgentConfirmLowWrites: z.boolean().optional(),
+  /** Days the main database keeps audit events the audit store verified (ADR-032); the database refuses < 30. */
+  auditLocalWindowDays: z.number().int().min(90).max(3650).optional(),
 });
 export type DeploymentSettingsInput = z.infer<typeof DeploymentSettingsInput>;
 

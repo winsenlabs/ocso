@@ -8,7 +8,8 @@ premises — running every OCSO process in containers. The same images run on EC
 |---|---|---|
 | `keygen` | One-shot. Creates missing secrets on the `secrets` volume, then exits | – |
 | `postgres` | PostgreSQL 18, data on the `pgdata` volume | – |
-| `migrate` | One-shot. Applies `packages/db/migrations`, then exits 0 | – |
+| `audit-db` | PostgreSQL 18 for the audit store (ADR-032), data on the `auditdata` volume | – |
+| `migrate` | One-shot. Applies `packages/db/migrations`, then provisions the audit store (`audit-migrate`), then exits 0 | – |
 | `api` | NestJS control plane, port 4000 | – (internal) |
 | `worker` | Agent workers, health on 4100. Two replicas by default (`OCSO_WORKER_REPLICAS`) | – |
 | `web` | Next.js UI and BFF. Proxies `/channels`, `/public`, `/oauth`, `/.well-known`, `/blobs` to the API | **3000** |
@@ -39,7 +40,7 @@ to Next.js, and Next.js calls the API over the internal network (ADR-020). Postg
 
 ```bash
 cp .env.example .env          # set EMAIL_* first (section 9); the rest has safe defaults
-docker compose up -d --build  # keygen → postgres → migrate → api + worker → web
+docker compose up -d --build  # keygen → postgres + audit-db → migrate → api + worker → web
 docker compose ps             # api, worker, web become "healthy"; keygen and migrate "exited (0)"
 ```
 
@@ -89,6 +90,11 @@ one-shot writes each missing secret to the `secrets` named volume:
 | `app/better_auth_secret` | Better Auth secret (ADR-025): signs session cookies, encrypts authenticator secrets and backup codes. Rotating it signs everyone out and users re-enrol their authenticator apps |
 | `app/demo_mcp_token`, `demo/*` | Demo MCP bearer token (`demo` profile) |
 | `app/aws_credentials`, `seaweedfs/s3.json` | SeaweedFS S3 identity (`s3` profile; readable by SeaweedFS uid 1000 only) |
+| `audit-postgres/db_password` (root, 0400) | Audit store database owner password (`audit-db`) |
+| `audit-migrate/audit_owner_url`, `audit_writer_password`, `audit_reader_password`, `audit_writer_url`, `audit_reader_url` | Audit store owner connection and the two roles' credentials — mounted only into `migrate` |
+| `audit-writer/audit_database_url` | `postgres://ocso_audit_writer:<password>@audit-db:5432/ocso_audit` — INSERT/SELECT only; mounted only into the worker |
+| `app/audit_reader_url` | `postgres://ocso_audit_reader:<password>@audit-db:5432/ocso_audit` — SELECT only; what the api (and the demo seed) read with |
+| `app/audit_signing_key` | Ed25519 private key (PKCS#8 PEM) signing audit checkpoints, exports and exception reports. Back it up; the public half is at `GET /v1/audit/keys` |
 
 Existing files are never overwritten. Each container mounts only its own sub-directory, so the
 postgres container never sees the master key. The images resolve `*_FILE` variables at start-up
@@ -217,13 +223,15 @@ volume is mounted at `/var/lib/postgresql`, the PG18+ layout, so `pg_upgrade --l
 
 ## 5. Backup and restore
 
-Back up these three things together. Any one is useless without the others:
+Back up these things together. Any one is useless without the others:
 
-1. **PostgreSQL.** This is the system of record: conversations, configuration, audit, and encrypted
-   credentials.
-2. **The `blobs` volume.** Media and attachments. On the `s3` profile, back up the `s3data` volume
-   instead.
-3. **The `secrets` volume**, above all `app/master_key`. Without it, the encrypted provider, channel
+1. **PostgreSQL.** Conversations, configuration, encrypted credentials, and the recent local window
+   of audit events.
+2. **The audit store** (`audit-db`, the `auditdata` volume): the system of record for audit events
+   (section 10).
+3. **The `blobs` volume.** Media, attachments and the signed audit exports. On the `s3` profile, back
+   up the `s3data` volume instead.
+4. **The `secrets` volume**, above all `app/master_key` and `app/audit_signing_key`. Without it, the encrypted provider, channel
    and MCP credentials in PostgreSQL cannot be decrypted. Store it separately from the database
    backup, for example in a password manager or a KMS-encrypted object, and restrict access.
 
@@ -232,6 +240,7 @@ Back up these three things together. Any one is useless without the others:
 # Keep backups OUTSIDE the repository checkout (never commit them).
 B=~/ocso-backups && mkdir -p "$B" && chmod 700 "$B" && ts=$(date +%Y%m%d-%H%M%S)
 docker compose exec -T postgres pg_dump -U ocso -d ocso -Fc > "$B/ocso-$ts.dump"
+docker compose exec -T audit-db pg_dump -U ocso_audit -d ocso_audit -Fc > "$B/ocso-audit-$ts.dump"
 docker run --rm -v ocso_blobs:/data:ro -v "$B":/b busybox tar czf /b/blobs-$ts.tgz -C /data .
 docker run --rm -v ocso_secrets:/data:ro -v "$B":/b busybox tar czf /b/secrets-$ts.tgz -C /data .
 chmod 600 "$B"/*
@@ -242,8 +251,21 @@ docker run --rm -v ocso_secrets:/data -v "$B":/b busybox tar xzf /b/secrets-<ts>
 docker run --rm -v ocso_blobs:/data -v "$B":/b busybox tar xzf /b/blobs-<ts>.tgz -C /data
 docker compose up -d postgres
 docker compose exec -T postgres pg_restore -U ocso -d ocso --clean --if-exists < "$B/ocso-<ts>.dump"
+docker compose up -d audit-db
+# The audit store is append-only (its tables refuse DELETE/TRUNCATE): restore into its fresh, empty database;
+# the next migrate step re-creates the writer role and its grants.
+docker compose exec -T audit-db pg_restore -U ocso_audit -d ocso_audit --no-privileges < "$B/ocso-audit-<ts>.dump"
 docker compose up -d                      # migrate brings the schema forward if the dump is older
 ```
+
+**If only the audit store is restored** (the main database is newer than the audit dump), events
+shipped after the dump are no longer in the store although the main database marks them verified.
+Reconciliation and the local prune check the store again and ship them once more, but only while
+they are inside the local window (`audit_local_window_days`): restore the store promptly, then
+confirm with `audit-verify` (section 10) and the System screen (**Full check**, **Shipping**). The
+restored chain continues from the dump's head, so positions after it are sealed again with other
+content than earlier exports under `audit-exports/` covered — keep those exports; each still
+verifies against its own manifest.
 
 Volume names carry the Compose project prefix (`ocso_`); check them with `docker volume ls`.
 Restore the `secrets` volume before PostgreSQL starts for the first time. Otherwise `keygen` creates
@@ -358,7 +380,80 @@ at `smtp.resend.com`, user `resend`, password = API key). Write the password to
 **Alert emails.** Email alert destinations send with this deployment sender by default ("Send with:
 deployment" — only recipients to enter). A destination can still use its own SMTP relay.
 
-## 10. Troubleshooting
+## 10. The audit store (ADR-032)
+
+Audit events are written in the same transaction as each change into the main database
+(`audit_events`, the transactional outbox), and the worker leader moves them to the **audit store**,
+a separate database that is the system of record:
+
+- **ship** (every 2 s): unshipped events are appended to the store (idempotent);
+- **reconcile** (every 5 min): shipped events are looked up in the store, marked verified, or sent
+  again if the store lost them;
+- **seal** (every 10 s): new records are added to a SHA-256 hash chain; every 1 000 entries (or
+  hourly) the worker re-verifies what is new since the last checkpoint and signs a checkpoint with the
+  Ed25519 key (a break found on the way is recorded as `CHAIN_BROKEN`; later ranges that verify on
+  their own are still signed);
+- **verify-full** (daily, in pages every minute until done): the whole chain is re-verified, so an
+  old record altered later is found;
+- **export** (daily): the sealed range up to the latest checkpoint is written to the blob store as
+  `audit-exports/YYYY/MM/DD/<from>-<to>.ndjson.gz` plus a signed `.manifest.json`.
+
+The main database keeps a local window of verified events (`audit_local_window_days`, default 90,
+minimum 90) and never deletes one the store has not confirmed — it checks the store again right
+before deleting. The audit screen reads the store
+merged with events not shipped yet. If the store is down, OCSO keeps working: events wait in the
+outbox, the System screen shows **Audit store · down** and an incident, and the audit screen serves
+the local copy. Readiness (`/health/ready`) does not depend on the store; `/health/dependencies`
+reports it with the shipping lag.
+
+The worker connects as `ocso_audit_writer` (INSERT and SELECT only) and the api as
+`ocso_audit_reader` (SELECT only). `UPDATE`, `DELETE` and `TRUNCATE` are refused by triggers for
+every role; only the owner (credentials in the `migrate` container alone) could disable them. Months
+past the audit retention are dropped whole by a `SECURITY DEFINER` function that never goes below
+`AUDIT_MIN_RETENTION_DAYS` (at least 365; set it to your regulatory retention, e.g. 2555) and logs
+each drop. Every store call is bounded (`AUDIT_STORE_TIMEOUT_MS`, default 15 s), so a store that
+stops answering never stalls the worker's other scheduled work.
+
+**A chain break** (`CHAIN_BROKEN` on the System screen, with the positions): investigate with
+`audit-verify --from <first> --to <last>`, then **Acknowledge break** (needs `audit.verify`) with a
+note of what was found. The acknowledgement is audited; nothing in the store is rewritten.
+
+**Rotating the signing key:** put the new PEM in `app/audit_signing_key`, keep the old public key
+(`openssl pkey -in old.pem -pubout`) in a file named by `AUDIT_TRUSTED_PUBLIC_KEYS_FILE`, and restart
+api and worker. Keygen creates a new key if the file is missing, so a lost `secrets` volume shows up
+as **Checkpoints were signed by a key this deployment does not trust** (`SIGNING_KEY_CHANGED`) —
+restore the old key rather than trusting a new one blindly.
+
+**Verify the chain** from the System screen (**Verify recent entries**, needs `audit.verify`), with
+`POST /v1/audit/verify {from?, to?}`, or offline for any range:
+
+```bash
+docker compose run --rm migrate node audit-store/dist/bin/audit-verify.js --from 1
+# exit 0 = verified; 1 = problems (JSON report: position, kind); 2 = could not run
+```
+
+An auditor verifies with public keys they pinned themselves (`GET /v1/audit/keys`, or
+`--public-key audit_signing_key.pub.pem`) — never the key inside an export manifest. The bin also
+fails when no valid checkpoint signs the range or more than `--max-unsigned` (default 5 000) entries
+follow the last one. Exports are an independent copy only when the blob store keeps
+`audit-exports/` write-once (on the `s3` profile or AWS, enable S3 Object Lock for that prefix).
+
+**A managed PostgreSQL for the store:** set `AUDIT_DATABASE_URL` (writer), `AUDIT_READER_URL`
+(reader) and `AUDIT_DATABASE_OWNER_URL` (owner; migrate only) in `.env`, `AUDIT_DATABASE_SSL=true`, and
+`AUDIT_PROVISION_ROLE=false` if your DBA creates the writer role (the migrate step then only
+applies the schema and grants). The owner may be a non-superuser that can create roles.
+
+**ClickHouse instead:** `AUDIT_DRIVER=clickhouse` with `CLICKHOUSE_URL`, `CLICKHOUSE_DATABASE`,
+`CLICKHOUSE_USER`/`CLICKHOUSE_PASSWORD` (the writer: SELECT and INSERT only),
+`CLICKHOUSE_READER_USER`/`AUDIT_READER_PASSWORD` (the api: SELECT only),
+`CLICKHOUSE_ADMIN_USER`/`CLICKHOUSE_ADMIN_PASSWORD` for the migrate step, and optionally
+`CLICKHOUSE_PURGE_USER`/`CLICKHOUSE_PURGE_PASSWORD` for the worker (ClickHouse needs `ALTER DELETE`
+to drop a partition, so retention purges run as that separate user; without it nothing is purged).
+The `audit-db` service is then unused. ClickHouse cannot refuse writes by trigger: it is
+tamper-evident (verification reports a second copy of a record or a second chain row), not
+append-only, and the purge user can delete — treat it like owner credentials.
+
+## 11. Troubleshooting
 
 | Symptom | Check |
 |---|---|

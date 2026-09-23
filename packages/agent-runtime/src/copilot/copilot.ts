@@ -100,12 +100,12 @@ export class CopilotService {
     const [conv] = await db.select().from(conversations).where(eq(conversations.id, conversationId));
     if (!conv) throw notFound('conversation', conversationId);
     if (!COPILOT_STATES.includes(conv.controlState)) throw conflict('copilot_unavailable_in_state', 'Copilot drafts are available while a colleague handles the conversation');
-    const [agent] = await db.select().from(virtualAgents).where(eq(virtualAgents.id, conv.agentId));
+    const [agent] = conv.agentId ? await db.select().from(virtualAgents).where(eq(virtualAgents.id, conv.agentId)) : [];
     const profileId = agent?.copilotProfileId ?? agent?.modelProfileId ?? null;
     if (!agent || !agent.copilotEnabled || !profileId) throw validation('copilot_disabled', 'Copilot is not enabled for this agent');
     const [channel] = conv.channelId ? await db.select().from(channels).where(eq(channels.id, conv.channelId)) : [];
 
-    const ctx = await context.build(conv, agent, channel ?? null, await this.deps.capabilitiesFor(profileId), false);
+    const ctx = await context.build(conv, agent, channel ?? null, await this.deps.capabilitiesFor(profileId), null);
     const system = [...ctx.compiled.system, copilotInstruction(opts)];
     const result = await gateway.run({
       profileId,

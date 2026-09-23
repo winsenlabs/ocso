@@ -51,7 +51,8 @@ describe('API authentication & RBAC', () => {
     await h.http().post('/v1/users').set('authorization', `Bearer ${execToken}`).send({ email: 'x@ocso.test', name: 'X', role: 'SERVICE', password: 'another password 1234' }).expect(403);
     await h.http().post('/v1/users').set('authorization', `Bearer ${adminToken}`).send({ email: 'lead@ocso.test', name: 'Lead', role: 'HEAD', password: 'lead password 12345' }).expect(201);
     const leadToken = await h.loginAs('lead@ocso.test', 'lead password 12345');
-    await h.http().post('/v1/users').set('authorization', `Bearer ${leadToken}`).send({ email: 'exec2@ocso.test', name: 'Exec Two', role: 'SERVICE', password: 'exec two password 1234' }).expect(201);
+    // A team-scoped maker places new users in one of their own teams (this Head has none yet); a Head never creates a Tech.
+    await h.http().post('/v1/users').set('authorization', `Bearer ${leadToken}`).send({ email: 'exec2@ocso.test', name: 'Exec Two', role: 'SERVICE', password: 'exec two password 1234' }).expect(403);
     await h.http().post('/v1/users').set('authorization', `Bearer ${leadToken}`).send({ email: 'admin2@ocso.test', name: 'Admin Two', role: 'TECH', password: 'admin two password 1234' }).expect(403);
   });
 

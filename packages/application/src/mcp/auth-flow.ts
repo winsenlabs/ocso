@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { forbidden } from '@ocso/domain';
-import { mcpConnections, users } from '@ocso/db';
+import { mcpConnections } from '@ocso/db';
 import {
   McpOAuthError,
   McpOAuthService,
@@ -11,6 +11,7 @@ import {
   type McpOAuthClientInformation,
 } from '@ocso/mcp';
 import { recordAudit } from '../audit/audit.js';
+import { loadPrincipal } from '../identity/sessions.js';
 import { emitEvent } from '../events/outbox.js';
 import type { ActorContext } from '../shared/context.js';
 import { assertCanOperate } from './access.js';
@@ -222,9 +223,10 @@ export class ConnectionAuthFlow {
 
   /** The user who started the flow, re-checked now: they must still be active (RBAC is re-applied by `operable`). */
   private async actorFor(userId: string, correlationId: string): Promise<ActorContext> {
-    const [user] = await this.ctx.db.select().from(users).where(eq(users.id, userId));
-    if (!user || user.status !== 'ACTIVE') throw forbidden('mcp.oauth', 'the user who started this authorization is no longer active');
-    return { principal: { userId: user.id, role: user.role, displayName: user.name, teamIds: [], via: 'UI' }, correlationId };
+    // Effective permissions and teams as of now: a revoke since the flow started applies to its callback.
+    const principal = await loadPrincipal(this.ctx.db, userId, 'UI');
+    if (!principal) throw forbidden('mcp.oauth', 'the user who started this authorization is no longer active');
+    return { principal, correlationId };
   }
 
   private async auditFailure(actor: ActorContext, connectionId: string, reason: string): Promise<void> {

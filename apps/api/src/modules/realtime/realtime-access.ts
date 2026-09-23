@@ -4,6 +4,7 @@ import type { Db } from '@ocso/db';
 import type { OcsoEvent } from '@ocso/events';
 
 const ALERT_TYPES = new Set(['alert.opened', 'alert.updated', 'alert.resolved']);
+const APPROVAL_TYPES = new Set(['approval.requested', 'approval.decided', 'approval.checker_invalid']);
 
 /**
  * Which realtime events one connection may receive, with a per-connection
@@ -37,6 +38,11 @@ export class RealtimeAccess {
       // The submitter's in-app notice; Tech admins see every channel's review results. Others get config.changed.
       const submittedBy = (event.payload as { submittedBy?: string | null }).submittedBy;
       return submittedBy === this.principal.userId || can(this.principal, Permission.CHANNELS_MANAGE);
+    }
+    if (APPROVAL_TYPES.has(event.type)) {
+      // Maker–checker notices: the maker, the named checker, and whoever may reassign any approval.
+      const p = event.payload as { makerId?: string | null; checkerId?: string | null };
+      return p.makerId === this.principal.userId || p.checkerId === this.principal.userId || can(this.principal, Permission.APPROVALS_REASSIGN_ANY);
     }
     if (!event.conversationId) {
       if (event.type !== 'config.changed' && event.type !== 'cache.invalidated') return false;

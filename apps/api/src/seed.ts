@@ -28,9 +28,13 @@ async function main(): Promise<number> {
   });
   try {
     const ctx = createSeedContext(database, config);
-    const outcome = await runDemoSeed(ctx);
-    printLogins(ctx, outcome);
-    return 0;
+    try {
+      const outcome = await runDemoSeed(ctx);
+      printLogins(ctx, outcome);
+      return 0;
+    } finally {
+      await ctx.auditStore.close();
+    }
   } finally {
     await database.close();
   }

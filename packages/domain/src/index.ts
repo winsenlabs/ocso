@@ -11,3 +11,8 @@ export * from './model/messages.js';
 export * from './conversation/session-window.js';
 export * from './templates/index.js';
 export * from './approvals/state.js';
+export * from './approvals/diff.js';
+export * from './routing/router-definition.js';
+export * from './routing/router-match.js';
+export * from './routing/router-session.js';
+export * from './routing/choices.js';

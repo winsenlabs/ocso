@@ -11,3 +11,6 @@ coverage/
 /test-results/
 /playwright-report/
 .DS_Store
+
+# Local development state (the dev audit signing key, ADR-032)
+.ocso/

@@ -229,6 +229,9 @@ function Locked({
       text = 'Resolved. Reopen to reply again.';
       action = cmd('reopen', 'Reopen');
       break;
+    case 'ROUTING':
+      text = 'A router is asking the customer where they need to go; an agent takes over once it has decided.';
+      break;
   }
   return (
     <>

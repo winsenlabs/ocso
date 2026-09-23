@@ -8,6 +8,10 @@ import { loadAgentOptions, type AgentOptions } from '../data/options';
 /** What every agent tab may do, from the session's permissions (the API enforces the same). */
 export interface AgentCan {
   manage: boolean;
+  /** Pause a live agent (a stop action, immediate). */
+  pause: boolean;
+  /** Propose deleting the agent (Head). */
+  remove: boolean;
   /** Reassign owning teams across any team (Tech admin, ADR-026). */
   assignOwner: boolean;
   editPrompt: boolean;
@@ -40,6 +44,8 @@ export function agentCan(session: Session): AgentCan {
   const has = (p: Permission) => session.permissions.has(p);
   return {
     manage: has(Permission.AGENTS_MANAGE),
+    pause: has(Permission.AGENTS_PAUSE),
+    remove: has(Permission.AGENTS_DELETE),
     assignOwner: has(Permission.AGENTS_ASSIGN_OWNER),
     editPrompt: has(Permission.PROMPTS_EDIT),
     activate: has(Permission.PROMPTS_ACTIVATE),

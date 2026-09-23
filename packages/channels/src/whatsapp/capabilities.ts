@@ -18,6 +18,10 @@ export const WHATSAPP_MAX_REPLY_BUTTONS = 3;
 export const WHATSAPP_BUTTON_TITLE_LIMIT = 20;
 export const WHATSAPP_BUTTON_ID_LIMIT = 256;
 export const WHATSAPP_SESSION_WINDOW_HOURS = 24;
+/** Interactive list messages: up to 10 rows, row titles ≤ 24, the opening button ≤ 20 characters. */
+export const WHATSAPP_MAX_LIST_ROWS = 10;
+export const WHATSAPP_LIST_ROW_TITLE_LIMIT = 24;
+export const WHATSAPP_LIST_ROW_ID_LIMIT = 200;
 
 export const OUTBOUND_IMAGE_MIME_TYPES: readonly string[] = ['image/jpeg', 'image/png'];
 
@@ -47,6 +51,7 @@ export const WHATSAPP_CAPABILITIES: ChannelCapabilities = Object.freeze<ChannelC
   },
   sessionWindowHours: WHATSAPP_SESSION_WINDOW_HOURS,
   identityKinds: ['whatsapp_bsuid', 'whatsapp_phone', 'whatsapp_parent_bsuid'],
+  choices: { buttons: 3, list: 10 },
 });
 
 /** Whether WhatsApp accepts this MIME type for an outbound message of `kind`. */

@@ -54,7 +54,7 @@ test('sign-in shows API errors, then the admin sees Platform navigation and not 
     'Home', 'Search',
     'System', 'Workers', 'Queues & leases', 'Telemetry',
     'Models', 'Connections', 'Channels', 'Message templates', 'Secrets', 'Webhooks',
-    'Alerts', 'Virtual agents', 'Audit log', 'Team & roles',
+    'Alerts', 'Virtual agents', 'Audit log', 'Team & roles', 'Approvals',
     'My connections',
     'Settings',
   ]);
@@ -70,21 +70,21 @@ test('sign-in shows API errors, then the admin sees Platform navigation and not 
   await expectNavLinksResolve(page);
 });
 
-test('admin creates a Lead from Team & roles', async ({ page }) => {
+test('admin creates a Head (the lead account) from Team & roles', async ({ page }) => {
   await login(page, ACCOUNTS.admin);
   await page.goto('/team');
   await expect(page.getByRole('heading', { name: 'Team & roles' })).toBeVisible();
   await page.getByRole('button', { name: 'New user' }).click();
   const roles = await page.getByRole('dialog', { name: 'New user' }).getByLabel('Role').locator('option').allTextContents();
-  expect(roles).toEqual(['Tech admin', 'Lead', 'Service member']);
+  expect(roles).toEqual(['Tech', 'Head', 'Lead', 'Service']);
   await page.getByRole('button', { name: 'Cancel' }).click();
 
   await createUser(page, { ...ACCOUNTS.lead, role: 'HEAD' });
-  await expect(page.getByRole('status').filter({ hasText: `Invited ${ACCOUNTS.lead.name} · Lead` })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: `Invited ${ACCOUNTS.lead.name} · Head` })).toBeVisible();
   await logout(page);
 });
 
-test('Lead sees Operations / Quality / Governance and can create only Service members', async ({ page }) => {
+test('the Head sees Operations / Quality / Governance and creates only presets within their own rights', async ({ page }) => {
   await login(page, ACCOUNTS.lead);
   const nav = await navModel(page);
   expect(nav.groups).toEqual(['Operations', 'Quality', 'Governance']);
@@ -92,7 +92,7 @@ test('Lead sees Operations / Quality / Governance and can create only Service me
     'Home', 'Search',
     'Conversations', 'Virtual agents', 'Queues', 'Customers', 'Message templates',
     'Analytics', 'Reviews', 'Prompt corrections', 'Escalation reasons',
-    'Alerts', 'SLA policies', 'Team',
+    'Alerts', 'SLA policies', 'Team', 'Approvals',
     'My connections',
     'Settings',
   ]);
@@ -106,10 +106,11 @@ test('Lead sees Operations / Quality / Governance and can create only Service me
 
   await page.getByRole('button', { name: 'New user' }).click();
   const roles = await page.getByRole('dialog', { name: 'New user' }).getByLabel('Role').locator('option').allTextContents();
-  expect(roles).toEqual(['Service member']);
+  // Containment (PM/research/11 §3.4): presets whose rights fit inside the Head's own.
+  expect(roles).toEqual(['Head', 'Lead', 'Service']);
   await page.getByRole('button', { name: 'Cancel' }).click();
 
-  await createUser(page, { ...ACCOUNTS.exec, team: TEAM });
+  await createUser(page, { ...ACCOUNTS.exec, role: 'SERVICE', team: TEAM });
   await logout(page);
 });
 
@@ -139,7 +140,7 @@ test('Ask OCSO opens with Ctrl+J and says it is not set up yet', async ({ page }
   const drawer = page.getByRole('dialog', { name: 'Ask OCSO' });
   await expect(drawer).toBeVisible();
   await expect(drawer).toContainText('scope · my conversations');
-  await expect(drawer).toContainText('role: cs exec');
+  await expect(drawer).toContainText('role: service');
 
   // No model profile chosen for the internal agent yet (full flow: internal-agent.spec.ts).
   await expect(drawer.getByText('Ask OCSO is not set up yet.')).toBeVisible();
@@ -181,11 +182,11 @@ async function enrolAuthenticator(page: Page, password: string): Promise<string>
   return secret;
 }
 
-test('Tech admin requires MFA for Leads: the lead enrols at sign-in, then signs in with a code', async ({ page }) => {
+test('Tech admin requires MFA for Heads: the lead (a Head) enrols at sign-in, then signs in with a code', async ({ page }) => {
   await login(page, ACCOUNTS.admin);
   await page.goto('/settings');
   const policy = page.getByRole('form', { name: 'Require MFA for roles' });
-  await policy.getByLabel('Lead').check();
+  await policy.getByLabel('Head', { exact: true }).check();
   await policy.getByRole('button', { name: 'Save MFA policy' }).click();
   await expect(page.getByText('MFA is now required for the selected roles')).toBeVisible();
   await logout(page);
@@ -221,7 +222,7 @@ test('Tech admin requires MFA for Leads: the lead enrols at sign-in, then signs 
   // Other specs sign leads in with a password only: lift the requirement again.
   await login(page, ACCOUNTS.admin);
   await page.goto('/settings');
-  await page.getByRole('form', { name: 'Require MFA for roles' }).getByLabel('Lead').uncheck();
+  await page.getByRole('form', { name: 'Require MFA for roles' }).getByLabel('Head', { exact: true }).uncheck();
   await page.getByRole('form', { name: 'Require MFA for roles' }).getByRole('button', { name: 'Save MFA policy' }).click();
   await expect(page.getByText('MFA is no longer required for any role.')).toBeVisible();
 });

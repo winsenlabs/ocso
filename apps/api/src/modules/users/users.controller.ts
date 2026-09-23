@@ -1,12 +1,11 @@
-import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Patch, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Patch, Post, Put, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { Permission } from '@ocso/auth';
-import { AuthMailer, CreateUserInput, TeamInput, TeamService, UpdateUserInput, UserService, type ActorContext } from '@ocso/application';
+import { AddMemberInput, AuthMailer, CreateUserInput, TeamInput, TeamService, UpdateUserInput, UserService, type ActorContext } from '@ocso/application';
 import { z } from 'zod';
 import { Actor, Authenticated, RequirePermission, RequireAnyPermission } from '../../common/decorators.js';
 
 const Availability = z.object({ availability: z.enum(['AVAILABLE', 'AWAY', 'OFFLINE']) });
-const MemberInput = z.object({ userId: z.uuid() });
-type MemberInput = z.infer<typeof MemberInput>;
 type Availability = z.infer<typeof Availability>;
 
 @Controller('v1')
@@ -23,18 +22,29 @@ export class UsersController {
     return this.users.list(actor);
   }
 
-  /** Permission is resolved in the service: Tech admin → any role, Lead → Service members only. */
+  /**
+   * Maker rules in the service (users.manage: any preset; users.manage_team: shared teams, containment).
+   * The user is created PENDING_APPROVAL (201, with `approvalRequired`), or submitted for approval with
+   * `approval` (202, with `proposal`). Development deployments may create them ACTIVE (201).
+   */
   @Post('users')
   @RequireAnyPermission(Permission.USERS_MANAGE, Permission.USERS_MANAGE_TEAM)
-  create(@Actor() actor: ActorContext, @Body({ schema: CreateUserInput }) body: CreateUserInput) {
-    return this.users.create(actor, body);
+  async create(@Actor() actor: ActorContext, @Body({ schema: CreateUserInput }) body: CreateUserInput, @Res({ passthrough: true }) res: Response) {
+    const created = await this.users.create(actor, body);
+    res.status(created.proposal ? 202 : 201);
+    return created;
   }
 
   /** How new users get their first sign-in here: emailed invites, or links/passwords handed over (log driver). */
   @Get('users/onboarding')
   @RequireAnyPermission(Permission.USERS_MANAGE, Permission.USERS_MANAGE_TEAM)
   onboarding() {
-    return { emailDelivery: this.mailer.delivers ? 'email' : 'log', inviteTtlHours: this.users.inviteTtlHours, allowInitialPasswords: this.users.allowInitialPasswords };
+    return {
+      emailDelivery: this.mailer.delivers ? 'email' : 'log',
+      inviteTtlHours: this.users.inviteTtlHours,
+      allowInitialPasswords: this.users.allowInitialPasswords,
+      approvalRequired: this.users.approvalRequired,
+    };
   }
 
   @Post('users/:id/invite')
@@ -51,10 +61,29 @@ export class UsersController {
     return this.users.sendPasswordReset(actor, id);
   }
 
+  /**
+   * Reductions apply at once (200); the widening part is proposed (202) or refused with 409 approval_required
+   * (the reductions still apply). On a pending user, `status: 'ACTIVE'` or `approval` submits their creation.
+   */
   @Patch('users/:id')
   @RequireAnyPermission(Permission.USERS_MANAGE, Permission.USERS_MANAGE_TEAM)
-  update(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string, @Body({ schema: UpdateUserInput }) body: UpdateUserInput) {
-    return this.users.update(actor, id, body);
+  async update(
+    @Actor() actor: ActorContext,
+    @Param('id', { schema: z.uuid() }) id: string,
+    @Body({ schema: UpdateUserInput }) body: UpdateUserInput,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const updated = await this.users.update(actor, id, body);
+    res.status(updated.proposal ? 202 : 200);
+    return updated;
+  }
+
+  /** Discard a user whose creation was never approved (PENDING_APPROVAL only; frees the email). Same maker rules. */
+  @Delete('users/:id')
+  @RequireAnyPermission(Permission.USERS_MANAGE, Permission.USERS_MANAGE_TEAM)
+  @HttpCode(204)
+  async discard(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string): Promise<void> {
+    await this.users.discard(actor, id);
   }
 
   @Put('me/availability')
@@ -83,12 +112,25 @@ export class UsersController {
     return this.teams.create(actor, body);
   }
 
-  /** Tech admin: any membership. Lead: Service members and themselves, on teams they belong to (enforced in TeamService). */
+  /**
+   * users.manage: any membership; teams.manage: on teams they belong to (TeamService). Joining a team widens
+   * an active user's scope: 202 with the proposal, or 409 approval_required; 204 when it applied.
+   */
   @Post('teams/:id/members')
   @RequireAnyPermission(Permission.USERS_MANAGE, Permission.TEAMS_MANAGE)
-  @HttpCode(204)
-  async addMember(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string, @Body({ schema: MemberInput }) body: MemberInput): Promise<void> {
-    await this.teams.addMember(actor, id, body.userId);
+  async addMember(
+    @Actor() actor: ActorContext,
+    @Param('id', { schema: z.uuid() }) id: string,
+    @Body({ schema: AddMemberInput }) body: AddMemberInput,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { proposal } = await this.teams.addMember(actor, id, body);
+    if (!proposal) {
+      res.status(204);
+      return undefined;
+    }
+    res.status(202);
+    return { proposal };
   }
 
   @Delete('teams/:id/members/:userId')

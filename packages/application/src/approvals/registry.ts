@@ -36,4 +36,9 @@ export class ApprovalRegistry {
   all(): readonly ApprovalDescriptor[] {
     return [...this.byKind.values()];
   }
+
+  /** Every permission that lets someone propose a change of some registered kind. */
+  makePermissions(): readonly Permission[] {
+    return [...new Set(this.all().flatMap((d) => d.actions.map((a) => d.makePermission(a))))];
+  }
 }

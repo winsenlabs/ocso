@@ -42,7 +42,8 @@
     "better-auth": "catalog:",
     "@better-auth/passkey": "catalog:",
     "@better-auth/sso": "catalog:",
-    "@better-auth/core": "catalog:"
+    "@better-auth/core": "catalog:",
+    "@ocso/audit-store": "workspace:*"
   },
   "devDependencies": {
     "@ocso/db": "workspace:*"

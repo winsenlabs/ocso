@@ -1,4 +1,5 @@
 import type { ModelContentPart, ModelMessage } from '@ocso/domain';
+import type { QueueTransferRequest } from '@ocso/tools';
 import type { ModelGateway, GatewayResult } from '../model/gateway.js';
 import type { UsageContext } from '../model/usage-recorder.js';
 import type { HandoffArgs } from '../tools/builtins.js';
@@ -17,6 +18,8 @@ export interface LoopResult {
   finalText: string | null;
   steps: number;
   handoff: HandoffArgs | null;
+  /** The agent asked to move the conversation to another queue's agent (ocso_transfer_to_queue). */
+  transfer: QueueTransferRequest | null;
   awaitingConfirmation: { reason: string } | null;
   toolFailures: number;
   last: GatewayResult | null;
@@ -39,7 +42,7 @@ export interface LoopParams {
 export async function runAgentLoop(gateway: ModelGateway, tools: ToolRunner, params: LoopParams, cb: LoopCallbacks): Promise<LoopResult> {
   const { compiled } = params.context;
   const messages: ModelMessage[] = [...compiled.messages];
-  const result: LoopResult = { finalText: null, steps: 0, handoff: null, awaitingConfirmation: null, toolFailures: 0, last: null, stepLimitReached: false };
+  const result: LoopResult = { finalText: null, steps: 0, handoff: null, transfer: null, awaitingConfirmation: null, toolFailures: 0, last: null, stepLimitReached: false };
 
   for (let step = 1; step <= params.maxSteps; step++) {
     cb.onStatus('THINKING');
@@ -76,6 +79,7 @@ export async function runAgentLoop(gateway: ModelGateway, tools: ToolRunner, par
       cb.onStatus('CALLING_TOOL');
       const outcome = await tools.run(call, params.toolContext);
       if (outcome.handoff) result.handoff ??= outcome.handoff;
+      if (outcome.transfer) result.transfer ??= outcome.transfer;
       if (outcome.status === 'AWAITING_CONFIRMATION') {
         cb.onStatus('WAITING_CONFIRMATION');
         const reason = outcome.output.type === 'json' ? String((outcome.output.value as { reason?: unknown }).reason ?? 'confirmation required') : 'confirmation required';

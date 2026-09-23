@@ -2,7 +2,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { createTestDatabase, type TestDatabase } from '@ocso/db/testing';
 import {
-  agentChannels,
   alerts,
   auditEvents,
   channels,
@@ -30,6 +29,7 @@ import {
 import type { Principal } from '@ocso/auth';
 import { AgentAnalyticsService, HomeService, QueueAnalyticsService, agentComparison, agentSummaries } from '../src/analytics/index.js';
 import { ownAgents } from './support/ownership.js';
+import { routeChannelToAgent } from '../src/routing/router-seed.js';
 
 const now = new Date();
 const SEC = 1000;
@@ -160,12 +160,11 @@ async function seed() {
     { id: id.wa, kind: 'WHATSAPP', name: 'WhatsApp', status: 'ACTIVE', publicKey: 'pk-a-wa' },
     { id: id.web, kind: 'WEBCHAT', name: 'Web chat', status: 'ACTIVE', publicKey: 'pk-a-web' },
   ]);
-  // A channel answers as one agent (agent_channels is unique per channel): both are Maya's; Arjun's
+  // Both channels route (pass-through) to Maya's queue, so they reach Maya (PM/research/11 §5); Arjun's
   // conversations still arrive on them, which is what the per-channel analytics below read.
-  await db.insert(agentChannels).values([
-    { agentId: id.maya, channelId: id.wa },
-    { agentId: id.maya, channelId: id.web },
-  ]);
+  const system = { principal: null, correlationId: 'test' };
+  await routeChannelToAgent(db, system, { channelId: id.wa, agentId: id.maya!, queueId: id.q1!, name: 'WhatsApp' });
+  await routeChannelToAgent(db, system, { channelId: id.web, agentId: id.maya!, queueId: id.q1!, name: 'Web chat' });
 
   // Maya cohort (last 7 days): c1..c6. Previous window: c7, c8.
   await conv({ key: 'c1', agent: 'maya', channel: 'wa', opened: ago(2 * DAY), state: 'RESOLVED', customer: 'Arvind Nair', resolvedAfter: 60 });

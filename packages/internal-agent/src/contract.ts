@@ -1,5 +1,5 @@
 import type { Permission, Principal } from '@ocso/auth';
-import type { ActorContext } from '@ocso/application';
+import type { ActorContext, AuditStore } from '@ocso/application';
 import type { Db } from '@ocso/db';
 import type { z } from 'zod';
 
@@ -49,6 +49,8 @@ export interface ToolContext {
   principal: Principal;
   actor: ActorContext;
   now: Date;
+  /** The audit store (ADR-032) for tools that read the audit log; absent → the main database's local window. */
+  auditStore?: AuditStore | null | undefined;
 }
 
 /**

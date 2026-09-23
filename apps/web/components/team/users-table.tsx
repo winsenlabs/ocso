@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { ROLE_LABELS, type Role } from '@ocso/auth';
 import { CellTitle, DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -5,7 +6,7 @@ import { Presence } from '@/components/ui/presence';
 import { StatusChip } from '@/components/ui/status-chip';
 import type { User } from '@/lib/api/users';
 import { formatDateTime } from '@/lib/format';
-import { AVAILABILITY, ROLE_TONE } from './labels';
+import { AVAILABILITY, ROLE_TONE, STATUS_CHIP } from './labels';
 import { UserAccess } from './user-access';
 import { UserTeams } from './user-teams';
 
@@ -17,7 +18,20 @@ export interface Viewer {
 
 function columns(timeZone: string, viewer: Viewer): Column<User>[] {
   return [
-    { key: 'name', header: 'Name', cell: (u) => <CellTitle title={u.name} caption={u.email} /> },
+    {
+      key: 'name',
+      header: 'Name',
+      cell: (u) => (
+        <CellTitle
+          title={
+            <Link href={`/team?user=${u.id}`} scroll={false}>
+              {u.name}
+            </Link>
+          }
+          caption={u.email}
+        />
+      ),
+    },
     { key: 'role', header: 'Role', cell: (u) => <StatusChip tone={ROLE_TONE[u.role]}>{ROLE_LABELS[u.role]}</StatusChip> },
     { key: 'teams', header: 'Teams', cell: (u) => <UserTeams person={{ id: u.id, name: u.name, email: u.email, role: u.role, status: u.status, teamIds: u.teamIds }} /> },
     {
@@ -28,7 +42,7 @@ function columns(timeZone: string, viewer: Viewer): Column<User>[] {
     {
       key: 'status',
       header: 'Status',
-      cell: (u) => <StatusChip tone={u.status === 'ACTIVE' ? 'good' : 'muted'}>{u.status === 'ACTIVE' ? 'active' : 'disabled'}</StatusChip>,
+      cell: (u) => <StatusChip tone={STATUS_CHIP[u.status].tone}>{STATUS_CHIP[u.status].label}</StatusChip>,
     },
     { key: 'login', header: 'Last sign-in', cell: (u) => <span className="mono-sm">{u.lastLoginAt ? formatDateTime(u.lastLoginAt, timeZone) : 'never'}</span> },
     {
@@ -49,15 +63,16 @@ function columns(timeZone: string, viewer: Viewer): Column<User>[] {
   ];
 }
 
-/** People in this deployment (GET /v1/users); team chips open the team drawer, "Edit" changes memberships. */
-export function UsersTable({ users, timeZone, viewer }: { users: User[]; timeZone: string; viewer: Viewer }) {
+/** People in this deployment (GET /v1/users); a name opens the user drawer, team chips the team drawer. */
+export function UsersTable({ users, timeZone, viewer, selected = null }: { users: User[]; timeZone: string; viewer: Viewer; selected?: string | null }) {
   return (
     <DataTable
       label="People"
       columns={columns(timeZone, viewer)}
       rows={users}
       rowKey={(u) => u.id}
-      template="minmax(0,1.2fr) 130px minmax(0,1.2fr) 100px 80px 112px minmax(150px,0.9fr)"
+      selectedKey={selected}
+      template="minmax(0,1.2fr) 130px minmax(0,1.2fr) 100px 110px 112px minmax(150px,0.9fr)"
       empty={<EmptyState title="No users yet">Invite the first Lead or Service member.</EmptyState>}
     />
   );

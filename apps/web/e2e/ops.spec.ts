@@ -2,6 +2,8 @@ import { randomBytes } from 'node:crypto';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 import { ACCOUNTS, E2E, apiUrl } from './config';
 import { login, logout, primaryNav, settled } from './helpers';
+import { routeChannelToAgent } from './routing';
+import { goLiveApproved } from './approval-setup';
 
 /**
  * Lead operations pages against the real API + worker. Seeded through the
@@ -22,11 +24,11 @@ const AGENT = 'Mira Ops';
 
 let api: APIRequestContext;
 const tok = { admin: '', lead: '' };
-const ids = { team: '', seedQueue: '', agent: '', webchatKey: '', conversation: '' };
+const ids = { team: '', seedQueue: '', agent: '', webchatKey: '', channel: '', conversation: '' };
 
 async function call<T = Record<string, unknown>>(method: 'GET' | 'POST' | 'PATCH', path: string, token: string | null, body?: unknown): Promise<T> {
   const res = await api.fetch(path, { method, headers: token ? { authorization: `Bearer ${token}` } : {}, ...(body !== undefined ? { data: body } : {}) });
-  if (![200, 201, 204].includes(res.status())) throw new Error(`${method} ${path} → ${res.status()} ${await res.text()}`);
+  if (![200, 201, 202, 204].includes(res.status())) throw new Error(`${method} ${path} → ${res.status()} ${await res.text()}`);
   return (res.status() === 204 ? {} : await res.json()) as T;
 }
 
@@ -54,9 +56,13 @@ test.beforeAll(async ({ playwright }) => {
   const provider = await call<{ id: string }>('POST', '/v1/model-providers', tok.admin, { kind: 'DEV_SCRIPTED', name: 'OPS Scripted', settings: { latencyMs: 50, chunkDelayMs: 15 } });
   const profile = await call<{ id: string }>('POST', '/v1/model-profiles', tok.admin, { name: 'ops-support', providerId: provider.id, model: 'scripted-1', retries: 0 });
   ids.agent = (await call<{ id: string }>('POST', '/v1/agents', tok.lead, { name: AGENT, slug: 'mira-ops', purpose: 'customer support', conversationType: 'SUPPORT', modelProfileId: profile.id, defaultQueueId: ids.seedQueue, teamIds: [owners] })).id;
-  await call('POST', `/v1/agents/${ids.agent}/status`, tok.lead, { status: 'LIVE' });
-  const channel = await call<{ publicKey: string }>('POST', '/v1/channels', tok.admin, { kind: 'WEBCHAT', name: 'OPS Web chat', status: 'ACTIVE', defaultAgentId: ids.agent, secrets: { visitorTokenSecret: randomBytes(32).toString('hex') } });
+  // Going live is a maker–checker approval (PM/research/11 §4): a second Head of the owning team checks it.
+  await goLiveApproved(api, { adminToken: tok.admin, makerToken: tok.lead, agentId: ids.agent, ownerTeamId: owners, checker: { name: 'OPS Checker', email: 'ops.checker@e2e.ocso.test', password: 'correct-horse-battery-opschecker' } });
+  const channel = await call<{ id: string; publicKey: string }>('POST', '/v1/channels', tok.admin, { kind: 'WEBCHAT', name: 'OPS Web chat', status: 'ACTIVE', secrets: { visitorTokenSecret: randomBytes(32).toString('hex') } });
   ids.webchatKey = channel.publicKey;
+  ids.channel = channel.id;
+  // channel → pass-through router → the agent's queue (PM/research/11 §5).
+  routeChannelToAgent({ channelId: channel.id, agentId: ids.agent, queueId: ids.seedQueue, name: 'OPS Web chat' });
 });
 
 test.afterAll(async () => {
@@ -146,7 +152,9 @@ test('a web-chat customer escalates into the new queue; analytics, reasons and S
   const queues = await call<Array<{ id: string; name: string }>>('GET', '/v1/queues', tok.lead);
   const queueId = queues.find((q) => q.name === QUEUE)?.id;
   expect(queueId).toBeTruthy();
-  await call('PATCH', `/v1/agents/${ids.agent}`, tok.lead, { defaultQueueId: queueId });
+  // The queue is the service unit (PM/research/11 §5): the web chat now routes to the new queue, which Mira serves;
+  // a handoff goes to the humans of the conversation's queue.
+  routeChannelToAgent({ channelId: ids.channel, agentId: ids.agent, queueId: queueId!, name: 'OPS Web chat → new queue' });
 
   const visitor = (await call<{ token: string }>('POST', `/public/webchat/${ids.webchatKey}/session`, null, {})).token;
   const say = async (text: string) => (await call<{ conversationId: string }>('POST', `/public/webchat/${ids.webchatKey}/messages`, visitor, { clientMessageId: `c-${randomBytes(6).toString('hex')}`, text })).conversationId;

@@ -1,4 +1,5 @@
-import type { InteractionPart, MediaPart } from '@ocso/domain';
+import { choicesOf, type InteractionPart, type MediaPart } from '@ocso/domain';
+import { renderChoicesAsText } from '../contract/choices.js';
 import type { ChannelCapabilities, RenderedOutbound } from '../contract/types.js';
 import { customerSafeParts } from '../contract/render-policy.js';
 import { chunkText } from '../common/chunk.js';
@@ -62,8 +63,10 @@ function renderContacts(part: ContactPart): TwilioOutboundPayload[] {
   return textPayloads(cards.join('\n\n'));
 }
 
-/** Interactive buttons need Content Templates on Twilio: use the fallback, else a numbered list. */
+/** Interactive buttons need Content Templates on Twilio: CHOICES and buttons go out as numbered text. */
 function renderStructured(part: StructuredPart): TwilioOutboundPayload[] {
+  const choices = choicesOf(part);
+  if (choices) return textPayloads(renderChoicesAsText(choices));
   if (part.fallbackText?.trim()) return textPayloads(part.fallbackText);
   const body = typeof part.data['body'] === 'string' ? part.data['body'] : '';
   const buttons = Array.isArray(part.data['buttons']) ? (part.data['buttons'] as unknown[]) : [];

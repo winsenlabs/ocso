@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, desc, eq, gt, gte, inArray } from 'drizzle-orm';
 import { customerSafeParts, type ChannelCapabilities } from '@ocso/channels';
 import type { InteractionPart } from '@ocso/domain';
-import { interactionParts, interactions, users, type Db } from '@ocso/db';
+import { interactionParts, interactions, users, virtualAgents, type Db } from '@ocso/db';
 import { DB } from '../../infrastructure/tokens.js';
 import { ConversationAccessService } from '../conversations/conversation-access.service.js';
 import { controlChangeFacts, firstName, noticeKind, type WebChatNotice } from './webchat-notices.js';
@@ -115,6 +115,9 @@ export class WebChatMessagesService {
     if (!rows.length) return [];
     const parts = await this.db.select().from(interactionParts).where(inArray(interactionParts.interactionId, rows.map((r) => r.id))).orderBy(asc(interactionParts.idx));
     const names = await this.firstNames([...new Set(rows.filter((r) => r.actorType === 'HUMAN' && r.actorId).map((r) => r.actorId!))]);
+    // A conversation can change agent (queue transfers): each AI message carries its own agent's name.
+    const agentIds = [...new Set(rows.filter((r) => r.actorType === 'AGENT' && r.actorId && /^[0-9a-f-]{36}$/i.test(r.actorId)).map((r) => r.actorId!))];
+    const agents = new Map(agentIds.length ? (await this.db.select({ id: virtualAgents.id, name: virtualAgents.name }).from(virtualAgents).where(inArray(virtualAgents.id, agentIds))).map((a) => [a.id, a.name] as const) : []);
     const out: WebChatMessage[] = [];
     for (const r of rows) {
       const own = parts.filter((p) => p.interactionId === r.id).map((p) => p.content as unknown as InteractionPart);
@@ -123,7 +126,8 @@ export class WebChatMessagesService {
         id: r.id,
         seq: r.seq,
         from: r.actorType === 'CUSTOMER' ? 'customer' : r.actorType === 'HUMAN' ? 'human' : 'agent',
-        name: r.actorType === 'HUMAN' && r.actorId ? (names.get(r.actorId) ?? null) : r.actorType === 'AGENT' ? agentName : null,
+        // ROUTER questions show as the assistant (no name: the router is not an agent).
+        name: r.actorType === 'HUMAN' && r.actorId ? (names.get(r.actorId) ?? null) : r.actorType === 'AGENT' ? (agents.get(r.actorId ?? '') ?? agentName) : null,
         parts: await this.media.signParts(safe),
         deliveryStatus: r.deliveryStatus,
         at: r.createdAt.toISOString(),

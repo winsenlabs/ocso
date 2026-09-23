@@ -3,6 +3,7 @@ import type { ToolSpec } from '@ocso/domain';
 import { agentToolGrants, mcpConnections, tools, type DbOrTx } from '@ocso/db';
 import { sanitizeToolDescription, type AgentToolGrant, type ConnectionRecord, type FirstPartyTool, type ToolRecord } from '@ocso/tools';
 import { BUILTIN_TOOLS } from './builtins.js';
+import { CONVERSATION_SCOPED_TOOLS } from './transfer-tool.js';
 
 export interface CatalogEntry {
   tool: ToolRecord;
@@ -75,6 +76,7 @@ export async function loadAgentToolCatalog(db: DbOrTx, agentId: string, firstPar
   const entries = new Map<string, CatalogEntry>();
   const specs: ToolSpec[] = [];
   for (const tool of firstParty) {
+    if (CONVERSATION_SCOPED_TOOLS.has(tool.name)) continue;
     entries.set(tool.name, firstPartyEntry(tool, agentId));
     specs.push({ name: tool.name, description: tool.description, inputSchema: tool.inputSchema });
   }
@@ -115,4 +117,11 @@ export async function loadAgentToolCatalog(db: DbOrTx, agentId: string, firstPar
     });
   }
   return { specs, entries };
+}
+
+/** The agent's catalog plus a first-party tool shaped for this conversation (e.g. the transfer tool's queue enum). */
+export function withConversationTool(catalog: AgentToolCatalog, tool: FirstPartyTool, agentId: string): AgentToolCatalog {
+  const entries = new Map(catalog.entries);
+  entries.set(tool.name, firstPartyEntry(tool, agentId));
+  return { entries, specs: [...catalog.specs.filter((s) => s.name !== tool.name), { name: tool.name, description: tool.description, inputSchema: tool.inputSchema }] };
 }

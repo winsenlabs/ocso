@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { modelProfiles, modelProviders, uuidv7 } from '@ocso/db';
 import { completeSetup, startApi, type ApiHarness } from './harness.js';
 import { setTeams } from './teams.js';
+import { routeChannel } from './routing.js';
 
 /**
  * WhatsApp via Twilio over the real API: plugin-driven channel kinds, the
@@ -83,12 +84,12 @@ beforeAll(async () => {
       kind: 'TWILIO_WHATSAPP',
       name: 'WhatsApp (Twilio)',
       status: 'ACTIVE',
-      defaultAgentId: agent,
       settings: { accountSid: ACCOUNT_SID, from: 'whatsapp:+14155238886', apiBaseUrl: stubUrl },
       secrets: { authToken: AUTH_TOKEN },
     })
     .expect(201);
   channel = created.body;
+  await routeChannel(h, created.body.id, agent, queue);
   expect(JSON.stringify(created.body)).not.toContain(AUTH_TOKEN);
 });
 

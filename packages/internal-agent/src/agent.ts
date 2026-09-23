@@ -1,6 +1,6 @@
 import { and, asc, desc, eq } from 'drizzle-orm';
 import { Permission, assertCan, viaInternalAgent, type Principal } from '@ocso/auth';
-import { SettingsService } from '@ocso/application';
+import { SettingsService, type AuditStore } from '@ocso/application';
 import type { ModelGateway } from '@ocso/agent-runtime';
 import { isDomainError, notFound, validation, type ModelContentPart, type ModelMessage } from '@ocso/domain';
 import { internalAgentActions, internalAgentMessages, internalAgentThreads, uuidv7, type Db } from '@ocso/db';
@@ -41,6 +41,8 @@ export class InternalAgentService {
     private readonly gateway: ModelGateway,
     private readonly registry: InternalToolRegistry,
     private readonly actions: InternalActionService,
+    /** Where `recent_changes` reads the audit log (ADR-032); null = the main database's local window. */
+    private readonly auditStore: AuditStore | null = null,
   ) {}
 
   /** Whether a Tech admin has chosen the model profile Ask OCSO runs on (deployment setting). */
@@ -110,7 +112,7 @@ export class InternalAgentService {
         stored.push({ type: 'action', action }, { type: 'tool', name, args, ok: true });
         return { type: 'json' as const, value: { status: 'pending_user_confirmation', actionId: action.id, description: action.description } };
       }
-      const result = await tool.run({ db: this.db, principal: actor.principal, actor, now: new Date() }, args);
+      const result = await tool.run({ db: this.db, principal: actor.principal, actor, now: new Date(), auditStore: this.auditStore }, args);
       if (result.links?.length) {
         sink.links(result.links);
         stored.push({ type: 'links', links: result.links });

@@ -1,5 +1,5 @@
 import { Permission } from '@ocso/auth';
-import { QueueService, SettingsService, WorkerSettingsInput, queryAudit } from '@ocso/application';
+import { AuditQuery, QueueService, SettingsService, WorkerSettingsInput, auditScope, queryAudit } from '@ocso/application';
 import { workers } from '@ocso/db';
 import { desc } from 'drizzle-orm';
 import { z } from 'zod';
@@ -67,12 +67,14 @@ export const queueStatus: InternalTool<Record<string, never>> = {
 
 export const recentChanges: InternalTool<{ limit: number; targetType?: string | undefined }> = {
   name: 'recent_changes',
-  description: 'Recent privileged changes from the immutable audit log (who changed what, when, via which surface).',
+  description: 'Recent privileged changes from the immutable audit log that the user may see (who changed what, when, via which surface).',
   input: z.object({ limit: z.number().int().min(1).max(50).default(15), targetType: z.string().max(60).optional() }),
   permission: Permission.AUDIT_READ,
   risk: 'READ',
   async run(ctx, args) {
-    const rows = await queryAudit(ctx.db, { limit: args.limit, targetType: args.targetType });
+    // The same scope as the audit screen: the caller's own actions, their teams' events, shared configuration (ADR-032).
+    const q = AuditQuery.parse({ limit: args.limit, ...(args.targetType ? { targetType: args.targetType } : {}) });
+    const rows = await queryAudit(ctx.auditStore ?? null, ctx.db, q, auditScope(ctx.principal));
     return { data: rows.map((r) => ({ at: r.occurredAt, actor: r.actorName, via: r.via, action: r.action, summary: r.summary, target: `${r.targetType}:${r.targetId ?? ''}` })) };
   },
 };

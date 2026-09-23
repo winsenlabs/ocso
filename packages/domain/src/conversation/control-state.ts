@@ -9,6 +9,8 @@ export const ControlState = {
   HUMAN_ACTIVE: 'HUMAN_ACTIVE',
   AI_RESUMING: 'AI_RESUMING',
   RESOLVED: 'RESOLVED',
+  /** A router is asking the customer or classifying before a queue and agent are chosen (PM/research/11 §5.5). */
+  ROUTING: 'ROUTING',
 } as const;
 export type ControlState = (typeof ControlState)[keyof typeof ControlState];
 
@@ -21,6 +23,8 @@ export function controlModeOf(state: ControlState): ControlMode {
   switch (state) {
     case ControlState.AI_ACTIVE:
     case ControlState.AI_RESUMING:
+    // Automation drives while the router decides; no human is involved yet.
+    case ControlState.ROUTING:
       return 'AI';
     case ControlState.ESCALATION_REQUESTED:
     case ControlState.WAITING_FOR_HUMAN:
@@ -41,7 +45,7 @@ export function aiMaySendAutonomously(state: ControlState): boolean {
   return state === ControlState.AI_ACTIVE;
 }
 
-/** States in which an inbound customer message should start an AI turn. */
+/** States in which an inbound customer message should start an AI turn (never ROUTING: the router answers). */
 export function inboundStartsAiTurn(state: ControlState): boolean {
   return (
     state === ControlState.AI_ACTIVE ||

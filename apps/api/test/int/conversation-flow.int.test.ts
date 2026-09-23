@@ -23,6 +23,7 @@ import {
 import { ScriptedAdapter } from '@ocso/agent-runtime/testing';
 import { completeSetup, startApi, type ApiHarness } from './harness.js';
 import { setTeams } from './teams.js';
+import { routeChannel } from './routing.js';
 
 let h: ApiHarness;
 let admin: string;
@@ -55,15 +56,18 @@ beforeAll(async () => {
 
   const agent = await h.http().post('/v1/agents').set(auth(lead)).send({ name: 'Maya', purpose: 'customer support', conversationType: 'SUPPORT', modelProfileId: ids.profile, defaultQueueId: ids.queue, teamIds: [ids.team] }).expect(201);
   ids.agent = agent.body.id;
-  await h.http().post(`/v1/agents/${ids.agent}/status`).set(auth(lead)).send({ status: 'LIVE' }).expect(201);
+  // Going live is a maker–checker approval (PM/research/11 §4): the lead is the owning team's only Head, so bootstrap.
+  await h.http().post(`/v1/agents/${ids.agent}/status`).set(auth(lead)).send({ status: 'LIVE', approval: { bootstrap: true, reason: 'Sole Head of the owning team' } }).expect(202);
 
   const channel = await h
     .http()
     .post('/v1/channels')
     .set(auth(admin))
-    .send({ kind: 'WEBCHAT', name: 'Web chat', status: 'ACTIVE', defaultAgentId: ids.agent, secrets: { visitorTokenSecret: randomBytes(32).toString('hex') } })
+    .send({ kind: 'WEBCHAT', name: 'Web chat', status: 'ACTIVE', secrets: { visitorTokenSecret: randomBytes(32).toString('hex') } })
     .expect(201);
   ids.webchatKey = channel.body.publicKey;
+  // channel → pass-through router → Maya's queue (PM/research/11 §5).
+  await routeChannel(h, channel.body.id, ids.agent!, ids.queue);
   expect(JSON.stringify(channel.body)).not.toMatch(/[0-9a-f]{64}/);
 
   adapter = new ScriptedAdapter(ids.provider);
@@ -197,12 +201,12 @@ describe('WhatsApp webhook', () => {
         kind: 'WHATSAPP',
         name: 'WhatsApp Business',
         status: 'ACTIVE',
-        defaultAgentId: ids.agent,
         settings: { phoneNumberId: '1098765432' },
         secrets: { accessToken: 'EAAG-test-token', appSecret, verifyToken: 'verify-me-please' },
       })
       .expect(201);
     key = channel.body.publicKey;
+    await routeChannel(h, channel.body.id, ids.agent!, ids.queue);
   });
 
   it('answers the subscription challenge only with the right verify token', async () => {
@@ -239,7 +243,10 @@ describe('agent prompt workflow over the API', () => {
     await h.http().put(`/v1/agents/${ids.agent}/prompt/draft`).set(auth(lead)).send({ ...components, behavior: 'Offer the reversal path first.' }).expect(204);
     const version = await h.http().post(`/v1/agents/${ids.agent}/prompt/versions`).set(auth(lead)).send({ reason: 'Duplicate-debit path shortened' }).expect(201);
     expect(version.body).toMatchObject({ version: 2, changedComponents: ['behavior'] });
-    await h.http().post(`/v1/agents/${ids.agent}/prompt/versions/${version.body.id}/activate`).set(auth(lead)).expect(204);
+    // Maya is live (approved), so activating a prompt is a proposal; the lead is the team's only Head (bootstrap).
+    await h.http().post(`/v1/agents/${ids.agent}/prompt/versions/${version.body.id}/activate`).set(auth(lead)).expect(409);
+    const activated = await h.http().post(`/v1/agents/${ids.agent}/prompt/versions/${version.body.id}/activate`).set(auth(lead)).send({ approval: { bootstrap: true } }).expect(202);
+    expect(activated.body.proposal).toMatchObject({ status: 'APPROVED', bootstrap: true });
     const preview = await h.http().get(`/v1/agents/${ids.agent}/prompt/preview`).set(auth(lead)).expect(200);
     expect(preview.body.hashes.promptVersionHash).toBe(version.body.promptHash);
   });

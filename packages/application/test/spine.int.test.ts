@@ -13,9 +13,11 @@ import {
   applyControl,
   loadConversationDetail,
   loadTimeline,
+  routeChannelToAgent,
   type ActorContext,
   type IngressMessage,
 } from '../src/index.js';
+import { makeLive } from './support/live-agent.js';
 
 let t: TestDatabase;
 const queue = new MemoryQueue();
@@ -45,9 +47,11 @@ beforeAll(async () => {
   await t.db.insert(queues).values({ id: queueId, name: 'Cards & EMI · Tier 2' });
   await t.db.insert(queueTeams).values({ queueId, teamId });
   const agent = await new AgentService(t.db).create(ctx(lead), { name: 'Maya', purpose: 'customer support', conversationType: 'SUPPORT', description: '', defaultQueueId: queueId, teamIds: [teamId] });
-  await t.db.update(virtualAgents).set({ status: 'LIVE' }).where(eq(virtualAgents.id, agent.id));
+  await makeLive(t.db, agent.id);
   channelId = uuidv7();
-  await t.db.insert(channels).values({ id: channelId, kind: 'WHATSAPP', name: 'WhatsApp', status: 'ACTIVE', publicKey: 'pk1', defaultAgentId: agent.id });
+  await t.db.insert(channels).values({ id: channelId, kind: 'WHATSAPP', name: 'WhatsApp', status: 'ACTIVE', publicKey: 'pk1' });
+  // channel → pass-through router → Maya's queue (PM/research/11 §5).
+  await routeChannelToAgent(t.db, ctx(lead), { channelId, agentId: agent.id, queueId });
 });
 afterAll(async () => {
   await t?.drop();

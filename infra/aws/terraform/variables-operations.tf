@@ -107,6 +107,8 @@ variable "queue_topics" {
     "alert.deliver",
     "webhook.deliver",
     "evaluation.run",
+    "approval.notify",
+    "approval.activate",
   ]
 }
 

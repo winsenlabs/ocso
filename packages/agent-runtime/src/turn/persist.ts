@@ -1,7 +1,8 @@
 import { eq } from 'drizzle-orm';
 import { DomainError, aiMaySendAutonomously, type ControlState } from '@ocso/domain';
 import { contextSnapshots, conversations, turns, type Db } from '@ocso/db';
-import { appendInteraction, emitEvent, lockConversation, requestHandoff, agentActor } from '@ocso/application';
+import { aiTransferToQueue, appendInteraction, emitEvent, lockConversation, requestHandoff, agentActor } from '@ocso/application';
+import type { QueueTransferRequest } from '@ocso/tools';
 import type { QueueAdapter } from '@ocso/queue';
 import type { LeaseManager } from '../leases/lease-manager.js';
 import type { TurnContext } from '../context/context-builder.js';
@@ -70,16 +71,30 @@ export class TurnWriter {
   async complete(
     t: TurnIdentity,
     ctx: TurnContext,
-    outcome: { kind: 'REPLIED' | 'HANDOFF' | 'NO_REPLY' | 'AWAITING_CONFIRMATION'; steps: number; latencyMs: number; ttftMs: number | null; providerId: string | null; model: string | null },
+    outcome: { kind: 'REPLIED' | 'HANDOFF' | 'NO_REPLY' | 'AWAITING_CONFIRMATION' | 'TRANSFERRED'; steps: number; latencyMs: number; ttftMs: number | null; providerId: string | null; model: string | null },
     handoff: { reason: string; summary: string; priority?: 'P1' | 'P2' | 'P3' | 'P4' | undefined; trigger: 'AGENT_DECISION' | 'CUSTOMER_REQUEST' | 'SENSITIVE_ACTION' | 'TOOL_FAILURE' } | null,
+    transfer: QueueTransferRequest | null = null,
   ): Promise<void> {
+    let transferred = false;
     await this.db.transaction(async (tx) => {
       await this.leases.assertHeld(tx, t.conversationId, t.leaseVersion);
       const conv = await lockConversation(tx, t.conversationId);
-      await tx
-        .update(conversations)
-        .set({ lastProcessedSeq: Math.max(conv.lastProcessedSeq, ctx.pendingSeqTo) })
-        .where(eq(conversations.id, t.conversationId));
+      // A queue transfer hands the customer's unanswered messages to the receiving agent (PM/research/11 §5.5).
+      if (transfer && aiMaySendAutonomously(conv.controlState as ControlState)) {
+        try {
+          await aiTransferToQueue(tx, agentActor(t.agentId, t.correlationId, t.agentName), t.conversationId, { ...transfer, now: new Date() });
+          transferred = true;
+        } catch (err) {
+          // The target stopped being allowed since the tool validated it: the turn completes as a plain reply.
+          if (!(err instanceof DomainError)) throw err;
+        }
+      }
+      if (!transferred) {
+        await tx
+          .update(conversations)
+          .set({ lastProcessedSeq: Math.max(conv.lastProcessedSeq, ctx.pendingSeqTo) })
+          .where(eq(conversations.id, t.conversationId));
+      }
       if (handoff && aiMaySendAutonomously(conv.controlState as ControlState)) {
         await requestHandoff(
           tx,
@@ -100,7 +115,7 @@ export class TurnWriter {
         .update(turns)
         .set({
           status: 'COMPLETED',
-          outcome: outcome.kind,
+          outcome: outcome.kind === 'TRANSFERRED' && !transferred ? 'REPLIED' : outcome.kind,
           steps: outcome.steps,
           latencyMs: outcome.latencyMs,
           ttftMs: outcome.ttftMs,
@@ -127,7 +142,7 @@ export class TurnWriter {
             updatedAt: new Date(),
           },
         });
-      await emitEvent(tx, { correlationId: t.correlationId }, 'agent.turn_completed', { turnId: t.turnId, outcome: outcome.kind === 'AWAITING_CONFIRMATION' ? 'HANDOFF' : outcome.kind }, {
+      await emitEvent(tx, { correlationId: t.correlationId }, 'agent.turn_completed', { turnId: t.turnId, outcome: outcome.kind === 'AWAITING_CONFIRMATION' || outcome.kind === 'TRANSFERRED' ? 'HANDOFF' : outcome.kind }, {
         conversationId: t.conversationId,
         agentId: t.agentId,
       });

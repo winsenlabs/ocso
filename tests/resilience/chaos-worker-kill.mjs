@@ -14,6 +14,7 @@ const stack = await startStack({ dbName: 'ocso_chaos', apiPort: 4490, workers: 2
 let failed = false;
 try {
   const { publicKey } = await seedWebChat(stack.baseUrl, stack.setupToken, {
+    databaseUrl: stack.databaseUrl,
     latencyMs: Number(values.latency),
     workerSettings: { conversationsPerWorker: Math.max(10, N), turnTimeoutSeconds: TURN_TIMEOUT, leaseDurationSeconds: 10, heartbeatIntervalSeconds: 3 },
   });

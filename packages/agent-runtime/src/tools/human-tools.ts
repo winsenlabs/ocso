@@ -169,7 +169,7 @@ export class HumanToolService {
   private async claimsFor(conversationId: string | null, connection: ConnectionRow, tool: ToolRow): Promise<string | undefined> {
     if (!this.claims || !connection.sendCustomerClaims || !conversationId) return undefined;
     const [conv] = await this.db.select({ customerId: conversations.customerId, agentId: conversations.agentId }).from(conversations).where(eq(conversations.id, conversationId));
-    if (!conv) return undefined;
+    if (!conv?.agentId) return undefined;
     return this.claims.issue({ customerId: conv.customerId, conversationId, agentId: conv.agentId, connectionId: connection.id, scopes: tool.requiredScopes });
   }
 

@@ -50,12 +50,14 @@ export async function recordCsat(
       .where(and(eq(csatResponses.conversationId, conversationId), gte(csatResponses.receivedAt, cycleStart)))
       .limit(1);
     if (dup) throw conflict('csat_already_recorded', 'A satisfaction response was already recorded for this conversation');
+    if (!conv.agentId) throw conflict('conversation_routing', 'The conversation has no agent yet (a router is still deciding)');
     const handled = await tx.execute<{ human: boolean }>(
       sql`SELECT EXISTS (SELECT 1 FROM interactions WHERE conversation_id = ${conversationId} AND actor_type = 'HUMAN' AND kind = 'MESSAGE' AND visibility = 'CUSTOMER') AS human`,
     );
     const handledByHuman = Boolean(handled.rows[0]?.human);
     const id = uuidv7();
-    await tx.insert(csatResponses).values({ id, conversationId, agentId: conv.agentId, handledByHuman, score: input.score, comment: input.comment ?? null, receivedAt: now });
+    const agentId = conv.agentId;
+    await tx.insert(csatResponses).values({ id, conversationId, agentId, handledByHuman, score: input.score, comment: input.comment ?? null, receivedAt: now });
     await tx.update(conversations).set({ csatScore: input.score, updatedAt: now }).where(eq(conversations.id, conversationId));
     if (actor.principal) {
       await recordAudit(tx, actor, { action: 'csat.record', targetType: 'conversation', targetId: conversationId, summary: `Recorded CSAT ${input.score}/5 for ${displayId('conv', conversationId)}` });

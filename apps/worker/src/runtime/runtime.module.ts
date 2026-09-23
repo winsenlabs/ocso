@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { CustomerClaimsIssuer, SettingsService } from '@ocso/application';
+import { CustomerClaimsIssuer, RoutingEngine, SettingsService } from '@ocso/application';
 import {
   ChannelRuntime,
   channelContextFrom,
@@ -12,7 +12,10 @@ import {
   LeaseManager,
   MediaMaterializer,
   ModelGateway,
+  RouteProcessor,
   SummaryService,
+  createRouterClassifier,
+  sessionWindowHoursFrom,
   ToolRunner,
   TurnProcessor,
   UsageRecorder,
@@ -88,6 +91,14 @@ export const HISTORY_WINDOW = 20;
         new CopilotService({ db, gateway, context, capabilitiesFor: capabilitiesResolver(db, source) }),
     },
     {
+      // Routers (PM/research/11 §5.3): CLASSIFY through the same gateway; router messages honour the channel's session window.
+      provide: RoutingEngine,
+      inject: [DB, QUEUE, ModelGateway, CHANNEL_REGISTRY, LOGGER],
+      useFactory: (db: Db, queue: QueueAdapter, gateway: ModelGateway, channels: ChannelRegistry, logger: Logger) =>
+        new RoutingEngine({ db, queue, classifier: createRouterClassifier(gateway), windowHours: sessionWindowHoursFrom(channels), onError: (err, context) => logger.error({ err, ...context }, 'routing problem') }),
+    },
+    { provide: RouteProcessor, inject: [DB, RoutingEngine, LOGGER], useFactory: (db: Db, engine: RoutingEngine, logger: Logger) => new RouteProcessor({ db, engine, logger }) },
+    {
       provide: TurnProcessor,
       inject: [DB, QUEUE, LeaseManager, ModelGateway, ContextBuilder, MediaMaterializer, TOOL_PROVIDERS, PROVIDER_SOURCE, CustomerClaimsIssuer, LOGGER],
       useFactory: (
@@ -118,6 +129,6 @@ export const HISTORY_WINDOW = 20;
       },
     },
   ],
-  exports: [WorkerRegistryService, ChannelRuntime, CopilotService, CustomerClaimsIssuer, ConversationInsightsService, EvaluationService, HotContextCache, LeaseManager, ModelGateway, TurnProcessor, DeliveryService, MediaMaterializer, SummaryService, PROVIDER_SOURCE, TOOL_PROVIDERS],
+  exports: [RoutingEngine, RouteProcessor, WorkerRegistryService, ChannelRuntime, CopilotService, CustomerClaimsIssuer, ConversationInsightsService, EvaluationService, HotContextCache, LeaseManager, ModelGateway, TurnProcessor, DeliveryService, MediaMaterializer, SummaryService, PROVIDER_SOURCE, TOOL_PROVIDERS],
 })
 export class RuntimeModule {}

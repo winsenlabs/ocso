@@ -1,4 +1,4 @@
-import type { Role } from '@ocso/auth';
+import type { Role, UserStatus } from '@ocso/auth';
 import type { PresenceState } from '@/components/ui/presence';
 import type { StatusTone } from '@/components/ui/status-chip';
 
@@ -9,4 +9,11 @@ export const AVAILABILITY: Record<'AVAILABLE' | 'AWAY' | 'OFFLINE', { state: Pre
   AVAILABLE: { state: 'working', label: 'available' },
   AWAY: { state: 'waiting', label: 'away' },
   OFFLINE: { state: 'off_shift', label: 'offline' },
+};
+
+/** User status chips; a pending user waits for their creation to be approved (PM/research/11 §3.4). */
+export const STATUS_CHIP: Record<UserStatus, { tone: StatusTone; label: string }> = {
+  ACTIVE: { tone: 'good', label: 'active' },
+  DISABLED: { tone: 'muted', label: 'disabled' },
+  PENDING_APPROVAL: { tone: 'warn', label: 'pending approval' },
 };

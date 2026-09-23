@@ -29,10 +29,10 @@ export const listConversations: InternalTool<{ view: 'all' | 'mine' | 'waiting' 
       limit: args.limit,
     });
     return {
-      data: { counts: result.counts, conversations: result.items.map((c) => ({ id: c.id, ref: c.displayId, customer: c.customer.name, agent: c.agent.name, state: c.controlState, priority: c.priority, preview: c.lastPreview, waitingSince: c.waitingSince, slaDueAt: c.slaDueAt })) },
+      data: { counts: result.counts, conversations: result.items.map((c) => ({ id: c.id, ref: c.displayId, customer: c.customer.name, agent: c.agent?.name ?? null, state: c.controlState, priority: c.priority, preview: c.lastPreview, waitingSince: c.waitingSince, slaDueAt: c.slaDueAt })) },
       links: result.items.slice(0, 5).map((c) => ({
         label: `${c.displayId} · ${c.customer.name ?? 'Customer'}`,
-        detail: `${c.agent.name} · ${c.controlState.replaceAll('_', ' ').toLowerCase()}${c.lastPreview ? ` · ${c.lastPreview.slice(0, 60)}` : ''}`,
+        detail: `${c.agent?.name ?? 'routing'} · ${c.controlState.replaceAll('_', ' ').toLowerCase()}${c.lastPreview ? ` · ${c.lastPreview.slice(0, 60)}` : ''}`,
         href: `/conversations/${c.id}`,
         status: c.controlState === 'WAITING_FOR_HUMAN' ? 'warn' : 'ok',
       })),

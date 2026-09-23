@@ -29,7 +29,7 @@ export interface Person {
   name: string;
   email: string;
   role: Role;
-  status: 'ACTIVE' | 'DISABLED';
+  status: 'ACTIVE' | 'DISABLED' | 'PENDING_APPROVAL';
   teamIds: readonly string[];
 }
 

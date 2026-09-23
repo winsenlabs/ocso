@@ -57,7 +57,7 @@ export function ocsoPolicy(deps: PolicyPluginDeps): BetterAuthPlugin {
           await deleteSession(db, live.sessionId);
           throw APIError.from('UNAUTHORIZED', { code: 'SESSION_EXPIRED', message: 'Your session ended after a period of inactivity. Sign in again.' });
         }
-        const mfa = await authPolicy.mfaState(live.role, live.authMethod, live.twoFactorEnabled);
+        const mfa = await authPolicy.mfaState(live.role, live.authMethod, live.twoFactorEnabled, live.permissions);
         if (mfaPending(mfa) && !PENDING_MFA_ENDPOINTS.has(path)) {
           throw APIError.from('FORBIDDEN', { code: 'MFA_ENROLLMENT_REQUIRED', message: 'Set up two-factor authentication to continue' });
         }

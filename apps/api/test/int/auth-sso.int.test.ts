@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
+import { activateUser, loadPrincipal } from '@ocso/application';
 import { users } from '@ocso/db';
 import { completeSetup, startApi, type ApiHarness } from './harness.js';
 import { MiniIdp } from './mini-idp.js';
@@ -7,8 +8,9 @@ import { MiniIdp } from './mini-idp.js';
 /**
  * SSO (ADR-025): Tech admin-only provider management, and the provisioning
  * policy end to end against a local OIDC provider — invited users link,
- * strangers are refused unless auto-provisioning is on, and an IdP cannot
- * vouch for addresses outside its domains.
+ * strangers are refused unless auto-provisioning is on (and then wait for
+ * approval like any new user: PM/research/11 §2.7), and an IdP cannot vouch
+ * for addresses outside its domains. A governed deployment (approval not skipped).
  */
 const SECRET = 'client-secret-never-returned';
 let h: ApiHarness;
@@ -34,9 +36,17 @@ async function ssoSignIn(email: string, asserted = email) {
 beforeAll(async () => {
   const issuer = await idp.start();
   process.env['OCSO_AUTH_TRUSTED_ORIGINS'] = issuer;
-  h = await startApi();
+  h = await startApi({ env: { OCSO_DEV_SKIP_ACCESS_APPROVAL: 'false' } });
   admin = await completeSetup(h);
 });
+
+/** What approving a user's creation does (the approval spine calls it in wave 2). */
+async function approve(email: string) {
+  const [row] = await h.db.db.select({ id: users.id }).from(users).where(eq(users.email, email));
+  const [me] = await h.db.db.select({ id: users.id }).from(users).where(eq(users.role, 'TECH'));
+  const principal = (await loadPrincipal(h.db.db, me!.id, 'SYSTEM'))!;
+  await h.db.db.transaction((tx) => activateUser(tx, { principal, correlationId: 'sso-test' }, row!.id));
+}
 afterAll(async () => {
   delete process.env['OCSO_AUTH_TRUSTED_ORIGINS'];
   await h?.close();
@@ -46,6 +56,7 @@ afterAll(async () => {
 describe('SSO providers', () => {
   it('only the Tech admin manages providers; client secrets are write-only', async () => {
     await h.http().post('/v1/users').set(bearer(admin)).send({ email: 'lead@ocso.test', name: 'Lead', role: 'HEAD', password: 'lead password 12345' }).expect(201);
+    await approve('lead@ocso.test');
     const lead = await h.loginAs('lead@ocso.test', 'lead password 12345');
     await h.http().get('/v1/settings/sso-providers').set(bearer(lead)).expect(403);
     const body = { providerId: 'corp', name: 'Corp SSO', type: 'oidc', domains: ['corp.test'], oidc: { issuer: idp.issuer, clientId: idp.clientId, clientSecret: SECRET } };
@@ -64,6 +75,9 @@ describe('SSO providers', () => {
 
   it('links an invited user by email and accepts their invite', async () => {
     await h.http().post('/v1/users').set(bearer(admin)).send({ email: 'ana@corp.test', name: 'Ana', role: 'SERVICE' }).expect(201);
+    // Not yet approved: the IdP cannot sign them in.
+    expect((await ssoSignIn('ana@corp.test')).token).toBeUndefined();
+    await approve('ana@corp.test');
     const result = await ssoSignIn('ana@corp.test');
     expect(result.status).toBe(302);
     expect(result.token).toBeTruthy();
@@ -73,15 +87,23 @@ describe('SSO providers', () => {
     expect(ana).toMatchObject({ emailVerified: true, inviteExpiresAt: null });
   });
 
-  it('refuses unknown users unless auto-provisioning is on, then creates them as Service member', async () => {
+  it('refuses unknown users unless auto-provisioning is on, then creates them as a Service member pending approval', async () => {
     const refused = await ssoSignIn('bob@corp.test');
     expect(refused.token).toBeUndefined();
     expect(await h.db.db.select().from(users).where(eq(users.email, 'bob@corp.test'))).toHaveLength(0);
     await h.http().patch('/v1/settings/sso-providers/corp').set(bearer(admin)).send({ autoProvision: true }).expect(200);
+    // Creating a user is an increase: the IdP account exists in OCSO but cannot sign in until approved.
     const provisioned = await ssoSignIn('bob@corp.test');
-    expect(provisioned.token).toBeTruthy();
+    expect(provisioned.token).toBeUndefined();
     const [bob] = await h.db.db.select().from(users).where(eq(users.email, 'bob@corp.test'));
-    expect(bob).toMatchObject({ role: 'SERVICE', status: 'ACTIVE' });
+    expect(bob).toMatchObject({ role: 'SERVICE', status: 'PENDING_APPROVAL' });
+    const { rows } = await h.db.pool.query(`SELECT after FROM audit_events WHERE action = 'user.create' AND target_id = $1`, [bob!.id]);
+    expect(rows[0].after).toMatchObject({ provisionedBy: 'sso', status: 'PENDING_APPROVAL' });
+    expect((await ssoSignIn('bob@corp.test')).token).toBeUndefined();
+    const again = await h.db.pool.query(`SELECT summary FROM audit_events WHERE action = 'auth.sso_rejected' AND summary LIKE '%account_pending_approval%'`);
+    expect(again.rows.length).toBeGreaterThan(0);
+    await approve('bob@corp.test');
+    expect((await ssoSignIn('bob@corp.test')).token).toBeTruthy();
   });
 
   it('refuses an IdP assertion for an address outside the provider domains', async () => {

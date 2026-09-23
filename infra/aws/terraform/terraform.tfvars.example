@@ -66,3 +66,13 @@ alarm_email_addresses = ["platform-oncall@meridianbank.in"]
 tags = {
   "cost-center" = "customer-service"
 }
+
+# Audit store (ADR-032): by default its own RDS instance whose owner only the migrate task
+# holds; the worker writes as an INSERT/SELECT-only role, the api reads as a SELECT-only one.
+# audit_database_name = "ocso_audit"
+# audit_store = { separate_instance = true, instance_class = "db.t4g.small", min_retention_days = 2555 }
+# The Ed25519 signing key is its own secret, created once outside Terraform (never rotated
+# with bootstrap_secret_version):
+#   openssl genpkey -algorithm ed25519 -out audit_signing_key.pem
+#   aws secretsmanager create-secret --name ocso/prod/audit-signing-key --secret-string file://audit_signing_key.pem
+audit_signing_key_secret_arn = "arn:aws:secretsmanager:ap-south-1:123456789012:secret:ocso/prod/audit-signing-key-AbCdEf"

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ObjectApprovalStateSchema } from '@/components/approvals/lib/schemas';
 
 /**
  * Response contracts for the virtual-agent screens (design/02). Shapes mirror
@@ -55,7 +56,8 @@ export const AgentSchema = z.object({
   stats: AgentStatsSchema.nullable(),
 });
 export type Agent = z.infer<typeof AgentSchema>;
-export const AgentDetailSchema = AgentSchema.extend({ channelIds: z.array(z.string()) });
+/** `approval`: maker–checker state (approved? pending proposal?) for the header badge and the submit modal. */
+export const AgentDetailSchema = AgentSchema.extend({ channelIds: z.array(z.string()), approval: ObjectApprovalStateSchema.optional() });
 export type AgentDetail = z.infer<typeof AgentDetailSchema>;
 
 export const PromptComponentSchema = z.object({

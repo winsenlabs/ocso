@@ -1,7 +1,8 @@
 import { sql } from 'drizzle-orm';
-import { boolean, index, integer, jsonb, pgTable, primaryKey, real, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, index, integer, jsonb, pgTable, primaryKey, real, text, uniqueIndex, uuid, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import { createdAt, id, updatedAt } from './columns.js';
 import { teams } from './identity.js';
+import { virtualAgents, type BusinessHours } from './agents.js';
 
 export const slaPolicies = pgTable('sla_policies', {
   id: id(),
@@ -32,10 +33,23 @@ export const queues = pgTable(
     preferAccountOwner: boolean().notNull().default(true),
     slaPolicyId: uuid().references(() => slaPolicies.id),
     afterHoursMessage: text(),
+    /** The queue's one AI agent (PM/research/11 §5.5); an agent may serve many queues. */
+    // Annotated: agents.ts references queues too (default_queue_id), a type-level cycle.
+    agentId: uuid().references((): AnyPgColumn => virtualAgents.id, { onDelete: 'set null' }),
+    /** What the queue serves, e.g. { language: 'ta', product: 'sales' }; unique across queues when set. */
+    attributes: jsonb().$type<Record<string, string>>().notNull().default({}),
+    /** When humans take handoffs from this queue; null = the agent's hours. */
+    businessHours: jsonb().$type<BusinessHours | null>(),
+    /** Queues conversations may be transferred to from here (by the AI tool; humans see them first). */
+    transferTargetIds: uuid().array().notNull().default(sql`'{}'::uuid[]`),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [uniqueIndex('queues_name_uq').on(sql`lower(${t.name})`)],
+  (t) => [
+    uniqueIndex('queues_name_uq').on(sql`lower(${t.name})`),
+    uniqueIndex('queues_attributes_uq').on(t.attributes).where(sql`${t.attributes} <> '{}'::jsonb`),
+    index('queues_agent_idx').on(t.agentId),
+  ],
 );
 
 export const queueTeams = pgTable(

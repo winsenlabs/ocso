@@ -36,6 +36,10 @@ export interface RealtimePayloads {
   'config.changed': { area: string; entityId: string | null };
   /** A message template's review result changed (sent to the submitter and Tech admins). */
   'message_template.status_changed': { templateId: string; channelId: string; name: string; language: string; status: string; previousStatus: string; submittedBy: string | null };
+  /** Maker–checker (sent to the maker, the named checker and approvals.reassign_any holders). */
+  'approval.requested': { proposalId: string; objectKind: string; objectId: string; action: string; makerId: string; checkerId: string };
+  'approval.decided': { proposalId: string; objectKind: string; objectId: string; decision: 'APPROVED' | 'REJECTED' | 'WITHDRAWN' | 'BLOCKED' | 'VOID'; checkerId: string | null; makerId: string | null };
+  'approval.checker_invalid': { proposalId: string; objectKind: string; checkerId: string; reason: 'DISABLED' | 'LOST_RIGHTS'; makerId: string };
 }
 
 export type RealtimeEventType = keyof RealtimePayloads;
@@ -83,6 +87,9 @@ export const REALTIME_EVENT_TYPES = [
   'alert.resolved',
   'config.changed',
   'message_template.status_changed',
+  'approval.requested',
+  'approval.decided',
+  'approval.checker_invalid',
 ] as const satisfies readonly RealtimeEventType[];
 
 const KNOWN: ReadonlySet<string> = new Set(REALTIME_EVENT_TYPES);

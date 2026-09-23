@@ -15,7 +15,7 @@ export interface MemberRow {
   name: string;
   email: string;
   role: Role;
-  status: 'ACTIVE' | 'DISABLED';
+  status: 'ACTIVE' | 'DISABLED' | 'PENDING_APPROVAL';
   availability: keyof typeof AVAILABILITY;
   /** "added 22 Sep 2026, 14:05", formatted on the server in the deployment timezone. */
   addedLabel: string;
@@ -55,6 +55,7 @@ export function TeamMembers({ teamId, teamName, members }: { teamId: string; tea
                 {m.userId === scope.viewer.id ? <span className="chip accent">you</span> : null}
                 <StatusChip tone={ROLE_TONE[m.role]}>{ROLE_LABELS[m.role]}</StatusChip>
                 {m.status === 'DISABLED' ? <StatusChip tone="muted">disabled</StatusChip> : null}
+                {m.status === 'PENDING_APPROVAL' ? <StatusChip tone="warn">pending approval</StatusChip> : null}
               </span>
               {canChangeMembership(scope.viewer, teamId, { id: m.userId, role: m.role }) ? (
                 <button

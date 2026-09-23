@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { Permission, ROLES, assertCan, type Role } from '@ocso/auth';
+import { Permission, ROLES, assertCan, mfaRequiredFor, type Role } from '@ocso/auth';
 import { forbidden } from '@ocso/domain';
 import { authPolicy, type Db, type DbOrTx } from '@ocso/db';
 import { z } from 'zod';
@@ -76,16 +76,29 @@ export class AuthPolicyService {
     return this.get();
   }
 
-  async mfaState(role: Role, authMethod: string, twoFactorEnabled: boolean): Promise<MfaState> {
+  /**
+   * MFA follows rights, not only presets: pass the user's effective permissions
+   * so a grant of a permission only an MFA-required preset holds also requires
+   * a second factor (mfaRequiredFor).
+   */
+  async mfaState(role: Role, authMethod: string, twoFactorEnabled: boolean, permissions?: ReadonlySet<Permission>): Promise<MfaState> {
     const policy = await this.get();
-    return { required: policy.requireMfaRoles.includes(role), satisfied: MFA_METHODS.has(authMethod), enrolled: twoFactorEnabled };
+    return { required: mfaRequiredFor(role, permissions, policy.requireMfaRoles), satisfied: MFA_METHODS.has(authMethod), enrolled: twoFactorEnabled };
   }
+}
+
+/** What a long-lived stream was opened with: it closes when the user's rights no longer cover it. */
+export interface HeldRights {
+  permissions?: ReadonlySet<Permission> | undefined;
+  teamIds: readonly string[];
 }
 
 /**
  * Long-lived streams (staff SSE, Ask OCSO) re-check their session with this
  * every minute and close when it was revoked or expired (absolute or idle),
- * the user was disabled, or the MFA policy no longer admits it.
+ * the user was disabled, the MFA policy no longer admits it, or — given what
+ * the stream was opened with — the user lost a permission or a team since
+ * (a revoke, an expired grant, a team removal: reductions reach open streams).
  */
 export class SessionLiveness {
   constructor(
@@ -94,9 +107,15 @@ export class SessionLiveness {
     private readonly authPolicy: AuthPolicyService,
   ) {}
 
-  async isLive(sessionId: string, now = new Date()): Promise<boolean> {
+  async isLive(sessionId: string, now = new Date(), held?: HeldRights): Promise<boolean> {
     const session = await findLiveSession(this.db, { sessionId }, now);
     if (!session || isIdleExpired(session, this.policy, now)) return false;
-    return !mfaPending(await this.authPolicy.mfaState(session.role, session.authMethod, session.twoFactorEnabled));
+    if (held && !stillHolds(held, session)) return false;
+    return !mfaPending(await this.authPolicy.mfaState(session.role, session.authMethod, session.twoFactorEnabled, session.permissions));
   }
+}
+
+function stillHolds(held: HeldRights, now: { permissions: ReadonlySet<Permission>; teamIds: readonly string[] }): boolean {
+  for (const p of held.permissions ?? []) if (!now.permissions.has(p)) return false;
+  return held.teamIds.every((t) => now.teamIds.includes(t));
 }

@@ -85,6 +85,8 @@ const NAV: readonly GroupDef[] = [
       { key: 'alerts', label: 'Alerts', href: '/alerts', requires: P.ALERTS_BUSINESS_READ },
       { key: 'sla', label: 'SLA policies', href: '/sla', requires: P.SLA_MANAGE },
       { key: 'team', label: 'Team', href: '/team', requires: P.USERS_READ },
+      // Maker–checker queue (PM/research/11 §4).
+      { key: 'approvals', label: 'Approvals', href: '/approvals', requires: P.APPROVALS_READ },
     ],
   },
   {
@@ -120,6 +122,7 @@ const NAV: readonly GroupDef[] = [
       { key: 'agents', label: 'Virtual agents', href: '/agents', requires: P.AGENTS_READ },
       { key: 'audit', label: 'Audit log', href: '/audit', requires: P.AUDIT_READ },
       { key: 'team', label: 'Team & roles', href: '/team', requires: P.USERS_MANAGE },
+      { key: 'approvals', label: 'Approvals', href: '/approvals', requires: P.APPROVALS_READ },
     ],
   },
   {

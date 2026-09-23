@@ -12,6 +12,7 @@ import { ChannelRuntime, ContextBuilder, HotContextCache, LeaseManager, MediaMat
 import { ScriptedAdapter } from '@ocso/agent-runtime/testing';
 import { completeSetup, startApi, type ApiHarness } from './harness.js';
 import { setTeams } from './teams.js';
+import { routeChannel } from './routing.js';
 
 /** Widget-facing additions to the public web chat API (config, origin allowlist, history notices). */
 
@@ -42,9 +43,12 @@ beforeAll(async () => {
   const profile = uuidv7();
   await h.db.db.insert(modelProfiles).values({ id: profile, name: 'widget-primary', providerId: provider, model: 'scripted', retries: 0 });
   const agent = (await h.http().post('/v1/agents').set(auth(lead)).send({ name: 'Maya', purpose: 'support', conversationType: 'SUPPORT', modelProfileId: profile, defaultQueueId: queue, teamIds: [team] }).expect(201)).body.id;
-  await h.http().post(`/v1/agents/${agent}/status`).set(auth(lead)).send({ status: 'LIVE' }).expect(201);
+  // Going live is a maker–checker approval (PM/research/11 §4): the lead is the owning team's only Head, so bootstrap.
+  await h.http().post(`/v1/agents/${agent}/status`).set(auth(lead)).send({ status: 'LIVE', approval: { bootstrap: true, reason: 'Sole Head of the owning team' } }).expect(202);
   const settings = { allowedOrigins: [HOST], audioAttachments: true, branding: { title: 'Meridian help', accentColor: '#0f766e', greeting: 'Hi! Ask us anything.' } };
-  key = (await h.http().post('/v1/channels').set(auth(admin)).send({ kind: 'WEBCHAT', name: 'Site chat', status: 'ACTIVE', defaultAgentId: agent, settings, secrets: { visitorTokenSecret: randomBytes(32).toString('hex') } }).expect(201)).body.publicKey;
+  const created = (await h.http().post('/v1/channels').set(auth(admin)).send({ kind: 'WEBCHAT', name: 'Site chat', status: 'ACTIVE', settings, secrets: { visitorTokenSecret: randomBytes(32).toString('hex') } }).expect(201)).body;
+  key = created.publicKey;
+  await routeChannel(h, created.id, agent, queue);
 
   adapter.current = new ScriptedAdapter(provider);
   processor = new TurnProcessor({

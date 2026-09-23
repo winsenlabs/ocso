@@ -50,11 +50,16 @@ RUN turbo run build --filter=@ocso/api... --filter=@ocso/worker...
 RUN pnpm deploy --legacy --filter=@ocso/api --prod /out/api \
  && pnpm deploy --legacy --filter=@ocso/worker --prod /out/worker \
  && pnpm deploy --legacy --filter=@ocso/db --prod /out/migrate \
+ && pnpm deploy --legacy --filter=@ocso/audit-store --prod /out/audit-store \
  && test -f /out/api/dist/main.js \
  && test -f /out/api/dist/seed.js \
  && test -f /out/worker/dist/main.js \
  && test -f /out/migrate/dist/bin/migrate.js \
- && test -d /out/migrate/migrations
+ && test -d /out/migrate/migrations \
+ && test -f /out/audit-store/dist/bin/audit-migrate.js \
+ && test -f /out/audit-store/dist/bin/audit-verify.js \
+ && test -d /out/audit-store/migrations/postgres \
+ && test -d /out/audit-store/migrations/clickhouse
 
 # ─── server runtime base (api / worker / migrate) ────────────────────────────
 FROM ${NODE_IMAGE} AS server-base
@@ -109,9 +114,14 @@ CMD ["node", "--enable-source-maps", "--import", "./dist/instrumentation.js", "d
 FROM server-base AS migrate
 # @ocso/db ships dist/ + migrations/; dist/bin/migrate.js resolves ../../migrations.
 COPY --from=server-build /out/migrate ./
+# The audit store's provisioning and verification tools (ADR-032): audit-migrate
+# applies the selected driver's schema and writer role after the main migrations;
+# audit-verify re-checks the hash chain (`docker compose run --rm migrate
+# node audit-store/dist/bin/audit-verify.js`).
+COPY --from=server-build /out/audit-store ./audit-store
 USER node
 HEALTHCHECK NONE
-CMD ["node", "--enable-source-maps", "dist/bin/migrate.js"]
+CMD ["sh", "-c", "node --enable-source-maps dist/bin/migrate.js && node --enable-source-maps audit-store/dist/bin/audit-migrate.js"]
 
 # ─── web: prune → install → build (Next standalone) ──────────────────────────
 FROM toolchain AS web-prune

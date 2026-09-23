@@ -23,6 +23,8 @@ export interface MessageLogProps {
   t: Translate;
   onRetry: (clientMessageId: string) => void;
   onDiscard: (clientMessageId: string) => void;
+  /** The customer tapped an option of the latest question (sent as their reply). */
+  onChoose?: ((label: string) => void) | undefined;
 }
 
 const GROUP_GAP_MS = 5 * 60_000;
@@ -55,7 +57,7 @@ function startsGroup(message: OcsoUIMessage, previous: OcsoUIMessage | undefined
   return gap > GROUP_GAP_MS;
 }
 
-function Message({ message, first, locale, t, onRetry, onDiscard }: { message: OcsoUIMessage; first: boolean } & Pick<MessageLogProps, 'locale' | 't' | 'onRetry' | 'onDiscard'>) {
+function Message({ message, first, latest, locale, t, onRetry, onDiscard, onChoose }: { message: OcsoUIMessage; first: boolean; latest: boolean } & Pick<MessageLogProps, 'locale' | 't' | 'onRetry' | 'onDiscard' | 'onChoose'>) {
   const meta = message.metadata;
   if (!meta) return null;
   if (meta.kind === 'notice') {
@@ -70,6 +72,7 @@ function Message({ message, first, locale, t, onRetry, onDiscard }: { message: O
   const text = message.parts.filter((p) => p.type === 'text');
   const files = message.parts.filter((p) => p.type === 'file' || p.type === 'data-unavailable');
   const streaming = text.some((p) => p.type === 'text' && p.state === 'streaming');
+  const choices = message.parts.flatMap((p) => (p.type === 'data-choices' ? p.data.options : []));
   const clientId = meta.clientMessageId;
   return (
     <div className={`wc-row ${side}${first ? ' first' : ''}${failed ? ' failed' : ''}`} data-author={meta.author}>
@@ -84,6 +87,15 @@ function Message({ message, first, locale, t, onRetry, onDiscard }: { message: O
         ) : null}
         {text.map((part, i) => (part.type === 'text' ? <RichText key={i} text={part.text} /> : null))}
       </div>
+      {choices.length ? (
+        <div className="wc-choices" role="group" aria-label={t('choices.label')}>
+          {choices.map((option) => (
+            <button key={option.id} type="button" className="wc-choice" disabled={!latest || !onChoose} onClick={() => onChoose?.(option.label)}>
+              {option.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
       {meta.kind === 'message' ? (
         <div className="wc-meta">
           <span>{timeOf(meta.at, locale)}</span>
@@ -104,7 +116,7 @@ function Message({ message, first, locale, t, onRetry, onDiscard }: { message: O
   );
 }
 
-export function MessageLog({ messages, typing, agentName, greeting, loading, locale, t, onRetry, onDiscard }: MessageLogProps) {
+export function MessageLog({ messages, typing, agentName, greeting, loading, locale, t, onRetry, onDiscard, onChoose }: MessageLogProps) {
   const ref = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
   const streamingTurn = messages.some((m) => m.metadata?.kind === 'draft');
@@ -135,7 +147,18 @@ export function MessageLog({ messages, typing, agentName, greeting, loading, loc
       {loading && messages.length === 0 ? <div className="wc-empty">{t('log.loading')}</div> : null}
       {!loading && !greeting && messages.length === 0 ? <div className="wc-empty">{t('log.empty')}</div> : null}
       {messages.map((message, i) => (
-        <Message key={message.id} message={message} first={startsGroup(message, messages[i - 1])} locale={locale} t={t} onRetry={onRetry} onDiscard={onDiscard} />
+        <Message
+          key={message.id}
+          message={message}
+          first={startsGroup(message, messages[i - 1])}
+          // Options answer only the latest question: once the customer wrote again they are history.
+          latest={messages.slice(i + 1).every((m) => m.metadata?.kind === 'notice')}
+          locale={locale}
+          t={t}
+          onRetry={onRetry}
+          onDiscard={onDiscard}
+          onChoose={onChoose}
+        />
       ))}
       {showTyping ? (
         <div className="wc-typing" data-testid="wc-typing">

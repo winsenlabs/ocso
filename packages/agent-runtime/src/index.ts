@@ -23,3 +23,6 @@ export * from './copilot/instructions.js';
 export * from './copilot/copilot.js';
 export * from './jobs/insights.js';
 export * from './jobs/evaluation.js';
+export * from './tools/transfer-tool.js';
+export * from './routing/classifier.js';
+export * from './routing/route-processor.js';

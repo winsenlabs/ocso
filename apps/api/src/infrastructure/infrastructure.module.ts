@@ -4,20 +4,25 @@ import { SettingsService, SetupService, generatedSetupToken } from '@ocso/applic
 import {
   FIRST_PARTY_PLUGINS,
   assertDrivers,
+  createAuditStore,
   createBlobStore,
   createChannelRegistry,
   createDriverRegistries,
   createProviderRegistry,
   createQueue,
   createSecretStore,
+  loadAuditSigner,
   type DriverRegistries,
   type OcsoPlugin,
 } from '@ocso/bootstrap';
+import type { AuditStore } from '@ocso/application';
 import { ApiEnv, assertDriverConfig, loadEnv } from '@ocso/config';
 import { createDatabase, type Database, type Db } from '@ocso/db';
 import { emailStatus, resolveEmailConfig, senderFor, type ResolvedEmailConfig } from '@ocso/email';
 import { AUTH_EXPORTS, AUTH_PROVIDERS } from './auth.providers.js';
 import {
+  AUDIT_SIGNER,
+  AUDIT_STORE,
   BLOB_STORE,
   CHANNEL_REGISTRY,
   DATABASE,
@@ -61,6 +66,16 @@ function loadApiEnv(drivers: DriverRegistries): ApiEnv {
     { provide: DB, inject: [DATABASE], useFactory: (d: Database) => d.db },
     { provide: SECRET_STORE, inject: [ENV, DB, DRIVERS], useFactory: createSecretStore },
     { provide: BLOB_STORE, inject: [ENV, DRIVERS], useFactory: createBlobStore },
+    // The audit store (ADR-032): reads go through it; writes stay in the main database's outbox.
+    {
+      provide: AUDIT_STORE,
+      inject: [ENV, DRIVERS],
+      useFactory: (env: ApiEnv, drivers: DriverRegistries) => {
+        const logger = new Logger('AuditStore');
+        return createAuditStore(env, { info: (msg) => logger.log(msg), warn: (msg, fields) => logger.warn(fields ? `${msg} ${JSON.stringify(fields)}` : msg) }, drivers);
+      },
+    },
+    { provide: AUDIT_SIGNER, inject: [ENV], useFactory: (env: ApiEnv) => loadAuditSigner(env, new Logger('AuditStore')) },
     { provide: CHANNEL_REGISTRY, inject: [PLUGINS, DB], useFactory: (plugins: readonly OcsoPlugin[], db: Db) => createChannelRegistry({ db }, plugins) },
     {
       provide: PROVIDER_REGISTRY,
@@ -101,6 +116,8 @@ function loadApiEnv(drivers: DriverRegistries): ApiEnv {
     DB,
     SECRET_STORE,
     BLOB_STORE,
+    AUDIT_STORE,
+    AUDIT_SIGNER,
     CHANNEL_REGISTRY,
     PROVIDER_REGISTRY,
     QUEUE,
@@ -113,11 +130,15 @@ function loadApiEnv(drivers: DriverRegistries): ApiEnv {
   ],
 })
 export class InfrastructureModule implements OnApplicationShutdown {
-  constructor(@Inject(DATABASE) private readonly database: Database) {}
+  constructor(
+    @Inject(DATABASE) private readonly database: Database,
+    @Inject(AUDIT_STORE) private readonly auditStore: AuditStore,
+  ) {}
 
   async onApplicationShutdown(): Promise<void> {
     // Flush telemetry before the pool closes (research/04 §7 gotcha 3).
     await (globalThis as { __ocsoOtelSdk?: { shutdown(): Promise<void> } }).__ocsoOtelSdk?.shutdown().catch(() => {});
+    await this.auditStore.close().catch(() => {});
     await this.database.close();
   }
 }

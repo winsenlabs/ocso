@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { createTestDatabase, type TestDatabase } from '@ocso/db/testing';
 import { channels, modelProfiles, modelProviders, queueTeams, queues, teams, uuidv7, virtualAgents } from '@ocso/db';
-import { AgentService, IngressService, SettingsService, type ActorContext } from '@ocso/application';
+import { AgentService, IngressService, SettingsService, routeChannelToAgent, type ActorContext } from '@ocso/application';
 import { MemoryQueue } from '@ocso/queue';
 import { ChannelRegistry } from '@ocso/channels';
 import { InMemorySecretRows, LocalSecretStore, parseMasterKey } from '@ocso/secrets';
@@ -56,7 +56,9 @@ export async function createRuntimeHarness(): Promise<RuntimeHarness> {
   const agent = await new AgentService(t.db).create(lead, { name: 'Maya', purpose: 'customer support', conversationType: 'SUPPORT', description: '', modelProfileId: profileId, defaultQueueId: queueId, teamIds: [teamId] });
   await t.db.update(virtualAgents).set({ status: 'LIVE' }).where(eq(virtualAgents.id, agent.id));
   const channelId = uuidv7();
-  await t.db.insert(channels).values({ id: channelId, kind: 'WEBCHAT', name: 'Web chat', status: 'ACTIVE', publicKey: `pk-${channelId.slice(-6)}`, defaultAgentId: agent.id });
+  await t.db.insert(channels).values({ id: channelId, kind: 'WEBCHAT', name: 'Web chat', status: 'ACTIVE', publicKey: `pk-${channelId.slice(-6)}` });
+  // channel → pass-through router → Maya's queue (PM/research/11 §5): the pre-routing behaviour.
+  await routeChannelToAgent(t.db, lead, { channelId, agentId: agent.id, queueId, name: 'Web chat' });
 
   const adapter = new ScriptedAdapter(providerId);
   const secrets = new LocalSecretStore(new InMemorySecretRows(), parseMasterKey('k', randomBytes(32).toString('base64')));

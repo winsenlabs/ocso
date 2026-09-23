@@ -11,11 +11,13 @@
 # at external infrastructure (e.g. DATABASE_URL for RDS) without editing the
 # Compose file. The file variable is removed from the environment either way.
 #
-# OCSO_SECRETS_MASTER_KEY_FILE is deliberately NOT in the list: the app reads
-# that file itself, so the master key never enters the process environment.
+# OCSO_SECRETS_MASTER_KEY_FILE and AUDIT_SIGNING_KEY_FILE are deliberately NOT
+# in the list: the app reads those files itself, so the keys never enter the
+# process environment.
 set -eu
 
-for var in DATABASE_URL BLOB_SIGNING_KEY OCSO_SETUP_TOKEN BETTER_AUTH_SECRET OCSO_RECOVERY_TOKEN OCSO_DEMO_PASSWORD DEMO_MCP_TOKEN RESEND_API_KEY SMTP_PASSWORD; do
+for var in DATABASE_URL BLOB_SIGNING_KEY OCSO_SETUP_TOKEN BETTER_AUTH_SECRET OCSO_RECOVERY_TOKEN OCSO_DEMO_PASSWORD DEMO_MCP_TOKEN RESEND_API_KEY SMTP_PASSWORD \
+  AUDIT_DATABASE_URL AUDIT_DATABASE_OWNER_URL AUDIT_READER_URL AUDIT_WRITER_PASSWORD AUDIT_READER_PASSWORD CLICKHOUSE_PASSWORD CLICKHOUSE_ADMIN_PASSWORD CLICKHOUSE_PURGE_PASSWORD; do
   file_var="${var}_FILE"
   eval "file=\${${file_var}:-}"
   eval "current=\${${var}:-}"

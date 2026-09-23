@@ -1,16 +1,28 @@
 import { and, asc, eq, ne, sql } from 'drizzle-orm';
-import { Permission, ROLE_PERMISSIONS, assertCan, can, rightsWithin, type Role } from '@ocso/auth';
+import { Permission, applyRightsChange, assertCan, can, classifyRightsChange, computeEffectivePermissions, rightsWithin, type Role, type UserStatus } from '@ocso/auth';
 import { conflict, forbidden, notFound } from '@ocso/domain';
 import { teamMembers, teams, users, uuidv7, type Db, type DbOrTx } from '@ocso/db';
 import { z } from 'zod';
 import { recordAudit } from '../audit/audit.js';
 import type { ActorContext } from '../shared/context.js';
+import { applyPermissionChangeSet } from './permissions/apply.js';
+import { ApprovalChoice } from './permissions/change-set.js';
+import { proposeIncrease, skipMarker, type IdentityGovernance, type IdentityProposalRef } from './permissions/gate.js';
+import { loadUserRights } from './permissions/state.js';
 
 export const TeamInput = z.object({
   name: z.string().trim().min(1).max(120),
   description: z.string().max(500).nullable().default(null),
 });
 export type TeamInput = z.infer<typeof TeamInput>;
+
+/** POST /v1/teams/:id/members: joining a team widens someone's scope, so it goes through approval. */
+export const AddMemberInput = z.object({
+  userId: z.uuid(),
+  reason: z.string().trim().min(3).max(500).optional(),
+  approval: ApprovalChoice.optional(),
+});
+export type AddMemberInput = z.infer<typeof AddMemberInput>;
 
 export interface TeamView {
   id: string;
@@ -25,7 +37,7 @@ export interface TeamMemberView {
   name: string;
   email: string;
   role: Role;
-  status: 'ACTIVE' | 'DISABLED';
+  status: UserStatus;
   availability: 'AVAILABLE' | 'AWAY' | 'OFFLINE';
   addedAt: string;
 }
@@ -36,7 +48,10 @@ export interface TeamDetail extends TeamView {
 }
 
 export class TeamService {
-  constructor(private readonly db: Db) {}
+  constructor(
+    private readonly db: Db,
+    private readonly governance: IdentityGovernance = {},
+  ) {}
 
   async list(): Promise<TeamView[]> {
     const rows = await this.db
@@ -72,7 +87,12 @@ export class TeamService {
     };
   }
 
-  /** The creating Lead joins the team: team ownership of agents (ADR-026) needs a member to manage them. */
+  /**
+   * The creating Lead joins the team: team ownership of agents (ADR-026) needs a
+   * member to manage them. Exempt from approval on purpose: a new team owns no
+   * agent, queue or conversation yet, so joining it widens nobody's reach; every
+   * later membership of it is an ordinary (approved) change.
+   */
   async create(actor: ActorContext, input: TeamInput): Promise<TeamView> {
     const principal = actor.principal!;
     assertCan(principal, Permission.TEAMS_MANAGE);
@@ -88,15 +108,38 @@ export class TeamService {
   }
 
   /**
-   * Team membership. Tech admin: anyone on any team. Lead: only on teams
-   * they belong to, and only Service members or themselves.
+   * Team membership. users.manage: anyone on any team. teams.manage: only on
+   * teams they belong to, for colleagues whose rights fit inside their own.
+   * Nobody adds themselves. Adding an approved user (ACTIVE or DISABLED) is a
+   * scope increase (PM/research/11 §3.4): it is proposed for approval (or
+   * refused with 409 approval_required); adding a pending user is a draft edit
+   * and applies at once. Decided under the user's row lock.
    */
-  async addMember(actor: ActorContext, teamId: string, userId: string): Promise<void> {
-    await this.db.transaction(async (tx) => {
+  async addMember(actor: ActorContext, teamId: string, input: AddMemberInput | string): Promise<{ proposal: IdentityProposalRef | null }> {
+    const { userId, reason, approval } = typeof input === 'string' ? { userId: input, reason: undefined, approval: undefined } : AddMemberInput.parse(input);
+    if (actor.principal?.userId === userId) throw forbidden(Permission.TEAMS_MANAGE, 'you cannot add yourself to a team; ask a colleague');
+    const outcome = await this.db.transaction(async (tx) => {
+      const before = await loadUserRights(tx, userId, { lock: true });
       const { team, user } = await this.assertCanChangeMembership(tx, actor, teamId, userId);
-      const added = await tx.insert(teamMembers).values({ teamId, userId }).onConflictDoNothing().returning({ userId: teamMembers.userId });
-      if (added.length) await recordAudit(tx, actor, { action: 'team.member_add', targetType: 'team', targetId: teamId, summary: `Added ${user.email} to ${team.name}` });
+      const why = reason ?? approval?.reason ?? `Add ${user.email} to ${team.name}`;
+      if (before.teamIds.includes(teamId)) return { propose: null };
+      const classification = classifyRightsChange(before, applyRightsChange(before, { teams: { add: [teamId] } }));
+      if (classification.direction === 'INCREASE' && !this.governance.skipAccessApproval) return { propose: why };
+      await this.governance.onDirectRightsChange?.(tx, actor, { userId, kind: 'rights' });
+      await applyPermissionChangeSet(tx, actor, { userId, teams: { add: [teamId], remove: [] }, ops: [], reason: why }, { approvalSkipped: skipMarker(this.governance) });
+      await recordAudit(tx, actor, { action: 'team.member_add', targetType: 'team', targetId: teamId, summary: `Added ${user.email} to ${team.name}` });
+      return { propose: null };
     });
+    if (!outcome.propose) return { proposal: null };
+    const proposal = await proposeIncrease(this.governance, actor, {
+      objectKind: 'permission_change',
+      objectId: userId,
+      action: 'UPDATE',
+      payload: { userId, makerId: actor.principal!.userId, teams: { add: [teamId], remove: [] }, ops: [], reason: outcome.propose },
+      approval,
+      reason: outcome.propose,
+    });
+    return { proposal };
   }
 
   async removeMember(actor: ActorContext, teamId: string, userId: string): Promise<void> {
@@ -118,7 +161,8 @@ export class TeamService {
     if (!can(principal, Permission.TEAMS_MANAGE)) throw forbidden(Permission.TEAMS_MANAGE);
     const [membership] = await tx.select({ teamId: teamMembers.teamId }).from(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, principal.userId)));
     if (!membership) throw forbidden(Permission.TEAMS_MANAGE, 'You manage only the teams you belong to');
-    if (user.id !== principal.userId && !rightsWithin(ROLE_PERMISSIONS[user.role], principal)) {
+    const rights = user.id === principal.userId ? null : await loadUserRights(tx, user.id);
+    if (rights && !rightsWithin(computeEffectivePermissions(rights.role, rights.overrides), principal)) {
       throw forbidden(Permission.TEAMS_MANAGE, 'You manage the memberships of colleagues whose rights do not exceed yours (and your own)');
     }
     return { team, user };

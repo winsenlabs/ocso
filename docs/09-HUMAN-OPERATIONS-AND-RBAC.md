@@ -1,19 +1,101 @@
 # Human Operations and RBAC
 
-## 1. Roles
+## 1. Presets and per-user permissions
 
-OCSO has three primary human user types.
+OCSO has four presets (PM/research/11 §3). A preset is a starting set of permissions, not a level: every rule —
+including who may approve whose work — is written in permissions (`packages/auth/src/permissions.ts`), and
+`packages/auth/src/permission-info.ts` gives each one a label, a group and a description (the catalogue).
 
-### Platform Tech Admin
-Technical platform ownership.
+### Tech
+Platform ownership: providers, channels, MCP, secrets, webhooks, system and deployment settings, every user
+(`users.manage`), the whole audit log, platform and access approvals. Deliberately no conversation content, no
+prompt editing, no business analytics, and no approval of agent, routing or channel changes.
 
-### CS Lead
-Business/customer-operations ownership.
+### Head
+Full authority inside the teams they belong to: everything a Lead holds, plus teams, deleting agents and templates
+(through approval), all five `approvals.check.*` permissions, `permissions.manage`, and the exception report.
 
-### CS Exec
-Frontline human conversation handling.
+### Lead
+Runs their teams: drafts and proposes configuration (agents, prompts, tools, queues, routers, templates, business
+alerts), pauses agents, manages colleagues who share a team and whose rights fit inside their own
+(`users.manage_team`). Checks nobody's work.
 
-Avoid multiplying roles until concrete authorization needs require it.
+### Service
+Frontline conversation handling in their teams' queues, plus reading the approvals they are part of.
+
+Existing users were mapped by migration 0021: Platform Tech Admin → Tech, CS Lead → Head, CS Exec → Service.
+
+### Per-user permissions
+
+A user's effective permissions are **preset ∪ active grants − active revokes** (`user_permission_grants`, migration
+0022). A grant may expire; expiry is computed on every request, never swept. One live override per permission. The
+table is its own history: a trigger lets a row change only by being cleared once, rows are never deleted, and users
+with grant history cannot be deleted (`ON DELETE RESTRICT`). `loadPrincipal` computes the set together with the user's
+teams in one query, so a change takes effect on the next request; a preset change or deactivation also ends every
+session at once, and open streams (staff SSE, Ask OCSO) re-check the user's rights every minute and close when they
+lost a permission or a team (a revoke, an expired grant, a team removal). `GET /v1/auth/me` returns the effective set.
+Effective permissions, not presets, also decide handoff routing (who can be assigned needs `conversations.read` and
+`conversations.reply` now), the MCP OAuth callback, and MFA: when "require MFA for roles" lists a preset, anyone
+granted a permission that preset holds and their own lacks must use a second factor too.
+
+Everyone — Head included — acts only inside the teams they belong to.
+
+**Tech never holds conversation content** (conversations, customers, human tools, Copilot, reviews, corrections),
+`prompts.edit` or business analytics — not even through an approved grant (`NON_GRANTABLE_BY_PRESET` in `@ocso/auth`;
+400 `grant_not_allowed_for_preset`, re-checked when an approval applies, and a preset change to Tech cannot carry
+such a grant along).
+
+**Increase vs decrease.** `planRightsChange` in `@ocso/auth` splits a change set (preset, status, memberships,
+grants, revokes, clears) into what only takes access away — a revoke, clearing a grant, shortening a grant, leaving a
+team, a downgrade to a preset contained in the old one, disabling — and the rest. The reductions **apply at once,
+even when the same request also widens access**; the rest is an **increase** when the user would hold a permission
+they lack, join a team, hold a grant that is new or lasts longer, or become active.
+- Reductions are audited `user.permissions_reduced` (disabling: `user.disable`; team removal from the team drawer:
+  `team.member_remove`). Stopping is never held for approval.
+- Increases never apply directly. They are proposals for a checker holding `approvals.check.permissions`
+  (kinds `user` and `permission_change`); without a named checker the API answers **409 `approval_required`**
+  with `{objectKind, action, objectId}` — and, when the request also carried reductions, says they were applied
+  (`details.applied`). The checker is never the maker nor the target (400 `checker_not_eligible`). (Until the approval
+  spine's `user` and `permission_change` descriptors are registered, naming a checker gets the same 409.) Approval runs
+  `activateUser` / `applyPermissionChangeSet` (`packages/application/src/identity/permissions/apply.ts`), which
+  re-check the maker's rights at that moment (`maker_not_active`, `maker_no_longer_eligible`), record the maker as the
+  grant's `created_by`, and are audited `user.activate` / `user.enable` / `user.permissions_increased`.
+- A new user is created **PENDING_APPROVAL**: inert, unable to sign in (password: 403 `ACCOUNT_PENDING_APPROVAL`;
+  SSO: `account_pending_approval`); the invite is sent when their creation is approved. A pending user is a draft:
+  preset and teams are edited directly (grants still need approval). `PATCH /v1/users/:id` with `approval` (or
+  `status: 'ACTIVE'`) submits their creation; the `user` proposal binds the rights it approves (`{userId, makerId,
+  rights}`), and activation refuses any other state (`user_changed_since_proposal`). A pending user cannot be disabled;
+  it can be **discarded** (`DELETE /v1/users/:id`, pending only), which frees the email. If `POST /v1/users` names a
+  checker and the proposal cannot be submitted, nothing is left behind.
+- An approved user stays governed while **disabled**: an upgrade or a team added while disabled is an increase, and
+  re-enabling is a `user` ACTIVATE proposal bound to the rights it restores (re-enabling goes alone: `activate_alone`).
+- **SSO auto-provisioning** creates the new Service member PENDING_APPROVAL (audited `user.create`, `provisionedBy:
+  'sso'`) and refuses that sign-in; once approved, the next SSO sign-in links them.
+
+**Makers.** Grants and revokes need `permissions.manage`; creating users, presets and memberships need `users.manage`
+or `users.manage_team`. Never on yourself (you may leave your own teams; nobody adds themselves to a team). Without
+`users.manage` the target must share a team with you (before or after the change), a new user must be placed in one
+of your teams, memberships change only on your teams, and the target's rights before and after must fit inside your
+own (containment). All of this is decided under the target user's row lock. The creator of a new team joins it
+without approval: a new team owns nothing yet, so joining it widens nobody's reach. The last active Tech admin with
+password sign-in and `users.manage` cannot be downgraded, disabled or have `users.manage` revoked (break-glass).
+
+**Development deployments** may set `OCSO_DEV_SKIP_ACCESS_APPROVAL=true` (refused when `NODE_ENV=production`, and
+accepted only when `NODE_ENV` is set explicitly to `development` or `test`; the API logs a warning at start-up): users
+are created active and preset upgrades, re-enabling and team additions apply at once — the e2e stack and the API
+integration harness use it. Grants still need approval. The demo seed creates its people active the same way. Every
+skipped approval is audited with `approvalSkipped: 'dev_flag' | 'demo_seed'` so the exception report can list it.
+
+**Screens.** Team → a person's name opens their drawer; the **Permissions** tab lists the effective permissions
+grouped by catalogue group with a source chip (preset / granted until … / revoked) and **Change permissions** (grant,
+revoke, clear; optional expiry; reason). The dialog says what applies at once and what needs approval. Users waiting
+for approval carry a *pending approval* badge, and their drawer offers **Discard**.
+
+API: `GET /v1/permissions/catalogue` (any signed-in user), `GET /v1/users/:id/permissions` (`permissions.read`;
+another user must share a team unless you hold `users.manage`, else 404), `POST /v1/users/:id/permission-changes`
+(200 `{applied, lost, teamsRemoved, sessionsEnded}` · 202 with `proposal`, `gained`, `teamsAdded` · 409
+`approval_required`), `POST /v1/users` (201 pending, 202 with a proposal), `PATCH /v1/users/:id` and
+`POST /v1/teams/:id/members` (increases 409 / 202), `DELETE /v1/users/:id` (pending users only, 204).
 
 ## 2. CS inbox
 
@@ -61,32 +143,26 @@ Internal notes are never rendered to customer channels and must be represented s
 
 ## 6. Permission examples
 
-Tech Admin:
-- provider configuration
-- worker/scaling config
-- technical logs/traces
-- MCP technical setup
-- system alerts
-- security configuration
+Tech:
+- provider, model profile and channel configuration
+- worker/scaling config, technical logs/traces, system alerts
+- MCP technical setup, secrets, webhooks, security configuration
+- every user and permission change (proposes; checks platform and access changes)
 
-CS Lead:
-- virtual-agent business prompt/instructions
-- queue/routing policy
-- escalation policy
-- QA
-- business analytics
-- prompt corrections
-- business alerts
-- team management subject to policy
+Head (in their teams):
+- everything a Lead does
+- teams; deleting agents and templates (through approval)
+- checking (approving) agent, routing, channel, platform and access changes
+- per-user grants and revokes; the exception report
 
-CS Exec:
-- conversation handling
-- claim/accept
-- customer reply
-- internal note
-- approved tools
-- resolve
-- return-to-AI
+Lead (in their teams):
+- virtual-agent business prompt/instructions, tools, escalation, pausing agents
+- queue/routing policy, SLA, message templates, business alerts
+- QA, business analytics, prompt corrections
+- colleagues who share a team and whose rights fit inside their own
+
+Service:
+- conversation handling: claim/accept, customer reply, internal note, approved tools, resolve, return-to-AI
 
 ## 7. Prompt correction workflow
 
@@ -105,9 +181,9 @@ Do not mutate prompts invisibly.
 
 ## Implementation notes (as built)
 
-- Roles map to permission sets in `packages/auth/src/roles.ts`; every API route declares its permission (checked by a unit test) and conversation-scoped routes also check conversation access. The web navigation is derived from permissions, never role names.
+- Presets map to permission sets in `packages/auth/src/roles.ts`, adjusted per user (§1); every API route declares its permission (checked by a unit test) and conversation-scoped routes also check conversation access. The web navigation is derived from the effective permissions, never preset names.
 - Copilot: drafts for the human handling a conversation, on request or proactively when a customer writes while `HUMAN_ACTIVE`; never sent automatically; policy identifiers are shown only if they exist in the agent's active prompt.
-- Team management is a CS Lead capability (§6); the Tech Admin manages users and system settings.
+- Team management is a Head capability (`teams.manage`, §6); the Tech manages every user and system settings; Leads and Heads manage colleagues within their teams and rights (§1).
 - WhatsApp after 24 hours (§4, docs/07 §3). The composer shows the reply window on WhatsApp conversations ("reply window open · closes in 3h 12m"). Once it has closed (24 hours after the customer's last message on that number), **Reply to customer** gives way to **Template**: the exec picks an approved template of the conversation's channel (search, category badge, language), fills every variable (examples as placeholders), checks the live preview — exactly the text the customer receives — and sends. Templates are also available while the window is open (structured notifications). The same holder rule as a reply applies (HUMAN_ACTIVE; the assigned human, or a lead with assign rights); a free-form reply after the window is refused with `session_window_closed` before anything is sent. The timeline and customer history show the filled text with the template's name, language and category; the send is audited (`conversation.template_sent`, with which variables were filled but not their values).
 - A **resolved** WhatsApp conversation offers **Reopen with a template**: staff may reopen conversations (REOPEN by a human → HUMAN_ACTIVE with them as the handler, `conversations.take_over`), so reopen-and-send is one action (`reopen: true`) — refused when the customer already has a newer open conversation with the same agent on that channel. Without `reopen` the API asks for an explicit reopen first.
 - Templates are business content: `message_templates.manage` (CS Lead, for channels used by their teams' agents; Tech Admin, every channel) creates them in OCSO (**Message templates**, for channels whose adapter supports templates, e.g. WhatsApp) and submits them to the provider for approval, and deletes them; CS Execs cannot. The submitter gets an in-app notice when the provider approves, rejects (with the reason), pauses or disables a template.

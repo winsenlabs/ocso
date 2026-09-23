@@ -1,12 +1,13 @@
 import { and, asc, eq, isNull, or } from 'drizzle-orm';
 import { Permission, assertCan, type Principal } from '@ocso/auth';
 import { notFound } from '@ocso/domain';
-import { escalationRules, uuidv7, type Db } from '@ocso/db';
+import { escalationRules, uuidv7, type Db, type DbOrTx } from '@ocso/db';
 import { z } from 'zod';
 import { recordAudit } from '../audit/audit.js';
 import { bumpGeneration } from '../cache/generations.js';
 import type { ActorContext } from '../shared/context.js';
 import { assertAgentManageable, assertAgentReadable } from './access.js';
+import { assertAgentUnlocked, lockAgentConfig } from './approval-lock.js';
 import { patchOf } from '../shared/patch.js';
 
 /** Deterministic trigger conditions evaluated in code (docs/01 §6); the prompt covers judgement calls. */
@@ -58,6 +59,7 @@ export class EscalationRuleService {
   async create(actor: ActorContext, agentId: string, input: EscalationRuleInput): Promise<EscalationRuleRow> {
     await this.canManage(actor, agentId);
     return this.db.transaction(async (tx) => {
+      await lockAgentUnlocked(tx, agentId);
       const [row] = await tx.insert(escalationRules).values({ id: uuidv7(), agentId, ...input }).returning();
       await recordAudit(tx, actor, { action: 'escalation_rule.create', targetType: 'escalation_rule', targetId: row!.id, summary: `Escalation rule "${input.name}"`, after: input });
       await bumpGeneration(tx, actor.correlationId, `agent:${agentId}`, 'policy_changed');
@@ -68,6 +70,7 @@ export class EscalationRuleService {
   async update(actor: ActorContext, agentId: string, id: string, input: EscalationRulePatch): Promise<EscalationRuleRow> {
     await this.canManage(actor, agentId);
     return this.db.transaction(async (tx) => {
+      await lockAgentUnlocked(tx, agentId);
       const [before] = await tx.select().from(escalationRules).where(and(eq(escalationRules.id, id), eq(escalationRules.agentId, agentId)));
       if (!before) throw notFound('escalation_rule', id);
       const [row] = await tx.update(escalationRules).set({ ...input, updatedAt: new Date() }).where(eq(escalationRules.id, id)).returning();
@@ -80,6 +83,7 @@ export class EscalationRuleService {
   async remove(actor: ActorContext, agentId: string, id: string): Promise<void> {
     await this.canManage(actor, agentId);
     await this.db.transaction(async (tx) => {
+      await lockAgentUnlocked(tx, agentId);
       const [before] = await tx.delete(escalationRules).where(and(eq(escalationRules.id, id), eq(escalationRules.agentId, agentId))).returning();
       if (!before) throw notFound('escalation_rule', id);
       await recordAudit(tx, actor, { action: 'escalation_rule.delete', targetType: 'escalation_rule', targetId: id, summary: `Deleted "${before.name}"`, before });
@@ -95,4 +99,10 @@ export class EscalationRuleService {
       .where(and(eq(escalationRules.trigger, trigger), eq(escalationRules.enabled, true), or(eq(escalationRules.agentId, agentId), isNull(escalationRules.agentId))));
     return rows.sort((a, b) => Number(b.agentId !== null) - Number(a.agentId !== null));
   }
+}
+
+/** The agent's escalation rules are part of what an open agent proposal shows its checker (11b): locked while one is open. */
+async function lockAgentUnlocked(tx: DbOrTx, agentId: string): Promise<void> {
+  await lockAgentConfig(tx, agentId);
+  await assertAgentUnlocked(tx, agentId);
 }

@@ -2,11 +2,11 @@
 
 import { refresh } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { Permission, ROLES, ROLE_LABELS } from '@ocso/auth';
+import { Permission, ROLES, ROLE_LABELS, ROLE_PERMISSIONS } from '@ocso/auth';
 import { z } from 'zod';
 import { describeApiError } from '../api/errors';
 import { createTeam } from '../api/teams';
-import { createUser, resendInvite, sendPasswordReset } from '../api/users';
+import { createUser, discardUser, resendInvite, sendPasswordReset } from '../api/users';
 import { getSession } from '../session';
 import { field, fieldErrorsFrom, type FormState } from './form-state';
 
@@ -38,9 +38,14 @@ export async function createUserAction(_prev: InviteState, formData: FormData): 
   });
   if (!parsed.success) return { status: 'error', fieldErrors: fieldErrorsFrom(parsed.error.issues), values };
 
+  // Containment (PM/research/11 §3.4): without users.manage, only presets whose rights fit inside your own.
   const canManageAll = session.permissions.has(Permission.USERS_MANAGE);
-  if (!canManageAll && parsed.data.role !== 'SERVICE') {
-    return { status: 'error', fieldErrors: { role: 'Leads can create Service member accounts only.' }, values };
+  if (!canManageAll && ![...ROLE_PERMISSIONS[parsed.data.role]].every((p) => session.permissions.has(p))) {
+    return { status: 'error', fieldErrors: { role: 'You can create colleagues whose rights do not exceed yours.' }, values };
+  }
+  // A new user must land in one of your teams unless you manage everyone (the API refuses it otherwise).
+  if (!canManageAll && !parsed.data.teamIds.some((t) => session.user.teamIds.includes(t))) {
+    return { status: 'error', fieldErrors: { teamIds: 'Place them in at least one of your teams.' }, values };
   }
   let created;
   try {
@@ -50,6 +55,9 @@ export async function createUserAction(_prev: InviteState, formData: FormData): 
   }
   refresh();
   const label = `${parsed.data.name} · ${ROLE_LABELS[parsed.data.role]}`;
+  if (created.onboarding.kind === 'pending_approval') {
+    return { status: 'success', message: `Created ${label} · pending approval: they can sign in once a checker approves them` };
+  }
   if (created.onboarding.kind !== 'invite') return { status: 'success', message: `Created ${label}` };
   const { delivery, link, expiresAt } = created.onboarding;
   if (link) return { status: 'success', message: `Invited ${label}`, inviteLink: link, expiresAt };
@@ -73,6 +81,18 @@ export async function userAccessAction(userId: string, kind: 'invite' | 'reset')
   } catch (err) {
     return { ok: false, message: describeApiError(err) };
   }
+}
+
+/** Discard a user whose creation was never approved (DELETE /v1/users/:id). */
+export async function discardUserAction(userId: string): Promise<{ ok: boolean; message: string }> {
+  if (!(await getSession())) return { ok: false, message: 'Your session has ended. Sign in again.' };
+  try {
+    await discardUser(userId);
+  } catch (err) {
+    return { ok: false, message: describeApiError(err) };
+  }
+  refresh();
+  return { ok: true, message: 'Discarded.' };
 }
 
 const CreateTeamForm = z.object({

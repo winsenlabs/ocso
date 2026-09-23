@@ -28,7 +28,7 @@ export class SummaryService {
 
   async summarize(conversationId: string, correlationId: string): Promise<'summarized' | 'not_needed'> {
     const [conv] = await this.db.select().from(conversations).where(eq(conversations.id, conversationId));
-    if (!conv) return 'not_needed';
+    if (!conv?.agentId) return 'not_needed';
     const [agent] = await this.db.select().from(virtualAgents).where(eq(virtualAgents.id, conv.agentId));
     const profileId = agent?.summarizerProfileId ?? agent?.modelProfileId;
     if (!profileId) return 'not_needed';

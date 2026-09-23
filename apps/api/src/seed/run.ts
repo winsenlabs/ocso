@@ -9,6 +9,7 @@ import { seedMcp } from './steps/mcp.js';
 import { seedModels } from './steps/models.js';
 import { seedOrganization } from './steps/organization.js';
 import { seedRouting } from './steps/routing.js';
+import { seedRouters } from './steps/routers.js';
 
 /** Audit action written once the demo is complete; its presence makes the seed a no-op. */
 export const SEED_MARKER = 'demo.seed_completed';
@@ -17,7 +18,10 @@ export type SeedOutcome = { status: 'already_seeded' } | { status: 'seeded'; mcp
 
 async function alreadySeeded(ctx: SeedContext): Promise<boolean> {
   const [row] = await ctx.db.select({ id: auditEvents.id }).from(auditEvents).where(eq(auditEvents.action, SEED_MARKER)).limit(1);
-  return Boolean(row);
+  if (row) return true;
+  // After the local window prune (ADR-032) the marker lives only in the audit store.
+  const stored = await ctx.auditStore.query({ actionPrefix: SEED_MARKER, targetType: 'deployment', limit: 1 }, null).catch(() => []);
+  return stored.some((r) => r.action === SEED_MARKER);
 }
 
 /**
@@ -36,8 +40,9 @@ export async function runDemoSeed(ctx: SeedContext): Promise<SeedOutcome> {
     const profiles = await seedModels(ctx, people.admin);
     await ctx.services.settings.updateDeployment(people.admin, { internalAgentProfileId: profiles.supportFast });
     const agents = await seedAgents(ctx, people.leads, { profiles, queues, teams: people.teamIds });
-    const webchat = await seedWebChat(ctx, people.admin, agents.maya);
-    await publishAgents(ctx, people.leads, agents, webchat.id);
+    const webchat = await seedWebChat(ctx, people.admin);
+    await seedRouters(ctx, people.admin, people.lead, agents, queues, webchat.id);
+    await publishAgents(ctx, people.leads, agents);
     const mcp = await seedMcp(ctx, people.admin, people.lead, agents.maya);
     const alerts = await seedDefaultAlertRules(ctx.db, ctx.correlationId);
     ctx.log(`default alert rules: ${alerts.created.length} created, ${alerts.existing} already present`);

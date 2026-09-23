@@ -30,6 +30,8 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module.js';
 import { TelemetryModule } from './modules/telemetry/telemetry.module.js';
 import { AnalyticsModule } from './modules/analytics/analytics.module.js';
 import { QualityModule } from './modules/quality/quality.module.js';
+import { ApprovalsModule } from './modules/approvals/approvals.module.js';
+import { RoutersModule } from './modules/routers/routers.module.js';
 
 /** Feature modules are registered here; each owns one domain area (build rule §2). */
 export const FEATURE_MODULES = [
@@ -57,6 +59,8 @@ export const FEATURE_MODULES = [
   TelemetryModule,
   AnalyticsModule,
   QualityModule,
+  ApprovalsModule,
+  RoutersModule,
 ];
 
 @Module({

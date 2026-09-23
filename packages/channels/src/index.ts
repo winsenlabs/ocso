@@ -2,6 +2,7 @@ export * from './contract/types.js';
 export * from './contract/descriptor.js';
 export * from './contract/embed.js';
 export * from './contract/render-policy.js';
+export { CHOICES_SCHEMA, choicesPresentation, renderChoicesAsText, type ChoicesData } from './contract/choices.js';
 export * from './contract/registry.js';
 export * from './common/errors.js';
 export { TemplateProviderError, normalizeTemplateCategory, type TemplateErrorReason } from './common/templates.js';

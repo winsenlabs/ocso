@@ -27,7 +27,8 @@ export interface ConversationSummary {
   displayId: string;
   customer: { id: string; name: string | null; identity: string | null };
   channel: { id: string | null; kind: string | null; name: string | null };
-  agent: { id: string; name: string; conversationType: string };
+  /** Null while a router is still deciding (ROUTING). */
+  agent: { id: string; name: string; conversationType: string } | null;
   controlState: string;
   priority: string;
   assignedUser: { id: string; name: string } | null;
@@ -62,7 +63,7 @@ function viewPredicate(view: InboxView, principal: Principal): SQL | undefined {
     case 'waiting':
       return inArray(conversations.controlState, ['WAITING_FOR_HUMAN', 'ESCALATION_REQUESTED']);
     case 'ai':
-      return inArray(conversations.controlState, ['AI_ACTIVE', 'AI_RESUMING']);
+      return inArray(conversations.controlState, ['AI_ACTIVE', 'AI_RESUMING', 'ROUTING']);
     case 'human':
       return eq(conversations.controlState, 'HUMAN_ACTIVE');
     case 'priority':
@@ -103,7 +104,7 @@ export class InboxService {
       })
       .from(conversations)
       .innerJoin(customers, eq(customers.id, conversations.customerId))
-      .innerJoin(virtualAgents, eq(virtualAgents.id, conversations.agentId))
+      .leftJoin(virtualAgents, eq(virtualAgents.id, conversations.agentId))
       .leftJoin(channels, eq(channels.id, conversations.channelId))
       .leftJoin(users, eq(users.id, conversations.assignedUserId))
       .leftJoin(queues, eq(queues.id, conversations.queueId))
@@ -118,7 +119,7 @@ export class InboxService {
         displayId: displayId('conv', r.c.id),
         customer: { id: r.c.customerId, name: r.customerName, identity: maskIdentity(r.identity) },
         channel: { id: r.c.channelId, kind: r.channelKind, name: r.channelName },
-        agent: { id: r.c.agentId, name: r.agentName, conversationType: r.agentType },
+        agent: r.c.agentId && r.agentName && r.agentType ? { id: r.c.agentId, name: r.agentName, conversationType: r.agentType } : null,
         controlState: r.c.controlState,
         priority: r.c.priority,
         assignedUser: r.c.assignedUserId && r.assigneeName ? { id: r.c.assignedUserId, name: r.assigneeName } : null,

@@ -1,41 +1,36 @@
 import { sql, type SQL } from 'drizzle-orm';
 import { Permission, can, type Principal } from '@ocso/auth';
-import { alertRules, auditEvents, conversations, escalationRules, evaluationRuns, promptCorrections, promptVersions, teamMembers } from '@ocso/db';
-import { readableAgentsSql } from '../agents/access.js';
-import { conversationScope, type VisibilityPolicy } from '../conversations/access.js';
-
-/** Shared operational configuration every Lead may see changes to. */
-const SHARED_TARGETS = ['queue', 'sla_policy', 'team'];
+import type { AuditScopeFilter } from '@ocso/audit-store';
+import { auditEvents } from '@ocso/db';
 
 /**
- * Which audit events a reader may see (docs/15 §7, ADR-026). `audit.read_all`
- * (Tech admin) sees everything. Everyone else sees: their own and their
- * teammates' actions; changes to agents they can read and to those agents'
- * prompts, escalation rules, corrections, evaluations and business alert
- * rules; events on conversations they can open; changes to users in their
- * teams; and shared queue/SLA/team configuration.
+ * Shared operational configuration every audit reader may see changes to.
+ * Channels and their message templates belong to no team (routers decide who
+ * serves a channel's customers), so, like routers, their changes are shared;
+ * their audit payloads never hold secrets (sanitizeForAudit, secret refs only).
  */
-export function auditScope(principal: Principal, policy: VisibilityPolicy): SQL | null {
+export const SHARED_AUDIT_TARGETS: readonly string[] = ['queue', 'sla_policy', 'team', 'router', 'channel', 'message_template'];
+
+/**
+ * Which audit events a reader may see (docs/15 §7, ADR-026, ADR-032).
+ * `audit.read_all` (Tech) sees everything (null). Everyone else sees events
+ * they performed, events that concern one of their teams — `team_ids`, the
+ * target's teams ∪ the actor's teams at write time (auditTeams): teammates'
+ * actions, changes to their teams' agents and those agents' prompts, rules,
+ * corrections and evaluations, their teams' conversations, tool calls, users
+ * and approvals — and changes to shared queue/SLA/team/router/channel
+ * configuration.
+ * The filter is data, not SQL, so every audit store driver can apply it.
+ */
+export function auditScope(principal: Principal): AuditScopeFilter {
   if (can(principal, Permission.AUDIT_READ_ALL)) return null;
-  const teamIds = [...principal.teamIds];
-  const teammates = teamIds.length
-    ? sql`SELECT ${teamMembers.userId}::text FROM ${teamMembers} WHERE ${teamMembers.teamId} IN (${sql.join(teamIds.map((t) => sql`${t}::uuid`), sql`, `)})`
-    : sql`SELECT NULL::text WHERE false`;
-  const agents = readableAgentsSql(principal) ?? sql`SELECT NULL::uuid WHERE false`;
-  const convScope = conversationScope(principal, policy);
-  const visibleConversations = sql`SELECT ${conversations.id}::text FROM ${conversations}${convScope ? sql` WHERE ${convScope}` : sql``}`;
-  const target = (type: string, ids: SQL) => sql`(${auditEvents.targetType} = ${type} AND ${auditEvents.targetId} IN (${ids}))`;
-  return sql`(
-    ${auditEvents.actorId} = ${principal.userId}
-    OR ${auditEvents.actorId} IN (${teammates})
-    OR ${target('agent', sql`SELECT id::text FROM (${agents}) a(id)`)}
-    OR ${target('prompt_version', sql`SELECT ${promptVersions.id}::text FROM ${promptVersions} WHERE ${promptVersions.agentId} IN (${agents})`)}
-    OR ${target('escalation_rule', sql`SELECT ${escalationRules.id}::text FROM ${escalationRules} WHERE ${escalationRules.agentId} IS NULL OR ${escalationRules.agentId} IN (${agents})`)}
-    OR ${target('prompt_correction', sql`SELECT ${promptCorrections.id}::text FROM ${promptCorrections} WHERE ${promptCorrections.agentId} IN (${agents})`)}
-    OR ${target('evaluation_run', sql`SELECT ${evaluationRuns.id}::text FROM ${evaluationRuns} WHERE ${evaluationRuns.agentId} IN (${agents})`)}
-    OR ${target('alert_rule', sql`SELECT ${alertRules.id}::text FROM ${alertRules} WHERE ${alertRules.kind} = 'BUSINESS' AND (${alertRules.agentId} IS NULL OR ${alertRules.agentId} IN (${agents}))`)}
-    OR ${target('conversation', visibleConversations)}
-    OR ${target('user', teammates)}
-    OR ${auditEvents.targetType} IN (${sql.join(SHARED_TARGETS.map((t) => sql`${t}`), sql`, `)})
-  )`;
+  return { actorId: principal.userId, teamIds: [...principal.teamIds], sharedTargetTypes: SHARED_AUDIT_TARGETS };
+}
+
+/** The same filter over the main database's `audit_events` (the outbox and local window). */
+export function auditScopeSql(scope: AuditScopeFilter): SQL | null {
+  if (!scope) return null;
+  const teams = scope.teamIds.length ? sql`${auditEvents.teamIds} && ARRAY[${sql.join(scope.teamIds.map((t) => sql`${t}::uuid`), sql`, `)}]` : sql`false`;
+  const shared = scope.sharedTargetTypes.length ? sql`${auditEvents.targetType} IN (${sql.join(scope.sharedTargetTypes.map((t) => sql`${t}`), sql`, `)})` : sql`false`;
+  return sql`(${auditEvents.actorId} = ${scope.actorId} OR ${teams} OR ${shared})`;
 }

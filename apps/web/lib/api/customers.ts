@@ -31,7 +31,8 @@ export type CustomerListItem = z.infer<typeof CustomerListItemSchema>;
 
 export const CustomerDetailSchema = Base.extend({
   identities: z.array(z.object({ kind: z.string(), display: z.string().nullable(), verified: z.boolean() })),
-  conversations: z.array(z.object({ id: z.string(), controlState: State, openedAt: z.string(), lastPreview: z.string().nullable(), agentId: z.string() })),
+  // agentId is null while a router is still deciding (PM/research/11 §5).
+  conversations: z.array(z.object({ id: z.string(), controlState: State, openedAt: z.string(), lastPreview: z.string().nullable(), agentId: z.string().nullable().transform((a) => a ?? '') })),
 });
 export type CustomerDetail = z.infer<typeof CustomerDetailSchema>;
 

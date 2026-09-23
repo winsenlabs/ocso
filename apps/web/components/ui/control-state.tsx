@@ -16,6 +16,8 @@ export const CONTROL_STATE_LABELS: Readonly<Record<ControlStateKind, string>> = 
 export function controlStateKind(state: DomainControlState): ControlStateKind {
   switch (state) {
     case 'AI_ACTIVE':
+    // A router is asking the customer: automation drives (PM/research/11 §5).
+    case 'ROUTING':
       return 'ai';
     case 'ESCALATION_REQUESTED':
     case 'WAITING_FOR_HUMAN':

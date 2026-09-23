@@ -2,6 +2,7 @@ import { and, desc, eq, isNull } from 'drizzle-orm';
 import { displayId, sessionWindowState, type SessionWindowState } from '@ocso/domain';
 import {
   channels,
+  conversationRouting,
   conversationSummaries,
   conversations,
   customerIdentities,
@@ -10,6 +11,7 @@ import {
   modelProfiles,
   promptVersions,
   queues,
+  routers,
   users,
   virtualAgents,
   type Db,
@@ -33,7 +35,8 @@ export interface ConversationDetail {
   resolutionDueAt: string | null;
   customer: { id: string; name: string | null; language: string | null; attributes: Record<string, unknown>; identities: Array<{ kind: string; value: string }> };
   channel: { id: string; kind: string; name: string } | null;
-  agent: { id: string; name: string; conversationType: string; status: string };
+  /** Null while a router is still deciding (ROUTING). */
+  agent: { id: string; name: string; conversationType: string; status: string } | null;
   promptVersion: { id: string; version: number } | null;
   modelProfile: { id: string; name: string } | null;
   queue: { id: string; name: string } | null;
@@ -58,6 +61,23 @@ export interface ConversationDetail {
    * message template. Null for channels without a window.
    */
   sessionWindow: SessionWindowState | null;
+  /** How the router placed the conversation (PM/research/11 §5.7 "Routing" card); null for conversations never routed. */
+  routing: ConversationRoutingView | null;
+}
+
+export interface ConversationRoutingView {
+  router: { id: string; name: string } | null;
+  routerVersionId: string | null;
+  phase: string;
+  outcome: string | null;
+  /** 0-based index of the rule that matched. */
+  ruleIndex: number | null;
+  attributes: Record<string, string>;
+  answers: Record<string, string>;
+  classifications: Record<string, { label: string | null; confidence: number }>;
+  queueId: string | null;
+  awaitingSince: string | null;
+  decidedAt: string | null;
 }
 
 /** Context rail data for the workspace (design/01 right rail). Caller checks access. */
@@ -70,21 +90,22 @@ export async function loadConversationDetail(
     .select({ c: conversations, customer: customers, agent: virtualAgents, channel: channels, queue: queues, assignee: users })
     .from(conversations)
     .innerJoin(customers, eq(customers.id, conversations.customerId))
-    .innerJoin(virtualAgents, eq(virtualAgents.id, conversations.agentId))
+    .leftJoin(virtualAgents, eq(virtualAgents.id, conversations.agentId))
     .leftJoin(channels, eq(channels.id, conversations.channelId))
     .leftJoin(queues, eq(queues.id, conversations.queueId))
     .leftJoin(users, eq(users.id, conversations.assignedUserId))
     .where(eq(conversations.id, conversationId));
   if (!row) return null;
   const { c, customer, agent, channel, queue, assignee } = row;
-  const [identities, [summary], [handover], [handoff], [prompt], [profile], [resolver]] = await Promise.all([
+  const [identities, [summary], [handover], [handoff], [prompt], [profile], [resolver], [routing]] = await Promise.all([
     db.select({ kind: customerIdentities.kind, value: customerIdentities.value }).from(customerIdentities).where(eq(customerIdentities.customerId, customer.id)),
     db.select().from(conversationSummaries).where(and(eq(conversationSummaries.conversationId, c.id), eq(conversationSummaries.kind, 'ROLLING'))).orderBy(desc(conversationSummaries.version)).limit(1),
     db.select().from(conversationSummaries).where(and(eq(conversationSummaries.conversationId, c.id), eq(conversationSummaries.kind, 'HANDOVER'))).orderBy(desc(conversationSummaries.version)).limit(1),
     db.select().from(handoffs).where(and(eq(handoffs.conversationId, c.id), isNull(handoffs.resolvedAt), isNull(handoffs.cancelledAt), isNull(handoffs.returnedAt))).orderBy(desc(handoffs.requestedAt)).limit(1),
-    agent.activePromptVersionId ? db.select({ id: promptVersions.id, version: promptVersions.version }).from(promptVersions).where(eq(promptVersions.id, agent.activePromptVersionId)) : Promise.resolve([]),
-    agent.modelProfileId ? db.select({ id: modelProfiles.id, name: modelProfiles.name }).from(modelProfiles).where(eq(modelProfiles.id, agent.modelProfileId)) : Promise.resolve([]),
+    agent?.activePromptVersionId ? db.select({ id: promptVersions.id, version: promptVersions.version }).from(promptVersions).where(eq(promptVersions.id, agent.activePromptVersionId)) : Promise.resolve([]),
+    agent?.modelProfileId ? db.select({ id: modelProfiles.id, name: modelProfiles.name }).from(modelProfiles).where(eq(modelProfiles.id, agent.modelProfileId)) : Promise.resolve([]),
     c.resolvedBy ? db.select({ id: users.id, name: users.name }).from(users).where(eq(users.id, c.resolvedBy)) : Promise.resolve([]),
+    db.select({ r: conversationRouting, routerName: routers.name }).from(conversationRouting).leftJoin(routers, eq(routers.id, conversationRouting.routerId)).where(eq(conversationRouting.conversationId, c.id)),
   ]);
   const hours = channel && options.windowHours ? options.windowHours(channel) : null;
   const sessionWindow = channel && hours !== null ? sessionWindowState(hours, await lastCustomerMessageAt(db, customer.id, channel.id), options.now ?? new Date()) : null;
@@ -110,7 +131,7 @@ export async function loadConversationDetail(
       identities: identities.map((i) => ({ kind: i.kind, value: maskIdentity(`${i.kind}:${i.value}`) ?? i.value })),
     },
     channel: channel ? { id: channel.id, kind: channel.kind, name: channel.name } : null,
-    agent: { id: agent.id, name: agent.name, conversationType: agent.conversationType, status: agent.status },
+    agent: agent ? { id: agent.id, name: agent.name, conversationType: agent.conversationType, status: agent.status } : null,
     promptVersion: prompt ?? null,
     modelProfile: profile ?? null,
     queue: queue ? { id: queue.id, name: queue.name } : null,
@@ -131,5 +152,20 @@ export async function loadConversationDetail(
     resolvedBy: resolver ?? null,
     firstHumanResponseAt: c.firstHumanResponseAt?.toISOString() ?? null,
     sessionWindow,
+    routing: routing
+      ? {
+          router: routing.r.routerId && routing.routerName ? { id: routing.r.routerId, name: routing.routerName } : null,
+          routerVersionId: routing.r.routerVersionId,
+          phase: routing.r.phase,
+          outcome: routing.r.outcome,
+          ruleIndex: routing.r.ruleIndex,
+          attributes: routing.r.attributes,
+          answers: routing.r.answers,
+          classifications: routing.r.classifications,
+          queueId: routing.r.queueId,
+          awaitingSince: routing.r.awaitingSince?.toISOString() ?? null,
+          decidedAt: routing.r.decidedAt?.toISOString() ?? null,
+        }
+      : null,
   };
 }

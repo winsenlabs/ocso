@@ -44,6 +44,12 @@ export interface AuthServerConfig {
   session: SessionPolicy;
   /** Better Auth's rate limiter (database storage). On by default. */
   rateLimit?: boolean | undefined;
+  /**
+   * Development deployments only (OCSO_DEV_SKIP_ACCESS_APPROVAL): SSO
+   * auto-provisioned users start ACTIVE. Otherwise they start PENDING_APPROVAL
+   * and cannot sign in until their creation is approved (PM/research/11 §2.7).
+   */
+  skipAccessApproval?: boolean | undefined;
 }
 
 export interface AuthServerDeps {
@@ -111,6 +117,7 @@ function authOptions(config: AuthServerConfig, deps: AuthServerDeps) {
   const { db, mailer, log } = deps;
   const audit = new AuthAudit(db, log);
   const origin = new URL(config.publicUrl).origin;
+  const provisionedStatus = config.skipAccessApproval ? 'ACTIVE' : 'PENDING_APPROVAL';
 
   return {
     appName: 'OCSO',
@@ -193,6 +200,9 @@ function authOptions(config: AuthServerConfig, deps: AuthServerDeps) {
             const user = ctx
               ? ((await ctx.context.internalAdapter.findUserById(session.userId)) as { status?: string } | null)
               : (await db.select({ status: users.status }).from(users).where(eq(users.id, session.userId)).limit(1))[0];
+            if (user?.status === 'PENDING_APPROVAL') {
+              throw APIError.from('FORBIDDEN', { code: 'ACCOUNT_PENDING_APPROVAL', message: 'Your OCSO account is waiting for approval' });
+            }
             if (user?.status !== 'ACTIVE') throw APIError.from('UNAUTHORIZED', { code: 'INVALID_EMAIL_OR_PASSWORD', message: 'Invalid email or password' });
             const inherited = typeof session['authMethod'] === 'string' ? session['authMethod'] : (ctx?.context.session?.session as { authMethod?: string } | undefined)?.authMethod;
             const method = SIGN_IN_METHODS[ctx?.path ?? ''] ?? inherited ?? 'password';
@@ -207,10 +217,18 @@ function authOptions(config: AuthServerConfig, deps: AuthServerDeps) {
       },
       user: {
         create: {
-          // Only SSO auto-provisioning creates users through Better Auth (sign-up is off).
-          before: async (user) => ({ data: { ...user, email: user.email.toLowerCase(), role: 'SERVICE', status: 'ACTIVE', emailVerified: true } }),
+          // Only SSO auto-provisioning creates users through Better Auth (sign-up is off), and only where approval is
+          // skipped (development): a governed deployment provisions them pending in the resolver (sso-resolver.ts).
+          // Defensive: should Better Auth ever create one on a governed deployment, it is inert.
+          before: async (user) => ({ data: { ...user, email: user.email.toLowerCase(), role: 'SERVICE', status: provisionedStatus, emailVerified: true } }),
           after: async (user, ctx) => {
-            await audit.asSystem(ctx ?? {}, { action: 'user.create', targetType: 'user', targetId: user.id, summary: `Created SERVICE ${user.email} on first SSO sign-in (auto-provisioning)` });
+            await audit.asSystem(ctx ?? {}, {
+              action: 'user.create',
+              targetType: 'user',
+              targetId: user.id,
+              summary: `Created SERVICE ${user.email} on first SSO sign-in (auto-provisioning)${config.skipAccessApproval ? ' (approval skipped: dev_flag)' : ', pending approval'}`,
+              after: { role: 'SERVICE', status: provisionedStatus, provisionedBy: 'sso', ...(config.skipAccessApproval ? { approvalSkipped: 'dev_flag' } : {}) },
+            });
           },
         },
       },
@@ -232,7 +250,7 @@ function authOptions(config: AuthServerConfig, deps: AuthServerDeps) {
       }),
       sso({
         modelName: 'authSsoProviders',
-        resolveUser: ssoUserResolver(db, audit),
+        resolveUser: ssoUserResolver(db, audit, { skipAccessApproval: config.skipAccessApproval }),
         providersLimit: 100,
         disableImplicitSignUp: false,
         trustEmailVerified: false,

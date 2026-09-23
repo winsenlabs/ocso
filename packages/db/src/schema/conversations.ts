@@ -1,10 +1,11 @@
 import { sql } from 'drizzle-orm';
-import { boolean, index, integer, jsonb, pgTable, real, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, check, index, integer, jsonb, pgTable, real, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { createdAt, id, ts, updatedAt } from './columns.js';
 import { customers, channels } from './customers.js';
 import { users } from './identity.js';
 import { virtualAgents } from './agents.js';
 import { queues } from './routing.js';
+import { routerVersions, routers, type RoutingOutcome, type RoutingPhase } from './routers.js';
 
 export const conversations = pgTable(
   'conversations',
@@ -13,9 +14,8 @@ export const conversations = pgTable(
     customerId: uuid()
       .notNull()
       .references(() => customers.id),
-    agentId: uuid()
-      .notNull()
-      .references(() => virtualAgents.id),
+    /** The one agent answering (PM/research/11 §5.5); null only while a router is still deciding (ROUTING). */
+    agentId: uuid().references(() => virtualAgents.id),
     channelId: uuid().references(() => channels.id),
     type: text().notNull(),
     controlState: text().notNull().default('AI_ACTIVE'),
@@ -60,10 +60,48 @@ export const conversations = pgTable(
     index('conversations_recent_idx').on(t.lastInteractionAt),
     // Inbox tag filter (`tags @> ARRAY[tag]`) and tag autocomplete.
     index('conversations_tags_idx').using('gin', t.tags),
-    // At most one open conversation per customer, channel and agent.
-    uniqueIndex('conversations_open_uq')
-      .on(t.customerId, t.channelId, t.agentId)
+    // At most one open conversation per customer and channel (routing and transfers happen inside it).
+    uniqueIndex('conversations_open_channel_uq')
+      .on(t.customerId, t.channelId)
       .where(sql`${t.controlState} <> 'RESOLVED'`),
+    // No agent: a router is still deciding, or it was resolved before one was chosen.
+    check('conversations_agent_or_routing_ck', sql`${t.agentId} IS NOT NULL OR ${t.controlState} IN ('ROUTING', 'RESOLVED')`),
+  ],
+);
+
+/**
+ * Where a conversation is in its router (PM/research/11 §5.1): the version it
+ * follows, the collected attributes and answers, and how it was decided.
+ * `seq_from` is the conversation's last seq when routing started: the agent
+ * answers every customer message after it once routing completes.
+ */
+export const conversationRouting = pgTable(
+  'conversation_routing',
+  {
+    conversationId: uuid()
+      .primaryKey()
+      .references(() => conversations.id, { onDelete: 'cascade' }),
+    routerId: uuid().references(() => routers.id, { onDelete: 'set null' }),
+    routerVersionId: uuid().references(() => routerVersions.id, { onDelete: 'set null' }),
+    phase: text().$type<RoutingPhase>().notNull(),
+    stepIndex: integer().notNull().default(0),
+    attributes: jsonb().$type<Record<string, string>>().notNull().default({}),
+    answers: jsonb().$type<Record<string, string>>().notNull().default({}),
+    classifications: jsonb().$type<Record<string, { label: string | null; confidence: number; error?: string }>>().notNull().default({}),
+    followUps: integer().notNull().default(0),
+    attempts: integer().notNull().default(0),
+    previousState: text(),
+    awaitingSince: ts('awaiting_since'),
+    seqFrom: integer().notNull().default(0),
+    outcome: text().$type<RoutingOutcome>(),
+    ruleIndex: integer(),
+    queueId: uuid().references(() => queues.id, { onDelete: 'set null' }),
+    decidedAt: ts('decided_at'),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index('conversation_routing_awaiting_idx').on(t.awaitingSince).where(sql`${t.phase} <> 'DONE' AND ${t.awaitingSince} IS NOT NULL`),
+    check('conversation_routing_phase_ck', sql`${t.phase} IN ('RETURNING','STEPS','DONE')`),
   ],
 );
 
@@ -77,7 +115,8 @@ export const interactions = pgTable(
       .references(() => conversations.id, { onDelete: 'cascade' }),
     channelId: uuid(),
     seq: integer().notNull(),
-    actorType: text().$type<'CUSTOMER' | 'AGENT' | 'HUMAN' | 'SYSTEM' | 'TOOL'>().notNull(),
+    /** ROUTER: a router's question to the customer (PM/research/11 §5.1). */
+    actorType: text().$type<'CUSTOMER' | 'AGENT' | 'HUMAN' | 'SYSTEM' | 'TOOL' | 'ROUTER'>().notNull(),
     actorId: text(),
     direction: text().$type<'INBOUND' | 'OUTBOUND' | 'INTERNAL'>().notNull(),
     visibility: text().$type<'CUSTOMER' | 'INTERNAL'>().notNull(),

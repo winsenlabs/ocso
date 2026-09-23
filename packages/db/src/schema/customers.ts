@@ -2,6 +2,7 @@ import { boolean, index, integer, jsonb, pgTable, primaryKey, text, uniqueIndex,
 import { createdAt, id, ts, updatedAt } from './columns.js';
 import { users } from './identity.js';
 import { virtualAgents } from './agents.js';
+import { routers } from './routers.js';
 
 /** Canonical external person/account (docs/03 Customer). */
 export const customers = pgTable(
@@ -51,7 +52,10 @@ export const channels = pgTable(
     publicKey: text().notNull(),
     settings: jsonb().$type<Record<string, unknown>>().notNull().default({}),
     secretRefs: jsonb().$type<Record<string, string>>().notNull().default({}),
+    /** Deprecated (PM/research/11 §5): no longer read or written; the router decides. Dropped in a later release. */
     defaultAgentId: uuid().references(() => virtualAgents.id),
+    /** Who routes this channel's customers (ACTIVE router only; none = messages are rejected `no_router`). */
+    routerId: uuid().references(() => routers.id, { onDelete: 'set null' }),
     lastInboundAt: ts('last_inbound_at'),
     lastVerifiedAt: ts('last_verified_at'),
     createdAt: createdAt(),
@@ -60,6 +64,7 @@ export const channels = pgTable(
   (t) => [uniqueIndex('channels_public_key_uq').on(t.publicKey)],
 );
 
+/** Deprecated (PM/research/11 §5): no longer read or written; reach is derived through routers and queues. */
 export const agentChannels = pgTable(
   'agent_channels',
   {

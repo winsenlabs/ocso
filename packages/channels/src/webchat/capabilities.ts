@@ -32,6 +32,8 @@ export const WEBCHAT_CAPABILITIES: ChannelCapabilities = Object.freeze<ChannelCa
     ],
   },
   sessionWindowHours: null,
+  // The widget shows CHOICES as buttons (it has no separate list form).
+  choices: { buttons: 10, list: 0 },
 });
 
 /** Audio types accepted when a channel opts in (`settings.audioAttachments`); all are content-sniffable. */

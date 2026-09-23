@@ -50,3 +50,13 @@ export function auditQuery(filter: AuditFilter): string {
 }
 
 export const listAudit = (filter: AuditFilter = {}) => api.get(`/v1/audit${auditQuery(filter)}`, z.array(AuditEventSchema));
+
+/**
+ * The same read, plus where it came from: `store` (the audit store merged with
+ * events not shipped yet) or `local` (the store did not answer; only the main
+ * database's local window, so older events may be missing).
+ */
+export async function readAuditLog(filter: AuditFilter = {}): Promise<{ rows: AuditEvent[]; source: 'store' | 'local' }> {
+  const { data, headers } = await api.getWithHeaders(`/v1/audit${auditQuery(filter)}`, z.array(AuditEventSchema));
+  return { rows: data, source: headers.get('x-ocso-audit-source') === 'local' ? 'local' : 'store' };
+}

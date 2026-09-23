@@ -52,7 +52,7 @@ export class InternalAgentController {
     if (!(await this.agent.configured())) throw validation('internal_agent_not_configured', 'A Tech admin must choose a model profile for Ask OCSO');
     const abort = new AbortController();
     // Long answers re-check the session like every stream (ADR-025): revocation stops the model call.
-    const stopWatching = abortWhenSessionEnds(this.liveness, req.authSession?.id, this.env.SESSION_STREAM_RECHECK_SECONDS * 1000, abort);
+    const stopWatching = abortWhenSessionEnds(this.liveness, req.authSession?.id, this.env.SESSION_STREAM_RECHECK_SECONDS * 1000, abort, principal);
     res.on('close', () => {
       stopWatching();
       abort.abort();

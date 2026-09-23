@@ -1,15 +1,19 @@
-import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Post, Put, Query, Res } from '@nestjs/common';
 import { Permission, type Principal } from '@ocso/auth';
 import {
   AgentService,
+  ApprovalService,
   ComponentsInput,
   CreateVersionInput,
   EscalationRuleInput,
   EscalationRulePatch,
   EscalationRuleService,
   PromptService,
+  WithApproval,
+  requestApproval,
   type ActorContext,
 } from '@ocso/application';
+import type { Response } from 'express';
 import { channelContextFrom, loadAgentToolCatalog } from '@ocso/agent-runtime';
 import type { ChannelRegistry } from '@ocso/channels';
 import { channels, users, type Db } from '@ocso/db';
@@ -19,6 +23,7 @@ import { eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { Actor, CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
 import { CHANNEL_REGISTRY, DB } from '../../infrastructure/tokens.js';
+import { approvalResponse } from '../approvals/approval-response.js';
 
 const Id = z.uuid();
 const DiffQuery = z.object({ from: z.uuid(), to: z.uuid() });
@@ -28,6 +33,7 @@ type DiffQuery = z.infer<typeof DiffQuery>;
 type Components = z.infer<typeof ComponentsInput>;
 const RulePatch = EscalationRulePatch;
 type RulePatch = z.infer<typeof RulePatch>;
+type ApprovalBody = z.infer<typeof WithApproval>;
 
 /**
  * Structured prompt editing, versioning and escalation rules (design/02
@@ -43,6 +49,7 @@ export class PromptsController {
     @Inject(EscalationRuleService) private readonly rules: EscalationRuleService,
     @Inject(DB) private readonly db: Db,
     @Inject(CHANNEL_REGISTRY) private readonly registry: ChannelRegistry,
+    @Inject(ApprovalService) private readonly approvals: ApprovalService,
   ) {}
 
   @Get('prompt')
@@ -114,11 +121,24 @@ export class PromptsController {
     return this.prompts.createVersionFromDraft(actor, agentId, body);
   }
 
+  /**
+   * A draft agent's prompt activates directly (204). Once the agent has been
+   * approved, activation is a proposal (kind prompt_version): 202 `{proposal}`
+   * with `approval`, else 409 approval_required.
+   */
   @Post('prompt/versions/:versionId/activate')
   @HttpCode(204)
   @RequirePermission(Permission.PROMPTS_ACTIVATE)
-  async activate(@Actor() actor: ActorContext, @Param('agentId', { schema: Id }) agentId: string, @Param('versionId', { schema: Id }) versionId: string) {
-    await this.prompts.activate(actor, agentId, versionId);
+  async activate(
+    @Actor() actor: ActorContext,
+    @Param('agentId', { schema: Id }) agentId: string,
+    @Param('versionId', { schema: Id }) versionId: string,
+    @Body({ schema: WithApproval.optional() }) body: ApprovalBody | undefined,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    await this.prompts.assertVersionOf(actor, agentId, versionId);
+    const outcome = await approvalResponse(res, requestApproval(this.approvals, actor, { objectKind: 'prompt_version', objectId: versionId, action: 'ACTIVATE' }, body?.approval, () => this.prompts.activate(actor, agentId, versionId)));
+    return outcome ?? undefined;
   }
 
   @Get('prompt/diff')

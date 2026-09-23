@@ -1,11 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { eq, sql } from 'drizzle-orm';
 import { createTestDatabase, type TestDatabase } from '@ocso/db/testing';
-import { channels, conversations, interactionParts, uuidv7, virtualAgents } from '@ocso/db';
+import { channels, conversations, interactionParts, queues, uuidv7, virtualAgents } from '@ocso/db';
 import { MemoryQueue } from '@ocso/queue';
 import type { Principal } from '@ocso/auth';
-import { AgentService, IngressService, REDACTED_TEXT, RetentionInput, RetentionService, SettingsService, effectiveRetention, recordAudit, systemActor, type ActorContext } from '../src/index.js';
+import { AgentService, IngressService, REDACTED_TEXT, RetentionInput, RetentionService, SettingsService, effectiveRetention, recordAudit, routeChannelToAgent, systemActor, type ActorContext } from '../src/index.js';
 import { createTeam } from './support/ownership.js';
+import { makeLive } from './support/live-agent.js';
 
 let t: TestDatabase;
 let channelId: string;
@@ -20,9 +21,12 @@ beforeAll(async () => {
   await t.pool.query(`INSERT INTO users (id, email, name, role) VALUES ($1, 'admin@x.test', 'Dev', 'TECH')`, [admin.userId]);
   const owners = await createTeam(t.db);
   const agent = await new AgentService(t.db).create(ctx({ ...admin, role: 'HEAD', teamIds: [owners] }), { name: 'Maya', purpose: 'support', conversationType: 'SUPPORT', description: '', teamIds: [owners] });
-  await t.db.update(virtualAgents).set({ status: 'LIVE' }).where(eq(virtualAgents.id, agent.id));
+  await makeLive(t.db, agent.id);
   channelId = uuidv7();
-  await t.db.insert(channels).values({ id: channelId, kind: 'WHATSAPP', name: 'WhatsApp', status: 'ACTIVE', publicKey: 'pk-ret', defaultAgentId: agent.id });
+  await t.db.insert(channels).values({ id: channelId, kind: 'WHATSAPP', name: 'WhatsApp', status: 'ACTIVE', publicKey: 'pk-ret' });
+  const queueId = uuidv7();
+  await t.db.insert(queues).values({ id: queueId, name: 'Support' });
+  await routeChannelToAgent(t.db, ctx(admin), { channelId, agentId: agent.id, queueId });
 });
 afterAll(async () => {
   await t?.drop();

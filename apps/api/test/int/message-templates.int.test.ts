@@ -3,11 +3,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ChannelRuntime, DeliveryService, templateProviderSource } from '@ocso/agent-runtime';
 import { pollPendingTemplates } from '@ocso/application';
 import type { BlobStore } from '@ocso/blob';
-import { modelProfiles, modelProviders, uuidv7 } from '@ocso/db';
+import { eq } from 'drizzle-orm';
+import { modelProfiles, modelProviders, uuidv7, virtualAgents } from '@ocso/db';
 import { BLOB_STORE } from '../../src/infrastructure/tokens.js';
 import { completeSetup, startApi, type ApiHarness } from './harness.js';
 import { setTeams } from './teams.js';
 import { seededContent, startTwilioStub, type TwilioStub } from './twilio-stub.js';
+import { routeChannel } from './routing.js';
 
 /**
  * Message templates (WhatsApp through Twilio) over the real API against a
@@ -78,9 +80,13 @@ beforeAll(async () => {
   const channel = await api()
     .post('/v1/channels')
     .set(auth(tokens.admin))
-    .send({ kind: 'TWILIO_WHATSAPP', name: 'WhatsApp (Twilio)', status: 'ACTIVE', defaultAgentId: agent, settings: { accountSid: ACCOUNT_SID, from: 'whatsapp:+14155238886', apiBaseUrl: stub.url, contentApiBaseUrl: stub.url }, secrets: { authToken: AUTH_TOKEN } })
+    .send({ kind: 'TWILIO_WHATSAPP', name: 'WhatsApp (Twilio)', status: 'ACTIVE', settings: { accountSid: ACCOUNT_SID, from: 'whatsapp:+14155238886', apiBaseUrl: stub.url, contentApiBaseUrl: stub.url }, secrets: { authToken: AUTH_TOKEN } })
     .expect(201);
   ids.channel = channel.body.id;
+  // Maya is live (routing hands customers of an agent that does not answer straight to a person).
+  await h.db.db.update(virtualAgents).set({ status: 'LIVE' }).where(eq(virtualAgents.id, agent));
+  // channel → pass-through router → Maya's queue (PM/research/11 §5): the lead's team reaches the channel through Maya.
+  await routeChannel(h, channel.body.id, agent, ids.queue);
   ids.webhookPath = channel.body.webhookPath;
 
   await inbound('My card was charged twice', 'SM2f6c1e0b9a8d7c6b5a4f3e2d1c0b9a8f');

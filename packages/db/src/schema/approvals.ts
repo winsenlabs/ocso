@@ -55,6 +55,11 @@ export const approvalProposals = pgTable(
     check('approval_proposals_status_ck', sql`${t.status} IN ('SUBMITTED','APPROVED','REJECTED','WITHDRAWN','BLOCKED','VOID')`),
     check('approval_proposals_self_ck', sql`${t.makerId} IS NULL OR ${t.checkerId} IS NULL OR ${t.makerId} <> ${t.checkerId} OR ${t.bootstrap}`),
     check('approval_proposals_open_ck', sql`${t.status} <> 'SUBMITTED' OR (${t.makerId} IS NOT NULL AND ${t.checkerId} IS NOT NULL)`),
+    // Nobody decides their own change, except a recorded bootstrap; withdrawing or voiding is not a decision on the merits.
+    check(
+      'approval_proposals_decider_ck',
+      sql`${t.decidedBy} IS NULL OR ${t.makerId} IS NULL OR ${t.decidedBy} <> ${t.makerId} OR ${t.bootstrap} OR ${t.status} IN ('WITHDRAWN','VOID')`,
+    ),
     uniqueIndex('approval_proposals_open_uq').on(t.objectKind, t.objectId).where(sql`${t.status} = 'SUBMITTED'`),
     index('approval_proposals_checker_idx').on(t.checkerId, t.status, t.submittedAt),
     index('approval_proposals_maker_idx').on(t.makerId, t.submittedAt),
@@ -73,7 +78,7 @@ export const approvalDecisions = pgTable(
     id: id(),
     proposalId: uuid()
       .notNull()
-      .references(() => approvalProposals.id, { onDelete: 'cascade' }),
+      .references(() => approvalProposals.id, { onDelete: 'restrict' }),
     revision: integer().notNull(),
     kind: text()
       .$type<'SUBMIT' | 'EDIT' | 'APPROVE' | 'BOOTSTRAP_APPROVE' | 'REJECT' | 'WITHDRAW' | 'REASSIGN' | 'BLOCK' | 'VOID' | 'ACTIVATE'>()

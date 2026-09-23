@@ -1,9 +1,10 @@
 // Local OCSO stack for resilience tests: throwaway database, migrated, with the
 // built API and N built workers as real processes (so they can be killed).
+// The audit store (ADR-032) gets its own database `<db>_audit` with a writer role.
 // Prerequisite: `npx turbo run build --filter=@ocso/api... --filter=@ocso/worker...`.
 import { execFileSync, spawn } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { generateKeyPairSync, randomBytes } from 'node:crypto';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,6 +21,7 @@ export async function startStack({ dbName = 'ocso_resilience', apiPort = 4490, w
   const databaseUrl = `${PG}/${dbName}`;
   execFileSync(process.execPath, [join(repo, 'packages/db/dist/bin/migrate.js')], { stdio: 'inherit', env: { ...process.env, DATABASE_URL: databaseUrl } });
   const blobDir = mkdtempSync(join(tmpdir(), 'ocso-resilience-'));
+  const audit = provisionAuditStore(dbName);
   const setupToken = randomBytes(18).toString('base64url');
   const shared = {
     NODE_ENV: 'test',
@@ -31,6 +33,9 @@ export async function startStack({ dbName = 'ocso_resilience', apiPort = 4490, w
     OCSO_PUBLIC_URL: `http://localhost:${apiPort}`,
     OCSO_ENABLE_DEV_PROVIDERS: 'true',
     DATABASE_POOL_SIZE: process.env.RES_DB_POOL ?? '10',
+    // The scripts create working users directly (maker–checker access approval is exercised elsewhere).
+    OCSO_DEV_SKIP_ACCESS_APPROVAL: 'true',
+    ...audit.env,
   };
   const procs = new Map();
   const run = (name, cwd, env) => {
@@ -65,6 +70,34 @@ export async function startStack({ dbName = 'ocso_resilience', apiPort = 4490, w
       await Promise.all([...procs.values()].map((p) => (p.exitCode !== null || p.signalCode !== null ? null : new Promise((r) => p.once('exit', r)))));
       rmSync(blobDir, { recursive: true, force: true });
       psql(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`);
+      audit.drop();
+    },
+  };
+}
+
+/** Audit store database + writer role + an Ed25519 signing key in its own temp dir. */
+function provisionAuditStore(dbName) {
+  const dir = mkdtempSync(join(tmpdir(), 'ocso-resilience-audit-key-'));
+  const auditDb = `${dbName}_audit`;
+  const role = `${dbName}_audit_w`;
+  psql(`DROP DATABASE IF EXISTS ${auditDb} WITH (FORCE)`);
+  psql(`CREATE DATABASE ${auditDb}`);
+  const owner = `${PG}/${auditDb}`;
+  const writer = new URL(owner);
+  writer.username = role;
+  writer.password = randomBytes(12).toString('hex');
+  execFileSync(process.execPath, [join(repo, 'packages/audit-store/dist/bin/audit-migrate.js')], {
+    stdio: 'inherit',
+    env: { ...process.env, AUDIT_DRIVER: 'postgres', AUDIT_DATABASE_OWNER_URL: owner, AUDIT_DATABASE_URL: writer.toString() },
+  });
+  const keyFile = join(dir, 'audit_signing_key.pem');
+  writeFileSync(keyFile, generateKeyPairSync('ed25519').privateKey.export({ type: 'pkcs8', format: 'pem' }), { mode: 0o600 });
+  return {
+    env: { AUDIT_DRIVER: 'postgres', AUDIT_DATABASE_URL: writer.toString(), AUDIT_SIGNING_KEY_FILE: keyFile },
+    drop() {
+      psql(`DROP DATABASE IF EXISTS ${auditDb} WITH (FORCE)`);
+      psql(`DROP ROLE IF EXISTS ${role}`);
+      rmSync(dir, { recursive: true, force: true });
     },
   };
 }

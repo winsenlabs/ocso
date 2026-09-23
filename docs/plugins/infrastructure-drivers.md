@@ -1,6 +1,6 @@
-# Infrastructure drivers: blob storage, secrets, queue, deployment
+# Infrastructure drivers: blob storage, secrets, queue, deployment, audit store
 
-These four contracts let the same application run on a single Docker host and on AWS without two code
+These five contracts let the same application run on a single Docker host and on AWS without two code
 paths (build rule [§17](../99-BUILD-RULES.md#17-same-application-two-deployment-shapes)). Each is a
 small registry of named drivers, filled from the plugins (like channels, model providers and alert
 destinations) and selected by one environment variable at start-up. Product code depends only on the
@@ -12,17 +12,19 @@ contract and never branches on the driver. [Email senders](email.md) work the sa
 | `SecretStore` (`packages/secrets/src/contract.ts`) | `SecretStoreDriverDefinition` | `local` (AES-256-GCM envelope encryption in PostgreSQL, master key from a file), `aws` (Secrets Manager) | `SECRETS_DRIVER` | `local` |
 | `QueueAdapter` (`packages/queue/src/contract.ts`) | `QueueDriverDefinition` | `postgres` (`jobs` table, `SKIP LOCKED`), `sqs` (Standard queues with DLQs); `memory` for tests | `QUEUE_DRIVER` | `postgres` |
 | `DeploymentAdapter` (`packages/deployment/src/contract.ts`) | `DeploymentDriverDefinition` | `compose` (advisory), `ecs` (Application Auto Scaling, CloudWatch, task protection) | `DEPLOYMENT_DRIVER` (worker) | `compose` |
+| `AuditStore` (`packages/audit-store/src/contract.ts`, ADR-032) | `AuditStoreDriverDefinition` | `postgres` (its own database, monthly partitions, INSERT/SELECT writer role), `clickhouse` (HTTP interface, MergeTree read first-copy-wins) | `AUDIT_DRIVER` | `postgres` |
 
 ## How selection works
 
 - **Env.** `packages/config/src/env.ts` parses each `*_DRIVER` as an open string (trimmed, 1–64
   characters) with the defaults above. It no longer lists driver names.
 - **Registries.** The composition root (`packages/bootstrap`) fills one `DriverRegistry` per contract
-  from every plugin's `blobDrivers`, `secretsDrivers`, `queueDrivers` and `deploymentDrivers`
+  from every plugin's `blobDrivers`, `secretsDrivers`, `queueDrivers`, `deploymentDrivers` and `auditStoreDrivers`
   (`createDriverRegistries(plugins)`). Same shape as the other registries: `register`, `get`, `has`,
   `list`. Names are lower case `a-z0-9-`; a duplicate name refuses to start.
 - **Start-up check.** The api and worker call `assertDrivers(env, drivers)` (the worker
-  `assertWorkerDrivers`, which adds `DEPLOYMENT_DRIVER`) right after parsing the environment. It
+  `assertWorkerDrivers`, which adds `DEPLOYMENT_DRIVER`) right after parsing the environment; both
+  include `AUDIT_DRIVER` (and, in production, the audit signing key). It
   throws one `Invalid OCSO configuration` error listing every problem: an unregistered name, with the
   registered alternatives, and each selected driver's own settings checks.
 
@@ -32,10 +34,11 @@ Invalid OCSO configuration:
   - QUEUE_DRIVER=sqs requires SQS_QUEUE_URLS and AWS_REGION
 ```
 
-- **Construction.** `createBlobStore`, `createSecretStore`, `createQueue` and `createDeploymentAdapter`
-  (all in `@ocso/bootstrap`) ask the registry for the selected driver and call its `create`. The
-  first-party definitions are in `packages/bootstrap/src/drivers/first-party.ts`; each carries its own
-  `check`, so a new driver never edits a central switch.
+- **Construction.** `createBlobStore`, `createSecretStore`, `createQueue`, `createDeploymentAdapter`
+  and `createAuditStore` (all in `@ocso/bootstrap`) ask the registry for the selected driver and call
+  its `create`. The first-party definitions are in `packages/bootstrap/src/drivers/first-party.ts`
+  (the audit store's in `packages/audit-store/src/drivers.ts`, contributed by the `@ocso/audit-store`
+  plugin entry); each carries its own `check`, so a new driver never edits a central switch.
 
 ## The driver contract
 
@@ -54,6 +57,7 @@ export interface BlobDriverDefinition<Env> {
 // SecretStoreDriverDefinition: create(env, { rows })            — rows = the `secrets` metadata table
 // QueueDriverDefinition:       create(env, { sql, workerId, notifier? })
 // DeploymentDriverDefinition:  create(env, { logger? })          — worker only
+// AuditStoreDriverDefinition:  create(env, { logger, fetch? })    — plus provision(env, { log }) for audit-migrate
 ```
 
 A driver ships in a plugin (see [README.md](README.md#the-plugin-shape)):
@@ -126,6 +130,54 @@ the alert queue-age condition reads the `jobs` table only when `inDatabase`, the
 back to PostgreSQL for the queue age when `reportsOldestAge` is false, and the System → Workers panel
 renders the deployment status from its `facts`.
 
+## The audit store driver (ADR-032)
+
+The audit store is the system of record for audit events; the main database's `audit_events` is its
+transactional outbox. A driver implements this contract (trimmed):
+
+```ts
+export interface AuditStore {
+  readonly driver: string;
+  append(records: readonly AuditRecord[]): Promise<void>;           // idempotent on id
+  has(ids: readonly string[]): Promise<ReadonlySet<string>>;         // reconciliation
+  query(q: AuditStoreQuery, scope: AuditScopeFilter): Promise<AuditRecord[]>; // (occurredAt, id) DESC, keyset
+  unsealed(limit: number): Promise<AuditRecord[]>;                   // arrival order
+  chainHead(): Promise<ChainEntry | null>;
+  appendChain(entries: readonly ChainEntry[]): Promise<void>;        // refuses a gap or a fork
+  appendCheckpoint(c: Checkpoint): Promise<void>;
+  checkpoints(q: CheckpointQuery): Promise<Checkpoint[]>;
+  chainRange(fromPosition: number, limit: number): Promise<ChainRangeItem[]>; // + forks / conflicts it can see
+  purgeBefore(cutoff: Date): Promise<number>;                        // store minimum retention; logged
+  purgeHorizon(): Promise<Date | null>;                              // newest logged purge cutoff
+  stats(): Promise<AuditStoreStats>;
+  health(): Promise<AuditStoreHealth>;                               // answers within ~5 s, never hangs
+  selfCheck(): Promise<AuditStoreSelfCheck>;                         // canWrite + weaknesses to show
+  close(): Promise<void>;
+}
+```
+
+What a driver must guarantee: the writer credentials the worker holds cannot update or delete
+records, chain entries or checkpoints (postgres: grants plus triggers; clickhouse: grants — the
+purge runs as a separate worker-only user because dropping a partition needs `ALTER DELETE`), and
+the reader credentials the api holds can only SELECT; every call is time-bounded
+(`AUDIT_STORE_TIMEOUT_MS`), so a store that stops answering fails instead of hanging the leader;
+`purgeBefore` honours a minimum retention the writer cannot change and logs every removal, so
+verification (`purgeHorizon`) can tell retention from deletion; `chainRange` reports what an INSERT
+alone could do to history in that store (`forks`: another chain row at a position or sealing the
+same record; `conflicts`: another stored copy of a record with different content); reads return the
+first stored copy of a record; `append` is idempotent; `query` applies the `AuditScopeFilter` (actor, team ids, shared target
+types) itself, since the store cannot join the main database; ties on time sort by the id as a
+string; times keep millisecond precision (hashes are computed over what the store returns). Hashing,
+signing and verification are shared code (`canonical.ts`, `signing.ts`, `chain.ts`), not the
+driver's. `provision` (the `audit-migrate` bin, owner credentials) applies the driver's schema from
+`packages/audit-store/migrations/<driver>`, sets the minimum retention and ensures the writer and
+(optional) reader roles; in production it refuses a writer that is the owner/admin unless
+`AUDIT_ALLOW_OWNER_WRITER=true`.
+
+Tests to copy: `packages/audit-store/test/postgres-store.int.test.ts` and
+`clickhouse-store.int.test.ts` (the same cases; the ClickHouse one runs when `CLICKHOUSE_TEST_URL`
+points at a server), `packages/bootstrap/test/audit-drivers.test.ts` (selection).
+
 ## What the core relies on
 
 - **Blob.** PostgreSQL keeps media metadata and keys; the store keeps bytes. Keys are generated by OCSO
@@ -136,6 +188,11 @@ renders the deployment status from its `facts`.
 - **Queue.** Messages are wake-ups; the work is in PostgreSQL. Correctness comes from conversation
   leases with fencing, not from queue ordering or single delivery. A duplicate or lost message is
   harmless: the lease-recovery sweep re-enqueues stranded turns (ADR-008).
+- **Audit store.** Readiness never depends on it: events wait in the outbox while it is down, the
+  audit screen merges rows not yet confirmed in the store (and serves the local window, with a
+  banner, when the store fails or does not answer within 5 s), and incidents record the outage. The
+  sealer is fenced by a lock in the main database, so a driver without unique positions is never
+  written by two sealers at once. Reads are always scoped by the caller's `AuditScopeFilter`.
 - **Deployment.** The worker's scheduler leader reconciles the Tech Admin's worker settings through the
   adapter. Compose returns advice and the exact `docker compose up -d --scale worker=N` command; ECS
   applies the settings ([docs/operations/worker-scaling.md](../operations/worker-scaling.md)).

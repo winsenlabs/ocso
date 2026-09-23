@@ -1,11 +1,12 @@
 import { asc, eq, inArray, sql } from 'drizzle-orm';
 import { Permission, assertCan } from '@ocso/auth';
-import { notFound } from '@ocso/domain';
-import { conversations, queueTeams, queues, slaPolicies, teamMembers, users, uuidv7, type Db } from '@ocso/db';
+import { AttrKey, BusinessHoursSchema, conflict, notFound, validation } from '@ocso/domain';
+import { conversations, queueTeams, queues, slaPolicies, teamMembers, users, uuidv7, virtualAgents, type Db, type DbOrTx } from '@ocso/db';
 import { z } from 'zod';
 import { recordAudit } from '../audit/audit.js';
 import type { ActorContext } from '../shared/context.js';
 import { patchOf } from '../shared/patch.js';
+import { assertAgentAssignable, assertLiveQueueChange, assertQueueInScope, assertTeamChange } from './queue-guards.js';
 
 export const QueueInput = z.object({
   name: z.string().trim().min(1).max(120),
@@ -18,6 +19,14 @@ export const QueueInput = z.object({
   preferAccountOwner: z.boolean().default(true),
   slaPolicyId: z.uuid().nullable().default(null),
   teamIds: z.array(z.uuid()).default([]),
+  /** The queue's one AI agent (PM/research/11 §5.5); an agent may serve many queues. */
+  agentId: z.uuid().nullable().default(null),
+  /** What the queue serves, e.g. { language: 'ta', product: 'sales' } (unique across queues). */
+  attributes: z.record(AttrKey, z.string().trim().min(1).max(60)).default({}),
+  /** When humans take handoffs from this queue; null = the agent's hours. */
+  businessHours: BusinessHoursSchema.nullable().default(null),
+  /** Queues conversations may be transferred to from here. */
+  transferTargetIds: z.array(z.uuid()).max(50).default([]),
 });
 export type QueueInput = z.infer<typeof QueueInput>;
 export const QueuePatch = patchOf(QueueInput);
@@ -74,30 +83,55 @@ export class QueueService {
   }
 
   async create(actor: ActorContext, input: QueueInput): Promise<string> {
-    assertCan(actor.principal!, Permission.QUEUES_MANAGE);
+    const principal = actor.principal!;
+    assertCan(principal, Permission.QUEUES_MANAGE);
     const id = uuidv7();
     const { teamIds, ...fields } = input;
-    await this.db.transaction(async (tx) => {
-      await tx.insert(queues).values({ id, ...fields });
+    await this.guarded(input.name, async (tx) => {
+      if (fields.agentId) await assertAgentAssignable(tx, principal, fields.agentId);
+      await assertQueueRefs(tx, id, fields);
+      await tx.insert(queues).values({ id, ...fields, attributes: normalizeAttributes(fields.attributes) });
       if (teamIds.length) await tx.insert(queueTeams).values(teamIds.map((teamId) => ({ queueId: id, teamId })));
       await recordAudit(tx, actor, { action: 'queue.create', targetType: 'queue', targetId: id, summary: `Created queue ${input.name}`, after: input });
     });
     return id;
   }
 
+  /** Team-scoped; changes to a queue live routing uses are approvals (queue-guards.ts). */
   async update(actor: ActorContext, id: string, input: QueuePatch): Promise<void> {
-    assertCan(actor.principal!, Permission.QUEUES_MANAGE);
+    const principal = actor.principal!;
+    assertCan(principal, Permission.QUEUES_MANAGE);
     const { teamIds, ...fields } = input;
-    await this.db.transaction(async (tx) => {
-      const [before] = await tx.select().from(queues).where(eq(queues.id, id));
+    await this.guarded(input.name ?? '', async (tx) => {
+      const [before] = await tx.select().from(queues).where(eq(queues.id, id)).for('update');
       if (!before) throw notFound('queue', id);
-      await tx.update(queues).set({ ...fields, updatedAt: new Date() }).where(eq(queues.id, id));
+      const currentTeams = await assertQueueInScope(tx, principal, before);
+      const { added } = teamIds ? assertTeamChange(principal, currentTeams, [...new Set(teamIds)]) : { added: [] };
+      if (fields.agentId && fields.agentId !== before.agentId) await assertAgentAssignable(tx, principal, fields.agentId);
+      await assertQueueRefs(tx, id, fields);
+      await assertLiveQueueChange(tx, before, { agentId: fields.agentId, addedTeams: added, transferTargetIds: fields.transferTargetIds });
+      await tx
+        .update(queues)
+        .set({ ...fields, ...(fields.attributes ? { attributes: normalizeAttributes(fields.attributes) } : {}), updatedAt: new Date() })
+        .where(eq(queues.id, id));
       if (teamIds) {
         await tx.delete(queueTeams).where(eq(queueTeams.queueId, id));
         if (teamIds.length) await tx.insert(queueTeams).values(teamIds.map((teamId) => ({ queueId: id, teamId })));
       }
-      await recordAudit(tx, actor, { action: 'queue.update', targetType: 'queue', targetId: id, summary: `Updated queue ${before.name}`, before, after: input });
+      await recordAudit(tx, actor, { action: 'queue.update', targetType: 'queue', targetId: id, summary: `Updated queue ${before.name}`, before: { ...before, teamIds: currentTeams }, after: input });
     });
+  }
+
+  /** One transaction; unique-index violations become readable conflicts. */
+  private async guarded(name: string, fn: (tx: DbOrTx) => Promise<void>): Promise<void> {
+    try {
+      await this.db.transaction(fn);
+    } catch (err) {
+      const constraint = (err as { constraint?: string; cause?: { constraint?: string } }).constraint ?? (err as { cause?: { constraint?: string } }).cause?.constraint;
+      if (constraint === 'queues_attributes_uq') throw conflict('queue_attributes_taken', 'Another queue already serves exactly these attributes');
+      if (constraint === 'queues_name_uq') throw conflict('queue_name_taken', `A queue named ${name} already exists`);
+      throw err;
+    }
   }
 
   listSlaPolicies() {
@@ -123,5 +157,25 @@ export class QueueService {
     if (!teamIds.length) return [];
     const rows = await this.db.select({ queueId: queueTeams.queueId }).from(queueTeams).where(inArray(queueTeams.teamId, [...teamIds]));
     return [...new Set(rows.map((r) => r.queueId))];
+  }
+}
+
+/** Attribute values are compared case-insensitively by routers; stored lower case so the unique index agrees. */
+function normalizeAttributes(attributes: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(attributes).map(([k, v]) => [k, v.trim().toLowerCase()]));
+}
+
+/** The agent exists; transfer targets exist and are not the queue itself. */
+async function assertQueueRefs(tx: DbOrTx, queueId: string, fields: { agentId?: string | null | undefined; transferTargetIds?: readonly string[] | undefined }): Promise<void> {
+  if (fields.agentId) {
+    const [agent] = await tx.select({ id: virtualAgents.id }).from(virtualAgents).where(eq(virtualAgents.id, fields.agentId));
+    if (!agent) throw notFound('agent', fields.agentId);
+  }
+  const targets = [...new Set(fields.transferTargetIds ?? [])];
+  if (targets.includes(queueId)) throw validation('transfer_target_self', 'A queue cannot transfer to itself');
+  if (targets.length) {
+    const found = await tx.select({ id: queues.id }).from(queues).where(inArray(queues.id, targets));
+    const missing = targets.find((t) => !found.some((f) => f.id === t));
+    if (missing) throw notFound('queue', missing);
   }
 }

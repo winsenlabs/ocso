@@ -7,7 +7,7 @@ import type { ControlState, DeliveryStatus, HandoffMode, HandoffTrigger, Priorit
  */
 export interface OcsoEventPayloads {
   'interaction.received': { interactionId: string; seq: number; actorType: string; channelId: string | null };
-  'interaction.sent': { interactionId: string; seq: number; actorType: 'AGENT' | 'HUMAN' };
+  'interaction.sent': { interactionId: string; seq: number; actorType: 'AGENT' | 'HUMAN' | 'ROUTER' };
   'interaction.delivery_updated': { interactionId: string; status: DeliveryStatus; errorCode?: string };
   'conversation.created': { customerId: string; channelId: string | null; queueId: string | null };
   'conversation.updated': { fields: string[] };
@@ -56,6 +56,27 @@ export interface OcsoEventPayloads {
   };
   'cache.invalidated': { scope: string; key: string | null; reason: string };
   'worker.heartbeat': { workerId: string; activeLeases: number; capacity: number };
+  /** Maker–checker (PM/research/11b): delivered to the maker, the named checker and approvals.reassign_any holders. */
+  'approval.requested': { proposalId: string; objectKind: string; objectId: string; action: string; makerId: string; checkerId: string };
+  'approval.decided': {
+    proposalId: string;
+    objectKind: string;
+    objectId: string;
+    decision: 'APPROVED' | 'REJECTED' | 'WITHDRAWN' | 'BLOCKED' | 'VOID';
+    checkerId: string | null;
+    makerId: string | null;
+  };
+  'approval.checker_invalid': { proposalId: string; objectKind: string; checkerId: string; reason: 'DISABLED' | 'LOST_RIGHTS'; makerId: string };
+  /** Routing (PM/research/11 §5.3): a router chose the queue and agent; or a conversation moved to another queue. */
+  'conversation.routed': {
+    routerId: string | null;
+    /** The router version that decided (null for transfers). */
+    routerVersionId?: string | null;
+    queueId: string;
+    agentId: string;
+    outcome: 'RULE' | 'MODEL' | 'FALLBACK' | 'PASS_THROUGH' | 'CONTINUE' | 'TIMEOUT' | 'TRANSFER';
+    ruleIndex: number | null;
+  };
 }
 
 export type OcsoEventType = keyof OcsoEventPayloads;

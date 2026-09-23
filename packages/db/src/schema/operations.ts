@@ -83,7 +83,9 @@ export const turns = pgTable(
       .$type<'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'SUPERSEDED'>()
       .notNull()
       .default('RUNNING'),
-    outcome: text().$type<'REPLIED' | 'HANDOFF' | 'NO_REPLY' | 'FAILED' | 'CANCELLED' | 'AWAITING_CONFIRMATION'>(),
+    outcome: text().$type<'REPLIED' | 'HANDOFF' | 'NO_REPLY' | 'FAILED' | 'CANCELLED' | 'AWAITING_CONFIRMATION' | 'TRANSFERRED'>(),
+    /** The agent that ran the turn (a conversation changes agent on queue transfers). */
+    agentId: uuid(),
     workerId: text().notNull(),
     leaseVersion: integer().notNull(),
     seqFrom: integer().notNull(),

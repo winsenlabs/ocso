@@ -19,8 +19,8 @@ export const RETENTION_CLASSES = {
   usage: { defaultDays: 400, minDays: 30, label: 'Model usage', description: 'Token and cost records behind usage analytics.' },
   /** Operational records: published outbox events, health samples, delivery logs, login attempts. */
   operational: { defaultDays: 14, minDays: 1, label: 'Operational records', description: 'Published events, health samples, delivery logs and login attempts.' },
-  /** Audit trail. */
-  auditEvents: { defaultDays: 2555, minDays: 365, label: 'Audit trail', description: 'Audit events; the database refuses to delete anything younger than 365 days.' },
+  /** Audit trail, in the audit store (ADR-032); the main database keeps only a local window of verified rows. */
+  auditEvents: { defaultDays: 2555, minDays: 365, label: 'Audit trail', description: 'Audit events in the audit store; nothing younger than 365 days is ever removed, whatever this says.' },
 } as const;
 
 export type RetentionClass = keyof typeof RETENTION_CLASSES;
