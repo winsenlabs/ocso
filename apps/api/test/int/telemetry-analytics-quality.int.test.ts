@@ -25,6 +25,8 @@ async function bootApi(): Promise<INestApplication> {
   const { LoggerModule } = await import('nestjs-pino');
   const { InfrastructureModule } = await import('../../src/infrastructure/infrastructure.module.js');
   const { ChannelsModule } = await import('../../src/modules/channels/channels.module.js');
+  // Channel administration is approvable (PM/research/11 §4): its controller needs the approval services.
+  const { ApprovalsModule } = await import('../../src/modules/approvals/approvals.module.js');
   const { RealtimeModule } = await import('../../src/modules/realtime/realtime.module.js');
   const { TelemetryModule } = await import('../../src/modules/telemetry/telemetry.module.js');
   const { AnalyticsModule } = await import('../../src/modules/analytics/analytics.module.js');
@@ -35,7 +37,7 @@ async function bootApi(): Promise<INestApplication> {
   // Local module (not AppModule): infrastructure + the modules under test.
   class TestApiModule {}
   Module({
-    imports: [LoggerModule.forRoot({ pinoHttp: { level: 'silent' } }), InfrastructureModule, RealtimeModule, ChannelsModule, TelemetryModule, AnalyticsModule, QualityModule],
+    imports: [LoggerModule.forRoot({ pinoHttp: { level: 'silent' } }), InfrastructureModule, ApprovalsModule, RealtimeModule, ChannelsModule, TelemetryModule, AnalyticsModule, QualityModule],
     providers: [
       { provide: APP_GUARD, useClass: AuthGuard },
       { provide: APP_FILTER, useClass: OcsoExceptionFilter },
@@ -66,7 +68,7 @@ beforeAll(async () => {
     OCSO_TRACE_URL_TEMPLATE: 'http://localhost:16686/trace/{traceId}',
   });
   app = await bootApi();
-  const { AgentService, ChannelService, IngressService, hashPassword, setPasswordCredential } = await import('@ocso/application');
+  const { AgentService, ApprovalDecisionService, ApprovalService, ChannelService, IngressService, hashPassword, setPasswordCredential } = await import('@ocso/application');
   const { AUTH } = await import('../../src/infrastructure/tokens.js');
   const auth = app.get<{ handler(r: Request): Promise<Response> }>(AUTH);
   const hash = await hashPassword(PASSWORD);
@@ -88,7 +90,10 @@ beforeAll(async () => {
   const principal = (key: 'admin' | 'lead'): Principal => ({ userId: ids[key]!, role: key === 'admin' ? 'TECH' : 'HEAD', displayName: key, teamIds: key === 'lead' ? [ids.team!] : [], via: 'UI' });
   ids.agent = (await new AgentService(db.db).create({ principal: principal('lead'), correlationId: 't' }, { name: 'Maya', purpose: 'customer support', conversationType: 'SUPPORT', description: '', teamIds: [ids.team!] })).id;
   ids.secret = randomBytes(32).toString('hex');
-  const channel = await app.get(ChannelService).create({ principal: principal('admin'), correlationId: 't' }, { kind: 'WEBCHAT', name: 'Web chat', status: 'ACTIVE', settings: {}, secrets: { visitorTokenSecret: ids.secret } });
+  const channel = await app.get(ChannelService).create({ principal: principal('admin'), correlationId: 't' }, { kind: 'WEBCHAT', name: 'Web chat', status: 'DRAFT', settings: {}, secrets: { visitorTokenSecret: ids.secret } });
+  // A new channel is a draft: the lead (a Head, approvals.check.channels) approves its activation.
+  const activation = await app.get(ApprovalService).submit({ principal: principal('admin'), correlationId: 't' }, { objectKind: 'channel', objectId: channel.id, action: 'ACTIVATE', checkerId: ids.lead!, reason: 'Open web chat' });
+  await app.get(ApprovalDecisionService).decide({ principal: principal('lead'), correlationId: 't' }, activation.id, { decision: 'APPROVE', reason: 'ok', contentHash: activation.contentHash });
   await routeChannel({ db }, channel.id, ids.agent);
   ids.channel = channel.id;
   ids.publicKey = channel.publicKey;

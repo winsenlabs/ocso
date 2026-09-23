@@ -21,6 +21,8 @@ const VIEWS: ReadonlyArray<{ key: InboxView; label: string }> = [
   { key: 'human', label: 'Human active' },
   { key: 'priority', label: 'Priority' },
   { key: 'resolved', label: 'Resolved' },
+  // A router is still deciding which queue (PM/research/11 §5.7).
+  { key: 'routing', label: 'Routing' },
 ];
 const VIEW_KEYS = new Set<string>(VIEWS.map((v) => v.key));
 
@@ -252,6 +254,7 @@ function InboxEmpty({ view, term, tag, waiting, onShowWaiting, onClearTag }: { v
       </EmptyState>
     );
   }
+  if (view === 'routing') return <EmptyState size="sm" title="No router is asking anyone">Conversations whose router is still choosing a queue (a menu or a classifier) appear here.</EmptyState>;
   if (view === 'waiting') return <EmptyState size="sm" title="Nobody is waiting for a human">Escalated conversations in your queues appear here to claim.</EmptyState>;
   return <EmptyState size="sm" title="No conversations here">Nothing in this view right now. New conversations appear live.</EmptyState>;
 }

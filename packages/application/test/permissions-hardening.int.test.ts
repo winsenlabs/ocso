@@ -5,6 +5,7 @@ import { createTestDatabase, type TestDatabase } from '@ocso/db/testing';
 import { auditEvents, authSessions, teamMembers, userPermissionGrants, users, uuidv7 } from '@ocso/db';
 import {
   AuthPolicyService,
+  applyAuthPolicy,
   PermissionService,
   SessionLiveness,
   TeamService,
@@ -249,7 +250,8 @@ describe('effective permissions, not presets, decide routing, streams and MFA', 
 
   it('a grant of an MFA-required preset permission requires MFA', async () => {
     const policy = new AuthPolicyService(t.db);
-    await policy.update(await actorOf(t.db, ids.tech), { requireMfaRoles: ['TECH'] });
+    // Applied as an approved settings proposal would (the direct path is approval_required).
+    await t.db.transaction(async (tx) => applyAuthPolicy(tx, await actorOf(t.db, ids.tech), { requireMfaRoles: ['TECH'] }));
     const target = await addPerson(t.db, { name: 'Gus Granted', role: 'SERVICE', teamIds: [ids.cards] });
     const before = (await loadPrincipal(t.db, target, 'UI'))!;
     expect((await policy.mfaState(before.role, 'password', false, before.permissions)).required).toBe(false);
@@ -257,6 +259,6 @@ describe('effective permissions, not presets, decide routing, streams and MFA', 
     await t.db.transaction((tx) => applyPermissionChangeSet(tx, tech, { userId: target, ops: [{ op: 'GRANT', permission: P.USERS_MANAGE, expiresAt: null }], reason }, { proposalId: uuidv7() }));
     const after = (await loadPrincipal(t.db, target, 'UI'))!;
     expect((await new AuthPolicyService(t.db).mfaState(after.role, 'password', false, after.permissions)).required).toBe(true);
-    await policy.update(await actorOf(t.db, ids.tech), { requireMfaRoles: [] });
+    await t.db.transaction(async (tx) => applyAuthPolicy(tx, await actorOf(t.db, ids.tech), { requireMfaRoles: [] }));
   });
 });

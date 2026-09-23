@@ -30,8 +30,19 @@ export interface ApprovalDescriptor {
   readonly actions: readonly ApprovalAction[];
   /** The permission that lets someone propose this change (the same one that guards the object's write route). */
   makePermission(action: ApprovalAction): Permission;
+  /**
+   * Who may propose it, when one permission cannot say (identity: users.manage OR users.manage_team). Replaces
+   * `can(principal, makePermission(action))` wherever the spine checks the maker; makePermission still names
+   * the canonical one (route decorators, coverage). Default: holds makePermission(action).
+   */
+  mayMake?(principal: Principal, action: ApprovalAction): boolean;
   /** The approvals.check.* permission a checker must hold. */
   readonly checkPermission: Permission;
+  /**
+   * Also lets a maker bootstrap (self-approve, recorded) when nobody anywhere holds checkPermission — for a
+   * kind whose makers do not hold its check permission (a sole Tech taking a channel live). Default: none.
+   */
+  readonly bootstrapPermission?: Permission | undefined;
   /** Projection keys a stop action may change without voiding an open proposal (left out of the content hash). */
   readonly hashExclude?: readonly string[] | undefined;
   /** Validates the payload of CREATE/UPDATE proposals. */
@@ -40,8 +51,11 @@ export interface ApprovalDescriptor {
   project(tx: DbOrTx, objectId: string): Promise<Record<string, unknown> | null>;
   /** The same projection with the proposal applied; null for DELETE. */
   projectAfter(tx: DbOrTx, proposal: ProposalRow): Promise<Record<string, unknown> | null>;
-  /** Owning teams at submit; [] = platform-wide. */
-  teamIds(tx: DbOrTx, objectId: string): Promise<string[]>;
+  /**
+   * Owning teams at submit (and on an edit); [] = platform-wide. `payload`, when given, is the proposal's: a change
+   * that moves the object to another owner (a rule retargeted to another team's agent) names both owners' teams.
+   */
+  teamIds(tx: DbOrTx, objectId: string, payload?: Record<string, unknown>): Promise<string[]>;
   /** 'kind:id@<updated_at ISO>' for everything whose change invalidates the proposal. */
   dependencies(tx: DbOrTx, proposal: ProposalRow): Promise<string[]>;
   /** Visibility (ADR-026); throws exactly as the object's own service does (404 out of scope). */
@@ -88,6 +102,14 @@ export interface ApprovalDescriptor {
    * and both hashes are re-checked — so `activate` must not change anything `project` returns.
    */
   activateDeferred?(db: Db, actor: ActorContext, proposal: ProposalRow): Promise<void>;
+  /**
+   * Only with DEFERRED: whether the approved change is already in effect — committed by `activate` (a new user is
+   * active; the invite is a follow-up) or by an earlier activateDeferred that crashed before the spine stamped it (a
+   * rule already deleted). The worker then skips re-validation and the hash checks, runs activateDeferred as an
+   * idempotent follow-up and stamps the proposal ACTIVATED — a failing follow-up is recorded on that decision, never
+   * turned into BLOCKED, because nothing live may carry a blocked approval. Default: false.
+   */
+  settled?(db: DbOrTx, proposal: ProposalRow): Promise<boolean>;
   /** Live objects of this kind (for the exception report's live-without-approval check). */
   liveObjects(tx: DbOrTx): Promise<string[]>;
   /** Queue row + email subject: "Take Maya live". */

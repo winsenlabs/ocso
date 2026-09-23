@@ -1,15 +1,15 @@
 import { eq } from 'drizzle-orm';
-import { recordAudit, seedDefaultAlertRules } from '@ocso/application';
+import { SETTINGS_OBJECT_ID, recordAudit, seedDefaultAlertRules } from '@ocso/application';
 import { auditEvents } from '@ocso/db';
 import type { SeedContext } from './context.js';
 import { USERS } from './data/organization.js';
-import { publishAgents, seedAgents } from './steps/agents.js';
+import { approveAs, publishAgents, seedAgents } from './steps/agents.js';
 import { seedWebChat } from './steps/channels.js';
 import { seedMcp } from './steps/mcp.js';
 import { seedModels } from './steps/models.js';
 import { seedOrganization } from './steps/organization.js';
 import { seedRouting } from './steps/routing.js';
-import { seedRouters } from './steps/routers.js';
+import { approveRouting, seedRouters } from './steps/routers.js';
 
 /** Audit action written once the demo is complete; its presence makes the seed a no-op. */
 export const SEED_MARKER = 'demo.seed_completed';
@@ -37,13 +37,15 @@ export async function runDemoSeed(ctx: SeedContext): Promise<SeedOutcome> {
 
     const people = await seedOrganization(ctx);
     const queues = await seedRouting(ctx, people.lead, people.teamIds);
-    const profiles = await seedModels(ctx, people.admin);
-    await ctx.services.settings.updateDeployment(people.admin, { internalAgentProfileId: profiles.supportFast });
+    const profiles = await seedModels(ctx, people.admin, people.lead);
+    // Settings change only through an approval (PM/research/11 §4): the Tech admin proposes, a Head checks.
+    await approveAs(ctx, people.admin, people.lead, { objectKind: 'deployment_settings', objectId: SETTINGS_OBJECT_ID, action: 'UPDATE', payload: { deployment: { internalAgentProfileId: profiles.supportFast } } }, 'Demo seed: the internal agent uses the fast profile');
     const agents = await seedAgents(ctx, people.leads, { profiles, queues, teams: people.teamIds });
-    const webchat = await seedWebChat(ctx, people.admin);
+    const webchat = await seedWebChat(ctx, people.admin, people.lead);
     await seedRouters(ctx, people.admin, people.lead, agents, queues, webchat.id);
     await publishAgents(ctx, people.leads, agents);
-    const mcp = await seedMcp(ctx, people.admin, people.lead, agents.maya);
+    await approveRouting(ctx, people.leads, queues);
+    const mcp = await seedMcp(ctx, people.admin, people.lead, agents.maya, people.leads.lead2);
     const alerts = await seedDefaultAlertRules(ctx.db, ctx.correlationId);
     ctx.log(`default alert rules: ${alerts.created.length} created, ${alerts.existing} already present`);
 

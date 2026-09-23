@@ -1,10 +1,11 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { PERMISSION_GROUPS, isEmptyRightsChange, planRightsChange, type Permission, type PermissionGroup, type PermissionOp, type RightsState, type Role, type UserStatus } from '@ocso/auth';
 import { AlertBanner } from '@/components/ui/alert-banner';
 import { Modal } from '@/components/ui/modal';
-import { changePermissionsAction, type PermissionChangeForm, type PermissionChangeOutcome } from '@/lib/actions/permissions';
+import { useApprovalRequest } from '@/components/approvals/use-approval-request';
+import { changePermissionsAction, requestPermissionChangeAction, type PermissionChangeForm, type PermissionChangeOutcome } from '@/lib/actions/permissions';
 
 export interface PermissionChoice {
   permission: Permission;
@@ -42,8 +43,8 @@ function toOps(rows: readonly Row[]): PermissionOp[] {
  * "Change permissions" (PM/research/11 §3.6): grant, revoke or clear single
  * permissions with an optional expiry and a reason. The dialog plans the
  * change as the API will: reductions apply at once, even beside an increase;
- * what widens access needs a checker's approval (the API answers 409
- * approval_required until the approvals screen can name one).
+ * what widens access goes to a checker named in the submit-for-approval modal
+ * (never the maker, never this user; bootstrap only when nobody else can check).
  */
 export function ChangePermissions({ user, overrides, catalogue }: ChangePermissionsProps) {
   const [open, setOpen] = useState(false);
@@ -52,6 +53,7 @@ export function ChangePermissions({ user, overrides, catalogue }: ChangePermissi
   const [outcome, setOutcome] = useState<PermissionChangeOutcome | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const approval = useApprovalRequest();
 
   const before: RightsState = useMemo(
     () => ({ role: user.role, status: user.status, teamIds: user.teamIds, overrides: overrides.map((o) => ({ ...o, expiresAt: o.expiresAt ? new Date(o.expiresAt) : null })) }),
@@ -76,24 +78,42 @@ export function ChangePermissions({ user, overrides, catalogue }: ChangePermissi
     setOutcome(null);
   };
   const update = (key: number, patch: Partial<Row>) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
-  const submit = () =>
+  const form = (choice: PermissionChangeForm['approval'] = null): PermissionChangeForm => ({
+    userId: user.id,
+    preset: null,
+    changes: rows.flatMap((r): PermissionChangeForm['changes'] => {
+      if (!r.permission) return [];
+      return r.op === 'GRANT' ? [{ op: 'GRANT', permission: r.permission, expiresOn: r.expiresOn || null }] : [{ op: r.op, permission: r.permission }];
+    }),
+    reason,
+    approval: choice,
+  });
+  const submit = () => {
+    if (increase) {
+      // Name the checker first: the reductions in the same change still apply the moment it is sent.
+      approval.run({ objectKind: 'permission_change', objectId: user.id, title: `Change ${user.name}'s access` }, (choice) => requestPermissionChangeAction(form(choice ?? null)), { always: true });
+      return;
+    }
     start(async () => {
-      const result = await changePermissionsAction({
-        userId: user.id,
-        preset: null,
-        changes: rows.flatMap((r): PermissionChangeForm['changes'] => {
-          if (!r.permission) return [];
-          return r.op === 'GRANT' ? [{ op: 'GRANT', permission: r.permission, expiresOn: r.expiresOn || null }] : [{ op: r.op, permission: r.permission }];
-        }),
-        reason,
-        checkerId: null,
-      });
+      const result = await changePermissionsAction(form());
       setOutcome(result);
       if (result.kind === 'applied' || result.kind === 'proposed') {
         setNotice(result.message);
         close();
       }
     });
+  };
+  const sent = approval.outcome;
+  const clearApproval = approval.clear;
+  useEffect(() => {
+    if (!sent) return;
+    setNotice(sent === 'proposed' ? 'Sent for approval. It applies once the checker approves it; any reductions applied at once.' : 'Approved as the only eligible checker (bootstrap) and applied.');
+    clearApproval();
+    setOpen(false);
+    setRows([{ key: 0, op: 'GRANT', permission: '', expiresOn: '' }]);
+    setReason('');
+    setOutcome(null);
+  }, [sent, clearApproval]);
 
   return (
     <>
@@ -122,13 +142,18 @@ export function ChangePermissions({ user, overrides, catalogue }: ChangePermissi
               <button type="button" className="btn" onClick={close}>
                 Cancel
               </button>
-              <button type="button" className="btn accent" disabled={pending || !ops.length || duplicate || reason.trim().length < 3} onClick={submit}>
-                {pending ? 'Saving…' : increase ? 'Request approval' : 'Apply now'}
+              <button type="button" className="btn accent" disabled={pending || approval.pending || !ops.length || duplicate || reason.trim().length < 3} onClick={submit}>
+                {pending ? 'Saving…' : increase ? 'Choose a checker…' : 'Apply now'}
               </button>
             </>
           }
         >
           <div style={{ display: 'grid', gap: 12 }}>
+            {approval.error ? (
+              <AlertBanner tone="error" style={{ margin: 0 }}>
+                {approval.error}
+              </AlertBanner>
+            ) : null}
             {outcome && (outcome.kind === 'approval_required' || outcome.kind === 'error') ? (
               <AlertBanner tone={outcome.kind === 'error' ? 'error' : 'warn'} title={outcome.kind === 'approval_required' ? 'Approval required' : undefined} style={{ margin: 0 }}>
                 {outcome.message}
@@ -191,6 +216,7 @@ export function ChangePermissions({ user, overrides, catalogue }: ChangePermissi
               <p className="mono-sm">Reducing access is never held for approval: it applies as soon as you save.</p>
             ) : null}
           </div>
+          {approval.modal}
         </Modal>
       ) : null}
     </>

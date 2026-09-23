@@ -6,10 +6,11 @@ import { createTestDatabase, type TestDatabase } from '@ocso/db/testing';
 import { uuidv7, virtualAgents } from '@ocso/db';
 import type { Principal } from '@ocso/auth';
 import { InMemorySecretRows, LocalSecretStore, parseMasterKey } from '@ocso/secrets';
-import { AgentToolGrantService, McpConnectionService, type ActorContext, type ConnectionView } from '../src/index.js';
+import { AgentToolGrantService, McpConnectionService, sweepApprovalSecrets, type ActorContext, type ConnectionView } from '../src/index.js';
 import { startV2Server, type McpTestServer } from '../../mcp/test/helpers/custom-servers.js';
 import { createTeam, ownAgents } from './support/ownership.js';
 import { startDemo, type DemoServer } from '../../mcp/test/helpers/demo-server.js';
+import { platformApprover, type PlatformApprover } from './support/platform-approvals.js';
 
 const TOKEN = 'meridian-demo-bearer-token-5f1c2a';
 // Lead and exec belong to the team that owns both agents (ADR-026).
@@ -25,6 +26,7 @@ let demo: DemoServer;
 let secrets: LocalSecretStore;
 let svc: McpConnectionService;
 let grants: AgentToolGrantService;
+let approver: PlatformApprover;
 const agentA = uuidv7();
 const agentB = uuidv7();
 
@@ -74,6 +76,7 @@ beforeAll(async () => {
   secrets = new LocalSecretStore(new InMemorySecretRows(), parseMasterKey('k1', randomBytes(32).toString('base64')));
   svc = new McpConnectionService({ db: t.db, secrets, publicUrl: 'http://localhost:3000' });
   grants = new AgentToolGrantService(t.db);
+  approver = await platformApprover(t.db, { secrets });
   demo = await startDemo({ mode: 'bearer', token: TOKEN });
 });
 afterAll(async () => {
@@ -130,7 +133,11 @@ describe('MCP connection wizard against the bearer-mode demo server', () => {
 
   it('classifies tools, approves the connection, and exposes approved + granted tools to allowed agents only', async () => {
     const byName = Object.fromEntries((await svc.listTools(as(lead), conn.id)).map((tool) => [tool.name, tool]));
-    await expect(svc.approve(as(admin), conn.id, { allowedAgentIds: [agentA] })).rejects.toMatchObject({ code: 'mcp_no_tools_approved' });
+    // Going live is an ACTIVATE proposal; it is refused at submit while no tool is approved.
+    await expect(approver.submit(as(admin), 'mcp_connection', conn.id, 'ACTIVATE')).rejects.toMatchObject({
+      code: 'validation_failed',
+      details: { problems: expect.arrayContaining([expect.objectContaining({ code: 'mcp_no_tools_approved' })]) },
+    });
     const classify = {
       tools: [
         { toolId: byName['crm.get_customer']!.id, riskClass: 'READ' as const, approved: true },
@@ -145,9 +152,19 @@ describe('MCP connection wizard against the bearer-mode demo server', () => {
     expect(classified.filter((tool) => tool.approved).map((tool) => tool.name)).toEqual(['crm.get_customer', 'payments.reverse_transaction']);
 
     await expect(svc.approve(as(admin), conn.id, { allowedAgentIds: [uuidv7()] })).rejects.toMatchObject({ code: 'mcp_unknown_agents' });
-    const approved = await svc.approve(as(admin), conn.id, { allowedAgentIds: [agentA], confirmationPolicy: 'ALL_WRITES', healthCheckSeconds: 30 });
-    expect(approved).toMatchObject({ status: 'ACTIVE', stage: 'ACTIVE', approvedBy: admin.userId, allowedAgentIds: [agentA], confirmationPolicy: 'ALL_WRITES' });
+    // "Approve" on a draft records the agent policy; a second person's approval takes it live (deferred: the
+    // worker re-contacts the server and checks the tool set is the one reviewed).
+    const drafted = await svc.approve(as(admin), conn.id, { allowedAgentIds: [agentA], confirmationPolicy: 'ALL_WRITES', healthCheckSeconds: 30 });
+    expect(drafted).toMatchObject({ status: 'PENDING', approvedBy: null, allowedAgentIds: [agentA], confirmationPolicy: 'ALL_WRITES' });
+    const proposal = await approver.approve(as(admin), 'mcp_connection', conn.id, 'ACTIVATE');
+    expect(proposal).toMatchObject({ status: 'APPROVED', activating: true });
+    expect(await approver.finish(proposal.id)).toBe('ACTIVATED');
+    const approved = await svc.get(as(admin), conn.id);
+    expect(approved).toMatchObject({ status: 'ACTIVE', stage: 'ACTIVE', approvedBy: approver.checker.userId, allowedAgentIds: [agentA], confirmationPolicy: 'ALL_WRITES' });
     expect(approved.tools).toEqual({ total: 7, approved: 2, changed: 0 });
+    // Approved: tool approvals and the policy change by proposal now.
+    await expect(svc.classifyTools(as(admin), conn.id, classify)).rejects.toMatchObject({ code: 'approval_required' });
+    await expect(svc.approve(as(admin), conn.id, { allowedAgentIds: '*' })).rejects.toMatchObject({ code: 'approval_required' });
     expect(await catalog(agentA)).toEqual([]); // approved but not yet granted
 
     const getCustomer = byName['crm.get_customer']!.id;
@@ -212,7 +229,8 @@ describe('MCP connection wizard against the bearer-mode demo server', () => {
     expect(due.map((d) => d.connectionId)).toEqual([conn.id]);
     expect(due[0]).toMatchObject({ health: 'HEALTHY', status: 'ACTIVE' });
     expect(await svc.runDueHealthChecks()).toEqual([]); // just checked: not due again
-    await svc.delete(as(admin), draft.id);
+    await expect(svc.delete(as(admin), draft.id)).rejects.toMatchObject({ code: 'approval_required' });
+    await approver.approve(as(admin), 'mcp_connection', draft.id, 'DELETE');
   });
 
   it('disable hides tools and blocks discovery; enable restores; delete revokes secrets and grants', async () => {
@@ -221,15 +239,21 @@ describe('MCP connection wizard against the bearer-mode demo server', () => {
     expect(await catalog(agentA)).toEqual([]);
     await expect(svc.discover(as(admin), conn.id)).rejects.toMatchObject({ code: 'mcp_connection_disabled' });
     expect(await svc.runHealthCheck(conn.id)).toMatchObject({ health: 'SKIPPED' });
-    expect((await svc.enable(as(admin), conn.id)).status).toBe('ACTIVE');
+    // Re-enabling is an ACTIVATE proposal (deferred), disabling was immediate.
+    await expect(svc.enable(as(admin), conn.id)).rejects.toMatchObject({ code: 'approval_required', details: { action: 'ACTIVATE' } });
+    expect(await approver.finish((await approver.approve(as(admin), 'mcp_connection', conn.id, 'ACTIVATE')).id)).toBe('ACTIVATED');
+    expect((await svc.get(as(admin), conn.id)).status).toBe('ACTIVE');
     expect(await catalog(agentA)).toEqual(['meridian-core__crm_get_customer']);
 
     await expect(svc.delete(as(lead), conn.id)).rejects.toMatchObject({ code: 'forbidden' });
+    await expect(svc.delete(as(admin), conn.id)).rejects.toMatchObject({ code: 'approval_required', details: { action: 'DELETE' } });
     const gen = await generation(agentA);
-    await svc.delete(as(admin), conn.id);
+    await approver.approve(as(admin), 'mcp_connection', conn.id, 'DELETE');
     expect(await q(`SELECT 1 FROM mcp_connections WHERE id = $1`, [conn.id])).toHaveLength(0);
     expect(await q(`SELECT 1 FROM tools WHERE connection_id = $1`, [conn.id])).toHaveLength(0);
     expect(await q(`SELECT 1 FROM agent_tool_grants WHERE agent_id = $1`, [agentA])).toHaveLength(0);
+    // Released in the approval's transaction; deleted by the leader sweep once that committed.
+    await sweepApprovalSecrets(t.db, secrets);
     expect(await secrets.describe(conn.auth.tokenRef!)).toBeNull();
     expect(await generation(agentA)).toBe(gen + 1);
     const [audit] = await q<{ after: Record<string, unknown> }>(`SELECT after FROM audit_events WHERE action = 'mcp.connection.delete' AND target_id = $1`, [conn.id]);
@@ -269,6 +293,7 @@ describe('tool drift on a no-auth server', () => {
       tools: ['lookup', 'notes', 'legacy_export'].map((n) => ({ toolId: initial[n]!.id as string, riskClass: 'READ' as const, approved: true })),
     });
     await svc.approve(as(admin), id, { allowedAgentIds: '*' });
+    expect(await approver.finish((await approver.approve(as(admin), 'mcp_connection', id, 'ACTIVATE')).id)).toBe('ACTIVATED');
     await grants.set(as(lead), agentB, { grants: ['lookup', 'notes', 'legacy_export'].map((n) => ({ toolId: initial[n]!.id as string })) });
     expect(await catalog(agentB)).toEqual(['drift-svc__legacy_export', 'drift-svc__lookup', 'drift-svc__notes']);
 
@@ -288,7 +313,8 @@ describe('tool drift on a no-auth server', () => {
     expect(await catalog(agentB)).toEqual([]);
     expect(await generation(agentB)).toBe(gen + 1);
 
-    await svc.classifyTools(as(admin), id, { tools: [{ toolId: now['lookup']!.id as string, riskClass: 'READ', approved: true }] });
+    // Re-approving a drifted tool on an approved connection is an UPDATE proposal.
+    await approver.approve(as(admin), 'mcp_connection', id, 'UPDATE', { tools: [{ toolId: now['lookup']!.id as string, riskClass: 'READ', approved: true }] });
     expect(await catalog(agentB)).toEqual(['drift-svc__lookup']);
     expect((await svc.listTools(as(admin), id)).find((tool) => tool.name === 'lookup')).toMatchObject({ approved: true, changedSinceApproval: false });
 

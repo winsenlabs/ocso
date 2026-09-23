@@ -31,6 +31,7 @@ function formModel(p: Provider): ProviderFormModel {
     residencyZone: p.residencyZone,
     settings: p.settings,
     credentialKeys: Object.keys(p.secretRefs),
+    approval: p.approval,
     enabled: p.enabled,
     maxConcurrency: p.maxConcurrency,
     profileNames: p.profiles.map((r) => r.name),

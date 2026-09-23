@@ -6,7 +6,10 @@ import { AlertBanner } from '@/components/ui/alert-banner';
 import { Drawer } from '@/components/ui/drawer';
 import { KeyValue } from '@/components/ui/key-value';
 import { StatusChip } from '@/components/ui/status-chip';
-import { checkHealthAction, classifyToolsAction, deleteConnectionAction, rediscoverAction, setConnectionEnabledAction } from '@/lib/actions/mcp';
+import { PendingBadge } from '@/components/approvals/pending-badge';
+import { useApprovalRequest } from '@/components/approvals/use-approval-request';
+import { checkHealthAction, classifyToolsAction, rediscoverAction, setConnectionEnabledAction } from '@/lib/actions/mcp';
+import { DeleteByApproval, LifecycleActions } from '../lifecycle-actions';
 import type { AgentLite, Connection, Tool } from '@/lib/api/mcp';
 import { formatAge, formatLatency } from '@/lib/format';
 import { ConfirmAction } from '../confirm-action';
@@ -38,6 +41,7 @@ export function ConnectionDrawer({ connection: c, tools, agents, canManage, clos
   const [overrides, setOverrides] = useState<Record<string, ToolDecision>>({});
   const [message, setMessage] = useState<{ tone: 'info' | 'error'; text: string } | null>(null);
   const [pending, start] = useTransition();
+  const approval = useApprovalRequest();
   const decisions = { ...initialDecisions(tools), ...overrides };
   const status = connectionStatus(c);
   const info = serverInfoSummary(c.serverInfo);
@@ -61,26 +65,32 @@ export function ConnectionDrawer({ connection: c, tools, agents, canManage, clos
       const r = await checkHealthAction(c.id, 'connections');
       return r.ok ? { ok: true, text: `Health: ${r.data.health.toLowerCase()} · ${formatLatency(r.data.latencyMs)} · ${r.data.detail}` } : { ok: false, text: r.message };
     });
-  const save = () =>
-    act(async () => {
-      const live = new Set(tools.filter((t) => !t.removedAt).map((t) => t.id));
-      const list = Object.entries(decisions)
-        .filter(([id]) => live.has(id))
-        .map(([toolId, d]) => ({ toolId, ...d }));
-      const r = await classifyToolsAction(c.id, list);
-      if (r.ok) setOverrides({});
-      return r.ok ? { ok: true, text: `Saved · ${r.data.approved} tools approved` } : { ok: false, text: r.message };
+  // A draft's review saves directly; on an approved connection it is a proposal (the submit modal asks for a checker).
+  const save = () => {
+    setMessage(null);
+    const live = new Set(tools.filter((t) => !t.removedAt).map((t) => t.id));
+    const list = Object.entries(decisions)
+      .filter(([id]) => live.has(id))
+      .map(([toolId, d]) => ({ toolId, ...d }));
+    approval.run({ objectKind: 'mcp_connection', objectId: c.id, title: `Change tool approvals of ${c.name}` }, (choice) => classifyToolsAction(c.id, list, choice), {
+      onApplied: (data) => {
+        setOverrides({});
+        if (data) setMessage({ tone: 'info', text: `Saved · ${data.approved} tools approved` });
+      },
     });
+  };
 
   return (
     <Drawer title={c.name} sub={c.url} onClose={close} footer={<span className="mono-sm">every change here is audited and attributed to you</span>}>
       <div role="status" aria-live="polite">
-        {message ? (
-          <AlertBanner tone={message.tone} style={{ margin: 0 }}>
-            {message.text}
+        {message || approval.error || approval.notice ? (
+          <AlertBanner tone={message?.tone ?? (approval.error ? 'error' : 'info')} style={{ margin: 0 }}>
+            {message?.text ?? approval.error ?? approval.notice}
           </AlertBanner>
         ) : null}
       </div>
+      {approval.modal}
+      {c.kind !== 'PERSONAL' ? <PendingBadge state={c.approval} /> : null}
       {c.status === 'AUTH_REQUIRED' ? (
         <AlertBanner tone="warn" style={{ margin: 0 }} title="The server rejects the stored credential." action={canManage ? <Link className="btn tiny" href={connectionsHref({ tab: 'mcp', connection: c.id, step: 'auth' })} scroll={false}>Re-authenticate</Link> : null}>
           Tools on this connection are unavailable to agents until it is re-authenticated.
@@ -144,23 +154,25 @@ export function ConnectionDrawer({ connection: c, tools, agents, canManage, clos
       {canManage ? (
         <div className="rowsplit">
           {disabled ? (
-            <button type="button" className="btn tiny" disabled={pending} onClick={() => act(async () => {
-              const r = await setConnectionEnabledAction(c.id, true);
-              return r.ok ? { ok: true, text: `Enabled · status ${r.data.status.toLowerCase()}` } : { ok: false, text: r.message };
-            })}>
-              Enable
-            </button>
+            // Re-enabling is an ACTIVATE proposal (a second person approves; the server is contacted again first).
+            <LifecycleActions kind="mcp_connection" id={c.id} name={c.name} state="stopped" approval={c.approval} canDelete={false} />
           ) : (
             <ConfirmAction label="Disable" buttonClass="btn tiny" title={`Disable ${c.name}`} confirmLabel="Disable connection" run={() => setConnectionEnabledAction(c.id, false)}>
               {`Agents and people lose access to its ${c.tools.approved} tools immediately; health checks stop. Credentials are kept, so you can enable it again.`}
             </ConfirmAction>
           )}
           <span className="sp" />
-          <ConfirmAction label="Delete" title={`Delete ${c.name}`} confirmLabel="Delete connection" typeToConfirm={c.name} run={() => deleteConnectionAction(c.id, 'connections')} onDone={close}>
-            {c.kind === 'TEMPLATE'
-              ? 'The template and every user’s personal connection to it are deleted, and all their stored credentials are revoked.'
-              : 'The connection, its tools and agent grants are deleted and its stored credentials are revoked. This cannot be undone.'}
-          </ConfirmAction>
+          <DeleteByApproval
+            kind="mcp_connection"
+            id={c.id}
+            name={c.name}
+            buttonClass="btn tiny danger"
+            detail={
+              c.kind === 'TEMPLATE'
+                ? 'Once approved, the template and every user’s personal connection to it are deleted, and all their stored credentials are revoked.'
+                : 'Once approved, the connection, its tools and agent grants are deleted and its stored credentials are revoked. This cannot be undone.'
+            }
+          />
         </div>
       ) : null}
     </Drawer>

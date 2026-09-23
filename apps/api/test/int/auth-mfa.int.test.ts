@@ -11,6 +11,7 @@ const ORIGIN = 'http://localhost:3000';
 
 let h: ApiHarness;
 let admin: string;
+let leadId: string;
 const bearer = (token: string) => ({ authorization: `Bearer ${token}` });
 const tokenOf = (res: { headers: Record<string, unknown> }) => res.headers['set-auth-token'] as string;
 const cookiesOf = (res: { headers: Record<string, unknown> }) => ([] as string[]).concat((res.headers['set-cookie'] as string[] | undefined) ?? []).map((c) => c.split(';')[0]!);
@@ -20,7 +21,7 @@ beforeAll(async () => {
   process.env['OCSO_RECOVERY_TOKEN'] = RECOVERY_TOKEN;
   h = await startApi();
   admin = await completeSetup(h);
-  await h.http().post('/v1/users').set(bearer(admin)).send({ email: LEAD.email, name: 'Lead', role: 'HEAD', password: LEAD.password }).expect(201);
+  leadId = (await h.http().post('/v1/users').set(bearer(admin)).send({ email: LEAD.email, name: 'Lead', role: 'HEAD', password: LEAD.password }).expect(201)).body.id;
 });
 afterAll(async () => {
   delete process.env['OCSO_RECOVERY_TOKEN'];
@@ -34,7 +35,13 @@ describe('require MFA for roles + TOTP', () => {
   it('only the Tech admin sets the policy', async () => {
     const lead = tokenOf(await signIn(LEAD.email, LEAD.password).expect(200));
     await h.http().put('/v1/settings/auth-policy').set(bearer(lead)).send({ requireMfaRoles: [] }).expect(403);
-    const res = await h.http().put('/v1/settings/auth-policy').set(bearer(admin)).send({ requireMfaRoles: ['HEAD'] }).expect(200);
+    // Part of the deployment settings: a proposal a second person approves (PM/research/11 §4).
+    await h.http().put('/v1/settings/auth-policy').set(bearer(admin)).send({ requireMfaRoles: ['HEAD'] }).expect(409);
+    const proposed = await h.http().put('/v1/settings/auth-policy').set(bearer(admin)).send({ requireMfaRoles: ['HEAD'], approval: { checkerId: leadId, reason: 'Heads approve changes' } }).expect(202);
+    expect((await h.http().get('/v1/settings/auth-policy').set(bearer(admin)).expect(200)).body.requireMfaRoles).toEqual([]);
+    const { proposal } = proposed.body;
+    await h.http().post(`/v1/approvals/${proposal.id}/decision`).set(bearer(lead)).send({ decision: 'APPROVE', reason: 'ok', contentHash: proposal.contentHash }).expect(200);
+    const res = await h.http().get('/v1/settings/auth-policy').set(bearer(admin)).expect(200);
     expect(res.body.requireMfaRoles).toEqual(['HEAD']);
   });
 

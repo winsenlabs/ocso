@@ -1,5 +1,6 @@
 import 'server-only';
 import { z } from 'zod';
+import { ObjectApprovalStateSchema, ProposalRefSchema, ProposedSchema } from '@/components/approvals/lib/schemas';
 import { api } from './client';
 
 /**
@@ -92,6 +93,8 @@ export const RuleSchema = z.object({
   createdBy: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  /** Maker–checker (PM/research/11 §4): approved at least once (then changes are proposals), and the proposal waiting on it. */
+  approval: z.object({ approved: z.boolean(), pending: ProposalRefSchema.nullable() }).catch({ approved: false, pending: null }),
 });
 export type AlertRule = z.infer<typeof RuleSchema>;
 
@@ -116,6 +119,8 @@ export const DestinationSchema = z.object({
   enabled: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  /** Maker–checker state (PM/research/11 §4), for managers. */
+  approval: ObjectApprovalStateSchema.nullable().catch(null).default(null),
 });
 export type NotificationDestination = z.infer<typeof DestinationSchema>;
 
@@ -195,8 +200,8 @@ export const deleteAlertRule = (ruleId: string) => api.command('DELETE', `/v1/al
 export const listDestinations = () => api.get('/v1/notification-destinations', z.array(DestinationSchema));
 export const listDestinationKinds = () => api.get('/v1/notification-destinations/kinds', z.array(DestinationKindSchema));
 export const createDestination = (input: DestinationInput) => api.post('/v1/notification-destinations', input, DestinationSchema);
-export const updateDestination = (destinationId: string, patch: Partial<Omit<DestinationInput, 'kind'>>) =>
-  api.patch(`/v1/notification-destinations/${id(destinationId)}`, patch, DestinationSchema);
+export const updateDestination = (destinationId: string, patch: Partial<Omit<DestinationInput, 'kind'>> & { approval?: { checkerId: string; reason: string } | { bootstrap: true; reason?: string | undefined } | undefined }) =>
+  api.patch(`/v1/notification-destinations/${id(destinationId)}`, patch, z.union([DestinationSchema, ProposedSchema]));
 export const deleteDestination = (destinationId: string) => api.command('DELETE', `/v1/notification-destinations/${id(destinationId)}`);
 /** Sends a synthetic alert through the destination right away (network call; allow for its timeout). */
 export const testDestination = (destinationId: string) =>

@@ -3,10 +3,11 @@
 import { useState, useTransition } from 'react';
 import { AlertBanner } from '@/components/ui/alert-banner';
 import { Modal } from '@/components/ui/modal';
-import { deletePricingAction, savePricingAction } from '@/lib/actions/models';
+import { useApprovalRequest } from '@/components/approvals/use-approval-request';
+import { savePricingAction } from '@/lib/actions/models';
 import type { CatalogPrice } from '@/lib/api/model-catalog';
 import type { Pricing, ProviderKind, ProviderKindView } from '@/lib/api/models';
-import { ConfirmAction } from '../confirm-action';
+import { DeleteByApproval } from '../lifecycle-actions';
 import { decimalFromMicros, microsFromDecimal } from '../models/money';
 import { Input } from '../profiles/profile-fields';
 import { useCloseTo } from '../routed-modal';
@@ -47,6 +48,7 @@ export function PricingDialog({ kinds, row, closeHref, initial }: Props) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const approval = useApprovalRequest();
 
   function save() {
     const next: Record<string, string> = {};
@@ -63,16 +65,22 @@ export function PricingDialog({ kinds, row, closeHref, initial }: Props) {
     setErrors(next);
     setMessage(null);
     if (Object.keys(next).length) return;
+    const body = {
+      providerKind: kind,
+      modelPattern: pattern.trim(),
+      currency: currency.trim(),
+      inputPerMTokMicros: micros.input!,
+      outputPerMTokMicros: micros.output!,
+      cachedInputPerMTokMicros: micros.cacheRead,
+      cacheWritePerMTokMicros: micros.cacheWrite,
+    };
+    if (row) {
+      // A draft saves directly; a live price (approved or from the catalog) asks for a checker: a proposal.
+      approval.run({ objectKind: 'model_pricing', objectId: row.id, title: `Change price for ${row.modelPattern}` }, (choice) => savePricingAction(row.id, body, choice), { onApplied: () => close() });
+      return;
+    }
     start(async () => {
-      const r = await savePricingAction(row?.id ?? null, {
-        providerKind: kind,
-        modelPattern: pattern.trim(),
-        currency: currency.trim(),
-        inputPerMTokMicros: micros.input!,
-        outputPerMTokMicros: micros.output!,
-        cachedInputPerMTokMicros: micros.cacheRead,
-        cacheWritePerMTokMicros: micros.cacheWrite,
-      });
+      const r = await savePricingAction(null, body);
       if (r.ok) close();
       else setMessage(r.message);
     });
@@ -89,9 +97,12 @@ export function PricingDialog({ kinds, row, closeHref, initial }: Props) {
           <span className="mono-sm">new usage is costed with the latest effective row</span>
           <span className="sp" />
           {row ? (
-            <ConfirmAction label="Delete" buttonClass="btn danger" title={`Delete price for ${row.modelPattern}`} confirmLabel="Delete price" run={() => deletePricingAction(row.id)} onDone={close}>
-              Future usage of matching models is recorded without a cost until another price row matches. Past usage keeps its recorded cost.
-            </ConfirmAction>
+            <DeleteByApproval
+              kind="model_pricing"
+              id={row.id}
+              name={`price for ${row.modelPattern}`}
+              detail="Once approved, future usage of matching models is recorded without a cost until another price row matches. Past usage keeps its recorded cost."
+            />
           ) : null}
           <button type="button" className="btn" onClick={close}>
             Cancel
@@ -111,11 +122,17 @@ export function PricingDialog({ kinds, row, closeHref, initial }: Props) {
           save();
         }}
       >
-        {message ? (
+        {message || approval.error ? (
           <AlertBanner tone="error" style={{ margin: 0 }}>
-            {message}
+            {message ?? approval.error}
           </AlertBanner>
         ) : null}
+        {approval.notice ? (
+          <AlertBanner tone="info" style={{ margin: 0 }}>
+            {approval.notice}
+          </AlertBanner>
+        ) : null}
+        {approval.modal}
         {row?.origin === 'catalog' ? (
           <AlertBanner tone="info" style={{ margin: 0 }}>
             From the {row.catalogSource ?? 'model'} catalog and kept current by catalog refreshes. Saving an edit makes it a manual price that refreshes never change.

@@ -58,7 +58,8 @@ async function ensureEscalations(ctx: SeedContext, lead: ActorContext, agentId: 
   const existing = await ctx.db.select({ name: escalationRules.name }).from(escalationRules).where(eq(escalationRules.agentId, agentId));
   for (const { queue, ...rule } of agent.escalations) {
     if (existing.some((e) => e.name === rule.name)) continue;
-    await ctx.services.escalations.create(lead, agentId, { ...rule, targetQueueId: queues[queue], enabled: true });
+    // A draft (off) until publishAgents turns it on through an approval.
+    await ctx.services.escalations.create(lead, agentId, { ...rule, targetQueueId: queues[queue], enabled: false });
   }
 }
 
@@ -99,5 +100,25 @@ export async function publishAgents(ctx: SeedContext, leads: Record<LeadKey, Act
     });
     await ctx.services.approvalDecisions.decide(checker, proposal.id, { decision: 'APPROVE', reason: 'Demo seed: reviewed', contentHash: proposal.contentHash });
     ctx.log(`${agent.name} is live (approved by ${checker.principal!.displayName})`);
+    await enableEscalations(ctx, maker, checker, id, agent.name);
   }
+}
+
+/** New escalation rules are drafts (off): each is turned on through its own approval, checked by the other Head. */
+async function enableEscalations(ctx: SeedContext, maker: ActorContext, checker: ActorContext, agentId: string, agentName: string): Promise<void> {
+  const drafts = await ctx.db.select({ id: escalationRules.id }).from(escalationRules).where(and(eq(escalationRules.agentId, agentId), eq(escalationRules.enabled, false)));
+  for (const rule of drafts) await approveAs(ctx, maker, checker, { objectKind: 'escalation_rule', objectId: rule.id, action: 'ACTIVATE' }, 'Demo seed: turn the escalation rule on');
+  if (drafts.length) ctx.log(`turned on ${drafts.length} escalation rule(s) of ${agentName} (approved by ${checker.principal!.displayName})`);
+}
+
+/** Propose as `maker`, approve as `checker` (the demo's two Heads check each other). */
+export async function approveAs(
+  ctx: SeedContext,
+  maker: ActorContext,
+  checker: ActorContext,
+  target: { objectKind: string; objectId: string; action: 'CREATE' | 'UPDATE' | 'DELETE' | 'ACTIVATE'; payload?: Record<string, unknown> },
+  reason: string,
+): Promise<void> {
+  const proposal = await ctx.services.approvals.submit(maker, { ...target, checkerId: checker.principal!.userId, reason });
+  await ctx.services.approvalDecisions.decide(checker, proposal.id, { decision: 'APPROVE', reason: 'Demo seed: reviewed', contentHash: proposal.contentHash });
 }

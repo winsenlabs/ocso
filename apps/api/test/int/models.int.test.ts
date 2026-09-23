@@ -1,6 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
 import { completeSetup, startApi, type ApiHarness } from './harness.js';
+import { approveOverHttp, approveProposal, platformChecker, type Checker } from './platform.js';
+import { sweepApprovalSecrets } from '@ocso/application';
+import type { SecretStore } from '@ocso/secrets';
+import { SECRET_STORE } from '../../src/infrastructure/tokens.js';
 
 const SECRET = 'sk-ant-api-INTEGRATION-SECRET-0123456789';
 const ROTATED = 'sk-ant-api-INTEGRATION-ROTATED-987654321';
@@ -13,6 +17,7 @@ let exec: string;
 let anthropicId: string;
 let devId: string;
 let profileId: string;
+let checker: Checker;
 
 const auth = (token: string) => ({ authorization: `Bearer ${token}` });
 
@@ -28,6 +33,7 @@ beforeAll(async () => {
   }
   lead = await h.loginAs('lead@ocso.test', 'HEAD password 1234');
   exec = await h.loginAs('exec@ocso.test', 'SERVICE password 1234');
+  checker = await platformChecker(h);
 });
 afterAll(async () => {
   await h?.close();
@@ -77,13 +83,25 @@ describe('model providers API', () => {
     expect(list.text).not.toMatch(LEAKS);
     const one = await h.http().get(`/v1/model-providers/${anthropicId}`).set(auth(admin)).expect(200);
     expect(one.text).not.toMatch(LEAKS);
+    // New providers are disabled drafts: enabling each is approved by a second person.
+    expect(one.body).toMatchObject({ enabled: false, approval: { approved: false, pending: null, updateNeedsApproval: false } });
+    await h.http().patch(`/v1/model-providers/${devId}`).set(auth(admin)).send({ enabled: true }).expect(409);
+    for (const id of [anthropicId, devId]) await approveOverHttp(h, admin, checker, { objectKind: 'model_provider', objectId: id, action: 'ACTIVATE' });
+    const enabled = await h.http().get(`/v1/model-providers/${anthropicId}`).set(auth(admin)).expect(200);
+    expect(enabled.body).toMatchObject({ enabled: true, approval: { approved: true, updateNeedsApproval: true } });
+    // Approved: a credential rotation is a proposal that carries a secret ref, never the value.
+    const rotation = await h.http().patch(`/v1/model-providers/${anthropicId}`).set(auth(admin)).send({ credentials: { apiKey: SECRET }, approval: { checkerId: checker.id, reason: 'Rotate' } }).expect(202);
+    expect(rotation.text).not.toMatch(LEAKS);
+    await approveProposal(h, checker, rotation.body.proposal);
   });
 
   it('keeps plaintext out of every table (ciphertext only in secrets)', async () => {
-    for (const table of ['model_providers', 'secrets', 'audit_events', 'outbox_events']) {
+    for (const table of ['model_providers', 'secrets', 'audit_events', 'outbox_events', 'approval_proposals', 'approval_decisions']) {
       const rows = await h.db.db.execute(sql.raw(`SELECT row_to_json(t)::text AS j FROM ${table} t`));
       expect(JSON.stringify(rows.rows), table).not.toMatch(LEAKS);
     }
+    // The rotation released the old key in the approval's transaction; the leader sweep deletes it after commit.
+    await sweepApprovalSecrets(h.db.db, h.app.get<SecretStore>(SECRET_STORE));
     const secrets = await h.db.db.execute(sql`SELECT ciphertext FROM secrets WHERE used_by = 'provider:Anthropic'`);
     expect(secrets.rows).toHaveLength(1);
     expect((secrets.rows[0] as { ciphertext: { data: string } }).ciphertext.data).toBeTruthy();
@@ -126,7 +144,10 @@ describe('model profiles API', () => {
   });
 
   it('rejects a primary target that violates residency', async () => {
-    await h.http().patch('/v1/settings/deployment').set(auth(admin)).send({ residencyZone: 'IN' }).expect(200);
+    // Settings change through an approval (PM/research/11 §4): 409 without one, 202 with a checker named.
+    await h.http().patch('/v1/settings/deployment').set(auth(admin)).send({ residencyZone: 'IN' }).expect(409);
+    const proposed = await h.http().patch('/v1/settings/deployment').set(auth(admin)).send({ residencyZone: 'IN', approval: { checkerId: checker.id, reason: 'Keep data in India' } }).expect(202);
+    await approveProposal(h, checker, proposed.body.proposal);
     const res = await h
       .http()
       .post('/v1/model-profiles')
@@ -141,8 +162,11 @@ describe('model profiles API', () => {
   });
 
   it('guards deletes of providers still in use', async () => {
-    const res = await h.http().delete(`/v1/model-providers/${devId}`).set(auth(admin)).expect(409);
-    expect(res.body.error.code).toBe('model_provider_in_use');
+    // Deleting is always a proposal; one for a provider a profile uses is refused at submit.
+    const unnamed = await h.http().delete(`/v1/model-providers/${devId}`).set(auth(admin)).expect(409);
+    expect(unnamed.body.error.code).toBe('approval_required');
+    const res = await h.http().delete(`/v1/model-providers/${devId}`).set(auth(admin)).send({ approval: { checkerId: checker.id, reason: 'Unused' } }).expect(400);
+    expect(res.body.error).toMatchObject({ code: 'validation_failed', details: { problems: [expect.objectContaining({ code: 'model_provider_in_use' })] } });
   });
 });
 
@@ -189,12 +213,17 @@ describe('model administration RBAC', () => {
       expect.objectContaining({ modelPattern: 'claude-haiku-4-*', outputPerMTokMicros: 4_000_000, currency: 'USD', origin: 'manual' }),
       expect.objectContaining({ modelPattern: 'claude-haiku-4-5', currency: 'USD', origin: 'catalog', catalogSource: 'models.dev' }),
     ]);
-    await h.http().delete(`/v1/model-pricing/${created.body.id}`).set(auth(admin)).expect(204);
+    // A new price is a draft (it prices nothing yet); removing one is a proposal.
+    expect(list.body[0]).toMatchObject({ status: 'DRAFT' });
+    const removal = await h.http().delete(`/v1/model-pricing/${created.body.id}`).set(auth(admin)).send({ approval: { checkerId: checker.id, reason: 'Duplicate' } }).expect(202);
+    await approveProposal(h, checker, removal.body.proposal);
+    await h.http().get('/v1/model-pricing').set(auth(admin)).expect(200).expect((r) => expect(r.body.map((p: { id: string }) => p.id)).not.toContain(created.body.id));
   });
 
   it('lets the Tech admin delete an unused profile and provider', async () => {
-    await h.http().delete(`/v1/model-profiles/${profileId}`).set(auth(admin)).expect(204);
-    await h.http().delete(`/v1/model-providers/${anthropicId}`).set(auth(admin)).expect(204);
+    await approveOverHttp(h, admin, checker, { objectKind: 'model_profile', objectId: profileId, action: 'DELETE' });
+    await approveOverHttp(h, admin, checker, { objectKind: 'model_provider', objectId: anthropicId, action: 'DELETE' });
+    await sweepApprovalSecrets(h.db.db, h.app.get<SecretStore>(SECRET_STORE));
     const left = await h.db.db.execute(sql`SELECT count(*)::int AS n FROM secrets`);
     expect((left.rows[0] as { n: number }).n).toBe(0);
   });

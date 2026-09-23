@@ -73,3 +73,23 @@ export * from './routing/reach.js';
 export * from './handoffs/queue-transfer.js';
 export * from './audit/index.js';
 export * from './routing/queue-guards.js';
+export * from './routing/router-approval.js';
+export * from './routing/queue-approval.js';
+export * from './routing/queue-writes.js';
+export * from './routing/approval-checks.js';
+export { slaPolicyApproval, applySlaPolicy, lockSlaPolicy } from './routing/sla-approval.js';
+export * from './exceptions/index.js';
+export * from './storage/index.js';
+// COVERAGE-PLATFORM: platform-object approval descriptors and their shared pieces.
+export * from './settings/platform-approvals.js';
+export * from './settings/platform-registry.js';
+export * from './settings/settings-approval.js';
+export * from './channels/channel-approval.js';
+export { ssoProviderApproval } from './identity/auth/sso-approval.js';
+// COVERAGE-BUSINESS: tool grants, escalation/alert rules, message templates, users and permission changes.
+export * from './identity/approval/index.js';
+export * from './channels/message-template-drafts.js';
+export * from './channels/message-template-approval.js';
+export { submitDraftToProvider, deleteTemplateAtProvider } from './channels/message-template-provider.js';
+export * from './settings/secret-refs.js';
+export * from './settings/platform-live.js';

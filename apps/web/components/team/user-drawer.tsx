@@ -7,8 +7,12 @@ import { ApiError } from '@/lib/api/errors';
 import { getPermissionCatalogue, getUserPermissions, type CatalogueEntry, type UserPermissions } from '@/lib/api/permissions';
 import type { User } from '@/lib/api/users';
 import { formatDateTime } from '@/lib/format';
+import { PendingBadge } from '@/components/approvals/pending-badge';
+import type { ObjectApprovalState } from '@/components/approvals/lib/schemas';
+import { objectApprovalState } from '@/lib/api/approvals';
 import { ChangePermissions } from './change-permissions';
 import { DiscardPendingUser } from './discard-pending';
+import { SubmitPendingUser } from './submit-pending';
 import { ROLE_TONE, STATUS_CHIP } from './labels';
 import { PermissionsPanel } from './permissions-panel';
 
@@ -17,6 +21,14 @@ export type UserDrawerTab = 'overview' | 'permissions';
 export interface UserDrawerData {
   permissions: UserPermissions | null;
   catalogue: CatalogueEntry[];
+  /** Maker–checker state of the person's creation or access change (PM/research/11 §3.4); null when not visible. */
+  approval?: ObjectApprovalState | null;
+}
+
+/** The proposal waiting on this person (their creation, or an access change), for the drawer's badge. */
+export async function loadUserApproval(userId: string): Promise<ObjectApprovalState | null> {
+  const [user, change] = await Promise.all([objectApprovalState('user', userId).catch(() => null), objectApprovalState('permission_change', userId).catch(() => null)]);
+  return user?.pending ? user : (change ?? user);
 }
 
 /** GET /v1/users/:id/permissions + the catalogue; out of scope (404/403) becomes "not visible". */
@@ -65,10 +77,20 @@ export function UserDrawer({ user, tab, data, teamNames, timeZone, viewer }: Use
                 <StatusChip tone={ROLE_TONE[user.role]}>{ROLE_LABELS[user.role]}</StatusChip>
                 <StatusChip tone={status.tone}>{status.label}</StatusChip>
               </span>
+              {data.approval?.pending ? <PendingBadge state={data.approval} /> : null}
               {user.status === 'PENDING_APPROVAL' ? (
                 <>
-                  <p className="tm-desc">Waiting for approval: this user cannot sign in until a checker approves their creation. The invite is sent then.</p>
-                  {viewer.canManageUsers ? <DiscardPendingUser userId={user.id} name={user.name} /> : null}
+                  <p className="tm-desc">
+                    {data.approval?.pending
+                      ? 'Waiting for the checker: this user cannot sign in until their creation is approved. The invite is sent then.'
+                      : 'Not submitted yet: this user cannot sign in until a checker approves their creation. Submit it, or discard the draft.'}
+                  </p>
+                  {viewer.canManageUsers ? (
+                    <span className="tm-perm-actions">
+                      {data.approval?.pending ? null : <SubmitPendingUser userId={user.id} name={user.name} role={ROLE_LABELS[user.role]} />}
+                      <DiscardPendingUser userId={user.id} name={user.name} />
+                    </span>
+                  ) : null}
                 </>
               ) : null}
               <p className="mono-sm">teams · {teamNames.length ? teamNames.join(', ') : 'none'}</p>

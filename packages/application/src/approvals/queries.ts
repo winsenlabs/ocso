@@ -4,7 +4,7 @@ import { approvalProposals, deploymentSettings, type Db } from '@ocso/db';
 import type { QueueAdapter, Topic } from '@ocso/queue';
 import { forbidden, notFound } from '@ocso/domain';
 import { nowOf } from '../shared/context.js';
-import { approvalScope, bootstrapAllowed, eligibleCheckers, mayCheck, mayReassign, type CheckerCandidate } from './access.js';
+import { approvalScope, bootstrapAllowed, canMake, eligibleCheckers, mayCheck, mayReassign, type CheckerCandidate } from './access.js';
 import type { ApprovalDescriptor, ProposalRow } from './contract.js';
 import { approvalState, assertMakeable, requiresApproval, type ApprovalState } from './guard.js';
 import type { ApprovalQuery } from './inputs.js';
@@ -188,7 +188,7 @@ export class ApprovalReader {
     assertCan(principal, Permission.APPROVALS_READ);
     const d = this.registry.get(objectKind);
     // Only someone who could propose a change to this object learns who could check it.
-    const action = d.actions.find((a) => can(principal, d.makePermission(a)));
+    const action = d.actions.find((a) => canMake(principal, d, a));
     if (!action) throw forbidden(d.makePermission(d.actions[0]!), `${principal.displayName} cannot propose ${d.label} changes`);
     await assertMakeable(this.db, d, principal, objectId, action);
     const facts = { makerId: principal.userId, teamIds: await d.teamIds(this.db, objectId), objectKind, objectId };

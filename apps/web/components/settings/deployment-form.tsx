@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
+import { SettingsApprovalFields } from '@/components/settings/approval-fields';
 import { SelectField, TextField } from '@/components/forms/field';
 import { AlertBanner } from '@/components/ui/alert-banner';
 import { IDLE } from '@/lib/actions/form-state';
@@ -55,9 +56,10 @@ export function DeploymentForm({ initial, timezones }: { initial: DeploymentForm
           </label>
         ))}
       </fieldset>
+      <SettingsApprovalFields idPrefix="deployment" errors={state.fieldErrors} />
       <div className="rowsplit">
         <button type="submit" className="btn accent" disabled={pending}>
-          {pending ? 'Saving…' : 'Save changes'}
+          {pending ? 'Submitting…' : 'Submit for approval'}
         </button>
         <span className="sp" />
         <span className="mono-sm">changes are audited and attributed to you</span>

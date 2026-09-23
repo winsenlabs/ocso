@@ -44,9 +44,10 @@ export const updateWorkerSettings: InternalTool<z.infer<typeof WorkerSettingsInp
     });
     return { summary: `Worker configuration · ${changes.map((c) => `${c.label} ${c.before ?? '—'} → ${c.after}`).join(', ')}`, changes };
   },
+  // Maker–checker (PM/research/11 §4): settings change only through an approved proposal — this surfaces the
+  // 409 approval_required and the person submits the change from System → Workers with a named checker.
   async run(ctx, args) {
-    const after = await new SettingsService(ctx.db).updateWorkers(ctx.actor, args);
-    return { data: after, links: [{ label: 'Worker configuration', detail: `min ${after.minWarmWorkers} · max ${after.maxWorkers} · ${after.conversationsPerWorker}/worker`, href: '/system/workers' }] };
+    return new SettingsService(ctx.db).updateWorkers(ctx.actor, args);
   },
 };
 

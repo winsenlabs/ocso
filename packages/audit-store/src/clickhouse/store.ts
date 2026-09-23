@@ -34,6 +34,7 @@ const FIRST_COPY = 'LIMIT 1 BY id_s';
  */
 export class ClickHouseAuditStore implements AuditStore {
   readonly driver = 'clickhouse';
+  readonly sizing = { kind: 'columnar', label: 'ClickHouse' } as const;
 
   constructor(
     private readonly ch: ClickHouseHttp,

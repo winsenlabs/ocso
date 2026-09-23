@@ -68,6 +68,8 @@ export interface AlertRuleView {
   createdBy: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Maker–checker state (PM/research/11 §4): approved at least once, and the proposal waiting on it. Set by AlertRuleService. */
+  approval?: { approved: boolean; pending: { id: string; action: string; checkerName: string | null; activating: boolean } | null } | undefined;
 }
 
 export interface NotificationDestinationView {

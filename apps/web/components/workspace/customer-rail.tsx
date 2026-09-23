@@ -5,6 +5,7 @@ import { RiskBadge } from '@/components/ui/risk-badge';
 import type { ConversationDetail, ConversationTools, CustomerProfile, TimelineItem } from '@/lib/api/conversations';
 import { formatDateTime, formatTime, initials } from '@/lib/format';
 import { riskOf } from './lib/timeline';
+import { RoutingCard } from './routing-card';
 import type { ConversationTags } from './lib/use-conversation-tags';
 import { TagsCard } from './tag-editor';
 
@@ -81,7 +82,7 @@ export function CustomerRail({ detail, customer, timeline, tools, meId, timeZone
       <section className="rcard" aria-label="Assignment">
         <h3>Assignment</h3>
         <div className="rkv">
-          <Pair k="agent" v={`${detail.agent.name} — ${detail.agent.conversationType.toLowerCase()}`} />
+          <Pair k="agent" v={detail.controlState === 'ROUTING' && !detail.agent.id ? 'not chosen yet — the router is deciding' : `${detail.agent.name} — ${detail.agent.conversationType.toLowerCase()}`} />
           {detail.promptVersion ? <Pair k="prompt" v={`v${detail.promptVersion.version}`} /> : null}
           {detail.modelProfile ? <Pair k="model" v={detail.modelProfile.name} /> : null}
           <Pair k="queue" v={detail.queue?.name ?? 'none'} />
@@ -90,6 +91,8 @@ export function CustomerRail({ detail, customer, timeline, tools, meId, timeZone
           <Pair k="priority" v={detail.priority} />
         </div>
       </section>
+
+      <RoutingCard detail={detail} />
 
       <section className="rcard" aria-label="Approved tools">
         <h3>

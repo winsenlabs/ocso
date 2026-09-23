@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ObjectApprovalStateSchema } from '@/components/approvals/lib/schemas';
+import { ObjectApprovalStateSchema, ProposalRefSchema } from '@/components/approvals/lib/schemas';
 
 /**
  * Response contracts for the virtual-agent screens (design/02). Shapes mirror
@@ -132,6 +132,10 @@ export const EscalationConditionSchema = z.object({
 });
 export type EscalationCondition = z.infer<typeof EscalationConditionSchema>;
 
+/** A list row's approval state (rules, templates): approved at least once, and the open (or activating) proposal. */
+export const ListedApprovalSchema = z.object({ approved: z.boolean(), pending: ProposalRefSchema.nullable() });
+export type ListedApproval = z.infer<typeof ListedApprovalSchema>;
+
 export const EscalationRuleSchema = z.object({
   id: z.string(),
   /** null = platform-wide rule. */
@@ -145,6 +149,8 @@ export const EscalationRuleSchema = z.object({
   enabled: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  /** Maker–checker (PM/research/11 §4): approved at least once (then every change is a proposal), and the proposal waiting on it. */
+  approval: ListedApprovalSchema.catch({ approved: false, pending: null }),
 });
 export type EscalationRule = z.infer<typeof EscalationRuleSchema>;
 

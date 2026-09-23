@@ -1,4 +1,4 @@
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { Permission } from '@ocso/auth';
 import { promptVersions, virtualAgents, type DbOrTx } from '@ocso/db';
 import { notFound } from '@ocso/domain';
@@ -105,8 +105,22 @@ export const promptVersionApproval: ApprovalDescriptor = {
     await applyPromptActivation(tx, actor, v.agentId, v.id);
     return { kind: 'DONE' };
   },
+  /**
+   * Active prompts of live agents — except one an approved agent proposal showed its checker (a draft
+   * agent's go-live approval covers the prompt it takes live: its after-snapshot names the version and hash).
+   */
   async liveObjects(tx) {
-    const rows = await tx.select({ id: virtualAgents.activePromptVersionId }).from(virtualAgents).where(inArray(virtualAgents.status, ['LIVE', 'PAUSED']));
+    const rows = await tx
+      .select({ id: virtualAgents.activePromptVersionId })
+      .from(virtualAgents)
+      .innerJoin(promptVersions, eq(promptVersions.id, virtualAgents.activePromptVersionId))
+      .where(
+        and(
+          inArray(virtualAgents.status, ['LIVE', 'PAUSED']),
+          sql`NOT EXISTS (SELECT 1 FROM approval_proposals ap WHERE ap.object_kind = 'agent' AND ap.object_id = ${virtualAgents.id} AND ap.status = 'APPROVED'
+                AND ap.after_snapshot->>'activePrompt' = 'v' || ${promptVersions.version} || ' · ' || ${promptVersions.promptHash})`,
+        ),
+      );
     return rows.flatMap((r) => (r.id ? [r.id] : []));
   },
   title(p) {

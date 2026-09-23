@@ -21,6 +21,8 @@ export interface PriceLike {
   modelPattern: string;
   effectiveFrom: Date;
   origin?: string | null | undefined;
+  /** `DRAFT`: entered but not approved yet (maker–checker) — never prices anything. */
+  status?: string | null | undefined;
   inputPerMTokMicros: number;
   outputPerMTokMicros: number;
   cachedInputPerMTokMicros: number | null;
@@ -41,11 +43,12 @@ export function patternMatch(pattern: string, model: string): 'exact' | 'prefix'
  * row beats a catalog row, then the most recently effective row wins.
  * Catalog rows match their exact model id only (a catalog price for
  * `gpt-5.5` must never price `gpt-5.5-pro`); manual rows keep the prefix rule.
+ * DRAFT rows (not approved yet) never price anything.
  */
 export function selectPrice<T extends PriceLike>(rows: readonly T[], providerKind: string, model: string, now: Date): T | undefined {
   let best: { row: T; rank: [number, number, number, number] } | undefined;
   for (const row of rows) {
-    if (row.providerKind !== providerKind || row.effectiveFrom.getTime() > now.getTime()) continue;
+    if (row.providerKind !== providerKind || row.effectiveFrom.getTime() > now.getTime() || row.status === 'DRAFT') continue;
     const match = row.origin === 'catalog' ? (row.modelPattern === model ? 'exact' : null) : patternMatch(row.modelPattern, model);
     if (!match) continue;
     const rank: [number, number, number, number] = [

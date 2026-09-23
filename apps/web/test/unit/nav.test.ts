@@ -17,9 +17,9 @@ describe('buildNav (design/OCSONav.dc.html, derived from permissions)', () => {
     expect(labels('HEAD')).toEqual(['Operations', 'Quality', 'Governance']);
     expect(items('HEAD')).toEqual([
       'Home', 'Search',
-      'Conversations', 'Virtual agents', 'Queues', 'Customers', 'Message templates',
+      'Conversations', 'Virtual agents', 'Queues', 'Routers', 'Customers', 'Message templates',
       'Analytics', 'Reviews', 'Prompt corrections', 'Escalation reasons',
-      'Alerts', 'SLA policies', 'Team', 'Approvals',
+      'Alerts', 'SLA policies', 'Team', 'Approvals', 'Exceptions',
       'My connections', 'Settings',
     ]);
   });
@@ -38,6 +38,18 @@ describe('buildNav (design/OCSONav.dc.html, derived from permissions)', () => {
     expect(navFor('TECH').find((g) => g.key === 'oversight')?.items.map((i) => i.key)).toContain('approvals');
     const withoutRead = new Set(permissionsForRole('HEAD').filter((p) => p !== 'approvals.read'));
     expect(buildNav(withoutRead).flatMap((g) => g.items.map((i) => i.key))).not.toContain('approvals');
+  });
+
+  it('shows Exceptions to exceptions.read holders (Head in Governance, Tech in Oversight), not to a Lead', () => {
+    expect(navFor('HEAD').find((g) => g.key === 'governance')?.items.map((i) => i.key)).toContain('exceptions');
+    expect(navFor('TECH').find((g) => g.key === 'oversight')?.items.map((i) => i.key)).toContain('exceptions');
+    expect(navFor('LEAD').flatMap((g) => g.items.map((i) => i.key))).not.toContain('exceptions');
+  });
+
+  it('shows Routers to routers.read holders (Lead and Head in Operations, Tech in Oversight), never to Service', () => {
+    expect(navFor('LEAD').find((g) => g.key === 'operations')?.items.map((i) => i.key)).toContain('routers');
+    expect(navFor('TECH').find((g) => g.key === 'oversight')?.items.map((i) => i.key)).toContain('routers');
+    expect(navFor('SERVICE').flatMap((g) => g.items.map((i) => i.key))).not.toContain('routers');
   });
 
   it('drops items whose permission is missing and empty groups', () => {

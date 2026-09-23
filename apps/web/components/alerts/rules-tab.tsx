@@ -19,7 +19,7 @@ function RulesTable({ rules, destinations, canManage }: { rules: AlertRule[]; de
   return (
     <DataTable
       label={`${rules[0]?.kind === 'TECHNICAL' ? 'Technical' : 'Business'} alert rules`}
-      template="minmax(0,1.6fr) 90px 70px minmax(0,0.9fr) minmax(0,0.9fr) 96px"
+      template="minmax(0,1.6fr) 90px 70px minmax(0,0.9fr) minmax(0,0.9fr) minmax(96px,1fr)"
       rows={rules}
       rowKey={(r) => r.id}
       columns={[
@@ -56,7 +56,7 @@ function RulesTable({ rules, destinations, canManage }: { rules: AlertRule[]; de
         {
           key: 'on',
           header: 'Enabled',
-          cell: (r) => (canManage ? <RuleEnabledToggle id={r.id} name={r.name} enabled={r.enabled} /> : <span className="mono-sm">{r.enabled ? 'on' : 'off'}</span>),
+          cell: (r) => (canManage ? <RuleEnabledToggle rule={r} /> : <span className="mono-sm">{r.enabled ? 'on' : r.approval.approved ? 'off' : 'draft'}</span>),
         },
       ]}
     />
@@ -89,7 +89,7 @@ export async function RulesTab({ session, params }: { session: Session; params: 
             <SecHead
               title={kind === 'TECHNICAL' ? 'Technical rules' : 'Business rules'}
               count={list.length}
-              desc={kind === 'TECHNICAL' ? 'platform health · audience Tech admin' : 'agent and queue outcomes · audience Lead / Service member'}
+              desc={`${kind === 'TECHNICAL' ? 'platform health · audience Tech admin' : 'agent and queue outcomes · audience Lead / Service member'} · new rules start off; turning one on needs a checker`}
               actions={
                 canManage ? (
                   <Link className="btn tiny" href={alertsHref({ tab: 'rules', rule: 'new', kind })} scroll={false}>

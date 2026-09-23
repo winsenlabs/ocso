@@ -107,6 +107,17 @@ export interface ApplyRightsOptions {
   approvalSkipped?: ApprovalSkipReason | null | undefined;
 }
 
+/**
+ * A direct GRANT that only shortens a live, approved grant (a reduction) is still covered by that grant's approval:
+ * it carries the approval on, so the exception report never reads it as a grant nobody approved.
+ */
+function narrowedApproval(cleared: ReadonlyArray<typeof userPermissionGrants.$inferSelect>, expiresAt: Date | null, now: Date): string | null {
+  const prev = cleared.find((g) => g.effect === 'GRANT' && g.proposalId && (!g.expiresAt || g.expiresAt > now));
+  if (!prev) return null;
+  const within = prev.expiresAt === null || (expiresAt !== null && expiresAt.getTime() <= prev.expiresAt.getTime());
+  return within ? prev.proposalId : null;
+}
+
 function scopeOf(set: ChangeSet, before: RightsState, after: RightsState, classification: RightsClassification): RightsChangeScope {
   const teamsTouched = [...classification.teamsAdded, ...classification.teamsRemoved];
   return { targetId: set.userId, before, after, ops: set.ops.length > 0, presetOrTeams: after.role !== before.role || teamsTouched.length > 0, teamsTouched };
@@ -151,10 +162,11 @@ export async function applyPermissionChangeSet(tx: DbOrTx, actor: ActorContext, 
   }
   for (const op of ops) {
     // One live override per permission: whatever it had (even expired) is cleared first.
-    await tx
+    const cleared = await tx
       .update(userPermissionGrants)
       .set({ clearedAt: now, clearedBy: actorId })
-      .where(and(eq(userPermissionGrants.userId, set.userId), eq(userPermissionGrants.permission, op.permission), isNull(userPermissionGrants.clearedAt)));
+      .where(and(eq(userPermissionGrants.userId, set.userId), eq(userPermissionGrants.permission, op.permission), isNull(userPermissionGrants.clearedAt)))
+      .returning();
     if (op.op === 'CLEAR') continue;
     await tx.insert(userPermissionGrants).values({
       id: uuidv7(),
@@ -163,7 +175,7 @@ export async function applyPermissionChangeSet(tx: DbOrTx, actor: ActorContext, 
       effect: op.op,
       expiresAt: op.op === 'GRANT' ? op.expiresAt : null,
       reason: set.reason,
-      proposalId: options.proposalId ?? null,
+      proposalId: options.proposalId ?? (op.op === 'GRANT' ? narrowedApproval(cleared, op.expiresAt ?? null, now) : null),
       createdBy,
       createdAt: now,
     });

@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { and, desc, eq } from 'drizzle-orm';
 import { conversationSummaries, handoffs, queues, uuidv7 } from '@ocso/db';
-import { HumanControlService, QueueService, agentActor, aiTransferTargets, aiTransferToQueue, requestHandoff, systemActor } from '../src/index.js';
+import { AgentService, HumanControlService, QueueService, agentActor, aiTransferTargets, aiTransferToQueue, requestHandoff, systemActor } from '../src/index.js';
+import { platformApprover, type PlatformApprover } from './support/platform-approvals.js';
 import { createRoutingFixture, type RoutingFixture } from './support/routing-fixture.js';
 
 /**
@@ -11,8 +12,11 @@ import { createRoutingFixture, type RoutingFixture } from './support/routing-fix
  */
 let f: RoutingFixture;
 let channel: string;
+let approver: PlatformApprover;
 beforeAll(async () => {
   f = await createRoutingFixture();
+  // A second person checks (the fixture's Head is the maker; its team has no other checker).
+  approver = await platformApprover(f.t.db);
   channel = await f.channelWith({ steps: [], rules: [], fallbackQueueId: 'CARDS', returning: null, timeoutMinutes: 10 }, 'Transfers');
 });
 afterAll(async () => {
@@ -51,6 +55,10 @@ describe('queues', () => {
     // Cards is live (a router routes to it): a new transfer target changes where customers go — an approval.
     await expect(service().update(f.actor, f.queues.cards, { transferTargetIds: [f.queues.sales] })).rejects.toMatchObject({ code: 'approval_required', details: { objectKind: 'queue', objectId: f.queues.cards } });
     await approveTargets(f.queues.cards, [f.queues.sales]);
+    // §5.5: only approved targets are offered — Sales's own approval is still open, so not yet.
+    const pending = await approver.submit(f.actor, 'queue', f.queues.sales, 'CREATE');
+    expect(await aiTransferTargets(f.t.db, f.queues.cards)).toEqual([]);
+    await approver.decide(pending);
     expect((await aiTransferTargets(f.t.db, f.queues.cards)).map((t) => t.agentName)).toEqual(['Arjun']);
     // The agent already holding the conversation is never a target (it would leave the messages unanswered).
     expect(await aiTransferTargets(f.t.db, f.queues.cards, f.agents.arjun)).toEqual([]);
@@ -60,14 +68,17 @@ describe('queues', () => {
   });
 
   it('handoffs use the queue’s business hours before the agent’s', async () => {
-    // Humans of the Cards queue work Sunday 00:00–00:01 only (closed now, whatever the day).
-    await service().update(f.actor, f.queues.cards, { businessHours: { timezone: 'UTC', humanHours: { sun: ['00:00', '00:01'] } } });
+    // Humans of the Cards queue work Sunday 00:00–00:01 only (closed now, whatever the day). Cards is live, so
+    // changing its hours is an approval (wave 2 queue descriptor); the approved value is set directly here.
+    const hours = { timezone: 'UTC', humanHours: { sun: ['00:00', '00:01'] as [string, string] } };
+    await expect(service().update(f.actor, f.queues.cards, { businessHours: hours })).rejects.toMatchObject({ code: 'approval_required' });
+    await f.t.db.update(queues).set({ businessHours: hours }).where(eq(queues.id, f.queues.cards));
     const { conversationId } = await f.say(channel, 'I want a person', '+919822000001');
     const outcome = await escalate(conversationId);
     const [h] = await f.t.db.select().from(handoffs).where(eq(handoffs.id, outcome.handoffId));
     expect(h?.queueId).toBe(f.queues.cards);
     expect((await f.systemEvents(conversationId, 'system.control_changed')).some((t) => t.includes('outside human hours'))).toBe(true);
-    await service().update(f.actor, f.queues.cards, { businessHours: null });
+    await f.t.db.update(queues).set({ businessHours: null }).where(eq(queues.id, f.queues.cards));
   });
 });
 
@@ -85,6 +96,18 @@ describe('transfers', () => {
     await new HumanControlService(f.t.db).takeOver(f.actor, conversationId);
     await new HumanControlService(f.t.db).transfer(f.actor, conversationId, { queueId: f.queues.sales });
     expect(await f.conversation(conversationId)).toMatchObject({ controlState: 'WAITING_FOR_HUMAN', queueId: f.queues.sales, agentId: f.agents.arjun, assignedUserId: null });
+  });
+
+  it('a human transfer never moves a customer into a queue nobody approved, nor onto an agent that does not answer', async () => {
+    const { conversationId } = await f.say(channel, 'a person please', '+919822000005');
+    await escalate(conversationId);
+    const riya = (await new AgentService(f.t.db).create(f.actor, { name: 'Riya', purpose: 'collections', conversationType: 'COLLECTIONS', description: '', teamIds: [...f.lead.teamIds] })).id;
+    const draft = await new QueueService(f.t.db).create(f.actor, { name: 'Hardship', description: null, mode: 'OPEN_PICKUP', autoAssignAfterSeconds: null, acceptTimeoutSeconds: 120, requiredSkills: [], languages: [], preferAccountOwner: true, slaPolicyId: null, teamIds: [], agentId: riya, attributes: { product: 'collections' }, businessHours: null, transferTargetIds: [] });
+    await expect(new HumanControlService(f.t.db).transfer(f.actor, conversationId, { queueId: draft })).rejects.toMatchObject({ code: 'queue_not_approved' });
+    await approver.approve(f.actor, 'queue', draft, 'CREATE');
+    // Approved, but Riya is a draft agent: the customer moves queue and keeps the agent that answers.
+    await new HumanControlService(f.t.db).transfer(f.actor, conversationId, { queueId: draft });
+    expect(await f.conversation(conversationId)).toMatchObject({ controlState: 'WAITING_FOR_HUMAN', queueId: draft, agentId: f.agents.maya });
   });
 
   it('an AI transfer moves the conversation to an allowed target, with a handover summary, staying AI_ACTIVE', async () => {

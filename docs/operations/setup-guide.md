@@ -216,7 +216,8 @@ only the agents their teams own (ADR-026). Before creating agents:
   memberships). A lead in no team sees "Join or create a team to create agents" instead of **New agent**.
 
 **Virtual agents → New agent**: name, **owning team** (one or more of your teams), purpose, conversation
-type, model profile (plus optional summarizer and copilot profiles), default queue, channels. Other teams'
+type, model profile (plus optional summarizer and copilot profiles), default queue. Channels reach agents
+through routers and queues (§5a); the agent's Channels tab lists them as "Reached through". Other teams'
 leads cannot see the agent, its conversations (unless routed to their queues), analytics, reviews or alerts.
 The agent's **Settings → Owning teams** card adds or removes your own teams as owners; the Tech Admin can
 reassign any agent there (e.g. when a lead leaves), and every change is audited. Then:
@@ -230,8 +231,54 @@ reassign any agent there (e.g. when a lead leaves), and every change is audited.
 3. **Escalation** — deterministic rules that hand the conversation to humans (keywords, the customer
    asking for a person, consecutive tool failures, amounts above a threshold) with mode, target queue and
    priority; judgement calls stay in the prompt's escalation component.
-4. **Routing** — queue, auto-assign vs open pickup, SLA policy (Queues and SLA policies pages).
-5. **Go live**.
+4. **Routing** — the agent answers through a queue (§5a); auto-assign vs open pickup and the SLA policy
+   are set on the queue.
+5. **Go live** — a proposal a Head approves.
+
+## 5a. Queues and routers (CS Lead; a Head approves)
+
+Customers reach an agent as **channel → router → queue → agent**. Every step below that makes something
+live is a maker–checker proposal: name a Head of the team as checker (Heads hold `approvals.check.routing`).
+
+1. **SLA policies → New SLA policy**, then **Submit** it for approval (a queue can be approved only with an
+   approved policy).
+2. **Queues → New queue**: name, the **AI agent** (exactly one per queue; one agent may serve many queues),
+   **attributes** such as `language = ta` (unique across queues; routers' rules send customers here by
+   them), teams, human hours (or the agent's), transfer targets, pickup mode and SLA policy. The queue is a
+   draft: **Submit** it for approval. After approval, edits open the submit dialog; removing a transfer
+   target or unlinking your team applies at once.
+3. **Routers → New router**: a name and the fallback queue. In the builder add steps — a **menu question**
+   (ASK: the question, options with values and synonyms), a **model classifier** (CLASSIFY: an approved
+   model profile, labels, minimum confidence, follow-ups) or a **known fact** (the customer's language or a
+   customer attribute) — then rules (**Rules from queue attributes** writes one rule per attribute queue),
+   returning customers (ask continue-or-new after N hours/days/months) and the timeout. **Simulate** to see
+   the decision trace. Tick the router's **channels** (direct while it is a draft), **Save as new version**,
+   then **Activate v1**: a Head approves it (Approvals). A queue or agent still waiting for its own approval
+   shows as a warning; approve those first.
+4. For WhatsApp, a router question outside the 24-hour window needs an approved template: **Create template
+   for <channel>** on the message drafts one from its text and opens its approval.
+5. **Disable** a router to stop new conversations at once (customers mid-conversation are unaffected);
+   resuming is an approval. Existing channels were given a pass-through router by the upgrade (0025).
+   A proposal to activate a new version that was waiting when the router was disabled is blocked on
+   approval (it would undo the stop): propose **Resume with vN** instead.
+
+Who may change what:
+
+- A router that has gone live belongs to the teams its live version serves (the teams of its queues and of
+  their agents). Only their Leads and Heads edit, disable, detach or propose changes to it, and only their
+  Heads check those proposals; the approval shows the **served teams** before and after. A router that never
+  went live is open to any routers.manage holder.
+- A channel another router routes cannot be attached elsewhere: detach it on that router first (its teams
+  do that). Detaching is a stop, applied at once.
+- Only approved queues take customers: the AI's transfer tool offers only approved transfer targets, and a
+  human transfer into a queue nobody approved is refused. A queue with any live reach (routed to, a live
+  agent's default queue, an escalation target, or a transfer target of one of those) changes only through
+  approval, and its last team cannot be unlinked.
+- A router that has routed customers is never deleted — its versions are their routing record. Disable it.
+- **Two checkers.** Give routing at least two Heads (in the teams concerned, or anywhere as the
+  platform-wide fallback). With one, every routing change is that Head's bootstrap self-approval (listed
+  in the exception report), and a router a Lead disabled stays off until that Head resumes it — Tech does
+  not hold approvals.check.routing.
 
 ## 6. People and operations (CS Lead)
 

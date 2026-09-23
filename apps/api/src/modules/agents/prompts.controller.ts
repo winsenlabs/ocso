@@ -5,9 +5,6 @@ import {
   ApprovalService,
   ComponentsInput,
   CreateVersionInput,
-  EscalationRuleInput,
-  EscalationRulePatch,
-  EscalationRuleService,
   PromptService,
   WithApproval,
   requestApproval,
@@ -31,13 +28,11 @@ const PreviewQuery = z.object({ channelId: z.uuid().optional() });
 type PreviewQuery = z.infer<typeof PreviewQuery>;
 type DiffQuery = z.infer<typeof DiffQuery>;
 type Components = z.infer<typeof ComponentsInput>;
-const RulePatch = EscalationRulePatch;
-type RulePatch = z.infer<typeof RulePatch>;
 type ApprovalBody = z.infer<typeof WithApproval>;
 
 /**
- * Structured prompt editing, versioning and escalation rules (design/02
- * Prompt/Versions/Escalation tabs). The services scope every call to agents
+ * Structured prompt editing and versioning (design/02 Prompt/Versions tabs;
+ * escalation rules: escalation-rules.controller.ts). The services scope every call to agents
  * the caller can read (reads) or whose owning team they are in (writes); 404
  * otherwise (ADR-026).
  */
@@ -46,7 +41,6 @@ export class PromptsController {
   constructor(
     @Inject(PromptService) private readonly prompts: PromptService,
     @Inject(AgentService) private readonly agents: AgentService,
-    @Inject(EscalationRuleService) private readonly rules: EscalationRuleService,
     @Inject(DB) private readonly db: Db,
     @Inject(CHANNEL_REGISTRY) private readonly registry: ChannelRegistry,
     @Inject(ApprovalService) private readonly approvals: ApprovalService,
@@ -145,35 +139,5 @@ export class PromptsController {
   @RequirePermission(Permission.AGENTS_READ)
   diff(@CurrentPrincipal() principal: Principal, @Param('agentId', { schema: Id }) agentId: string, @Query({ schema: DiffQuery }) q: DiffQuery) {
     return this.prompts.diff(principal, agentId, q.from, q.to);
-  }
-
-  @Get('escalation-rules')
-  @RequirePermission(Permission.AGENTS_READ)
-  listRules(@CurrentPrincipal() principal: Principal, @Param('agentId', { schema: Id }) agentId: string) {
-    return this.rules.list(principal, agentId);
-  }
-
-  @Post('escalation-rules')
-  @RequirePermission(Permission.ESCALATION_MANAGE)
-  createRule(@Actor() actor: ActorContext, @Param('agentId', { schema: Id }) agentId: string, @Body({ schema: EscalationRuleInput }) body: EscalationRuleInput) {
-    return this.rules.create(actor, agentId, body);
-  }
-
-  @Put('escalation-rules/:ruleId')
-  @RequirePermission(Permission.ESCALATION_MANAGE)
-  updateRule(
-    @Actor() actor: ActorContext,
-    @Param('agentId', { schema: Id }) agentId: string,
-    @Param('ruleId', { schema: Id }) ruleId: string,
-    @Body({ schema: RulePatch }) body: RulePatch,
-  ) {
-    return this.rules.update(actor, agentId, ruleId, body);
-  }
-
-  @Delete('escalation-rules/:ruleId')
-  @HttpCode(204)
-  @RequirePermission(Permission.ESCALATION_MANAGE)
-  async deleteRule(@Actor() actor: ActorContext, @Param('agentId', { schema: Id }) agentId: string, @Param('ruleId', { schema: Id }) ruleId: string) {
-    await this.rules.remove(actor, agentId, ruleId);
   }
 }

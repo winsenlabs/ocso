@@ -96,6 +96,14 @@ export function updateUserTeams(userId: string, teamIds: string[]): Promise<void
   return api.command('PATCH', `/v1/users/${encodeURIComponent(userId)}`, { teamIds });
 }
 
+/**
+ * PATCH /v1/users/:id { approval } on a pending user submits their creation: 202 with the proposal, or 409
+ * approval_required without `approval`.
+ */
+export function submitUserCreation(userId: string, approval: { checkerId: string; reason: string } | { bootstrap: true; reason?: string | undefined } | undefined): Promise<void> {
+  return api.command('PATCH', `/v1/users/${encodeURIComponent(userId)}`, approval ? { approval } : { status: 'ACTIVE' });
+}
+
 /** DELETE /v1/users/:id — discard a user whose creation was never approved (frees the email). */
 export function discardUser(userId: string): Promise<void> {
   return api.command('DELETE', `/v1/users/${encodeURIComponent(userId)}`);

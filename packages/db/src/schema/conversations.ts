@@ -101,6 +101,8 @@ export const conversationRouting = pgTable(
   },
   (t) => [
     index('conversation_routing_awaiting_idx').on(t.awaitingSince).where(sql`${t.phase} <> 'DONE' AND ${t.awaitingSince} IS NOT NULL`),
+    // Migration 0030: a router's conversations (delete blockers, per-router history).
+    index('conversation_routing_router_idx').on(t.routerId),
     check('conversation_routing_phase_ck', sql`${t.phase} IN ('RETURNING','STEPS','DONE')`),
   ],
 );

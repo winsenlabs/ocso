@@ -9,6 +9,7 @@ import { agentFamily, lockAgentConfig } from './approval-lock.js';
 import { applyAgentDelete, applyAgentStatus, applyAgentUpdate, deleteBlockers, liveReadiness } from './agent-writes.js';
 import { AgentApprovalPatch, type AgentPatch, type AgentRow } from './inputs.js';
 import { reachForAgents } from '../routing/reach.js';
+import { modelProfileProblems } from '../routing/approval-checks.js';
 
 export { promptVersionApproval } from './prompt-approval.js';
 
@@ -208,7 +209,11 @@ export const agentApproval: ApprovalDescriptor = {
     }
     if (p.action === 'ACTIVATE' && agent.status === 'LIVE') problems.push({ code: 'already_live', message: 'The agent is already live.' });
     // A live (or paused, resumable) agent must stay ready to answer; ACTIVATE checks the same.
-    if (p.action === 'ACTIVATE' || agent.status !== 'DRAFT') problems.push(...(await liveReadiness(tx, next)));
+    if (p.action === 'ACTIVATE' || agent.status !== 'DRAFT') {
+      problems.push(...(await liveReadiness(tx, next)));
+      // A live agent calls only model profiles a platform checker approved (as routers do; wave 2 COVERAGE-PLATFORM).
+      problems.push(...(await modelProfileProblems(tx, [next.modelProfileId, next.summarizerProfileId, next.copilotProfileId].filter((x): x is string => Boolean(x)))).filter((x) => x.code !== 'model_profile_not_found'));
+    }
     return problems;
   },
   async activate(tx, actor, p) {

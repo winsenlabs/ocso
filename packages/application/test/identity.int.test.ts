@@ -4,6 +4,7 @@ import { createTestDatabase, type TestDatabase } from '@ocso/db/testing';
 import type { Principal } from '@ocso/auth';
 import {
   SettingsService,
+  applyWorkerSettings,
   SetupService,
   TeamService,
   UserService,
@@ -90,10 +91,12 @@ describe('user management', () => {
     await expect(users.create(ctx(admin), { email: 'p@meridian.test', name: 'P', role: 'SERVICE', password: 'some password 123' })).rejects.toMatchObject({ code: 'initial_password_not_allowed' });
   });
 
-  it('validates worker settings bounds', async () => {
+  it('validates worker settings bounds (a change applies through an approved settings proposal)', async () => {
     const settings = new SettingsService(t.db);
-    await expect(settings.updateWorkers(ctx(admin), { minWarmWorkers: 20 })).rejects.toThrow();
-    const updated = await settings.updateWorkers(ctx(admin), { minWarmWorkers: 4 });
+    // Settings are always live: the direct path answers approval_required (settings-approval.ts applies them).
+    await expect(settings.updateWorkers(ctx(admin), { minWarmWorkers: 4 })).rejects.toMatchObject({ code: 'approval_required' });
+    await expect(t.db.transaction((tx) => applyWorkerSettings(tx, ctx(admin), { minWarmWorkers: 20 }))).rejects.toThrow();
+    const updated = await t.db.transaction((tx) => applyWorkerSettings(tx, ctx(admin), { minWarmWorkers: 4 }));
     expect(updated.minWarmWorkers).toBe(4);
     await expect(settings.updateWorkers(ctx({ ...admin, role: 'HEAD' }), { minWarmWorkers: 3 })).rejects.toMatchObject({
       category: 'authorization',

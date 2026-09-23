@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { LifecycleActions } from '../lifecycle-actions';
 import { CellTitle, DataTable } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SecHead } from '@/components/ui/sec-head';
@@ -73,6 +74,17 @@ export function ProfilesSection({ profiles, canManage, hasProviders }: { profile
             header: 'Tokens 24h',
             cell: (p) => <span className="mono">{p.stats24h ? formatCompact(p.stats24h.inputTokens + p.stats24h.outputTokens) : '—'}</span>,
           },
+          ...(canManage
+            ? [
+                {
+                  key: 'approval',
+                  header: 'Approval',
+                  cell: (p: Profile) => (
+                    <LifecycleActions kind="model_profile" id={p.id} name={p.name} state={p.approval?.approved ? 'live' : 'draft'} approval={p.approval} activateLabel="Approve for use" canStop={false} canDelete={false} />
+                  ),
+                },
+              ]
+            : []),
           {
             key: 'cache',
             header: 'Cache',

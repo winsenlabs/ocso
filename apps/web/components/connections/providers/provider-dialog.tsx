@@ -3,9 +3,10 @@
 import { useMemo, useState, useTransition } from 'react';
 import { AlertBanner } from '@/components/ui/alert-banner';
 import { Modal } from '@/components/ui/modal';
-import { createProviderAction, deleteProviderAction, updateProviderAction } from '@/lib/actions/models';
+import { useApprovalRequest } from '@/components/approvals/use-approval-request';
+import { createProviderAction, updateProviderAction } from '@/lib/actions/models';
 import type { ProviderKind, ProviderKindView } from '@/lib/api/models';
-import { ConfirmAction } from '../confirm-action';
+import { DeleteByApproval } from '../lifecycle-actions';
 import { credentialsFromValues, initialFieldValues, settingsFromValues, type FieldValue } from '../models/provider-form';
 import { useCloseTo } from '../routed-modal';
 import { CredentialFields } from './credential-fields';
@@ -23,6 +24,8 @@ export interface ProviderFormModel {
   enabled: boolean;
   maxConcurrency: number;
   profileNames: string[];
+  /** Once approved, a change is a proposal (the save button says so). */
+  approval?: { updateNeedsApproval: boolean } | null | undefined;
 }
 
 interface Props {
@@ -44,7 +47,6 @@ export function ProviderDialog({ kinds, initialKind, provider, closeHref }: Prop
   const [name, setName] = useState(provider?.name ?? def?.label ?? '');
   const [region, setRegion] = useState(provider?.region ?? '');
   const [zone, setZone] = useState(provider?.residencyZone ?? '');
-  const [enabled, setEnabled] = useState(provider?.enabled ?? true);
   const [maxConcurrency, setMaxConcurrency] = useState(String(provider?.maxConcurrency ?? 50));
   const [settings, setSettings] = useState<Record<string, FieldValue>>(() => initialFieldValues(def?.settings ?? [], provider?.settings ?? null));
   const [creds, setCreds] = useState<Record<string, string>>({});
@@ -52,6 +54,7 @@ export function ProviderDialog({ kinds, initialKind, provider, closeHref }: Prop
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const approval = useApprovalRequest();
   const stored = useMemo(() => (provider ? new Set(provider.credentialKeys) : null), [provider]);
 
   function chooseKind(next: ProviderKind) {
@@ -80,17 +83,22 @@ export function ProviderDialog({ kinds, initialKind, provider, closeHref }: Prop
       region: region.trim() || null,
       residencyZone: zone.trim() || null,
       settings: s.settings,
-      enabled,
       maxConcurrency: concurrency,
     };
+    if (provider) {
+      // A draft saves directly; an approved provider asks for a checker (new credentials travel as secret refs).
+      approval.run({ objectKind: 'model_provider', objectId: provider.id, title: `Change model provider ${provider.name}` }, (choice) => updateProviderAction(provider.id, { ...common, credentials: c.credentials }, choice), {
+        onApplied: () => close(),
+      });
+      return;
+    }
     start(async () => {
-      const result = provider
-        ? await updateProviderAction(provider.id, { ...common, credentials: c.credentials })
-        : await createProviderAction({
-            ...common,
-            kind,
-            credentials: Object.fromEntries(Object.entries(c.credentials).filter((e): e is [string, string] => e[1] !== null)),
-          });
+      const result = await createProviderAction({
+        ...common,
+        enabled: false,
+        kind,
+        credentials: Object.fromEntries(Object.entries(c.credentials).filter((e): e is [string, string] => e[1] !== null)),
+      });
       if (result.ok) close();
       else setMessage(result.message);
     });
@@ -108,24 +116,22 @@ export function ProviderDialog({ kinds, initialKind, provider, closeHref }: Prop
           <span className="mono-sm">{editing ? 'changes are audited · profiles using it are re-checked' : 'stored by reference · test it after saving'}</span>
           <span className="sp" />
           {provider ? (
-            <ConfirmAction
-              label="Delete"
-              buttonClass="btn danger"
-              title={`Delete ${provider.name}`}
-              confirmLabel="Delete provider"
-              run={() => deleteProviderAction(provider.id)}
-              onDone={close}
-            >
-              {provider.profileNames.length
-                ? `Profiles ${provider.profileNames.join(', ')} use this provider; the API refuses the delete until they are reassigned.`
-                : 'The provider and its stored credentials are removed. Nothing references it.'}
-            </ConfirmAction>
+            <DeleteByApproval
+              kind="model_provider"
+              id={provider.id}
+              name={provider.name}
+              detail={
+                provider.profileNames.length
+                  ? `Profiles ${provider.profileNames.join(', ')} use this provider; the delete is refused until they are reassigned.`
+                  : 'The provider and its stored credentials are removed once a second person approves.'
+              }
+            />
           ) : null}
           <button type="button" className="btn" onClick={close}>
             Cancel
           </button>
-          <button type="submit" form={FORM_ID} className="btn accent" disabled={pending || !def}>
-            {pending ? 'Saving…' : editing ? 'Save changes' : 'Add provider'}
+          <button type="submit" form={FORM_ID} className="btn accent" disabled={pending || approval.pending || !def}>
+            {pending || approval.pending ? 'Saving…' : editing ? (provider.approval?.updateNeedsApproval ? 'Submit change' : 'Save changes') : 'Add provider (draft)'}
           </button>
         </>
       }
@@ -139,11 +145,17 @@ export function ProviderDialog({ kinds, initialKind, provider, closeHref }: Prop
           save();
         }}
       >
-        {message ? (
+        {message || approval.error ? (
           <AlertBanner tone="error" style={{ margin: 0 }}>
-            {message}
+            {message ?? approval.error}
           </AlertBanner>
         ) : null}
+        {approval.notice ? (
+          <AlertBanner tone="info" style={{ margin: 0 }}>
+            {approval.notice}
+          </AlertBanner>
+        ) : null}
+        {approval.modal}
         {editing ? null : (
           <div className="fld">
             <label htmlFor="pv-kind">Provider</label>
@@ -165,10 +177,7 @@ export function ProviderDialog({ kinds, initialKind, provider, closeHref }: Prop
           <Text id="pv-zone" label="Data residency zone (optional)" value={zone} onChange={setZone} error={errors['zone']} hint="where it keeps data, e.g. IN · checked against deployment policy" />
           <Text id="pv-conc" label="Max concurrency" value={maxConcurrency} onChange={setMaxConcurrency} error={errors['maxConcurrency']} type="number" />
         </div>
-        <label className="toggle-row">
-          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
-          Enabled — disabled providers are skipped by every profile
-        </label>
+        {editing ? null : <span className="hint">A new provider is a disabled draft: enable it from its card once saved (a second person approves).</span>}
         <fieldset className="conn-fieldset">
           <legend>Settings</legend>
           {(def?.settings ?? []).map((d) => (

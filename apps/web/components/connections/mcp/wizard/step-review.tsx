@@ -29,9 +29,9 @@ export function StepReview({ connection, tools, api }: { connection: Connection 
     }
     api.run(async () => {
       const r = await classifyToolsAction(id, list);
-      if (!r.ok) api.fail(r.message);
+      if (!r.ok) api.fail(r.code === 'approval_required' ? 'This connection is live: change its tool approvals from the connection drawer (a second person approves).' : r.message);
       else {
-        api.notify(`Saved classification · ${r.data.approved} tools approved.`);
+        api.notify(r.data ? `Saved classification · ${r.data.approved} tools approved.` : 'Sent for approval.');
         api.go('approve');
       }
     });

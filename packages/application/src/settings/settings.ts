@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { Permission, assertCan } from '@ocso/auth';
 import { validation } from '@ocso/domain';
+import { approvalRequiredError } from '../approvals/guard.js';
 import { deploymentSettings, workerSettings, type DbOrTx } from '@ocso/db';
 import { z } from 'zod';
 import { recordAudit } from '../audit/audit.js';
@@ -26,8 +27,10 @@ export const DeploymentSettingsInput = z.object({
   egressAllowedInternalHosts: z.array(z.string().max(253)).max(200).optional(),
   internalAgentProfileId: z.uuid().nullable().optional(),
   internalAgentConfirmLowWrites: z.boolean().optional(),
-  /** Days the main database keeps audit events the audit store verified (ADR-032); the database refuses < 30. */
+  /** Days the main database keeps audit events the audit store verified (ADR-032); the database refuses < 90. */
   auditLocalWindowDays: z.number().int().min(90).max(3650).optional(),
+  /** Open approvals older than this carry the `aged` warning (PM/research/11b). */
+  approvalAgeWarningHours: z.number().int().min(1).max(24 * 90).optional(),
 });
 export type DeploymentSettingsInput = z.infer<typeof DeploymentSettingsInput>;
 
@@ -58,6 +61,12 @@ export const WorkerSettingsInput = z
   });
 export type WorkerSettingsInput = z.infer<typeof WorkerSettingsInput>;
 
+/**
+ * Deployment and worker settings. Every change is a proposal on the
+ * deployment-settings singleton (PM/research/11 §4, settings-approval.ts):
+ * the API submits it and approval applies it with the functions below, which
+ * write the same audit rows the direct path used to.
+ */
 export class SettingsService {
   constructor(private readonly db: Db) {}
 
@@ -71,47 +80,58 @@ export class SettingsService {
     return row!;
   }
 
-  async updateDeployment(actor: ActorContext, input: DeploymentSettingsInput): Promise<DeploymentSettings> {
+  /** Settings are always live: a change is a proposal (409 approval_required here; the API submits it). */
+  async updateDeployment(actor: ActorContext, _input: DeploymentSettingsInput): Promise<never> {
     assertCan(actor.principal!, Permission.DEPLOYMENT_SETTINGS_MANAGE);
-    return this.db.transaction(async (tx) => {
-      const before = await this.deployment(tx);
-      const [after] = await tx
-        .update(deploymentSettings)
-        .set({ ...stripUndefined(input), updatedAt: new Date(), updatedBy: actor.principal!.userId })
-        .where(eq(deploymentSettings.id, 1))
-        .returning();
-      await recordAudit(tx, actor, { action: 'deployment.settings_update', targetType: 'deployment', summary: 'Updated deployment settings', before, after: input });
-      await emitEvent(tx, actor, 'config.changed', { area: 'deployment', entityId: null });
-      return after!;
-    });
+    throw approvalRequiredError('deployment_settings', SETTINGS_OBJECT_ID, 'UPDATE');
   }
 
-  async updateWorkers(actor: ActorContext, input: WorkerSettingsInput): Promise<WorkerSettings> {
+  /** As updateDeployment (the internal agent's worker tool surfaces the 409). */
+  async updateWorkers(actor: ActorContext, _input: WorkerSettingsInput): Promise<never> {
     assertCan(actor.principal!, Permission.SYSTEM_CONFIGURE);
-    return this.db.transaction(async (tx) => {
-      const before = await this.workers(tx);
-      const merged = { ...before, ...stripUndefined(input) };
-      // Validate the merged result, not just the patch.
-      const check = WorkerSettingsInput.safeParse(merged);
-      if (!check.success) {
-        throw validation('invalid_worker_settings', check.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; '));
-      }
-      const [after] = await tx
-        .update(workerSettings)
-        .set({ ...stripUndefined(input), updatedAt: new Date(), updatedBy: actor.principal!.userId })
-        .where(eq(workerSettings.id, 1))
-        .returning();
-      await recordAudit(tx, actor, {
-        action: 'workers.config_update',
-        targetType: 'worker_settings',
-        summary: describeChange(before, after!),
-        before,
-        after: input,
-      });
-      await emitEvent(tx, actor, 'config.changed', { area: 'workers', entityId: null });
-      return after!;
-    });
+    throw approvalRequiredError('deployment_settings', SETTINGS_OBJECT_ID, 'UPDATE');
   }
+}
+
+/**
+ * The object id of the deployment-settings singleton in approvals (PM/research/11b: the table's key is the
+ * smallint 1, so a constant uuid stands for it). 11b's all-zero `…-0000-0000-…0001` is not a valid RFC 4122
+ * uuid, which every approval route validates (zod `z.uuid()`), so the version/variant nibbles are set.
+ */
+export const SETTINGS_OBJECT_ID = '00000000-0000-4000-8000-000000000001';
+
+/** Apply a deployment-settings patch (activation of an approved proposal; setup writes its own row). */
+export async function applyDeploymentSettings(tx: DbOrTx, actor: ActorContext, input: DeploymentSettingsInput): Promise<DeploymentSettings> {
+  const [before] = await tx.select().from(deploymentSettings).where(eq(deploymentSettings.id, 1));
+  const [after] = await tx
+    .update(deploymentSettings)
+    .set({ ...stripUndefined(input), updatedAt: new Date(), updatedBy: actor.principal?.userId ?? null })
+    .where(eq(deploymentSettings.id, 1))
+    .returning();
+  await recordAudit(tx, actor, { action: 'deployment.settings_update', targetType: 'deployment', summary: 'Updated deployment settings', before, after: input });
+  await emitEvent(tx, actor, 'config.changed', { area: 'deployment', entityId: null });
+  return after!;
+}
+
+/** The worker settings a patch produces, validated as a whole (not just the patch). */
+export function mergedWorkerSettings(before: WorkerSettings, input: WorkerSettingsInput): { ok: true } | { ok: false; message: string } {
+  const check = WorkerSettingsInput.safeParse({ ...before, ...stripUndefined(input) });
+  return check.success ? { ok: true } : { ok: false, message: check.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') };
+}
+
+/** Apply a worker-settings patch (activation of an approved proposal). */
+export async function applyWorkerSettings(tx: DbOrTx, actor: ActorContext, input: WorkerSettingsInput): Promise<WorkerSettings> {
+  const [before] = await tx.select().from(workerSettings).where(eq(workerSettings.id, 1));
+  const merged = mergedWorkerSettings(before!, input);
+  if (!merged.ok) throw validation('invalid_worker_settings', merged.message);
+  const [after] = await tx
+    .update(workerSettings)
+    .set({ ...stripUndefined(input), updatedAt: new Date(), updatedBy: actor.principal?.userId ?? null })
+    .where(eq(workerSettings.id, 1))
+    .returning();
+  await recordAudit(tx, actor, { action: 'workers.config_update', targetType: 'worker_settings', summary: describeChange(before!, after!), before, after: input });
+  await emitEvent(tx, actor, 'config.changed', { area: 'workers', entityId: null });
+  return after!;
 }
 
 function stripUndefined<T extends Record<string, unknown>>(o: T): Partial<T> {

@@ -1,17 +1,22 @@
-import { asc, desc, eq, inArray, max } from 'drizzle-orm';
+import { asc, desc, eq, inArray } from 'drizzle-orm';
 import { Permission, assertCan, can, type Principal } from '@ocso/auth';
 import { RouterDefinitionSchema, conflict, notFound, type RouterDefinition } from '@ocso/domain';
 import { channels, routerDrafts, routerVersions, routers, uuidv7, type Db, type DbOrTx } from '@ocso/db';
 import { z } from 'zod';
+import { WithApproval } from '../approvals/inputs.js';
+import { assertChangeAllowed } from '../approvals/guard.js';
 import { recordAudit } from '../audit/audit.js';
 import type { ActorContext } from '../shared/context.js';
-import { activateRouterVersion, attachRouterChannels, disableRouter, routerActivationProblems, routerApprovalRequired, type RouterProblem } from './router-activation.js';
+import { activateRouterVersion, attachRouterChannels, disableRouter, routerActivationProblems, type RouterProblem } from './router-activation.js';
+import { detachRouterChannels, renameRouter, routerApproval } from './router-approval.js';
+import { agentReach, type AgentReach } from './router-reach.js';
 import { parseDefinition, type RouterRow } from './router-load.js';
+import { assertRouterInScope, channelsOnOtherRouters } from './router-scope.js';
+import { freezeRouterDraft, lockRouter } from './router-writes.js';
+
+export { freezeRouterDraft } from './router-writes.js';
 import { simulateRouter, type RouterSimulateInput, type SimulationResult } from './router-simulate.js';
 import type { RouterClassifier } from './routing-engine.js';
-
-/** `approval: { checkerId, reason }` on approvable writes (PM/research/11 §4.1); the spine consumes it in wave 2. */
-export const ApprovalRef = z.object({ checkerId: z.uuid().optional(), reason: z.string().trim().max(2_000).optional(), bootstrap: z.boolean().optional() });
 
 export const RouterCreateInput = z.object({
   name: z.string().trim().min(1).max(120),
@@ -22,10 +27,15 @@ export type RouterCreateInput = z.infer<typeof RouterCreateInput>;
 export const RouterDraftInput = z.object({ definition: RouterDefinitionSchema, name: z.string().trim().min(1).max(120).optional(), description: z.string().trim().max(500).optional() });
 export type RouterDraftInput = z.infer<typeof RouterDraftInput>;
 export const RouterVersionInput = z.object({ reason: z.string().trim().max(500).default('') });
-export const RouterActivateInput = z.object({ versionId: z.uuid(), approval: ApprovalRef.optional() });
-export const RouterChannelsInput = z.object({ channelIds: z.array(z.uuid()).max(200), approval: ApprovalRef.optional() });
+/** Activate (or resume with) the router's newest version; `approval` names the checker (PM/research/11 §4.1). */
+export const RouterActivateInput = WithApproval.extend({ versionId: z.uuid() });
+/** Exactly these channels: the ones left out are detached at once (a stop); new ones need approval once the router is approved. */
+export const RouterChannelsInput = WithApproval.extend({ channelIds: z.array(z.uuid()).max(200) });
+export const RouterUpdateInput = WithApproval.extend({ name: z.string().trim().min(1).max(120).optional(), description: z.string().trim().max(500).optional() });
+export type RouterUpdateInput = z.infer<typeof RouterUpdateInput>;
 
 export type RouterKind = 'PASS_THROUGH' | 'MENU' | 'MODEL' | 'MIXED';
+
 
 export interface RouterSummary {
   id: string;
@@ -44,6 +54,8 @@ export interface RouterDetail extends RouterSummary {
   draft: { definition: RouterDefinition; updatedAt: string; problems: RouterProblem[] } | null;
   activeDefinition: RouterDefinition | null;
   versions: Array<{ id: string; version: number; reason: string; createdAt: string; createdBy: string | null }>;
+  /** The newest frozen version: what an activation proposal takes live. */
+  latestVersionId: string | null;
 }
 
 /** What a definition does, for lists: no steps, only menus, only the model, or both. */
@@ -59,9 +71,9 @@ const nameTaken = (err: unknown) => (err as { code?: string; cause?: { code?: st
 /**
  * Routers (PM/research/11 §5.7): CRUD of the draft, frozen versions and a
  * dry-run simulator. Reads need routers.read, writes routers.manage.
- * Activation and channel attachment change live routing, so they are
- * approvals: the HTTP layer answers 409 approval_required and the approval
- * spine calls `activateVersion` / `attachChannels` on approval.
+ * Activation, deletion and — once approved — renames and channel attachment
+ * are approvals (the `router` descriptor, router-approval.ts); disabling and
+ * detaching channels are stops, never gated.
  */
 export class RouterService {
   constructor(private readonly db: Db, private readonly classifier: RouterClassifier | null = null) {}
@@ -86,6 +98,7 @@ export class RouterService {
       draft: draft && draftDefinition?.success ? { definition: draftDefinition.data, updatedAt: draft.updatedAt.toISOString(), problems: await routerActivationProblems(this.db, draftDefinition.data) } : null,
       activeDefinition: active ? parseDefinition(active.definition) : null,
       versions: versions.map((v) => ({ id: v.id, version: v.version, reason: v.reason, createdAt: v.createdAt.toISOString(), createdBy: v.createdBy })),
+      latestVersionId: versions[0]?.id ?? null,
     };
   }
 
@@ -111,8 +124,11 @@ export class RouterService {
     assertCan(actor.principal!, Permission.ROUTERS_MANAGE);
     try {
       await this.db.transaction(async (tx) => {
-        const [row] = await tx.select().from(routers).where(eq(routers.id, id)).for('update');
-        if (!row) throw notFound('router', id);
+        const row = await lockRouter(tx, id);
+        await assertRouterInScope(tx, actor.principal!, id);
+        // The draft definition is inert (only an approved version goes live); the name is the router's own configuration.
+        const renamed = (input.name !== undefined && input.name !== row.name) || (input.description !== undefined && input.description !== row.description);
+        if (renamed) await assertChangeAllowed(tx, routerApproval, id, 'UPDATE');
         const now = new Date();
         await tx
           .insert(routerDrafts)
@@ -136,28 +152,80 @@ export class RouterService {
   /** Freeze the draft into the next immutable version (what an activation proposal names). */
   async freezeVersion(actor: ActorContext, id: string, reason: string): Promise<{ id: string; version: number }> {
     assertCan(actor.principal!, Permission.ROUTERS_MANAGE);
-    return this.db.transaction((tx) => freezeRouterDraft(tx, actor, id, reason));
+    return this.db.transaction(async (tx) => {
+      await assertRouterInScope(tx, actor.principal!, id);
+      return freezeRouterDraft(tx, actor, id, reason);
+    });
   }
 
-  /** Stop: never gated. */
+  /** Stop: never gated, never locked by a proposal — but only by the teams the router serves (router-scope.ts). */
   async disable(actor: ActorContext, id: string): Promise<void> {
     assertCan(actor.principal!, Permission.ROUTERS_MANAGE);
-    await this.db.transaction((tx) => disableRouter(tx, actor, id));
+    await this.db.transaction(async (tx) => {
+      await assertRouterInScope(tx, actor.principal!, id);
+      await disableRouter(tx, actor, id);
+    });
   }
 
-  /** Until the approval spine handles routers, every activation is a 409 approval_required. */
-  async requestActivation(actor: ActorContext, id: string, versionId: string): Promise<never> {
-    assertCan(actor.principal!, Permission.ROUTERS_MANAGE);
+  /**
+   * An activation proposal takes the router's newest version live (pinned by the content hash). Asking for an
+   * older one is refused: restore it as the draft and freeze it again, so the checker reviews what goes live.
+   */
+  async assertActivatable(principal: Principal, id: string, versionId: string): Promise<void> {
+    assertCan(principal, Permission.ROUTERS_MANAGE);
     const [version] = await this.db.select({ routerId: routerVersions.routerId }).from(routerVersions).where(eq(routerVersions.id, versionId));
     if (!version || version.routerId !== id) throw notFound('router_version', versionId);
-    throw routerApprovalRequired(id, 'ACTIVATE');
+    const [latest] = await this.db.select({ id: routerVersions.id }).from(routerVersions).where(eq(routerVersions.routerId, id)).orderBy(desc(routerVersions.version)).limit(1);
+    if (latest?.id !== versionId) throw conflict('version_not_latest', 'Only the newest version can be activated: restore this version as the draft and freeze it again.');
   }
 
-  async requestChannels(actor: ActorContext, id: string): Promise<never> {
+  /** Rename / describe a draft router directly (an approved router answers 409 approval_required). */
+  async update(actor: ActorContext, id: string, input: Omit<RouterUpdateInput, 'approval'>): Promise<RouterDetail> {
     assertCan(actor.principal!, Permission.ROUTERS_MANAGE);
-    const [row] = await this.db.select({ id: routers.id }).from(routers).where(eq(routers.id, id));
-    if (!row) throw notFound('router', id);
-    throw routerApprovalRequired(id, 'UPDATE');
+    try {
+      await this.db.transaction(async (tx) => {
+        const row = await lockRouter(tx, id);
+        await assertRouterInScope(tx, actor.principal!, id);
+        await assertChangeAllowed(tx, routerApproval, id, 'UPDATE');
+        await renameRouter(tx, actor, row, input);
+      });
+    } catch (err) {
+      if (nameTaken(err)) throw conflict('router_name_taken', `A router named ${input.name} already exists`);
+      throw err;
+    }
+    return this.get(actor.principal!, id);
+  }
+
+  /**
+   * Split a channel set into the stop (channels left out are detached at once, never locked) and what is new
+   * (`attach`, an approvable change once the router is approved).
+   */
+  async detachExcept(actor: ActorContext, id: string, channelIds: readonly string[]): Promise<{ detached: string[]; attach: string[] }> {
+    assertCan(actor.principal!, Permission.ROUTERS_MANAGE);
+    return this.db.transaction(async (tx) => {
+      const [row] = await tx.select({ id: routers.id }).from(routers).where(eq(routers.id, id));
+      if (!row) throw notFound('router', id);
+      await assertRouterInScope(tx, actor.principal!, id);
+      const current = (await tx.select({ id: channels.id }).from(channels).where(eq(channels.routerId, id))).map((c) => c.id);
+      const wanted = [...new Set(channelIds)];
+      const detached = await detachRouterChannels(tx, actor, id, current.filter((c) => !wanted.includes(c)));
+      return { detached, attach: wanted.filter((c) => !current.includes(c)) };
+    });
+  }
+
+  /** Attach channels to a draft router directly (it routes nothing until its activation is approved). */
+  async attachDirect(actor: ActorContext, id: string, add: readonly string[]): Promise<void> {
+    assertCan(actor.principal!, Permission.ROUTERS_MANAGE);
+    await this.db.transaction(async (tx) => {
+      await lockRouter(tx, id);
+      await assertRouterInScope(tx, actor.principal!, id);
+      await assertChangeAllowed(tx, routerApproval, id, 'UPDATE');
+      // Taking another router's channel would stop its customers' routing without that router's teams: detach it there first.
+      const taken = await channelsOnOtherRouters(tx, id, add);
+      if (taken.length) throw conflict('channel_on_other_router', `${taken.map((c) => `${c.name} (on ${c.routerName})`).join(', ')}: detach it from that router first.`);
+      const current = (await tx.select({ id: channels.id }).from(channels).where(eq(channels.routerId, id))).map((c) => c.id);
+      await attachRouterChannels(tx, actor, id, [...new Set([...current, ...add])]);
+    });
   }
 
   /** Approval activation path (the router descriptor) and seeds: make a version live. */
@@ -167,6 +235,11 @@ export class RouterService {
 
   static attachChannels(tx: DbOrTx, actor: ActorContext, routerId: string, channelIds: readonly string[]): Promise<void> {
     return attachRouterChannels(tx, actor, routerId, channelIds);
+  }
+
+  /** "Reached through" for one agent (router-reach.ts). */
+  reachOfAgent(principal: Principal, agentId: string): Promise<AgentReach[]> {
+    return agentReach(this.db, principal, agentId);
   }
 
   async simulate(principal: Principal, id: string, input: RouterSimulateInput): Promise<SimulationResult> {
@@ -211,19 +284,4 @@ export class RouterService {
       };
     });
   }
-}
-
-/** Freeze a router's draft into version n+1 (structurally valid by construction; references checked at activation). */
-export async function freezeRouterDraft(tx: DbOrTx, actor: ActorContext, routerId: string, reason: string): Promise<{ id: string; version: number }> {
-  const [router] = await tx.select().from(routers).where(eq(routers.id, routerId)).for('update');
-  if (!router) throw notFound('router', routerId);
-  const [draft] = await tx.select().from(routerDrafts).where(eq(routerDrafts.routerId, routerId));
-  if (!draft) throw notFound('router_draft', routerId);
-  const definition = parseDefinition(draft.definition);
-  const [last] = await tx.select({ v: max(routerVersions.version) }).from(routerVersions).where(eq(routerVersions.routerId, routerId));
-  const version = (last?.v ?? 0) + 1;
-  const id = uuidv7();
-  await tx.insert(routerVersions).values({ id, routerId, version, definition, reason, createdBy: actor.principal?.userId ?? null });
-  await recordAudit(tx, actor, { action: 'router.version_create', targetType: 'router', targetId: routerId, summary: `Router ${router.name}: version ${version}${reason ? ` — ${reason}` : ''}`, after: { versionId: id, version, definition } });
-  return { id, version };
 }

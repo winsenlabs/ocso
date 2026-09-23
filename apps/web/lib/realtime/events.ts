@@ -40,6 +40,8 @@ export interface RealtimePayloads {
   'approval.requested': { proposalId: string; objectKind: string; objectId: string; action: string; makerId: string; checkerId: string };
   'approval.decided': { proposalId: string; objectKind: string; objectId: string; decision: 'APPROVED' | 'REJECTED' | 'WITHDRAWN' | 'BLOCKED' | 'VOID'; checkerId: string | null; makerId: string | null };
   'approval.checker_invalid': { proposalId: string; objectKind: string; checkerId: string; reason: 'DISABLED' | 'LOST_RIGHTS'; makerId: string };
+  /** A weekly or ad-hoc exception report is ready to sign (exceptions.read holders). */
+  'exception_report.ready': { reportId: string; kind: 'WEEKLY' | 'ADHOC'; periodStart: string; periodEnd: string };
 }
 
 export type RealtimeEventType = keyof RealtimePayloads;
@@ -90,6 +92,7 @@ export const REALTIME_EVENT_TYPES = [
   'approval.requested',
   'approval.decided',
   'approval.checker_invalid',
+  'exception_report.ready',
 ] as const satisfies readonly RealtimeEventType[];
 
 const KNOWN: ReadonlySet<string> = new Set(REALTIME_EVENT_TYPES);

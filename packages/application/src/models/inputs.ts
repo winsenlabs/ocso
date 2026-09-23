@@ -22,7 +22,8 @@ export const ProviderInput = z.object({
   settings: z.record(z.string(), z.unknown()).default({}),
   /** Plaintext credentials entered once; stored in the SecretStore and never returned. */
   credentials: z.record(z.string(), credentialValue).default({}),
-  enabled: z.boolean().default(true),
+  /** A new provider is a disabled draft; true asks for its activation at once (a proposal: the API needs `approval`). */
+  enabled: z.boolean().default(false),
   maxConcurrency: z.number().int().min(1).max(10_000).default(50),
 });
 export type ProviderInput = z.infer<typeof ProviderInput>;

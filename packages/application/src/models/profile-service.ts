@@ -13,6 +13,9 @@ import type { ModelCatalogService } from './catalog/catalog-service.js';
 import type { ProfileInput, ProfilePatch } from './inputs.js';
 import { checkProfileTargets, modelFacts, type ProfilePolicyCheck } from './model-policy.js';
 import { agentsByProfile } from './references.js';
+import { profilesInUse } from './profile-approval.js';
+import { approvalRequiredError } from '../approvals/guard.js';
+import { assertPlatformWrite } from '../settings/platform-approvals.js';
 import { EMPTY_USAGE_STATS, modelUsageStats } from './usage-stats.js';
 import { toProfileView, type ProfileRow, type ProfileView } from './views.js';
 
@@ -64,7 +67,9 @@ function definedFields(patch: ProfilePatch): Partial<ProfileFields> {
 
 /**
  * Logical model profiles (docs/06 §2): agents reference these, never provider
- * model ids. Saves are checked against the deployment model policy with the
+ * model ids. Maker–checker (PM/research/11 §4, profile-approval.ts): a profile
+ * nothing live uses and never approved is a draft, edited here directly; after
+ * that every change, and any delete, is a proposal. Saves are checked against the deployment model policy with the
  * same planner the runtime gateway uses; a non-permitted primary is rejected.
  */
 export class ProfileService {
@@ -116,6 +121,9 @@ export class ProfileService {
   async update(actor: ActorContext, id: string, patch: ProfilePatch): Promise<ProfileSaveResult> {
     authorize(actor, Permission.MODEL_PROFILES_MANAGE);
     return this.save(async (tx) => {
+      await this.row(tx, id);
+      // Maker–checker: a draft only (never approved and nothing live uses it); else 409 approval_required.
+      await assertPlatformWrite(tx, 'model_profile', id, 'UPDATE', async (t) => (await profilesInUse(t, [id])).size > 0);
       const before = await this.row(tx, id, true);
       const defined = definedFields(patch);
       const merged = fieldsOf({ ...before, ...defined });
@@ -142,32 +150,11 @@ export class ProfileService {
     }, actor);
   }
 
+  /** Deleting a profile is always a proposal (DELETE, profile-approval.ts): 409 approval_required here. */
   async delete(actor: ActorContext, id: string): Promise<void> {
     authorize(actor, Permission.MODEL_PROFILES_MANAGE);
-    try {
-      await this.deps.db.transaction(async (tx) => {
-        const row = await this.row(tx, id, true);
-        const agents = (await agentsByProfile(tx, [id])).get(id) ?? [];
-        if (agents.length) {
-          throw new DomainError(ErrorCategory.CONFLICT, 'model_profile_in_use', `${row.name} is used by virtual agents; reassign them first`, {
-            agents: [...new Set(agents.map((a) => a.name))],
-          });
-        }
-        await tx.delete(modelProfiles).where(eq(modelProfiles.id, id));
-        await recordAudit(tx, actor, {
-          action: 'model_profile.delete',
-          targetType: 'model_profile',
-          targetId: id,
-          summary: `Deleted model profile ${row.name}`,
-          before: fieldsOf(row),
-        });
-        await emitEvent(tx, actor, 'config.changed', { area: 'model_profile', entityId: id });
-      });
-    } catch (error) {
-      // An agent assigned concurrently still holds the FK.
-      if (isForeignKeyViolation(error)) throw conflict('model_profile_in_use', 'The profile is used by a virtual agent');
-      throw error;
-    }
+    await this.row(this.deps.db, id);
+    throw approvalRequiredError('model_profile', id, 'DELETE');
   }
 
   /** Reject a save whose primary target the deployment policy does not permit. */

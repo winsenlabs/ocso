@@ -45,6 +45,22 @@ test.beforeAll(async () => {
 
 const field = (page: Page, label: string) => page.getByRole('form', { name: 'Edit worker configuration' }).getByLabel(label, { exact: false });
 
+/** Settings are always live: every change names a checker (Sana, a Head) and a reason (PM/research/11 §4). */
+async function nameChecker(page: Page, form: string, reason = 'E2E: settings change'): Promise<void> {
+  const f = page.getByRole('form', { name: form });
+  await f.getByLabel('Checker').selectOption({ label: USERS.lead.name });
+  await f.getByLabel('Reason').fill(reason);
+}
+
+/** Sana approves the open proposal of this kind (the approvals screen has its own spec). */
+async function approveAsLead(objectKind: string): Promise<void> {
+  const { token } = (await (await call('POST', '/v1/auth/login', { email: USERS.lead.email, password: USERS.lead.password })).json()) as { token: string };
+  const rows = ((await (await call('GET', `/v1/approvals?box=AWAITING_ME&objectKind=${objectKind}`, undefined, token)).json()) as { rows: Array<{ id: string; contentHash: string }> }).rows;
+  expect(rows.length, `an open ${objectKind} proposal for ${USERS.lead.name}`).toBeGreaterThan(0);
+  const res = await call('POST', `/v1/approvals/${rows[0]!.id}/decision`, { decision: 'APPROVE', reason: 'E2E: reviewed', contentHash: rows[0]!.contentHash }, token);
+  expect(res.status).toBe(200);
+}
+
 test('Tech admin sees the control center built from real (empty) telemetry', async ({ page }) => {
   await login(page, ACCOUNTS.admin);
   await page.goto('/system');
@@ -81,21 +97,29 @@ test('Tech admin changes a worker setting; it persists, and an invalid value sho
   await expect(page.getByRole('region', { name: 'Scaling apply status' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Worker deployment' })).toBeVisible();
 
+  // Settings change by approval: the change is proposed, Sana approves it, then it applies.
   await field(page, 'Max workers').fill('12');
-  await page.getByRole('button', { name: 'Save configuration' }).click();
-  await expect(page.getByRole('form', { name: 'Edit worker configuration' }).getByRole('status')).toContainText('Worker configuration saved');
+  await nameChecker(page, 'Edit worker configuration', 'E2E: more headroom');
+  await page.getByRole('button', { name: 'Submit for approval' }).click();
+  await expect(page.getByRole('form', { name: 'Edit worker configuration' }).getByRole('status')).toContainText(`Sent for approval to ${USERS.lead.name}`);
+  await page.reload();
+  await settled(page);
+  await expect(field(page, 'Max workers')).toHaveValue('10');
+  await approveAsLead('deployment_settings');
   await page.reload();
   await settled(page);
   await expect(field(page, 'Max workers')).toHaveValue('12');
 
   await field(page, 'Min warm workers').fill('50');
-  await page.getByRole('button', { name: 'Save configuration' }).click();
+  await nameChecker(page, 'Edit worker configuration');
+  await page.getByRole('button', { name: 'Submit for approval' }).click();
   await expect(page.locator('#wk-minWarmWorkers-error')).toContainText('must not exceed max workers');
   await expect(field(page, 'Min warm workers')).toHaveAttribute('aria-invalid', 'true');
 
   await field(page, 'Min warm workers').fill('2');
   await field(page, 'Max workers').fill('0');
-  await page.getByRole('button', { name: 'Save configuration' }).click();
+  await nameChecker(page, 'Edit worker configuration');
+  await page.getByRole('button', { name: 'Submit for approval' }).click();
   await expect(page.locator('#wk-maxWorkers-error')).toContainText('expected number to be >=1');
   await page.reload();
   await settled(page);
@@ -114,6 +138,19 @@ test('Tech admin adds an in-app destination, sees the seeded rules and creates a
   await expect(dialog).toBeHidden();
   const destinations = page.getByRole('table', { name: 'Notification destinations' });
   await expect(destinations).toContainText('E2E ops inbox');
+  // A new destination is a disabled draft; enabling it is a second person's approval.
+  const inbox = destinations.getByRole('row', { name: /E2E ops inbox/ });
+  await expect(inbox).toContainText('draft');
+  await inbox.getByRole('button', { name: 'Enable E2E ops inbox' }).click();
+  const modal = page.getByRole('dialog', { name: 'Submit for approval' });
+  await modal.getByLabel('checker').selectOption({ label: USERS.lead.name });
+  await modal.getByLabel('reason').fill('E2E: ops inbox');
+  await modal.getByRole('button', { name: 'Submit for approval' }).click();
+  await expect(inbox).toContainText(`Pending approval · awaiting ${USERS.lead.name}`);
+  await approveAsLead('notification_destination');
+  await page.reload();
+  await settled(page);
+  await expect(destinations.getByRole('row', { name: /E2E ops inbox/ })).toContainText('enabled');
   await expect(destinations).toContainText('In-app notifications'); // seeded by setup
   await destinations.getByRole('button', { name: 'Send a test alert to E2E ops inbox' }).click();
   await expect(destinations.getByRole('status').filter({ hasText: 'test' })).toContainText('test delivered');
@@ -156,7 +193,7 @@ test('Tech admin opens a real technical alert, sees its deliveries, acknowledges
 
   await row.click();
   const drawer = page.getByRole('dialog', { name: 'Healthy workers below minimum' });
-  await expect(drawer).toContainText('Tech admin');
+  await expect(drawer).toContainText('audienceTech'); // presets were renamed Tech/Head/Lead/Service (PM/research/11 §3)
   await expect(drawer.getByRole('table', { name: 'Deliveries' })).toContainText('In-app notifications');
   await drawer.getByLabel(/note/).fill('Only one e2e worker is running.');
   await drawer.getByRole('button', { name: 'Acknowledge' }).click();

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { ApprovalNotifier, createApprovalRegistry, type ApprovalNotifyJob } from '@ocso/application';
+import { ApprovalNotifier, createApprovalRegistry, recordInstalledApproval, type ApprovalNotifyJob } from '@ocso/application';
 import { jobs, modelProfiles, modelProviders, uuidv7 } from '@ocso/db';
 import type { EmailSender } from '@ocso/email';
 import { EMAIL_SENDER } from '../../src/infrastructure/tokens.js';
@@ -46,6 +46,8 @@ beforeAll(async () => {
   ids.profile = uuidv7();
   await h.db.db.insert(modelProviders).values({ id: ids.provider, kind: 'DEV_SCRIPTED', name: 'Scripted' });
   await h.db.db.insert(modelProfiles).values({ id: ids.profile, name: 'support-fast', providerId: ids.provider, model: 'scripted-1' });
+  // An existing profile (grandfathered like 0031): agents go live only on approved profiles.
+  await recordInstalledApproval(h.db.db, { kind: 'model_profile', id: ids.profile, title: 'support-fast' }, 'Test fixture: existing profile');
   const agent = await h.http().post('/v1/agents').set(auth(tok.lead)).send({ name: 'Maya', conversationType: 'SUPPORT', modelProfileId: ids.profile, teamIds: [ids.cards] }).expect(201);
   ids.maya = agent.body.id;
 });
@@ -164,7 +166,8 @@ describe('changing a live agent', () => {
     await h.http().post(`/v1/approvals/${open.id}/withdraw`).set(auth(tok.service)).send({ reason: 'not mine' }).expect(403);
     await h.http().post(`/v1/approvals/${open.id}/withdraw`).set(auth(tok.lead)).send({ reason: 'Later' }).expect(204);
     const kinds = (await h.http().get('/v1/approvals/kinds').set(auth(tok.service)).expect(200)).body;
-    expect(kinds.map((k: { kind: string }) => k.kind).sort()).toEqual(['agent', 'prompt_version']);
+    // Every registered kind (approvals/coverage.test.ts pins the reviewed list).
+    expect(kinds.map((k: { kind: string }) => k.kind)).toEqual(expect.arrayContaining(['agent', 'prompt_version', 'channel', 'deployment_settings']));
     await h.http().get('/v1/approvals').query({ box: 'OPEN' }).set(auth(tok.head)).expect(403);
     await h.http().get('/v1/approvals').query({ box: 'OPEN' }).set(auth(tok.admin)).expect(200);
   });

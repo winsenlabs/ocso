@@ -12,17 +12,18 @@ import {
   ProfileInput,
   ProfileService,
   ProviderService,
-  SettingsService,
+  applyDeploymentSettings,
   readGenerations,
   type ActorContext,
   type ProviderInput,
 } from '../src/index.js';
+import { platformApprover, type PlatformApprover } from './support/platform-approvals.js';
 
 let t: TestDatabase;
 let providers: ProviderService;
 let profiles: ProfileService;
 let pricing: PricingService;
-let settings: SettingsService;
+let approver: PlatformApprover;
 const ids: Record<'india' | 'india2' | 'us' | 'offList' | 'global', string> = { india: '', india2: '', us: '', offList: '', global: '' };
 
 const as = (role: Principal['role']): ActorContext => ({
@@ -52,13 +53,16 @@ beforeAll(async () => {
   providers = new ProviderService({ db: t.db, secrets, registry });
   profiles = new ProfileService({ db: t.db, registry });
   pricing = new PricingService({ db: t.db, registry });
-  settings = new SettingsService(t.db);
+  approver = await platformApprover(t.db, { secrets, providers: registry });
   ids.india = (await providers.create(admin, dev('Mumbai', 'ap-south-1', 'IN'))).id;
   ids.india2 = (await providers.create(admin, dev('Hyderabad', 'ap-south-2', 'IN'))).id;
   ids.us = (await providers.create(admin, dev('Virginia', 'us-east-1', 'US'))).id;
   ids.offList = (await providers.create(admin, dev('Chennai', 'ap-south-1', 'IN'))).id;
   ids.global = (await providers.create(admin, dev('Global', 'global', 'GLOBAL'))).id;
-  await settings.updateDeployment(admin, {
+  // Enabled by approval, as in a deployment (a new provider is a disabled draft).
+  for (const id of Object.values(ids)) await approver.approve(admin, 'model_provider', id, 'ACTIVATE');
+  // Fixture: the policy as an approved settings change would leave it (settings changes are proposals).
+  await applyDeploymentSettings(t.db, admin, {
     residencyZone: 'IN',
     providerAllowlist: [ids.india, ids.india2, ids.us, ids.global],
     allowCrossProviderFallback: true,
@@ -125,11 +129,14 @@ describe('profile policy checks (docs/06 §5)', () => {
   });
 
   it('applies the cost ceiling using the price table', async () => {
-    await pricing.create(admin, pricingInput('scripted-*', 5_000_000));
-    await settings.updateDeployment(admin, { maxOutputCostPerMTokMicros: 1_000_000 });
+    const price = await pricing.create(admin, pricingInput('scripted-*', 5_000_000));
+    await applyDeploymentSettings(t.db, admin, { maxOutputCostPerMTokMicros: 1_000_000 });
+    // A draft price prices nothing until approved.
+    expect((await profiles.validate(admin, profile({ name: 'pricey', providerId: ids.india }))).primary.reason).toBeNull();
+    await approver.approve(admin, 'model_pricing', price.id, 'ACTIVATE');
     const check = await profiles.validate(admin, profile({ name: 'pricey', providerId: ids.india }));
     expect(check.primary.reason).toBe('cost_ceiling_exceeded');
-    await settings.updateDeployment(admin, { maxOutputCostPerMTokMicros: null });
+    await applyDeploymentSettings(t.db, admin, { maxOutputCostPerMTokMicros: null });
   });
 });
 
@@ -155,16 +162,18 @@ describe('configuration versions and cache generations', () => {
     const [row] = await t.db.select().from(modelProfiles).where(eq(modelProfiles.name, 'support-primary'));
     const scope = `profile:${row!.id}` as const;
     const before = (await readGenerations(t.db, [scope]))[scope]!;
-    await providers.update(admin, ids.india2, { settings: { latencyMs: 1, chunkDelayMs: 0 } });
-    await providers.update(admin, ids.india, { maxConcurrency: 7 });
+    // Approved providers change through proposals; the generations move when the change applies.
+    await approver.approve(admin, 'model_provider', ids.india2, 'UPDATE', { settings: { latencyMs: 1, chunkDelayMs: 0 } });
+    await approver.approve(admin, 'model_provider', ids.india, 'UPDATE', { maxConcurrency: 7 });
     expect((await readGenerations(t.db, [scope]))[scope]).toBe(before + 2);
   });
 });
 
 describe('delete guards', () => {
-  it('refuses to delete providers used by profiles, including as fallback', async () => {
-    await expect(providers.delete(admin, ids.india)).rejects.toMatchObject({ code: 'model_provider_in_use', details: { profiles: ['support-primary'] } });
-    await expect(providers.delete(admin, ids.india2)).rejects.toMatchObject({ code: 'model_provider_in_use' });
+  it('refuses to delete providers used by profiles, including as fallback (the DELETE proposal fails validation)', async () => {
+    await expect(providers.delete(admin, ids.india)).rejects.toMatchObject({ code: 'approval_required' });
+    await expect(approver.submit(admin, 'model_provider', ids.india, 'DELETE')).rejects.toMatchObject({ code: 'validation_failed', details: { problems: [expect.objectContaining({ code: 'model_provider_in_use' })] } });
+    await expect(approver.submit(admin, 'model_provider', ids.india2, 'DELETE')).rejects.toMatchObject({ code: 'validation_failed' });
   });
 
   it('refuses to delete a profile referenced by an agent, then deletes it once unassigned', async () => {
@@ -173,9 +182,10 @@ describe('delete guards', () => {
     await t.db.insert(virtualAgents).values({ id: agentId, name: 'Maya', slug: 'maya', conversationType: 'SUPPORT', summarizerProfileId: created.id });
     const [listed] = (await profiles.list(lead)).filter((p) => p.id === created.id);
     expect(listed!.agents).toEqual([{ id: agentId, name: 'Maya', usage: 'SUMMARIZER' }]);
-    await expect(profiles.delete(admin, created.id)).rejects.toMatchObject({ code: 'model_profile_in_use', details: { agents: ['Maya'] } });
+    await expect(profiles.delete(admin, created.id)).rejects.toMatchObject({ code: 'approval_required' });
+    await expect(approver.submit(admin, 'model_profile', created.id, 'DELETE')).rejects.toMatchObject({ details: { problems: [expect.objectContaining({ code: 'model_profile_in_use' })] } });
     await t.db.update(virtualAgents).set({ summarizerProfileId: null }).where(eq(virtualAgents.id, agentId));
-    await profiles.delete(admin, created.id);
+    await approver.approve(admin, 'model_profile', created.id, 'DELETE');
     await expect(profiles.get(admin, created.id)).rejects.toMatchObject({ category: 'not_found' });
   });
 });
@@ -221,7 +231,8 @@ describe('pricing', () => {
     expect(updated.outputPerMTokMicros).toBe(14_000_000);
     expect((await pricing.list(admin)).map((p) => p.modelPattern)).toContain('claude-sonnet-4-*');
     await expect(pricing.list(lead)).rejects.toMatchObject({ category: 'authorization' });
-    await pricing.delete(admin, row.id);
+    await expect(pricing.delete(admin, row.id)).rejects.toMatchObject({ code: 'approval_required' });
+    await approver.approve(admin, 'model_pricing', row.id, 'DELETE');
     await expect(pricing.update(admin, row.id, { outputPerMTokMicros: 1 })).rejects.toMatchObject({ category: 'not_found' });
   });
 

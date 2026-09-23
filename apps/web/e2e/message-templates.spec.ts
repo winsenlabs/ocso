@@ -3,7 +3,8 @@ import { createHmac, randomBytes } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { expect, test, type APIRequestContext } from '@playwright/test';
 import { ACCOUNTS, E2E, apiUrl, databaseUrl } from './config';
-import { login } from './helpers';
+import { login, logout } from './helpers';
+import { approveOver, approvedChannel, approvedProfile, approvedProvider } from './platform-setup';
 import { routeChannelToAgent } from './routing';
 
 /**
@@ -12,9 +13,11 @@ import { routeChannelToAgent } from './routing';
  * stand-in (Messages + Content API) the channel points at: a WhatsApp
  * customer writes, the exec holds the conversation after the adapter's
  * 24-hour window, the composer switches to Template, the exec fills and
- * sends an approved template (delivered through Twilio by Content SID); a CS
- * Lead writes a template, submits it for approval, and is notified in-app
- * when WhatsApp approves it. The old /whatsapp-templates URL redirects.
+ * sends an approved template (delivered through Twilio by Content SID); a
+ * Head writes a template and submits it — a second Head approves the
+ * submission in Approvals (PM/research/11 §4), only then does the worker send
+ * it to WhatsApp — and the maker is notified in-app when WhatsApp approves it.
+ * The old /whatsapp-templates URL redirects.
  */
 test.describe.configure({ mode: 'serial' });
 
@@ -23,6 +26,8 @@ const AUTH_TOKEN = '3f9c2b7a1e8d4c6b0a5f9e2d7c1b8a46';
 const APPROVED = 'HX0f0e72ce92eef937d6f481b338ecbd19';
 const LEAD = { name: 'Tina Lead', email: 'tpl.lead@e2e.ocso.test', password: 'correct-horse-battery-tpllead' };
 const EXEC = { name: 'Tom Exec', email: 'tpl.exec@e2e.ocso.test', password: 'correct-horse-battery-tplexec' };
+/** A second Head of the team: checks the first one's template submissions (PM/research/11 §4). */
+const CHECKER = { name: 'Cara Checker', email: 'tpl.checker@e2e.ocso.test', password: 'correct-horse-battery-tplcheck' };
 const STUB_PORT = E2E.apiPort + 3;
 
 let api: APIRequestContext;
@@ -100,23 +105,25 @@ test.beforeAll(async ({ playwright }) => {
     await call('POST', '/v1/setup', null, { setupToken: E2E.setupToken, orgName: 'E2E Bank', adminName: ACCOUNTS.admin.name, adminEmail: ACCOUNTS.admin.email, adminPassword: ACCOUNTS.admin.password, timezone: 'Asia/Kolkata' });
   }
   tok.admin = await loginApi(ACCOUNTS.admin.email, ACCOUNTS.admin.password);
-  // Channel adapters reach only public https hosts unless the Tech admin allowlists an internal one (the stub is on loopback).
-  await call('PATCH', '/v1/settings/deployment', tok.admin, { egressAllowedInternalHosts: ['127.0.0.1'] });
   const lead = await call<{ id: string }>('POST', '/v1/users', tok.admin, { name: LEAD.name, email: LEAD.email, role: 'HEAD', password: LEAD.password, teamIds: [], languages: [], maxConcurrent: 5 });
   tok.lead = await loginApi(LEAD.email, LEAD.password);
+  // Platform objects go live through a second person's approval (PM/research/11 §4): Tina, a Head, checks the admin's.
+  const platformChecker = { id: lead.id, token: tok.lead };
+  // Channel adapters reach only public https hosts unless the Tech admin allowlists an internal one (the stub is on loopback).
+  await approveOver(api, tok.admin, platformChecker, { method: 'PATCH', path: '/v1/settings/deployment', body: { egressAllowedInternalHosts: ['127.0.0.1'] } });
   const team = (await call<{ id: string }>('POST', '/v1/teams', tok.lead, { name: 'TPL Cards' })).id;
   await call('PATCH', `/v1/users/${lead.id}`, tok.admin, { teamIds: [team] });
+  await call('POST', '/v1/users', tok.admin, { name: CHECKER.name, email: CHECKER.email, role: 'HEAD', password: CHECKER.password, teamIds: [team], languages: [], maxConcurrent: 5 });
   ids.execId = (await call<{ id: string }>('POST', '/v1/users', tok.lead, { name: EXEC.name, email: EXEC.email, role: 'SERVICE', password: EXEC.password, teamIds: [team], languages: [], maxConcurrent: 5 })).id;
   tok.exec = await loginApi(EXEC.email, EXEC.password);
   ids.queue = (await call<{ id: string }>('POST', '/v1/queues', tok.lead, { name: 'TPL Cards', teamIds: [team] })).id;
-  const provider = (await call<{ id: string }>('POST', '/v1/model-providers', tok.admin, { kind: 'DEV_SCRIPTED', name: 'TPL Scripted', settings: { latencyMs: 20 } })).id;
-  const profile = (await call<{ id: string }>('POST', '/v1/model-profiles', tok.admin, { name: 'tpl-support', providerId: provider, model: 'scripted-1', retries: 0 })).id;
+  const provider = await approvedProvider(api, tok.admin, platformChecker, { kind: 'DEV_SCRIPTED', name: 'TPL Scripted', settings: { latencyMs: 20 } });
+  const profile = await approvedProfile(api, tok.admin, platformChecker, { name: 'tpl-support', providerId: provider, model: 'scripted-1', retries: 0 });
   const agent = (await call<{ id: string }>('POST', '/v1/agents', tok.lead, { name: 'Maya', slug: 'maya-tpl', purpose: 'customer support', conversationType: 'SUPPORT', modelProfileId: profile, defaultQueueId: ids.queue, teamIds: [team] })).id;
   const stubUrl = `http://127.0.0.1:${STUB_PORT}`;
-  const channel = await call<{ id: string; webhookPath: string }>('POST', '/v1/channels', tok.admin, {
+  const channel = await approvedChannel<{ id: string; webhookPath: string }>(api, tok.admin, platformChecker, {
     kind: 'TWILIO_WHATSAPP',
     name: 'TPL WhatsApp',
-    status: 'ACTIVE',
     settings: { accountSid: ACCOUNT_SID, from: 'whatsapp:+14155238886', apiBaseUrl: stubUrl, contentApiBaseUrl: stubUrl, statusCallback: false },
     secrets: { authToken: AUTH_TOKEN },
   });
@@ -165,8 +172,8 @@ test('after 24 hours the exec reaches the customer with an approved template', a
   await expect.poll(() => sent.find((m) => m['ContentSid'] === APPROVED)?.['ContentVariables'] ?? null, { timeout: 30_000 }).toBe('{"1":"Priya","2":"C-2291"}');
 });
 
-test('a Lead writes a template, submits it, and is told when WhatsApp approves it', async ({ page }) => {
-  test.setTimeout(90_000);
+test('a template goes to WhatsApp only after a second Head approves it; the maker is told when WhatsApp approves', async ({ page }) => {
+  test.setTimeout(120_000);
   await login(page, LEAD);
   await page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'Message templates' }).click();
   await expect(page).toHaveURL(/\/templates\?|\/templates$/);
@@ -180,10 +187,33 @@ test('a Lead writes a template, submits it, and is told when WhatsApp approves i
   await form.getByLabel('Example for {{1}}').fill('Priya');
   await form.getByLabel('Example for {{2}}').fill('Andheri');
   await expect(page.getByRole('figure', { name: 'Message preview' })).toContainText('Hi Priya, your replacement card is ready at the Andheri branch. Bring an ID.');
-  await form.getByRole('button', { name: 'Submit for WhatsApp approval' }).click();
+  await form.getByRole('button', { name: 'Save and submit for approval' }).click();
+  const modal = page.getByRole('dialog', { name: 'Submit for approval' });
+  await modal.getByLabel('checker').selectOption({ label: CHECKER.name });
+  await modal.getByLabel('reason').fill('Branch pickup notice for replacement cards');
+  await modal.getByRole('button', { name: 'Submit for approval' }).click();
 
-  await expect(page.getByRole('status').filter({ hasText: 'card_ready was submitted for WhatsApp approval' })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: 'card_ready is waiting for a checker' })).toBeVisible();
   const row = page.getByRole('listitem', { name: 'card_ready (en)' });
+  await expect(row).toContainText('Draft');
+  await expect(row.getByRole('link', { name: /Pending approval · awaiting Cara Checker/ })).toBeVisible();
+  // Nothing reached WhatsApp yet.
+  expect([...contents.values()].some((c) => c.item['friendly_name'] === 'card_ready')).toBe(false);
+  await logout(page);
+
+  await login(page, CHECKER);
+  await page.goto('/approvals');
+  await page.getByRole('table', { name: 'Approvals' }).getByRole('link', { name: /Submit template card_ready \(en\)/ }).click();
+  const d = page.getByRole('dialog', { name: /Submit template card_ready/ });
+  await expect(d).toContainText('Hi {{1}}, your replacement card is ready at the {{2}} branch.');
+  await d.getByRole('button', { name: 'Approve' }).click();
+  await expect(d).toContainText('approved');
+  // The worker submits it to WhatsApp (once).
+  await expect.poll(() => [...contents.values()].filter((c) => c.item['friendly_name'] === 'card_ready').length, { timeout: 30_000 }).toBe(1);
+  await logout(page);
+
+  await login(page, LEAD);
+  await page.goto(`/templates?channel=${ids.channel}`);
   await expect(row).toContainText('in review');
   await expect(row).toContainText('submitted by Tina Lead');
 

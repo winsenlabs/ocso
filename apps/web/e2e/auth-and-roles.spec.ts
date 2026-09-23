@@ -54,7 +54,7 @@ test('sign-in shows API errors, then the admin sees Platform navigation and not 
     'Home', 'Search',
     'System', 'Workers', 'Queues & leases', 'Telemetry',
     'Models', 'Connections', 'Channels', 'Message templates', 'Secrets', 'Webhooks',
-    'Alerts', 'Virtual agents', 'Audit log', 'Team & roles', 'Approvals',
+    'Alerts', 'Virtual agents', 'Audit log', 'Team & roles', 'Approvals', 'Exceptions',
     'My connections',
     'Settings',
   ]);
@@ -92,7 +92,7 @@ test('the Head sees Operations / Quality / Governance and creates only presets w
     'Home', 'Search',
     'Conversations', 'Virtual agents', 'Queues', 'Customers', 'Message templates',
     'Analytics', 'Reviews', 'Prompt corrections', 'Escalation reasons',
-    'Alerts', 'SLA policies', 'Team', 'Approvals',
+    'Alerts', 'SLA policies', 'Team', 'Approvals', 'Exceptions',
     'My connections',
     'Settings',
   ]);
@@ -130,7 +130,7 @@ test('Service member sees My work only, cannot open Team, and returns to the req
 
   await page.goto('/settings');
   await expect(page.getByRole('region', { name: 'Deployment settings' })).toContainText('E2E Bank');
-  await expect(page.getByRole('button', { name: 'Save changes' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Submit for approval' })).toHaveCount(0);
 });
 
 test('Ask OCSO opens with Ctrl+J and says it is not set up yet', async ({ page }) => {
@@ -155,8 +155,14 @@ test('Tech admin saves deployment settings', async ({ page }) => {
   await login(page, ACCOUNTS.admin);
   await page.goto('/settings');
   await page.getByLabel('Region label').fill('ap-south-1');
-  await page.getByRole('button', { name: 'Save changes' }).click();
-  await expect(page.getByText('Deployment settings saved')).toBeVisible();
+  // Settings are always live, so the change is a proposal a Head approves (PM/research/11 §4).
+  const form = page.getByRole('form', { name: 'Deployment settings' });
+  await form.getByLabel('Checker').selectOption({ label: ACCOUNTS.lead.name });
+  await form.getByLabel('Reason').fill('E2E: name the region');
+  await form.getByRole('button', { name: 'Submit for approval' }).click();
+  await expect(page.getByText(`Sent for approval to ${ACCOUNTS.lead.name}`)).toBeVisible();
+  await approveSettingsAs(ACCOUNTS.lead);
+  await page.reload();
   await expect(page.locator('.sb-brand .region')).toHaveText('ap-south-1');
 });
 
@@ -182,13 +188,42 @@ async function enrolAuthenticator(page: Page, password: string): Promise<string>
   return secret;
 }
 
+/**
+ * Settings change through approvals (PM/research/11 §4). The checker is a second Tech: Heads hold the platform
+ * check permission too, but once MFA is required for Heads a password-only Head could not approve lifting it.
+ */
+const MFA_CHECKER = { name: 'Mona Tech', email: 'mona.tech@e2e.ocso.test', password: 'correct-horse-battery-monatech' };
+async function apiFetch(method: string, path: string, body?: unknown, token?: string): Promise<Response> {
+  return fetch(`${apiUrl}${path}`, { method, headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+}
+async function apiToken(email: string, password: string): Promise<string> {
+  return ((await (await apiFetch('POST', '/v1/auth/login', { email, password })).json()) as { token: string }).token;
+}
+async function ensureMfaChecker(): Promise<void> {
+  const admin = await apiToken(ACCOUNTS.admin.email, ACCOUNTS.admin.password);
+  const res = await apiFetch('POST', '/v1/users', { name: MFA_CHECKER.name, email: MFA_CHECKER.email, role: 'TECH', password: MFA_CHECKER.password }, admin);
+  expect([201, 409]).toContain(res.status);
+}
+async function approveSettingsAs(who: { email: string; password: string }): Promise<void> {
+  const token = await apiToken(who.email, who.password);
+  const rows = ((await (await apiFetch('GET', '/v1/approvals?box=AWAITING_ME&objectKind=deployment_settings', undefined, token)).json()) as { rows: Array<{ id: string; contentHash: string }> }).rows;
+  expect(rows.length).toBeGreaterThan(0);
+  const res = await apiFetch('POST', `/v1/approvals/${rows[0]!.id}/decision`, { decision: 'APPROVE', reason: 'E2E: reviewed', contentHash: rows[0]!.contentHash }, token);
+  expect(res.status).toBe(200);
+}
+
 test('Tech admin requires MFA for Heads: the lead (a Head) enrols at sign-in, then signs in with a code', async ({ page }) => {
+  await ensureMfaChecker();
   await login(page, ACCOUNTS.admin);
   await page.goto('/settings');
   const policy = page.getByRole('form', { name: 'Require MFA for roles' });
   await policy.getByLabel('Head', { exact: true }).check();
-  await policy.getByRole('button', { name: 'Save MFA policy' }).click();
-  await expect(page.getByText('MFA is now required for the selected roles')).toBeVisible();
+  // A settings change is a proposal (PM/research/11 §4): another Head approves it before it applies.
+  await policy.getByLabel('Checker').selectOption({ label: MFA_CHECKER.name });
+  await policy.getByLabel('Reason').fill('E2E: Heads use a second factor');
+  await policy.getByRole('button', { name: 'Submit MFA policy for approval' }).click();
+  await expect(page.getByText(`Sent for approval to ${MFA_CHECKER.name}`)).toBeVisible();
+  await approveSettingsAs(MFA_CHECKER);
   await logout(page);
 
   // Password alone lands on forced enrolment; nothing else is reachable.
@@ -222,9 +257,13 @@ test('Tech admin requires MFA for Heads: the lead (a Head) enrols at sign-in, th
   // Other specs sign leads in with a password only: lift the requirement again.
   await login(page, ACCOUNTS.admin);
   await page.goto('/settings');
-  await page.getByRole('form', { name: 'Require MFA for roles' }).getByLabel('Head', { exact: true }).uncheck();
-  await page.getByRole('form', { name: 'Require MFA for roles' }).getByRole('button', { name: 'Save MFA policy' }).click();
-  await expect(page.getByText('MFA is no longer required for any role.')).toBeVisible();
+  const lift = page.getByRole('form', { name: 'Require MFA for roles' });
+  await lift.getByLabel('Head', { exact: true }).uncheck();
+  await lift.getByLabel('Checker').selectOption({ label: MFA_CHECKER.name });
+  await lift.getByLabel('Reason').fill('E2E: back to passwords');
+  await lift.getByRole('button', { name: 'Submit MFA policy for approval' }).click();
+  await expect(page.getByText(`Sent for approval to ${MFA_CHECKER.name}`)).toBeVisible();
+  await approveSettingsAs(MFA_CHECKER);
 });
 
 test('a Service member who forgot their password resets it from the emailed link', async ({ page, request }) => {

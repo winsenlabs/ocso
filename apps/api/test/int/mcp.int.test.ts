@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { ApprovalDecisionService, systemActor } from '@ocso/application';
 import { completeSetup, startApi, type ApiHarness } from './harness.js';
 
 /**
@@ -35,6 +36,10 @@ const teamId = '0192f0c1-0000-7000-8000-00000000a0f1';
 let connectionId: string;
 
 const bearer = (who: keyof typeof tokens) => ({ authorization: `Bearer ${tokens[who]}` });
+/** The lead (a Head, holding approvals.check.platform) approves the Tech admin's platform changes. */
+let leadId = '';
+const decideAsLead = (proposal: { id: string; contentHash: string }) =>
+  h.http().post(`/v1/approvals/${proposal.id}/decision`).set(bearer('lead')).send({ decision: 'APPROVE', reason: 'ok', contentHash: proposal.contentHash }).expect(200);
 
 /** Plays the admin's browser against the auto-approving AS; returns the path+query OCSO's callback receives. */
 async function consent(authorizationUrl: string): Promise<string> {
@@ -57,7 +62,9 @@ beforeAll(async () => {
   await h.db.pool.query(`INSERT INTO teams (id, name) VALUES ($1, 'Cards')`, [teamId]);
   await h.db.pool.query(`INSERT INTO agent_teams (agent_id, team_id) VALUES ($1, $2)`, [agentId, teamId]);
   await h.db.pool.query(`INSERT INTO team_members (team_id, user_id) SELECT $1, id FROM users WHERE email IN ('lead@ocso.test', 'exec@ocso.test')`, [teamId]);
-  await h.http().patch('/v1/settings/deployment').set(bearer('admin')).send({ egressAllowedInternalHosts: ['127.0.0.1'] }).expect(200);
+  leadId = (await h.http().get('/v1/auth/me').set(bearer('lead')).expect(200)).body.id;
+  const egress = await h.http().patch('/v1/settings/deployment').set(bearer('admin')).send({ egressAllowedInternalHosts: ['127.0.0.1'], approval: { checkerId: leadId, reason: 'Local MCP server' } }).expect(202);
+  await decideAsLead(egress.body.proposal);
   const { startTestAuthServer, startDemo } = await loadMcpTestHelpers();
   authServer = await startTestAuthServer({ expectedResource: () => rs.url });
   rs = await startDemo((mcpUrl) => ({
@@ -125,8 +132,18 @@ describe('MCP API', () => {
     const classify = { tools: [{ toolId: getCustomer.id, riskClass: 'READ', approved: true }] };
     await h.http().put(`/v1/mcp/connections/${connectionId}/tools`).set(bearer('lead')).send(classify).expect(403);
     await h.http().put(`/v1/mcp/connections/${connectionId}/tools`).set(bearer('admin')).send(classify).expect(200);
-    const approved = await h.http().post(`/v1/mcp/connections/${connectionId}/approve`).set(bearer('admin')).send({ allowedAgentIds: [agentId] }).expect(200);
-    expect(approved.body).toMatchObject({ status: 'ACTIVE', allowedAgentIds: [agentId] });
+    // "Approve" records the agent policy of the draft and asks for its activation: a proposal the lead approves.
+    await h.http().post(`/v1/mcp/connections/${connectionId}/approve`).set(bearer('admin')).send({ allowedAgentIds: [agentId] }).expect(409);
+    const proposed = await h.http().post(`/v1/mcp/connections/${connectionId}/approve`).set(bearer('admin')).send({ allowedAgentIds: [agentId], approval: { checkerId: leadId, reason: 'Core banking for Maya' } }).expect(202);
+    expect(proposed.body.proposal).toMatchObject({ objectKind: 'mcp_connection', action: 'ACTIVATE', status: 'SUBMITTED' });
+    const decided = await decideAsLead(proposed.body.proposal);
+    expect(decided.body).toMatchObject({ status: 'APPROVED', activating: true });
+    // Deferred: the worker re-contacts the server before the connection goes live (done here in-process).
+    expect(await h.app.get(ApprovalDecisionService).finishActivation(systemActor('test', 'mcp-activation'), proposed.body.proposal.id)).toBe('ACTIVATED');
+    const approved = await h.http().get(`/v1/mcp/connections/${connectionId}`).set(bearer('admin')).expect(200);
+    expect(approved.body).toMatchObject({ status: 'ACTIVE', allowedAgentIds: [agentId], approval: { approved: true, pending: null } });
+    // Live: tool approvals are proposals now.
+    await h.http().put(`/v1/mcp/connections/${connectionId}/tools`).set(bearer('admin')).send(classify).expect(409);
 
     const grant = { grants: [{ toolId: getCustomer.id, argumentRules: [{ path: 'cif', op: 'exists', effect: 'REQUIRE_CONFIRMATION', message: 'confirm lookups' }] }] };
     await h.http().put(`/v1/agents/${agentId}/tools`).set(bearer('admin')).send(grant).expect(403);
@@ -152,7 +169,9 @@ describe('MCP API', () => {
     await h.http().post(`/v1/mcp/connections/${connectionId}/disable`).set(bearer('lead')).expect(403);
     expect((await h.http().post(`/v1/mcp/connections/${connectionId}/disable`).set(bearer('admin')).expect(200)).body.status).toBe('DISABLED');
     await h.http().delete(`/v1/mcp/connections/${connectionId}`).set(bearer('exec')).expect(403);
-    await h.http().delete(`/v1/mcp/connections/${connectionId}`).set(bearer('admin')).expect(204);
+    await h.http().delete(`/v1/mcp/connections/${connectionId}`).set(bearer('admin')).expect(409);
+    const removal = await h.http().delete(`/v1/mcp/connections/${connectionId}`).set(bearer('admin')).send({ approval: { checkerId: leadId, reason: 'Retired' } }).expect(202);
+    await decideAsLead(removal.body.proposal);
     await h.http().get(`/v1/mcp/connections/${connectionId}`).set(bearer('admin')).expect(404);
   });
 });

@@ -9,6 +9,8 @@ import { emailDomainMatches } from './request.js';
 export interface ProvisioningFacts {
   email: string;
   providerDomains: string | null;
+  /** DRAFT (never approved) and DISABLED providers refuse every sign-in (PM/research/11 §4). Absent = ACTIVE. */
+  providerStatus?: 'DRAFT' | 'ACTIVE' | 'DISABLED' | undefined;
   autoProvision: boolean;
   existing: { id: string; status: UserStatus } | null;
 }
@@ -25,6 +27,7 @@ export interface ProvisioningFacts {
 export function decideProvisioning(facts: ProvisioningFacts): SSOUserResolution {
   if (!facts.email) return reject('sso_email_missing', 'The identity provider did not send an email address');
   if (!facts.providerDomains) return reject('sso_provider_unknown', 'This identity provider is not configured');
+  if (facts.providerStatus && facts.providerStatus !== 'ACTIVE') return reject('sso_provider_inactive', 'This identity provider is not active');
   if (!emailDomainMatches(facts.email, facts.providerDomains)) {
     return reject('sso_domain_not_allowed', 'Your email domain is not allowed for this identity provider');
   }
@@ -78,14 +81,14 @@ export function ssoUserResolver(db: Db, audit: AuthAudit, options: { skipAccessA
   return async (input: SSOUserResolutionInput): Promise<SSOUserResolution> => {
     const email = (input.providerUser.email ?? '').trim().toLowerCase();
     const [provider] = await db
-      .select({ domain: authSsoProviders.domain, autoProvision: authSsoProviders.autoProvision })
+      .select({ domain: authSsoProviders.domain, autoProvision: authSsoProviders.autoProvision, status: authSsoProviders.status })
       .from(authSsoProviders)
       .where(eq(authSsoProviders.providerId, input.providerId))
       .limit(1);
     const [existing] = email
       ? await db.select({ id: users.id, status: users.status }).from(users).where(sql`lower(${users.email}) = ${email}`).limit(1)
       : [];
-    const decision = decideProvisioning({ email, providerDomains: provider?.domain ?? null, autoProvision: provider?.autoProvision ?? false, existing: existing ?? null });
+    const decision = decideProvisioning({ email, providerDomains: provider?.domain ?? null, providerStatus: provider?.status, autoProvision: provider?.autoProvision ?? false, existing: existing ?? null });
     if (decision.action === 'continue' && !options.skipAccessApproval) return provisionPending(db, audit, input, email);
     if (decision.action === 'reject') {
       const entry = { action: 'auth.sso_rejected', summary: `SSO sign-in via ${input.providerId} refused: ${decision.code}` };

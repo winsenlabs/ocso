@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { bigint, boolean, index, integer, pgTable, smallint, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { bigint, boolean, check, index, integer, pgTable, smallint, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { createdAt, id, ts, updatedAt } from './columns.js';
 import { users } from './identity.js';
 
@@ -129,10 +129,15 @@ export const authSsoProviders = pgTable(
     name: text().notNull().default('Single sign-on'),
     /** Create unknown users (as Service member) on first sign-in; default: invited users only. */
     autoProvision: boolean().notNull().default(false),
+    /**
+     * DRAFT until approved (PM/research/11 §4): sign-in through it is refused. DISABLED is the immediate stop.
+     * Better Auth never writes this column, so a newly registered provider takes the DRAFT default (0029).
+     */
+    status: text().$type<'DRAFT' | 'ACTIVE' | 'DISABLED'>().notNull().default('DRAFT'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [uniqueIndex('auth_sso_providers_provider_uq').on(t.providerId)],
+  (t) => [uniqueIndex('auth_sso_providers_provider_uq').on(t.providerId), check('auth_sso_providers_status_ck', sql`${t.status} IN ('DRAFT', 'ACTIVE', 'DISABLED')`)],
 );
 
 /** Better Auth rate limiter (database storage: shared by every API instance). */

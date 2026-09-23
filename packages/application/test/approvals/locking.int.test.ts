@@ -71,7 +71,8 @@ describe('what the checker saw stays what goes live', () => {
     await new EscalationRuleService(f.t.db).create(act(f.p.lead), agent, { name: 'Fraud', trigger: 'RISK', condition: {}, mode: 'OPEN_PICKUP', targetQueueId: null, priority: 'P1', enabled: true });
     const p = await f.submit(f.p.lead, f.p.head, { objectId: agent, action: 'ACTIVATE' });
     const shown = await f.approvals.get(f.p.head, p.id);
-    expect(shown.after).toMatchObject({ status: 'LIVE', tools: [], escalationRules: ['Fraud (RISK)'] });
+    // A new rule is a disabled draft (COVERAGE-BUSINESS): it goes live only through its own ACTIVATE approval.
+    expect(shown.after).toMatchObject({ status: 'LIVE', tools: [], escalationRules: ['Fraud (RISK) · disabled'] });
     expect(Object.keys((shown.after!['promptText'] ?? {}) as object).length).toBeGreaterThan(0);
     await f.approvals.withdraw(act(f.p.lead), p.id, 'done');
   });

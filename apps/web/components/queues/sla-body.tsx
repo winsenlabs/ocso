@@ -62,7 +62,7 @@ export async function SlaBody() {
       ) : null}
 
       <SlaManager
-        policies={policies.map((p) => ({ ...p, queues: queues.filter((q) => q.slaPolicyId === p.id).map((q) => q.name) }))}
+        policies={policies.map((p) => ({ ...p, approved: p.approval.approved, pending: p.approval.pending, queues: queues.filter((q) => q.slaPolicyId === p.id).map((q) => q.name) }))}
         canManage={hasPermission(session, Permission.SLA_MANAGE)}
       />
       <p className="mono-sm" style={{ margin: '10px 0 0' }}>

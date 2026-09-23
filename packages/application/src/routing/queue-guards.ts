@@ -1,33 +1,45 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import { DomainError, ErrorCategory, conflict, notFound, validation } from '@ocso/domain';
+import { notFound, validation } from '@ocso/domain';
 import { agentTeams, queueTeams, queues, routerVersions, routers, virtualAgents, type DbOrTx } from '@ocso/db';
 import type { Principal } from '@ocso/auth';
 import type { ApprovalProblem } from '../approvals/contract.js';
 
 /**
- * Governance of queue writes (PM/research/11 §4, ADR-026) until the queue
- * approval descriptor lands (wave 2):
- * - team scope: a person changes only queues their teams serve or whose
- *   agent their teams own (or with no agent yet), unlinks only their own
- *   teams, and names only agents their teams own;
- * - live queues: on a queue customers can reach (an ACTIVE router's version
- *   names it, or a reachable queue transfers to it) changing its agent,
- *   adding teams or adding transfer targets changes who answers customers,
- *   so it is an approval (409 approval_required); removing a transfer target
- *   or unlinking your team is a stop and never gated; clearing the agent is
- *   refused while an active router routes to the queue.
+ * Team scope of queue writes (PM/research/11 §4, ADR-026): a person changes
+ * only queues their teams serve or whose agent their teams own (or with no
+ * agent yet), unlinks only their own teams, and names only agents their teams
+ * own. Which changes are proposals is the `queue` approval descriptor's rule
+ * (queue-approval.ts); what live routing reaches is computed here.
  */
 
 /** Active router versions' queue references (fallback and rules), as text. */
-const ROUTED_QUEUE_IDS = sql`SELECT ref FROM ${routers} r JOIN ${routerVersions} v ON v.id = r.active_version_id,
+export const ROUTED_QUEUE_IDS = sql`SELECT ref FROM ${routers} r JOIN ${routerVersions} v ON v.id = r.active_version_id,
     LATERAL (SELECT v.definition ->> 'fallbackQueueId' AS ref UNION ALL SELECT x ->> 'queueId' FROM jsonb_array_elements(COALESCE(v.definition -> 'rules', '[]'::jsonb)) AS x) refs
    WHERE r.status = 'ACTIVE'`;
 
 /**
- * What live routing that depends on this queue: the active routers that route
- * to it, and whether customers can reach it at all — routed to directly, or a
- * transfer target of a queue that is (transitively).
+ * Queues customers can reach, or that take handoffs from live agents: routed to by an active router, the
+ * default queue of a LIVE/PAUSED agent, the target of an enabled escalation rule (global, or of a LIVE/PAUSED
+ * agent), and — transitively — their transfer targets. One definition of "live" for gating (a change to a
+ * live queue is always a proposal) and for the exception report (live without approval).
  */
+export const LIVE_QUEUE_IDS = sql`
+  WITH RECURSIVE live(id) AS (
+    SELECT q.id FROM ${queues} q WHERE q.id::text IN (${ROUTED_QUEUE_IDS})
+    UNION SELECT a.default_queue_id FROM virtual_agents a WHERE a.status IN ('LIVE','PAUSED') AND a.default_queue_id IS NOT NULL
+    UNION SELECT r.target_queue_id FROM escalation_rules r LEFT JOIN virtual_agents a ON a.id = r.agent_id
+           WHERE r.enabled AND r.target_queue_id IS NOT NULL AND (r.agent_id IS NULL OR a.status IN ('LIVE','PAUSED'))
+    UNION SELECT t.id FROM live JOIN ${queues} s ON s.id = live.id CROSS JOIN LATERAL unnest(s.transfer_target_ids) AS t(id)
+  )
+  SELECT DISTINCT id FROM live`;
+
+/** Whether the queue is live (LIVE_QUEUE_IDS). */
+export async function isLiveQueue(tx: DbOrTx, queueId: string): Promise<boolean> {
+  const rows = await tx.execute<{ live: boolean }>(sql`SELECT EXISTS (SELECT 1 FROM (${LIVE_QUEUE_IDS}) l WHERE l.id = ${queueId}::uuid) AS live`);
+  return Boolean(rows.rows[0]?.live);
+}
+
+/** The active routers that route to this queue, and whether it is live at all (LIVE_QUEUE_IDS). */
 export async function queueLiveReferences(tx: DbOrTx, queueId: string): Promise<{ routers: string[]; live: boolean }> {
   const routerRows = await tx
     .select({ name: routers.name })
@@ -40,24 +52,8 @@ export async function queueLiveReferences(tx: DbOrTx, queueId: string): Promise<
       ),
     );
   if (routerRows.length) return { routers: routerRows.map((r) => r.name).sort(), live: true };
-  const reached = await tx.execute<{ id: string }>(sql`
-    WITH RECURSIVE live(id) AS (
-      SELECT q.id FROM ${queues} q WHERE q.id::text IN (${ROUTED_QUEUE_IDS})
-      UNION
-      SELECT t.id FROM live JOIN ${queues} s ON s.id = live.id CROSS JOIN LATERAL unnest(s.transfer_target_ids) AS t(id)
-    )
-    SELECT id FROM live WHERE id = ${queueId}::uuid LIMIT 1`);
-  return { routers: [], live: reached.rows.length > 0 };
+  return { routers: [], live: await isLiveQueue(tx, queueId) };
 }
-
-/** 409 until the approval spine accepts `approval` for queues (wave 2 registers the descriptor). */
-export const queueApprovalRequired = (queueId: string, fields: readonly string[]): DomainError =>
-  new DomainError(ErrorCategory.CONFLICT, 'approval_required', `Changing ${fields.join(', ')} of a queue live routing uses needs approval: name a checker and give a reason.`, {
-    objectKind: 'queue',
-    objectId: queueId,
-    action: 'UPDATE',
-    fields,
-  });
 
 async function teamsOf(tx: DbOrTx, queueId: string): Promise<string[]> {
   return (await tx.select({ teamId: queueTeams.teamId }).from(queueTeams).where(eq(queueTeams.queueId, queueId))).map((r) => r.teamId);
@@ -98,28 +94,6 @@ export function assertTeamChange(principal: Principal, before: readonly string[]
 export async function assertAgentAssignable(tx: DbOrTx, principal: Principal, agentId: string): Promise<void> {
   const [agent] = await tx.select({ id: virtualAgents.id }).from(virtualAgents).where(eq(virtualAgents.id, agentId));
   if (!agent || !(await agentOwnedByTeams(tx, agentId, principal.teamIds))) throw notFound('agent', agentId);
-}
-
-/**
- * Changes to a queue live routing uses: 409 approval_required for changes
- * that widen who answers (agent, added teams, added transfer targets); a
- * conflict for clearing the agent of a queue an active router routes to.
- */
-export async function assertLiveQueueChange(
-  tx: DbOrTx,
-  queue: { id: string; agentId: string | null; transferTargetIds: readonly string[] },
-  change: { agentId?: string | null | undefined; addedTeams: readonly string[]; transferTargetIds?: readonly string[] | undefined },
-): Promise<void> {
-  const agentChanged = change.agentId !== undefined && change.agentId !== queue.agentId;
-  const addedTargets = (change.transferTargetIds ?? []).filter((t) => !queue.transferTargetIds.includes(t));
-  if (!agentChanged && !change.addedTeams.length && !addedTargets.length) return;
-  const refs = await queueLiveReferences(tx, queue.id);
-  if (!refs.live) return;
-  if (agentChanged && change.agentId === null && refs.routers.length) {
-    throw conflict('queue_routed', `Routers ${refs.routers.join(', ')} route to this queue: route them elsewhere before removing its agent (pause the agent to stop it answering).`);
-  }
-  const fields = [...(agentChanged ? ['agent'] : []), ...(change.addedTeams.length ? ['teams'] : []), ...(addedTargets.length ? ['transfer targets'] : [])];
-  throw queueApprovalRequired(queue.id, fields);
 }
 
 /** Agent delete blockers (the agent approval descriptor): it serves a queue an active router routes to. */

@@ -55,8 +55,16 @@ they lack, join a team, hold a grant that is new or lasts longer, or become acti
 - Increases never apply directly. They are proposals for a checker holding `approvals.check.permissions`
   (kinds `user` and `permission_change`); without a named checker the API answers **409 `approval_required`**
   with `{objectKind, action, objectId}` — and, when the request also carried reductions, says they were applied
-  (`details.applied`). The checker is never the maker nor the target (400 `checker_not_eligible`). (Until the approval
-  spine's `user` and `permission_change` descriptors are registered, naming a checker gets the same 409.) Approval runs
+  (`details.applied`). The checker is never the maker nor the target (400 `checker_not_eligible`); they share a team
+  with the target or hold `users.manage` — and when nobody but the maker and the target qualifies, any other holder of
+  `approvals.check.permissions` may (the platform-wide fallback); bootstrap self-approval only when nobody anywhere can
+  check — and never while another checker was disabled in the last 30 days (400 `validation_failed`,
+  `bootstrap_checker_disabled`): disabling is immediate, so it must not create "nobody else can check". Re-enabling a
+  disabled checker is the one identity change that may still be self-approved then. The Team page asks for the checker: **Change permissions** opens the submit-for-approval picker when the change
+  widens access, and **New user** asks for one right after creating the pending user (or submit it later from their
+  drawer). While a pending user's creation waits, the draft is locked (409 `approval_open`); discarding it voids the
+  proposal. A new user's approval activates them in the same transaction; the invite is then sent by the worker (a failing
+  invite is recorded on the approval's activation, never turns the approved user's proposal BLOCKED). Approval runs
   `activateUser` / `applyPermissionChangeSet` (`packages/application/src/identity/permissions/apply.ts`), which
   re-check the maker's rights at that moment (`maker_not_active`, `maker_no_longer_eligible`), record the maker as the
   grant's `created_by`, and are audited `user.activate` / `user.enable` / `user.permissions_increased`.

@@ -59,15 +59,22 @@ describe('API authentication & RBAC', () => {
   it('validates bodies and merged worker settings', async () => {
     const bad = await h.http().patch('/v1/settings/workers').set('authorization', `Bearer ${adminToken}`).send({ minWarmWorkers: 'x' }).expect(400);
     expect(bad.body.error.category).toBe('validation');
+    // Settings change through an approval (PM/research/11 §4): the lead (a Head) checks the admin's change.
+    const leadToken = await h.loginAs('lead@ocso.test', 'lead password 12345');
+    const leadId = (await h.http().get('/v1/auth/me').set('authorization', `Bearer ${leadToken}`).expect(200)).body.id;
+    const approval = { checkerId: leadId, reason: 'More warm workers' };
+    await h.http().patch('/v1/settings/workers').set('authorization', `Bearer ${adminToken}`).send({ minWarmWorkers: 4 }).expect(409);
     const conflictingBounds = await h
       .http()
       .patch('/v1/settings/workers')
       .set('authorization', `Bearer ${adminToken}`)
-      .send({ minWarmWorkers: 50 })
+      .send({ minWarmWorkers: 50, approval })
       .expect(400);
-    expect(conflictingBounds.body.error.code).toBe('invalid_worker_settings');
-    const ok = await h.http().patch('/v1/settings/workers').set('authorization', `Bearer ${adminToken}`).send({ minWarmWorkers: 4 }).expect(200);
-    expect(ok.body.minWarmWorkers).toBe(4);
+    expect(conflictingBounds.body.error).toMatchObject({ code: 'validation_failed', details: { problems: [expect.objectContaining({ code: 'invalid_worker_settings' })] } });
+    const ok = await h.http().patch('/v1/settings/workers').set('authorization', `Bearer ${adminToken}`).send({ minWarmWorkers: 4, approval }).expect(202);
+    const { proposal } = ok.body;
+    await h.http().post(`/v1/approvals/${proposal.id}/decision`).set('authorization', `Bearer ${leadToken}`).send({ decision: 'APPROVE', reason: 'ok', contentHash: proposal.contentHash }).expect(200);
+    expect((await h.http().get('/v1/settings/workers').set('authorization', `Bearer ${adminToken}`).expect(200)).body.minWarmWorkers).toBe(4);
   });
 
   it('logs out and invalidates the token', async () => {

@@ -1,7 +1,8 @@
 import { Permission } from '@ocso/auth';
 import { KeyValue } from '@/components/ui/key-value';
 import { SecHead } from '@/components/ui/sec-head';
-import { getDeploymentSettings, type DeploymentSettings } from '@/lib/api/settings';
+import { PendingBadge } from '@/components/approvals/pending-badge';
+import { getDeploymentSettings, getSettingsApproval, type DeploymentSettings } from '@/lib/api/settings';
 import { formatDateTime } from '@/lib/format';
 import { hasPermission, requireSession } from '@/lib/session';
 import { DeploymentForm } from './deployment-form';
@@ -10,11 +11,13 @@ import { DeploymentForm } from './deployment-form';
 export async function SettingsContent() {
   const [session, settings] = await Promise.all([requireSession(), getDeploymentSettings()]);
   const canEdit = hasPermission(session, Permission.DEPLOYMENT_SETTINGS_MANAGE);
+  // Settings change through approvals (PM/research/11 §4): one settings proposal is open at a time.
+  const approval = canEdit ? await getSettingsApproval() : null;
 
   return (
     <div className="row2">
       <div>
-        <SecHead title="Deployment" desc={canEdit ? 'Tech admin' : 'read only · managed by the Tech admin'} />
+        <SecHead title="Deployment" desc={canEdit ? 'Tech admin · every change is approved by a second person' : 'read only · managed by the Tech admin'} actions={<PendingBadge state={approval} />} />
         {canEdit ? (
           <DeploymentForm
             timezones={Intl.supportedValuesOf('timeZone')}

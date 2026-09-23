@@ -55,12 +55,16 @@ export type SsoProviderPatch = z.infer<typeof SsoProviderPatch>;
 
 /** Secret-free view: what the Tech admin needs to configure the IdP side. */
 export interface SsoProviderView {
+  /** Row id: the object id of its approvals (PM/research/11 §4). */
+  id: string;
   providerId: string;
   name: string;
   type: 'oidc' | 'saml';
   issuer: string;
   domains: string[];
   autoProvision: boolean;
+  /** DRAFT until approved (sign-in refused), ACTIVE, or DISABLED (stopped). */
+  status: 'DRAFT' | 'ACTIVE' | 'DISABLED';
   /** Redirect URI (OIDC) or ACS URL (SAML) to register at the IdP. */
   callbackUrl: string;
   oidc: { clientId: string; discoveryEndpoint: string | null; scopes: string[] } | null;
@@ -99,12 +103,14 @@ export function toSsoProviderView(row: typeof authSsoProviders.$inferSelect, pub
   const idp = (saml?.['idpMetadata'] ?? {}) as Record<string, unknown>;
   const cert = certificateFacts(str(idp['cert']) ?? str(saml?.['cert']));
   return {
+    id: row.id,
     providerId: row.providerId,
     name: row.name,
     type,
     issuer: row.issuer,
     domains: row.domain.split(',').map((d) => d.trim()).filter(Boolean),
     autoProvision: row.autoProvision,
+    status: row.status,
     callbackUrl: type === 'saml' ? `${origin}/api/auth/sso/saml2/sp/acs/${encodeURIComponent(row.providerId)}` : `${origin}/api/auth/sso/callback/${encodeURIComponent(row.providerId)}`,
     oidc: oidc
       ? { clientId: str(oidc['clientId']) ?? '', discoveryEndpoint: str(oidc['discoveryEndpoint']), scopes: Array.isArray(oidc['scopes']) ? oidc['scopes'].filter((s): s is string => typeof s === 'string') : [] }

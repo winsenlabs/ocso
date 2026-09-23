@@ -1,6 +1,6 @@
-import { and, eq, inArray, isNotNull, max, ne } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, max, ne, sql } from 'drizzle-orm';
 import { validation } from '@ocso/domain';
-import { conversationSummaries, conversations, queues, virtualAgents, uuidv7, type DbOrTx } from '@ocso/db';
+import { approvalProposals, conversationSummaries, conversations, queues, virtualAgents, uuidv7, type DbOrTx } from '@ocso/db';
 import { applyControl, lockConversation, type ConversationRow } from '../conversations/control.js';
 import { emitEvent } from '../events/outbox.js';
 import type { ActorContext } from '../shared/context.js';
@@ -11,23 +11,32 @@ export interface TransferTarget {
   agent: { id: string; name: string; conversationType: string } | null;
 }
 
-/** A queue and its agent (agent null when the queue has none). */
-export async function transferTarget(tx: DbOrTx, queueId: string): Promise<TransferTarget | null> {
+/** Queues a checker has approved (PM/research/11 §5.5: only approved queues are reachable by a transfer). */
+export const approvedQueue = (column = queues.id) =>
+  sql`${column} IN (SELECT ${approvalProposals.objectId} FROM ${approvalProposals} WHERE ${approvalProposals.objectKind} = 'queue' AND ${approvalProposals.status} = 'APPROVED')`;
+
+/**
+ * A queue, its agent (null when it has none, or when that agent is not LIVE: the conversation then keeps its
+ * agent rather than moving to one that does not answer) and whether a checker has approved the queue.
+ */
+export async function transferTarget(tx: DbOrTx, queueId: string): Promise<(TransferTarget & { approved: boolean }) | null> {
   const [row] = await tx
-    .select({ queue: queues, agentId: virtualAgents.id, agentName: virtualAgents.name, conversationType: virtualAgents.conversationType })
+    .select({ queue: queues, agentId: virtualAgents.id, agentName: virtualAgents.name, agentStatus: virtualAgents.status, conversationType: virtualAgents.conversationType, approved: sql<boolean>`${approvedQueue()}` })
     .from(queues)
     .leftJoin(virtualAgents, eq(virtualAgents.id, queues.agentId))
     .where(eq(queues.id, queueId));
   if (!row) return null;
-  return { queue: row.queue, agent: row.agentId ? { id: row.agentId, name: row.agentName!, conversationType: row.conversationType! } : null };
+  const agent = row.agentId && row.agentStatus === 'LIVE' ? { id: row.agentId, name: row.agentName!, conversationType: row.conversationType! } : null;
+  return { queue: row.queue, agent, approved: Boolean(row.approved) };
 }
 
 /**
  * The queues an AI agent may transfer this conversation to (PM/research/11
  * §5.5): its queue's transfer targets whose agent answers (LIVE, with a
  * model) and is not the agent already holding the conversation (a transfer to
- * itself would leave the customer's messages unanswered). Approval of the
- * targets is enforced when the queue change is approved (wave 2).
+ * itself would leave the customer's messages unanswered). Only approved
+ * targets: a target whose own approval is still open (or was rejected) is
+ * never offered, even when the source queue's approval accepted it.
  */
 export async function aiTransferTargets(tx: DbOrTx, sourceQueueId: string | null, currentAgentId: string | null = null): Promise<Array<{ queue: QueueRow; agentId: string; agentName: string }>> {
   if (!sourceQueueId) return [];
@@ -37,7 +46,7 @@ export async function aiTransferTargets(tx: DbOrTx, sourceQueueId: string | null
     .select({ queue: queues, agentId: virtualAgents.id, agentName: virtualAgents.name })
     .from(queues)
     .innerJoin(virtualAgents, eq(virtualAgents.id, queues.agentId))
-    .where(and(inArray(queues.id, source.targets), eq(virtualAgents.status, 'LIVE'), isNotNull(virtualAgents.modelProfileId), currentAgentId ? ne(virtualAgents.id, currentAgentId) : undefined));
+    .where(and(inArray(queues.id, source.targets), approvedQueue(), eq(virtualAgents.status, 'LIVE'), isNotNull(virtualAgents.modelProfileId), currentAgentId ? ne(virtualAgents.id, currentAgentId) : undefined));
   return rows.sort((a, b) => a.queue.name.localeCompare(b.queue.name));
 }
 

@@ -4,7 +4,7 @@ import { createTestDatabase, type TestDatabase } from '@ocso/db/testing';
 import { channels, conversations, interactionParts, queues, uuidv7, virtualAgents } from '@ocso/db';
 import { MemoryQueue } from '@ocso/queue';
 import type { Principal } from '@ocso/auth';
-import { AgentService, IngressService, REDACTED_TEXT, RetentionInput, RetentionService, SettingsService, effectiveRetention, recordAudit, routeChannelToAgent, systemActor, type ActorContext } from '../src/index.js';
+import { AgentService, IngressService, REDACTED_TEXT, RetentionInput, RetentionService, applyDeploymentSettings, effectiveRetention, recordAudit, routeChannelToAgent, systemActor, type ActorContext } from '../src/index.js';
 import { createTeam } from './support/ownership.js';
 import { makeLive } from './support/live-agent.js';
 
@@ -60,7 +60,8 @@ describe('retention policy (docs/15 §8)', () => {
   });
 
   it('purges content of old resolved conversations but keeps structure; leaves open and recent ones alone', async () => {
-    await new SettingsService(t.db).updateDeployment(ctx(admin), { retention: { conversationContent: 30, media: 60 } });
+    // Fixture: the retention an approved settings change leaves (settings changes are proposals).
+    await applyDeploymentSettings(t.db, ctx(admin), { retention: { conversationContent: 30, media: 60 } });
     const old = await conversationWith('+919800000001', 'My card 4111 1111 1111 4417 was charged twice', true);
     const recent = await conversationWith('+919800000002', 'recent resolved');
     const open = await conversationWith('+919800000003', 'still open, very old');

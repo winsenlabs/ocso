@@ -9,7 +9,32 @@ import { ApprovalRegistry, RUNTIME_KINDS, agentApproval, createApprovalRegistry 
  * configuration object fails here until its descriptor is registered in
  * approvals/composition.ts — wave 2 extends the list.
  */
-const APPROVABLE_KINDS = ['agent', 'prompt_version'];
+const APPROVABLE_KINDS = [
+  'agent',
+  'prompt_version',
+  // ROUTING-WEB (approvals.check.routing)
+  'router',
+  'queue',
+  'sla_policy',
+  // COVERAGE-BUSINESS
+  'agent_tool_grant',
+  'escalation_rule',
+  'alert_rule',
+  'alert_rule_technical',
+  'message_template',
+  'user',
+  'permission_change',
+  // COVERAGE-PLATFORM (approvals.check.channels for channels, approvals.check.platform for the rest)
+  'channel',
+  'model_provider',
+  'model_profile',
+  'model_pricing',
+  'mcp_connection',
+  'notification_destination',
+  'webhook_subscription',
+  'sso_provider',
+  'deployment_settings',
+];
 
 describe('approval coverage', () => {
   const registry = createApprovalRegistry();
@@ -45,5 +70,14 @@ describe('approval coverage', () => {
     expect(agent.makePermission('UPDATE')).toBe(Permission.AGENTS_MANAGE);
     expect(registry.get('prompt_version').makePermission('ACTIVATE')).toBe(Permission.PROMPTS_ACTIVATE);
     expect(registry.makePermissions()).toEqual(expect.arrayContaining([Permission.AGENTS_MANAGE, Permission.AGENTS_DELETE, Permission.PROMPTS_ACTIVATE]));
+  });
+
+  it('routing: routers, queues and SLA policies are checked with approvals.check.routing; no stop action is registered', () => {
+    for (const kind of ['router', 'queue', 'sla_policy']) expect(registry.get(kind).checkPermission).toBe(Permission.APPROVALS_CHECK_ROUTING);
+    expect(registry.get('router').actions).toEqual(['ACTIVATE', 'UPDATE', 'DELETE']);
+    expect(registry.get('router').makePermission('ACTIVATE')).toBe(Permission.ROUTERS_MANAGE);
+    expect(registry.get('queue').actions).toEqual(['CREATE', 'UPDATE']);
+    expect(registry.get('queue').makePermission('UPDATE')).toBe(Permission.QUEUES_MANAGE);
+    expect(registry.get('sla_policy').makePermission('CREATE')).toBe(Permission.SLA_MANAGE);
   });
 });

@@ -2,7 +2,7 @@
 #
 # Jobs are independent so a failure points at one concern:
 #   lint-typecheck-unit  source guards (pnpm lint), turbo typecheck, vitest unit, guard-script tests
-#   integration          vitest integration project against a postgres:18 service
+#   integration          vitest integration project against postgres:18 and clickhouse services
 #   web-build            production Next.js build (standalone output)
 #   e2e                  Playwright against a locally started API + web stack (optional, non-blocking)
 #   terraform            fmt / init -backend=false / validate for infra/aws/terraform
@@ -50,10 +50,24 @@ jobs:
         run: pnpm test
 
   integration:
-    name: integration (postgres 18)
+    name: integration (postgres 18 · clickhouse)
     runs-on: ubuntu-latest
     timeout-minutes: 25
     services:
+      # The audit store's ClickHouse driver is tested against a real server (PM/research/11 §6.5).
+      clickhouse:
+        image: clickhouse/clickhouse-server:26.9
+        env:
+          CLICKHOUSE_USER: admin
+          CLICKHOUSE_PASSWORD: adminpw
+          CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: '1'
+        ports:
+          - 8123:8123
+        options: >-
+          --health-cmd "wget -qO- http://localhost:8123/ping || exit 1"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 30
       postgres:
         image: postgres:18
         env:
@@ -70,6 +84,8 @@ jobs:
     env:
       # Admin connection; each test file creates and drops its own migrated database.
       OCSO_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+      # Enables the ClickHouse audit-store integration tests (skipped without it).
+      CLICKHOUSE_TEST_URL: http://admin:adminpw@localhost:8123
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4

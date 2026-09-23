@@ -1,0 +1,21 @@
+/* Routers (PM/research/11 §5.7): list, builder, versions, channels, simulator. */
+.rt-facts{margin:-6px 0 14px}
+.rt-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,360px);gap:18px;align-items:start}
+@media (max-width:1100px){.rt-layout{grid-template-columns:minmax(0,1fr)}}
+.rt-builder,.rt-side{display:grid;gap:12px}
+.rt-h{font-size:13px;font-weight:600;margin:6px 0 0;color:var(--ink)}
+.rt-lbl{font-size:12px;color:var(--ink-2);font-weight:500}
+.rt-step,.rt-panel{border:1px solid var(--line);border-radius:10px;padding:12px;display:grid;gap:10px;background:var(--panel,transparent)}
+.rt-step input,.rt-rule input{min-width:0}
+.rt-rules{display:grid;gap:6px}
+.rt-rule{display:grid;grid-template-columns:22px minmax(0,1.4fr) 14px minmax(0,1fr) auto;gap:6px;align-items:center}
+.rt-templates{display:grid;gap:4px;margin-top:4px}
+.rt-issues{margin:0;padding-left:18px;display:grid;gap:2px}
+.rt-save{position:sticky;bottom:0;padding:10px 0;background:var(--bg,#fff)}
+.rt-versions{margin:0;padding:0;list-style:none;display:grid;gap:4px}
+.rt-versions li{display:flex;gap:8px;align-items:center}
+.rt-trace{margin:0;padding:0;list-style:none;display:grid;gap:4px;font-size:12.5px}
+.rt-trace li{display:grid;grid-template-columns:76px minmax(0,1fr);gap:8px}
+.rt-trace .rt-decided{font-weight:600;color:var(--accent)}
+.rt-trace .rt-muted{color:var(--ink-2)}
+.rt-card-rule{font-family:var(--mono,monospace);font-size:12px}

@@ -12,7 +12,7 @@ import { TeamScopeProvider } from './scope-context';
 import { TeamActions } from './team-actions';
 import { TeamDrawer, loadTeamDetail } from './team-drawer';
 import { TeamsTable } from './teams-table';
-import { UserDrawer, loadUserDrawer, type UserDrawerTab } from './user-drawer';
+import { UserDrawer, loadUserApproval, loadUserDrawer, type UserDrawerTab } from './user-drawer';
 import { UsersTable } from './users-table';
 
 /** A read the role may not have (403) degrades to null: the views then say what they cannot show. */
@@ -59,14 +59,17 @@ export async function TeamDirectory({ searchParams }: { searchParams: SearchPara
   const userTab: UserDrawerTab = params['tab'] === 'permissions' ? 'permissions' : 'overview';
   const canReadPermissions = hasPermission(session, Permission.PERMISSIONS_READ);
   const canChangePermissions = hasPermission(session, Permission.PERMISSIONS_MANAGE);
-  const [users, teams, agents, queues, detail, userData] = await Promise.all([
+  const [users, teams, agents, queues, detail, drawerData, drawerApproval] = await Promise.all([
     listUsers(),
     listTeams(),
     orNull(listTeamBoundAgents()),
     orNull(listTeamBoundQueues()),
     selected ? loadTeamDetail(selected) : Promise.resolve(null),
     selectedUser && userTab === 'permissions' ? loadUserDrawer(selectedUser, canReadPermissions, canChangePermissions) : Promise.resolve({ permissions: null, catalogue: [] }),
+    // Maker–checker (PM/research/11 §3.4): the proposal waiting on this person, for the drawer's badge.
+    selectedUser ? loadUserApproval(selectedUser) : Promise.resolve(null),
   ]);
+  const userData = { ...drawerData, approval: drawerApproval };
   // Containment (PM/research/11 §3.4): without users.manage, presets whose rights fit inside the viewer's own.
   const creatable = manageAll
     ? ROLES

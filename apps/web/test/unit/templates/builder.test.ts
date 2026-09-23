@@ -2,7 +2,9 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../../lib/actions/templates', () => ({ createTemplateAction: vi.fn(), deleteTemplateAction: vi.fn() }));
+vi.mock('../../../lib/actions/templates', () => ({ saveTemplateDraftAction: vi.fn(), submitTemplateAction: vi.fn(), deleteTemplateAction: vi.fn() }));
+// The builder asks for a checker through the approvals modal (PM/research/11 §4); its server action is not under test here.
+vi.mock('../../../lib/actions/approvals', () => ({ checkerChoiceAction: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 
 const { EMPTY_FORM, builderState, formToDraft, nextVariable } = await import('../../../components/templates/lib/builder');
@@ -61,7 +63,10 @@ describe('builder markup', () => {
     expect(html).toContain('aria-label="New message template"');
     expect(html).toContain('Updates about something the customer already asked for or bought');
     expect(html).toContain('Preview with your example values');
-    expect(html).toContain('Submit for WhatsApp approval');
+    // Maker–checker: a draft is saved, or saved and sent to a checker before WhatsApp ever sees it.
+    expect(html).toContain('Save and submit for approval');
+    expect(html).toContain('Save draft');
+    expect(html).toContain('a checker approves it first; then WhatsApp reviews it');
     expect(html).toContain('href="/templates?channel=c1"');
   });
 });

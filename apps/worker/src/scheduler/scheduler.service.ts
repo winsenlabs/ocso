@@ -12,6 +12,7 @@ import type { SecretStore } from '@ocso/secrets';
 import { BLOB_STORE, DB, ENV, LOGGER, QUEUE, SECRET_STORE } from '../infrastructure/tokens.js';
 import { ApprovalsWorker } from '../approvals/approvals.module.js';
 import { AuditWorker } from '../audit/audit.module.js';
+import { ExceptionsWorker } from '../exceptions/exceptions.module.js';
 import { LeaderElection } from './leader.js';
 import { subsystemTasks } from './tasks.registry.js';
 
@@ -48,6 +49,7 @@ export class SchedulerService {
     @Inject(ApprovalsWorker) approvals: ApprovalsWorker,
     @Inject(AuditWorker) audit: AuditWorker,
     @Inject(RoutingEngine) routing: RoutingEngine,
+    @Inject(ExceptionsWorker) exceptions: ExceptionsWorker,
   ) {
     this.leader = new LeaderElection(env.DATABASE_URL, 'ocso:scheduler');
     this.tasks = [
@@ -66,7 +68,7 @@ export class SchedulerService {
       // Message templates in review: ask the provider, record + announce status changes (docs/07 §3).
       { name: 'message-template-status', everySeconds: 180, run: ({ db, correlationId }) => pollPendingTemplates(db, templateProviderSource(channels), { correlationId }) },
       { name: 'purge-done-jobs', everySeconds: 3600, run: ({ db }) => db.execute(sql`DELETE FROM jobs WHERE status = 'done' AND completed_at < now() - interval '1 day'`) },
-      ...subsystemTasks({ db, env, secrets, queue, alerts, alertDelivery, claims, scaling, approvals, audit, routing }),
+      ...subsystemTasks({ db, env, secrets, queue, alerts, alertDelivery, claims, scaling, approvals, audit, routing, exceptions }),
     ];
   }
 

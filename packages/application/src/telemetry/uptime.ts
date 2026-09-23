@@ -16,7 +16,7 @@ export interface Uptime {
 }
 
 export const UPTIME_DEFINITION =
-  "Per minute over the last 30 days (starting at the first 'database' health sample): the minute is up when the database sample is not DOWN and — from the first 'workers' sample on — the workers sample is not DOWN. A minute without a sample inherits 'up' only if an adjacent minute has an up sample (tolerates sampling jitter); longer gaps count as down because the sampler runs on the worker fleet. The current, incomplete minute is excluded. lastIncidentAt = latest down minute.";
+  "Per minute over the last 30 days (starting at the first 'database' health sample): the minute is up when the database sample is not DOWN and — from the first 'workers' sample on — the workers sample is not DOWN. A minute without a sample inherits 'up' only if an adjacent minute has an up sample (tolerates sampling jitter); longer gaps count as down because the sampler runs on the worker fleet. The current, incomplete minute is excluded. Raw samples are kept two days; older hours use the same verdict frozen in hourly roll-ups. lastIncidentAt = latest down minute.";
 
 /**
  * 30-day availability from health_samples (health_samples_component_idx).
@@ -70,15 +70,25 @@ export async function uptime(db: DbOrTx, now: Date, windowDays = 30): Promise<Up
           FROM judged j, first_wk f
       ) verdict`);
   const r = rows[0];
-  const minutes = int(r?.minutes);
-  const up = int(r?.up_minutes);
+  // Hours older than the raw window come from the hourly roll-ups (health-rollups.ts): the
+  // availability row of every whole hour in the window that ends before the first raw sample.
+  const { rows: rolled } = await db.execute<{ minutes: number; up_minutes: number; last_down: Date | null; has_workers: boolean }>(sql`
+    SELECT coalesce(sum(minutes), 0)::int AS minutes, coalesce(sum(up_minutes), 0)::int AS up_minutes, max(last_down_at) AS last_down,
+           EXISTS (SELECT 1 FROM health_sample_rollups WHERE component = 'workers' AND hour > ${at(now)} - make_interval(days => ${windowDays})) AS has_workers
+      FROM health_sample_rollups
+     WHERE component = 'availability' AND hour >= ${at(now)} - make_interval(days => ${windowDays})
+       AND hour + interval '1 hour' <= coalesce((SELECT min(sampled_at) FROM health_samples WHERE component = 'database'), ${at(now)})`);
+  const h = rolled[0];
+  const minutes = int(r?.minutes) + int(h?.minutes);
+  const up = int(r?.up_minutes) + int(h?.up_minutes);
+  const lastDown = [r?.last_down, h?.last_down].filter((d): d is Date => Boolean(d)).map((d) => new Date(d)).sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
   return {
     windowDays,
     minutes,
     upMinutes: up,
     ratio: ratio(up, minutes),
-    lastIncidentAt: iso(r?.last_down ?? null),
-    workerSamplesAvailable: Boolean(r?.has_workers),
+    lastIncidentAt: iso(lastDown),
+    workerSamplesAvailable: Boolean(r?.has_workers) || Boolean(h?.has_workers),
     definition: UPTIME_DEFINITION,
   };
 }

@@ -116,7 +116,9 @@ export class RetentionService {
   private async operational(cutoff: Date): Promise<number> {
     const statements = [
       sql`DELETE FROM outbox_events WHERE id IN (SELECT id FROM outbox_events WHERE published_at IS NOT NULL AND published_at < ${cutoff} LIMIT ${ROW_BATCH})`,
-      sql`DELETE FROM health_samples WHERE id IN (SELECT id FROM health_samples WHERE sampled_at < ${cutoff} LIMIT ${ROW_BATCH})`,
+      // Only hours already rolled up (health_sample_rollups): a lagging roll-up must never turn pruned raw hours into false downtime.
+      sql`DELETE FROM health_samples WHERE id IN (SELECT id FROM health_samples WHERE sampled_at < ${cutoff}
+            AND sampled_at < (SELECT coalesce(max(hour) + interval '1 hour', '-infinity'::timestamptz) FROM health_sample_rollups WHERE component = 'availability') LIMIT ${ROW_BATCH})`,
       sql`DELETE FROM mcp_health_samples WHERE id IN (SELECT id FROM mcp_health_samples WHERE sampled_at < ${cutoff} LIMIT ${ROW_BATCH})`,
       sql`DELETE FROM webhook_deliveries WHERE id IN (SELECT id FROM webhook_deliveries WHERE status <> 'PENDING' AND created_at < ${cutoff} LIMIT ${ROW_BATCH})`,
       sql`DELETE FROM login_attempts WHERE id IN (SELECT id FROM login_attempts WHERE occurred_at < ${cutoff} LIMIT ${ROW_BATCH})`,

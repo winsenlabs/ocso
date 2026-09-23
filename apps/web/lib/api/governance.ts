@@ -1,5 +1,6 @@
 import 'server-only';
 import { z } from 'zod';
+import { ProposedSchema } from '@/components/approvals/lib/schemas';
 import { api } from './client';
 
 /** GET /v1/settings/retention — retention classes with defaults, floors and effective days (docs/15 §8). */
@@ -22,5 +23,6 @@ export const getRetention = () => api.get('/v1/settings/retention', z.array(Rete
 /** The Ask OCSO settings live on the deployment settings singleton. */
 export const getAssistantSettings = () => api.get('/v1/settings/deployment', AssistantSettingsSchema);
 
-export const updateGovernance = (patch: { retention?: Record<string, number>; internalAgentProfileId?: string | null; internalAgentConfirmLowWrites?: boolean }) =>
-  api.command('PATCH', '/v1/settings/deployment', patch);
+/** A settings change is a proposal (202) naming its checker (PM/research/11 §4). */
+export const updateGovernance = (patch: { retention?: Record<string, number>; internalAgentProfileId?: string | null; internalAgentConfirmLowWrites?: boolean; approval: { checkerId: string; reason: string } | { bootstrap: true; reason: string } }) =>
+  api.patch('/v1/settings/deployment', patch, z.union([ProposedSchema, z.unknown()]));

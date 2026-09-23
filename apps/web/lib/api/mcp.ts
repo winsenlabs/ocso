@@ -1,5 +1,6 @@
 import 'server-only';
 import { z } from 'zod';
+import { ObjectApprovalStateSchema, ProposedSchema } from '@/components/approvals/lib/schemas';
 import { api } from './client';
 
 /**
@@ -55,6 +56,8 @@ export const ConnectionSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   tools: z.object({ total: z.number(), approved: z.number(), changed: z.number() }),
+  /** Maker–checker state (PM/research/11 §4); absent for personal connections. */
+  approval: ObjectApprovalStateSchema.nullable().catch(null).default(null),
 });
 export type Connection = z.infer<typeof ConnectionSchema>;
 
@@ -163,8 +166,12 @@ export const rediscover = (id: string) => api.post(`/v1/mcp/connections/${id}/re
 export const setHeaderAuth = (id: string, input: { headerName: string; token: string }, area: McpArea = 'connections') =>
   api.post(`${base(area, id)}/auth/header`, input, DiscoverySchema, SLOW);
 export const beginOAuth = (id: string, input: BeginOAuth, area: McpArea = 'connections') => api.post(`${base(area, id)}/oauth/begin`, input, OAuthBegunSchema, SLOW);
-export const classifyTools = (id: string, tools: ToolClassification[]) => api.put(`/v1/mcp/connections/${id}/tools`, { tools }, z.array(ToolSchema));
-export const approveConnection = (id: string, input: Approval) => api.post(`/v1/mcp/connections/${id}/approve`, input, ConnectionSchema);
+type ApprovalChoice = { checkerId: string; reason: string } | { bootstrap: true; reason?: string | undefined };
+/** A draft's tools change directly; an approved connection's answer 409 approval_required until `approval` names a checker (202). */
+export const classifyTools = (id: string, tools: ToolClassification[], approval?: ApprovalChoice) =>
+  api.put(`/v1/mcp/connections/${id}/tools`, { tools, ...(approval ? { approval } : {}) }, z.union([z.array(ToolSchema), ProposedSchema]));
+/** A draft: records the agent policy, then its activation is a proposal (409 without `approval`, 202 with). */
+export const approveConnection = (id: string, input: Approval & { approval?: ApprovalChoice | undefined }) => api.post(`/v1/mcp/connections/${id}/approve`, input, z.union([ConnectionSchema, ProposedSchema]));
 export const disableConnection = (id: string) => api.post(`/v1/mcp/connections/${id}/disable`, undefined, ConnectionSchema);
 export const enableConnection = (id: string) => api.post(`/v1/mcp/connections/${id}/enable`, undefined, ConnectionSchema);
 export const deleteConnection = (id: string, area: McpArea = 'connections') => api.command('DELETE', base(area, id));

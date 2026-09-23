@@ -1,10 +1,9 @@
 import { and, eq, isNull, lt } from 'drizzle-orm';
-import { can } from '@ocso/auth';
 import { approvalProposals, type Db } from '@ocso/db';
 import { TOPICS, type QueueAdapter, type Topic } from '@ocso/queue';
 import { emitEvent } from '../events/outbox.js';
 import type { ActorContext } from '../shared/context.js';
-import { isEligibleChecker, loadPerson } from './access.js';
+import { canMake, isEligibleChecker, loadPerson } from './access.js';
 import type { ApprovalDescriptor, ProposalRow } from './contract.js';
 import { voidOpen } from './decisions.js';
 import type { ApprovalLogger } from './queries.js';
@@ -110,6 +109,6 @@ async function voidReason(db: Db, d: ApprovalDescriptor, p: ProposalRow): Promis
   if (!p.makerId) return null;
   const maker = await loadPerson(db, p.makerId);
   if (!maker) return "The maker's account is no longer active";
-  if (!can(maker, d.makePermission(p.action))) return 'The maker no longer holds the permission to make this change';
+  if (!canMake(maker, d, p.action)) return 'The maker no longer holds the permission to make this change';
   return null;
 }

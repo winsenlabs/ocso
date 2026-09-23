@@ -46,6 +46,7 @@ const monthKey = (d: Date) => d.getUTCFullYear() * 100 + d.getUTCMonth() + 1;
  */
 export class PostgresAuditStore implements AuditStore {
   readonly driver = 'postgres';
+  readonly sizing = { kind: 'row', label: 'PostgreSQL' } as const;
   private readonly pool: pg.Pool;
   /** Months (yyyymm) whose partitions this process has ensured, and when the forward window was last ensured. */
   private readonly ensured = new Set<number>();

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Principal } from '@ocso/auth';
-import { SettingsService } from '@ocso/application';
+import { SettingsService, recordInstalledApproval } from '@ocso/application';
 import { modelProfiles, modelProviders, uuidv7 } from '@ocso/db';
 import { createEvent } from '@ocso/events';
 import { RealtimeAccess } from '../../src/modules/realtime/realtime-access.js';
@@ -36,6 +36,8 @@ beforeAll(async () => {
   ids.profile = uuidv7();
   await h.db.db.insert(modelProviders).values({ id: ids.provider, kind: 'DEV_SCRIPTED', name: 'Scripted' });
   await h.db.db.insert(modelProfiles).values({ id: ids.profile, name: 'support-fast', providerId: ids.provider, model: 'scripted-1' });
+  // An existing profile (grandfathered like 0031): agents go live only on approved profiles.
+  await recordInstalledApproval(h.db.db, { kind: 'model_profile', id: ids.profile, title: 'support-fast' }, 'Test fixture: existing profile');
   ids.maya = (await h.http().post('/v1/agents').set(auth(tok.lead)).send({ name: 'Maya', conversationType: 'SUPPORT', modelProfileId: ids.profile, teamIds: [ids.cards] }).expect(201)).body.id;
   ids.proposal = (
     await h.http().post(`/v1/agents/${ids.maya}/status`).set(auth(tok.lead)).send({ status: 'LIVE', approval: { checkerId: ids.head, reason: 'Ready' } }).expect(202)
@@ -49,7 +51,9 @@ describe('approval scoping over HTTP', () => {
   it('another team’s Head neither lists nor opens it, and cannot learn the agent’s checkers', async () => {
     for (const box of ['AWAITING_ME', 'SENT_BY_ME', 'DECIDED']) {
       const res = await h.http().get('/v1/approvals').query({ box }).set(auth(tok.headLoans)).expect(200);
-      expect(res.body.rows).toEqual([]);
+      // Platform-wide configuration installed at setup (default alert rules, recorded like grandfathered config) is
+      // visible to every checker; nothing of the Cards team is.
+      expect(res.body.rows.filter((r: { origin: string }) => r.origin !== 'MIGRATION')).toEqual([]);
     }
     await h.http().get(`/v1/approvals/${ids.proposal}`).set(auth(tok.headLoans)).expect(404);
     await h.http().get('/v1/approvals/checkers').query({ objectKind: 'agent', objectId: ids.maya }).set(auth(tok.headLoans)).expect(404);

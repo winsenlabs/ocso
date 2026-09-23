@@ -1,10 +1,11 @@
 import { Global, Logger, Module } from '@nestjs/common';
-import { ApprovalDecisionService, ApprovalService, createApprovalRegistry, type ApprovalLogger, type ApprovalRegistry } from '@ocso/application';
+import { ApprovalDecisionService, ApprovalService, createApprovalRegistry, type ApprovalLogger, type ApprovalRegistry, type PlatformApprovalDeps } from '@ocso/application';
 import type { Db } from '@ocso/db';
 import type { QueueAdapter } from '@ocso/queue';
 import { DB, QUEUE } from '../../infrastructure/tokens.js';
 import { ApprovalsController } from './approvals.controller.js';
 import { APPROVAL_REGISTRY } from './approvals.tokens.js';
+import { PLATFORM_APPROVAL_DEPS, platformApprovalDepsProvider } from '../settings/platform-approval-deps.js';
 
 const nest = new Logger('Approvals');
 /** A failed queue publish is reported, never swallowed (the leader's redispatch sweeps retry it). */
@@ -19,7 +20,8 @@ const logger: ApprovalLogger = { warn: (context, message) => nest.warn(`${messag
 @Module({
   controllers: [ApprovalsController],
   providers: [
-    { provide: APPROVAL_REGISTRY, useFactory: () => createApprovalRegistry() },
+    platformApprovalDepsProvider,
+    { provide: APPROVAL_REGISTRY, inject: [PLATFORM_APPROVAL_DEPS], useFactory: (platform: PlatformApprovalDeps) => createApprovalRegistry({ platform }) },
     {
       provide: ApprovalService,
       inject: [DB, APPROVAL_REGISTRY, QUEUE],

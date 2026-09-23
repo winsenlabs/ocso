@@ -13,6 +13,8 @@ import { recordAudit } from '../../audit/audit.js';
 import { emitEvent } from '../../events/outbox.js';
 import type { ActorContext } from '../../shared/context.js';
 import { parseSettings } from '../provider-config.js';
+import { lockingProposal } from '../../approvals/guard.js';
+import { lockPlatformObject } from '../../settings/platform-approvals.js';
 
 type PricingRow = typeof modelPricing.$inferSelect;
 
@@ -168,7 +170,8 @@ export interface CatalogPriceSync {
 /**
  * After a catalog refresh: move catalog-origin rows to the catalog's current
  * price (audited, effective now). Manual rows are never touched; a row an
- * admin edits concurrently is skipped (the update is conditional on origin).
+ * admin edits concurrently is skipped (the update is conditional on origin),
+ * and so is a row an open proposal locks (counted as unchanged).
  */
 export async function syncCatalogPrices(db: Db, catalog: ModelCatalog, actor: ActorContext, now: Date): Promise<CatalogPriceSync> {
   const result: CatalogPriceSync = { updated: 0, unchanged: 0, notInCatalog: 0 };
@@ -182,18 +185,20 @@ export async function syncCatalogPrices(db: Db, catalog: ModelCatalog, actor: Ac
     const next = catalogPriceToMicros(hit.entry.price);
     const fetchedAt = new Date(hit.fetchedAt);
     const where = and(eq(modelPricing.id, row.id), eq(modelPricing.origin, 'catalog'));
-    if (samePrice(row, next)) {
-      await db.update(modelPricing).set({ catalogFetchedAt: fetchedAt }).where(where);
-      result.unchanged += 1;
-      continue;
-    }
     const changed = await db.transaction(async (tx) => {
+      // A person's open proposal on this row locks it: the refresh must not void (or change under) their change.
+      await lockPlatformObject(tx, 'model_pricing', row.id);
+      if (await lockingProposal(tx, { kind: 'model_pricing' }, row.id)) return 'locked' as const;
+      if (samePrice(row, next)) {
+        await tx.update(modelPricing).set({ catalogFetchedAt: fetchedAt }).where(where);
+        return 'unchanged' as const;
+      }
       const [after] = await tx
         .update(modelPricing)
         .set({ ...next, currency: 'USD', catalogFetchedAt: fetchedAt, effectiveFrom: now, updatedAt: now })
         .where(where)
         .returning();
-      if (!after) return false;
+      if (!after) return 'skipped' as const;
       await recordAudit(tx, actor, {
         action: 'model_pricing.update',
         targetType: 'model_pricing',
@@ -203,9 +208,10 @@ export async function syncCatalogPrices(db: Db, catalog: ModelCatalog, actor: Ac
         after: { ...next, catalogFetchedAt: fetchedAt.toISOString() },
       });
       await emitEvent(tx, actor, 'config.changed', { area: 'model_pricing', entityId: row.id });
-      return true;
+      return 'updated' as const;
     });
-    if (changed) result.updated += 1;
+    if (changed === 'unchanged' || changed === 'locked') result.unchanged += 1;
+    if (changed === 'updated') result.updated += 1;
   }
   return result;
 }

@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { AlertBanner } from '@/components/ui/alert-banner';
 import { Modal } from '@/components/ui/modal';
-import { deleteProfileAction, saveProfileAction, testProviderAction, validateProfileAction } from '@/lib/actions/models';
+import { useApprovalRequest } from '@/components/approvals/use-approval-request';
+import { saveProfileAction, testProviderAction, validateProfileAction } from '@/lib/actions/models';
 import type { PolicyCheck, PriceCheck, Profile } from '@/lib/api/models';
-import { ConfirmAction } from '../confirm-action';
+import { DeleteByApproval } from '../lifecycle-actions';
 import { initialProfileForm, toProfileInput, type ProfileFormState } from '../models/profile-form';
 import { useCloseTo } from '../routed-modal';
 import { FallbackEditor, providerOptionLabel, type ProviderOption } from './fallback-editor';
@@ -54,6 +55,7 @@ function ProfileDialogBody({ providers, profile, fallbackCategories, canTest, ca
   const [savedPrices, setSavedPrices] = useState<PriceCheck[] | null>(null);
   const [validating, startValidate] = useTransition();
   const [saving, startSave] = useTransition();
+  const approval = useApprovalRequest();
   const [testing, startTest] = useTransition();
   const latest = useRef('');
 
@@ -90,11 +92,21 @@ function ProfileDialogBody({ providers, profile, fallbackCategories, canTest, ca
     setErrors({});
     setMessage(null);
     const input = converted.input;
-    startSave(async () => {
-      const r = await saveProfileAction(profile?.id ?? null, input);
-      if (!r.ok) setMessage(r.message);
-      else if (needsPriceReview(r.data.prices)) setSavedPrices(r.data.prices);
+    const applied = (data: Awaited<ReturnType<typeof saveProfileAction>> & { ok: true }) => {
+      if (data.data && needsPriceReview(data.data.prices)) setSavedPrices(data.data.prices);
       else close();
+    };
+    if (!profile) {
+      startSave(async () => {
+        const r = await saveProfileAction(null, input);
+        if (!r.ok) setMessage(r.message);
+        else applied(r);
+      });
+      return;
+    }
+    // A draft saves directly; an approved profile (or one a live agent uses) asks for a checker: a proposal.
+    approval.run({ objectKind: 'model_profile', objectId: profile.id, title: `Change model profile ${profile.name}` }, (choice) => saveProfileAction(profile.id, input, choice), {
+      onApplied: (data) => applied({ ok: true, data }),
     });
   }
 
@@ -141,11 +153,16 @@ function ProfileDialogBody({ providers, profile, fallbackCategories, canTest, ca
           </span>
           <span className="sp" />
           {profile ? (
-            <ConfirmAction label="Delete" buttonClass="btn danger" title={`Delete ${profile.name}`} confirmLabel="Delete profile" run={() => deleteProfileAction(profile.id)} onDone={close}>
-              {profile.agents.length
-                ? `Agents ${profile.agents.map((a) => a.name).join(', ')} use this profile; the API refuses the delete until they are reassigned.`
-                : 'No agent uses this profile. It is removed and the change is audited.'}
-            </ConfirmAction>
+            <DeleteByApproval
+              kind="model_profile"
+              id={profile.id}
+              name={profile.name}
+              detail={
+                profile.agents.length
+                  ? `Agents ${profile.agents.map((a) => a.name).join(', ')} use this profile; the delete is refused until they are reassigned.`
+                  : 'No agent uses this profile. Deleting it needs a second person’s approval.'
+              }
+            />
           ) : null}
           <button type="button" className="btn" onClick={close}>
             Cancel
@@ -170,11 +187,17 @@ function ProfileDialogBody({ providers, profile, fallbackCategories, canTest, ca
           save();
         }}
       >
-        {message ? (
+        {message || approval.error ? (
           <AlertBanner tone="error" style={{ margin: 0 }}>
-            {message}
+            {message ?? approval.error}
           </AlertBanner>
         ) : null}
+        {approval.notice ? (
+          <AlertBanner tone="info" style={{ margin: 0 }}>
+            {approval.notice}
+          </AlertBanner>
+        ) : null}
+        {approval.modal}
         {testNote ? (
           <AlertBanner tone={testNote.startsWith('Test call passed') ? 'info' : 'warn'} style={{ margin: 0 }}>
             {testNote}

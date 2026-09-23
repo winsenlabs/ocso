@@ -1,5 +1,6 @@
 import 'server-only';
 import { z } from 'zod';
+import { ObjectApprovalStateSchema, ProposedSchema } from '@/components/approvals/lib/schemas';
 import { api } from './client';
 
 /**
@@ -94,6 +95,8 @@ export const ProviderSchema = z.object({
   policy: z.object({ allowlisted: z.boolean(), residency: z.enum(['NOT_REQUIRED', 'COMPLIANT', 'VIOLATION']) }),
   profiles: z.array(z.object({ id: z.string(), name: z.string(), role: z.enum(['PRIMARY', 'FALLBACK']) })),
   stats24h: StatsSchema,
+  /** Maker–checker state (PM/research/11 §4). */
+  approval: ObjectApprovalStateSchema.nullable().catch(null).default(null),
 });
 export type Provider = z.infer<typeof ProviderSchema>;
 
@@ -152,6 +155,8 @@ export const ProfileSchema = z.object({
   agents: z.array(z.object({ id: z.string(), name: z.string(), usage: z.enum(['MODEL', 'SUMMARIZER', 'COPILOT']) })),
   stats24h: StatsSchema.nullable(),
   updatedAt: z.string(),
+  /** Maker–checker state (PM/research/11 §4). */
+  approval: ObjectApprovalStateSchema.nullable().catch(null).default(null),
 });
 export type Profile = z.infer<typeof ProfileSchema>;
 
@@ -224,6 +229,10 @@ export const PricingSchema = z.object({
   catalogModelId: z.string().nullable().default(null),
   catalogFetchedAt: z.string().nullable().default(null),
   tiers: z.array(PriceTierSchema).nullable().default(null),
+  /** DRAFT: entered, not approved — prices nothing yet. */
+  status: z.enum(['DRAFT', 'ACTIVE']).catch('ACTIVE').default('ACTIVE'),
+  /** Maker–checker state (PM/research/11 §4). */
+  approval: ObjectApprovalStateSchema.nullable().catch(null).default(null),
 });
 export type Pricing = z.infer<typeof PricingSchema>;
 
@@ -245,9 +254,11 @@ export interface ProviderUpdate {
   settings?: Record<string, unknown>;
   /** A value rotates a credential, null removes it; omitted keys are kept. */
   credentials?: Record<string, string | null>;
-  enabled?: boolean;
   maxConcurrency?: number;
+  approval?: ApprovalChoice | undefined;
 }
+/** The maker's choice from the submit-for-approval modal. */
+export type ApprovalChoice = { checkerId: string; reason: string } | { bootstrap: true; reason?: string | undefined };
 export interface ProfileInput {
   name: string;
   description: string | null;
@@ -280,7 +291,8 @@ export interface PricingInput {
 export const listProviders = () => api.get('/v1/model-providers', z.array(ProviderSchema));
 export const listProviderKinds = () => api.get('/v1/model-providers/kinds', z.array(ProviderKindSchema));
 export const createProvider = (input: ProviderCreate) => api.post('/v1/model-providers', input, ProviderSchema);
-export const updateProvider = (id: string, patch: ProviderUpdate) => api.patch(`/v1/model-providers/${id}`, patch, ProviderSchema);
+/** A draft changes directly; an approved provider answers 409 approval_required until `approval` names a checker (then 202). */
+export const updateProvider = (id: string, patch: ProviderUpdate) => api.patch(`/v1/model-providers/${id}`, patch, z.union([ProviderSchema, ProposedSchema]));
 export const deleteProvider = (id: string) => api.command('DELETE', `/v1/model-providers/${id}`);
 /** Probes a real endpoint: allow for the adapter's 15 s health and 20 s generation timeouts. */
 export const testProvider = (id: string, model: string | null) =>
@@ -289,10 +301,10 @@ export const testProvider = (id: string, model: string | null) =>
 export const listProfiles = () => api.get('/v1/model-profiles', z.array(ProfileSchema));
 export const validateProfile = (input: ProfileInput) => api.post('/v1/model-profiles/validate', input, PolicyCheckSchema);
 export const createProfile = (input: ProfileInput) => api.post('/v1/model-profiles', input, ProfileSaveSchema);
-export const updateProfile = (id: string, input: Partial<ProfileInput>) => api.patch(`/v1/model-profiles/${id}`, input, ProfileSaveSchema);
+export const updateProfile = (id: string, input: Partial<ProfileInput> & { approval?: ApprovalChoice | undefined }) => api.patch(`/v1/model-profiles/${id}`, input, z.union([ProfileSaveSchema, ProposedSchema]));
 export const deleteProfile = (id: string) => api.command('DELETE', `/v1/model-profiles/${id}`);
 
 export const listPricing = () => api.get('/v1/model-pricing', z.array(PricingSchema));
 export const createPricing = (input: PricingInput) => api.post('/v1/model-pricing', input, PricingSchema);
-export const updatePricing = (id: string, input: Partial<PricingInput>) => api.patch(`/v1/model-pricing/${id}`, input, PricingSchema);
+export const updatePricing = (id: string, input: Partial<PricingInput> & { approval?: ApprovalChoice | undefined }) => api.patch(`/v1/model-pricing/${id}`, input, z.union([PricingSchema, ProposedSchema]));
 export const deletePricing = (id: string) => api.command('DELETE', `/v1/model-pricing/${id}`);

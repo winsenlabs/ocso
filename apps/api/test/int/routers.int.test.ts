@@ -1,10 +1,10 @@
-import { randomBytes } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { RouterService, RoutingEngine, systemActor } from '@ocso/application';
 import { modelProfiles, modelProviders, uuidv7, virtualAgents } from '@ocso/db';
 import { MemoryQueue } from '@ocso/queue';
 import { completeSetup, startApi, type ApiHarness } from './harness.js';
+import { activeWebChat } from './routing-web.js';
 import { setTeams } from './teams.js';
 
 /**
@@ -46,6 +46,7 @@ beforeAll(async () => {
   admin = await completeSetup(h);
   const mk = (email: string, role: string, extra: object = {}) => h.http().post('/v1/users').set(auth(admin)).send({ email, name: email.split('@')[0], role, password: 'a password 12345', ...extra }).expect(201);
   const leadId = (await mk('router-lead@ocso.test', 'HEAD')).body.id;
+  ids.leadId = leadId;
   lead = await h.loginAs('router-lead@ocso.test', 'a password 12345');
   ids.team = (await h.http().post('/v1/teams').set(auth(lead)).send({ name: 'Routing' }).expect(201)).body.id;
   await setTeams(h, admin, leadId, [ids.team!]);
@@ -86,7 +87,7 @@ describe('router API', () => {
     await h.http().post('/v1/routers').set(auth(admin)).send({ name: 'x', definition: menu() }).expect(403);
   });
 
-  it('draft → version → activate/attach are 409 approval_required; simulate is a dry run; disable is immediate', async () => {
+  it('draft → version → activate is 409 approval_required without a checker; simulate is a dry run; disable is immediate', async () => {
     const created = await h.http().post('/v1/routers').set(auth(lead)).send({ name: 'Web menu', definition: menu() }).expect(201);
     expect(created.body).toMatchObject({ status: 'DRAFT', draft: { problems: [] } });
     ids.router = created.body.id;
@@ -98,7 +99,7 @@ describe('router API', () => {
 
     const activate = await h.http().post(`/v1/routers/${ids.router}/activate`).set(auth(lead)).send({ versionId: ids.version }).expect(409);
     expect(activate.body.error).toMatchObject({ code: 'approval_required', details: { objectKind: 'router', objectId: ids.router, action: 'ACTIVATE' } });
-    await h.http().put(`/v1/routers/${ids.router}/channels`).set(auth(lead)).send({ channelIds: [] }).expect(409);
+    await h.http().put(`/v1/routers/${ids.router}/channels`).set(auth(lead)).send({ channelIds: [] }).expect(200);
 
     const simulated = await h.http().post(`/v1/routers/${ids.router}/simulate`).set(auth(lead)).send({ messages: ['hello', 'loans'] }).expect(200);
     expect(simulated.body.decision).toMatchObject({ queueName: 'Sales', agentName: 'Arjun', outcome: 'RULE' });
@@ -108,7 +109,7 @@ describe('router API', () => {
   });
 
   it('a menu router answers web chat visitors: ROUTING with CHOICES, then the chosen queue’s agent', async () => {
-    const channel = (await h.http().post('/v1/channels').set(auth(admin)).send({ kind: 'WEBCHAT', name: 'Menu chat', status: 'ACTIVE', settings: {}, secrets: { visitorTokenSecret: randomBytes(32).toString('hex') } }).expect(201)).body;
+    const channel = await activeWebChat(h, admin, { token: lead, id: ids.leadId! }, 'Menu chat');
     // Approval would do this (wave 2); the application functions are what the router descriptor calls.
     await h.db.db.transaction(async (tx) => {
       await RouterService.activateVersion(tx, systemActor('test', 't'), ids.version!);

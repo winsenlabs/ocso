@@ -1,5 +1,5 @@
 import { and, eq, inArray, notInArray } from 'drizzle-orm';
-import { DomainError, ErrorCategory, notFound, routerReferences, validation, type ApprovalAction, type RouterDefinition } from '@ocso/domain';
+import { notFound, routerReferences, validation, type RouterDefinition } from '@ocso/domain';
 import { channels, messageTemplates, modelProfiles, queues, routers, type DbOrTx } from '@ocso/db';
 import { recordAudit } from '../audit/audit.js';
 import { bumpGeneration } from '../cache/generations.js';
@@ -16,7 +16,9 @@ export interface RouterProblem {
  * Activation checks (PM/research/11 §5.2): every referenced queue exists and
  * has its agent; model profiles exist; each per-channel template belongs to
  * the channel it is keyed by and is approved. Approval of the referenced
- * queues and profiles is the approval descriptor's check (wave 2).
+ * queues, their agents being live, and approval of the profiles are the
+ * router approval descriptor's checks (router-approval.ts) — this function is
+ * also the trusted seed path's check, which has no approvals.
  */
 export async function routerActivationProblems(tx: DbOrTx, def: RouterDefinition): Promise<RouterProblem[]> {
   const refs = routerReferences(def);
@@ -49,10 +51,6 @@ export async function routerActivationProblems(tx: DbOrTx, def: RouterDefinition
 function assertNoProblems(problems: readonly RouterProblem[]): void {
   if (problems.length) throw validation('router_invalid', problems.map((p) => p.message).join('; '), { problems });
 }
-
-/** 409 until the approval spine accepts `approval` for routers (PM/research/11 §4.1). */
-export const routerApprovalRequired = (routerId: string, action: ApprovalAction): DomainError =>
-  new DomainError(ErrorCategory.CONFLICT, 'approval_required', 'This change needs approval: name a checker and give a reason.', { objectKind: 'router', objectId: routerId, action });
 
 /**
  * Make a frozen version the router's live behaviour (status ACTIVE). Called by

@@ -39,6 +39,10 @@ export class RealtimeAccess {
       const submittedBy = (event.payload as { submittedBy?: string | null }).submittedBy;
       return submittedBy === this.principal.userId || can(this.principal, Permission.CHANNELS_MANAGE);
     }
+    if (event.type === 'exception_report.ready') {
+      // The exception report (PM/research/11 §7): a report to read and sign; no object data in the payload.
+      return can(this.principal, Permission.EXCEPTIONS_READ);
+    }
     if (APPROVAL_TYPES.has(event.type)) {
       // Maker–checker notices: the maker, the named checker, and whoever may reassign any approval.
       const p = event.payload as { makerId?: string | null; checkerId?: string | null };

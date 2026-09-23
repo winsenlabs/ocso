@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ALL_PERMISSIONS, Permission as P } from '@ocso/auth';
-import { activateUser, applyPermissionChangeSet, loadPrincipal, type ActorContext } from '@ocso/application';
+import { activateUser, applyAuthPolicy, applyPermissionChangeSet, loadPrincipal, type ActorContext } from '@ocso/application';
 import { teamMembers, teams, uuidv7 } from '@ocso/db';
 import { addUserWithPassword, completeSetup, startApi, type ApiHarness } from './harness.js';
 
@@ -8,7 +8,8 @@ import { addUserWithPassword, completeSetup, startApi, type ApiHarness } from '.
  * Per-user permissions over HTTP (PM/research/11 §3.5) on a governed deployment
  * (access approval not skipped): the catalogue, effective permissions with
  * sources, decreases applying at once, increases answering 409
- * approval_required, maker scoping and never-self, and users created pending.
+ * approval_required or becoming proposals (202) a checker approves, maker
+ * scoping and never-self, and users created pending.
  */
 let h: ApiHarness;
 const PASSWORD = 'a password 12345';
@@ -56,20 +57,35 @@ describe('POST /v1/users/:id/permission-changes', () => {
     expect(me.body.permissions).not.toContain(P.COPILOT_USE);
   });
 
-  it('answers 409 approval_required for an increase, with or without a checker, and applies nothing', async () => {
+  it('answers 409 approval_required for an increase without a checker, refuses ineligible checkers, and applies nothing', async () => {
     for (const body of [
       { changes: [{ op: 'GRANT', permission: P.SLA_MANAGE, expiresAt: new Date(Date.now() + 86_400_000).toISOString() }], reason },
       { changes: [{ op: 'CLEAR', permission: P.COPILOT_USE }], reason },
       { preset: 'LEAD', reason },
-      { changes: [{ op: 'GRANT', permission: P.SLA_MANAGE }], reason, approval: { checkerId: ids.head2 } },
-      { changes: [{ op: 'GRANT', permission: P.SLA_MANAGE }], reason, approval: { bootstrap: true } },
     ]) {
       const res = await changes('head', ids.exec, body).expect(409);
       expect(res.body.error).toMatchObject({ code: 'approval_required', details: { objectKind: 'permission_change', action: 'UPDATE', objectId: ids.exec } });
     }
+    // COVERAGE-BUSINESS: the spine is wired. A Head of another team is not eligible while the Tech admin (users.manage)
+    // can check, and bootstrap is refused while anyone else can.
+    const other = await changes('head', ids.exec, { changes: [{ op: 'GRANT', permission: P.SLA_MANAGE }], reason, approval: { checkerId: ids.head2 } }).expect(400);
+    expect(other.body.error.code).toBe('checker_not_eligible');
+    const boot = await changes('head', ids.exec, { changes: [{ op: 'GRANT', permission: P.SLA_MANAGE }], reason, approval: { bootstrap: true } }).expect(400);
+    expect(boot.body.error.code).toBe('bootstrap_not_allowed');
     const me = await h.http().get('/v1/auth/me').set(as('exec')).expect(200);
     expect(me.body).toMatchObject({ role: 'SERVICE' });
     expect(me.body.permissions).not.toContain(P.SLA_MANAGE);
+  });
+
+  it('an increase with an eligible checker is a proposal (202); the checker’s approval applies it', async () => {
+    const res = await changes('head', ids.exec, { changes: [{ op: 'GRANT', permission: P.SLA_MANAGE }], reason, approval: { checkerId: ids.admin } }).expect(202);
+    expect(res.body.proposal).toMatchObject({ objectKind: 'permission_change', status: 'SUBMITTED', checkerId: ids.admin });
+    // The target never checks their own change, and neither does the maker.
+    const shown = await h.http().get(`/v1/approvals/${res.body.proposal.id}`).set(as('admin')).expect(200);
+    await h.http().post(`/v1/approvals/${res.body.proposal.id}/decision`).set(as('head')).send({ decision: 'APPROVE', contentHash: shown.body.contentHash }).expect(403);
+    await h.http().post(`/v1/approvals/${res.body.proposal.id}/decision`).set(as('admin')).send({ decision: 'APPROVE', contentHash: shown.body.contentHash }).expect(200);
+    const me = await h.http().get('/v1/auth/me').set(as('exec')).expect(200);
+    expect(me.body.permissions).toContain(P.SLA_MANAGE);
   });
 
   it('never lets anyone change their own access, and keeps team makers in their teams', async () => {
@@ -165,23 +181,34 @@ describe('review hardening over HTTP', () => {
 
   it('submits a pending user with PATCH, refuses disabling it, and discards it (DELETE) to free the email', async () => {
     const created = await h.http().post('/v1/users').set(as('admin')).send({ email: 'draft@ocso.test', name: 'Draft', role: 'SERVICE', password: PASSWORD }).expect(201);
-    const submit = await h.http().patch(`/v1/users/${created.body.id}`).set(as('admin')).send({ approval: { checkerId: ids.head } }).expect(409);
-    expect(submit.body.error).toMatchObject({ code: 'approval_required', details: { objectKind: 'user', action: 'CREATE', objectId: created.body.id } });
+    const unnamed = await h.http().patch(`/v1/users/${created.body.id}`).set(as('admin')).send({ status: 'ACTIVE' }).expect(409);
+    expect(unnamed.body.error).toMatchObject({ code: 'approval_required', details: { objectKind: 'user', action: 'CREATE', objectId: created.body.id } });
+    // The maker is offered the eligible checkers (users.manage holders, else — for a teamless user — any checker of permissions).
+    const offered = await h.http().get('/v1/approvals/checkers').query({ objectKind: 'user', objectId: created.body.id }).set(as('admin')).expect(200);
+    expect(offered.body.checkers.map((c: { id: string }) => c.id)).not.toContain(ids.admin);
+    const submit = await h.http().patch(`/v1/users/${created.body.id}`).set(as('admin')).send({ approval: { checkerId: offered.body.checkers[0].id } }).expect(202);
+    expect(submit.body.proposal).toMatchObject({ objectKind: 'user', action: 'CREATE', status: 'SUBMITTED' });
     await h.http().patch(`/v1/users/${created.body.id}`).set(as('admin')).send({ status: 'DISABLED' }).expect(409);
+    // The draft is locked while its creation waits (edit or withdraw the proposal); discarding voids it.
+    const locked = await h.http().patch(`/v1/users/${created.body.id}`).set(as('admin')).send({ role: 'LEAD' }).expect(409);
+    expect(locked.body.error.code).toBe('approval_open');
     await h.http().delete(`/v1/users/${created.body.id}`).set(as('exec')).expect(403);
     await h.http().delete(`/v1/users/${ids.exec}`).set(as('admin')).expect(409);
     await h.http().delete(`/v1/users/${created.body.id}`).set(as('admin')).expect(204);
+    const voided = await h.http().get(`/v1/approvals/${submit.body.proposal.id}`).set(as('admin')).expect(200);
+    expect(voided.body.status).toBe('VOID');
     await h.http().post('/v1/users').set(as('admin')).send({ email: 'draft@ocso.test', name: 'Draft Again', role: 'SERVICE', password: PASSWORD }).expect(201);
   });
 
   it('requires MFA of someone granted a permission only an MFA-required preset holds', async () => {
     const plain = await addUserWithPassword(h, { email: 'plain@ocso.test', name: 'Plain', role: 'SERVICE', password: PASSWORD });
     const token = { authorization: `Bearer ${await h.loginAs('plain@ocso.test', PASSWORD)}` };
-    await h.http().put('/v1/settings/auth-policy').set(as('admin')).send({ requireMfaRoles: ['HEAD'] }).expect(200);
+    // Fixture: the policy an approved settings change leaves (the MFA policy is part of the settings proposals).
+    await h.db.db.transaction(async (tx) => applyAuthPolicy(tx, await adminActor(), { requireMfaRoles: ['HEAD'] }));
     await h.http().get('/v1/permissions/catalogue').set(token).expect(200);
     await h.db.db.transaction(async (tx) => applyPermissionChangeSet(tx, await adminActor(), { userId: plain, ops: [{ op: 'GRANT', permission: P.EXCEPTIONS_SIGN, expiresAt: null }], reason }, { proposalId: uuidv7() }));
     const blocked = await h.http().get('/v1/permissions/catalogue').set(token).expect(403);
     expect(blocked.body.error.code).toBe('mfa_enrollment_required');
-    await h.http().put('/v1/settings/auth-policy').set(as('admin')).send({ requireMfaRoles: [] }).expect(200);
+    await h.db.db.transaction(async (tx) => applyAuthPolicy(tx, await adminActor(), { requireMfaRoles: [] }));
   });
 });

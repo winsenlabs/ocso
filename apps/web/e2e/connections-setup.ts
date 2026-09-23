@@ -1,7 +1,7 @@
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { ACCOUNTS, E2E, apiUrl } from './config';
 
 /** Shared seeding for the Connections & models specs (real API, idempotent). */
@@ -56,7 +56,16 @@ export function seedConnectionsStack(options: { mcpDemo: boolean }): void {
       expect([201, 409]).toContain(res.status);
     }
     // The example server runs on loopback: a private address the SSRF guard refuses unless allowlisted (ADR-021).
-    expect((await call('PATCH', '/v1/settings/deployment', { egressAllowedInternalHosts: ['127.0.0.1'] }, admin)).status).toBe(200);
+    // A settings change is a proposal the Head approves (PM/research/11 §4); skipped when already allowlisted.
+    const settings = (await (await call('GET', '/v1/settings/deployment', undefined, admin)).json()) as { egressAllowedInternalHosts: string[] };
+    if (!settings.egressAllowedInternalHosts.includes('127.0.0.1')) {
+      const lead = await apiLogin(USERS.lead.email, USERS.lead.password);
+      const leadId = ((await (await call('GET', '/v1/auth/me', undefined, lead)).json()) as { id: string }).id;
+      const res = await call('PATCH', '/v1/settings/deployment', { egressAllowedInternalHosts: [...settings.egressAllowedInternalHosts, '127.0.0.1'], approval: { checkerId: leadId, reason: 'E2E: the example MCP server' } }, admin);
+      expect(res.status).toBe(202);
+      const { proposal } = (await res.json()) as { proposal: { id: string; contentHash: string } };
+      expect((await call('POST', `/v1/approvals/${proposal.id}/decision`, { decision: 'APPROVE', reason: 'E2E: reviewed', contentHash: proposal.contentHash }, lead)).status).toBe(200);
+    }
     const kinds = (await (await call('GET', '/v1/model-providers/kinds', undefined, admin)).json()) as Array<{ kind: string }>;
     if (!kinds.some((k) => k.kind === 'DEV_SCRIPTED')) throw new Error('Run the API with OCSO_ENABLE_DEV_PROVIDERS=true (DEV_SCRIPTED kind missing)');
     if (options.mcpDemo) await startDemo();
@@ -67,3 +76,30 @@ export function seedConnectionsStack(options: { mcpDemo: boolean }): void {
   });
 }
 
+
+/**
+ * Maker–checker in the Connections UI (PM/research/11 §4): the submit-for-approval modal names the Head
+ * (Lina Lead) as checker; she approves over the API (the approvals screen has its own spec).
+ */
+export async function submitForApproval(page: Page, reason = 'E2E: platform change'): Promise<void> {
+  const modal = page.getByRole('dialog', { name: 'Submit for approval' });
+  await expect(modal).toBeVisible();
+  await expect(modal.getByLabel('checker')).toBeVisible();
+  await modal.getByLabel('checker').selectOption({ label: USERS.lead.name });
+  await modal.getByLabel('reason').fill(reason);
+  await modal.getByRole('button', { name: 'Submit for approval' }).click();
+  await expect(modal).toBeHidden();
+}
+
+/** Lina approves the open proposal on this object (objectKind + a title fragment); returns its id. */
+export async function approveAsLead(objectKind: string, titleIncludes: string): Promise<string> {
+  const lead = await apiLogin(USERS.lead.email, USERS.lead.password);
+  const res = await call('GET', `/v1/approvals?box=AWAITING_ME&objectKind=${objectKind}`, undefined, lead);
+  expect(res.status).toBe(200);
+  const rows = ((await res.json()) as { rows: Array<{ id: string; title: string; contentHash: string }> }).rows;
+  const open = rows.find((r) => r.title.includes(titleIncludes));
+  expect(open, `open ${objectKind} proposal "${titleIncludes}"`).toBeTruthy();
+  const decided = await call('POST', `/v1/approvals/${open!.id}/decision`, { decision: 'APPROVE', reason: 'E2E: reviewed', contentHash: open!.contentHash }, lead);
+  expect(decided.status, await decided.clone().text()).toBe(200);
+  return open!.id;
+}

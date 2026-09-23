@@ -61,7 +61,8 @@ export const channels = pgTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [uniqueIndex('channels_public_key_uq').on(t.publicKey)],
+  // channels_router_idx: migration 0030 (router channel lists, detach, reach).
+  (t) => [uniqueIndex('channels_public_key_uq').on(t.publicKey), index('channels_router_idx').on(t.routerId)],
 );
 
 /** Deprecated (PM/research/11 §5): no longer read or written; reach is derived through routers and queues. */

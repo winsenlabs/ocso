@@ -4,6 +4,7 @@ import { ACCOUNTS, E2E, apiUrl } from './config';
 import { login, logout, primaryNav, settled } from './helpers';
 import { routeChannelToAgent } from './routing';
 import { goLiveApproved } from './approval-setup';
+import { approvedChannel, approvedProfile, approvedProvider } from './platform-setup';
 
 /**
  * Lead operations pages against the real API + worker. Seeded through the
@@ -53,12 +54,13 @@ test.beforeAll(async ({ playwright }) => {
   await call('POST', '/v1/users', tok.admin, { name: EXEC.name, email: EXEC.email, role: 'SERVICE', password: EXEC.password, teamIds: [ids.team], languages: [], maxConcurrent: 5 });
   ids.seedQueue = (await call<{ id: string }>('POST', '/v1/queues', tok.lead, { name: 'OPS Seed queue', teamIds: [ids.team] })).id;
 
-  const provider = await call<{ id: string }>('POST', '/v1/model-providers', tok.admin, { kind: 'DEV_SCRIPTED', name: 'OPS Scripted', settings: { latencyMs: 50, chunkDelayMs: 15 } });
-  const profile = await call<{ id: string }>('POST', '/v1/model-profiles', tok.admin, { name: 'ops-support', providerId: provider.id, model: 'scripted-1', retries: 0 });
+  // Platform objects start as drafts: a Head approves enabling the provider and activating the channel (PM/research/11 §4).
+  const provider = { id: await approvedProvider(api, tok.admin, { id: lead.id, token: tok.lead }, { kind: 'DEV_SCRIPTED', name: 'OPS Scripted', settings: { latencyMs: 50, chunkDelayMs: 15 } }) };
+  const profile = { id: await approvedProfile(api, tok.admin, { id: lead.id, token: tok.lead }, { name: 'ops-support', providerId: provider.id, model: 'scripted-1', retries: 0 }) };
   ids.agent = (await call<{ id: string }>('POST', '/v1/agents', tok.lead, { name: AGENT, slug: 'mira-ops', purpose: 'customer support', conversationType: 'SUPPORT', modelProfileId: profile.id, defaultQueueId: ids.seedQueue, teamIds: [owners] })).id;
   // Going live is a maker–checker approval (PM/research/11 §4): a second Head of the owning team checks it.
   await goLiveApproved(api, { adminToken: tok.admin, makerToken: tok.lead, agentId: ids.agent, ownerTeamId: owners, checker: { name: 'OPS Checker', email: 'ops.checker@e2e.ocso.test', password: 'correct-horse-battery-opschecker' } });
-  const channel = await call<{ id: string; publicKey: string }>('POST', '/v1/channels', tok.admin, { kind: 'WEBCHAT', name: 'OPS Web chat', status: 'ACTIVE', secrets: { visitorTokenSecret: randomBytes(32).toString('hex') } });
+  const channel = await approvedChannel<{ id: string; publicKey: string }>(api, tok.admin, { id: lead.id, token: tok.lead }, { kind: 'WEBCHAT', name: 'OPS Web chat', secrets: { visitorTokenSecret: randomBytes(32).toString('hex') } });
   ids.webchatKey = channel.publicKey;
   ids.channel = channel.id;
   // channel → pass-through router → the agent's queue (PM/research/11 §5).
@@ -128,7 +130,7 @@ test('the lead creates an SLA policy and a queue that uses it', async ({ page })
 
   await row.getByRole('button', { name: `Edit ${QUEUE}` }).click();
   const edit = page.getByRole('dialog', { name: `Edit ${QUEUE}` });
-  await edit.getByLabel('Routing mode').selectOption('AUTO_ASSIGN');
+  await edit.getByLabel('Pickup mode').selectOption('AUTO_ASSIGN');
   await edit.getByLabel('Accept within (seconds)').fill('90');
   await edit.getByRole('button', { name: 'Save queue' }).click();
   await expect(edit).toBeHidden();
@@ -137,7 +139,7 @@ test('the lead creates an SLA policy and a queue that uses it', async ({ page })
 
   // Back to open pickup so the escalation below waits in the queue with a pickup clock.
   await row.getByRole('button', { name: `Edit ${QUEUE}` }).click();
-  await edit.getByLabel('Routing mode').selectOption('OPEN_PICKUP');
+  await edit.getByLabel('Pickup mode').selectOption('OPEN_PICKUP');
   await edit.getByRole('button', { name: 'Save queue' }).click();
   await expect(edit).toBeHidden();
   await expect(row).toContainText('Open pickup');

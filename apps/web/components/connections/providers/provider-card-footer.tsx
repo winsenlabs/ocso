@@ -30,7 +30,7 @@ function detailOf(r: ProviderTestResult): string {
 }
 
 /** Card footer: Test connection (POST /v1/model-providers/:id/test), Edit, policy chips, and the last test result. */
-export function ProviderCardFooter({ providerId, canManage, editHref, chips }: { providerId: string; canManage: boolean; editHref: string; chips: ReactNode }) {
+export function ProviderCardFooter({ providerId, canManage, editHref, chips, lifecycle }: { providerId: string; canManage: boolean; editHref: string; chips: ReactNode; lifecycle?: ReactNode }) {
   const [result, setResult] = useState<ProviderTestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -59,6 +59,7 @@ export function ProviderCardFooter({ providerId, canManage, editHref, chips }: {
             <Link className="btn tiny ghost" href={editHref} scroll={false}>
               Edit
             </Link>
+            {lifecycle}
           </>
         ) : null}
         <span className="sp" />

@@ -16,13 +16,14 @@ import { connectionNameTaken } from './errors.js';
 import { McpHealthMonitor, type HealthCheckOutcome, type HealthSampleView } from './health-monitor.js';
 import {
   CreateConnectionInput,
+  HeaderAuthInput,
   type ApproveConnectionInput,
   type BeginOAuthInput,
   type ClassifyToolsInput,
-  type HeaderAuthInput,
   type OAuthCallbackInput,
 } from './inputs.js';
 import { isUniqueViolation, loadConnection, type McpContext } from './records.js';
+import { stageSecrets, unstageSecrets } from '../settings/secret-refs.js';
 import { toToolView, viewOf, viewsOf, type ConnectionView, type ToolView } from './views.js';
 
 export interface McpConnectionServiceDeps {
@@ -163,8 +164,29 @@ export class McpConnectionService {
     return this.review.classifyTools(actor, id, input);
   }
 
+  /** Records a draft's agent policy (the ACTIVATE proposal takes it live); 409 approval_required once approved. */
   approve(actor: ActorContext, id: string, input: ApproveConnectionInput): Promise<ConnectionView> {
     return this.review.approve(actor, id, input);
+  }
+
+  /** Personal connections are one user's credentials and never proposals; shared ones and templates are. */
+  async isGoverned(actor: ActorContext, id: string): Promise<boolean> {
+    const row = await loadConnection(this.ctx.db, id);
+    assertCanView(actor, row);
+    return row.ownerUserId === null;
+  }
+
+  /**
+   * The payload of an UPDATE proposal carrying a new header credential: the token is stored as a NEW secret
+   * (the live connection keeps its credential until approval) and travels as its ref only.
+   */
+  async stageHeaderCredential(actor: ActorContext, id: string, raw: HeaderAuthInput): Promise<{ payload: Record<string, unknown>; discard: () => Promise<void> }> {
+    const input = HeaderAuthInput.parse(raw);
+    const row = await loadConnection(this.ctx.db, id);
+    requirePermission(actor, Permission.MCP_MANAGE);
+    const owner = { kind: 'mcp_connection', objectId: row.id, makerId: actor.principal!.userId };
+    const [staged] = await stageSecrets(this.ctx.db, this.ctx.secrets, owner, { name: `mcp ${row.name}`, kind: () => 'API_KEY', usedBy: `mcp:${row.name}` }, { [input.headerName]: input.token });
+    return { payload: { headerCredential: { headerName: input.headerName, ref: staged!.ref } }, discard: () => unstageSecrets(this.ctx.db, this.ctx.secrets, [staged!.ref]) };
   }
 
   disable(actor: ActorContext, id: string): Promise<ConnectionView> {

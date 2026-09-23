@@ -1,5 +1,5 @@
 import { Logger, Module } from '@nestjs/common';
-import { AuthMailer, PermissionService, TeamService, UserService, type IdentityApprovals, type IdentityGovernance } from '@ocso/application';
+import { ApprovalService, AuthMailer, PermissionService, TeamService, UserService, createIdentityApprovals, type IdentityApprovals, type IdentityGovernance } from '@ocso/application';
 import type { ApiEnv } from '@ocso/config';
 import type { Db } from '@ocso/db';
 import { DB, ENV } from '../../infrastructure/tokens.js';
@@ -10,7 +10,8 @@ import { UsersController } from './users.controller.js';
 @Module({
   controllers: [UsersController, PermissionsController],
   providers: [
-    { provide: IDENTITY_APPROVALS, useValue: null },
+    // Per-user permission increases and new users become `user` / `permission_change` proposals (the approval spine is global).
+    { provide: IDENTITY_APPROVALS, inject: [ApprovalService], useFactory: (approvals: ApprovalService) => createIdentityApprovals(approvals) },
     {
       provide: IDENTITY_GOVERNANCE,
       inject: [ENV, IDENTITY_APPROVALS],

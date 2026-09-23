@@ -78,7 +78,8 @@ export function createSeedContext(database: Database, config: SeedConfig, plugin
   const channelRegistry = createChannelRegistry({ db }, plugins);
   const validateChannel = (kind: string, settings: unknown, values: Record<string, string>): string[] =>
     channelRegistry.has(kind) ? channelRegistry.get(kind).validateConfig(settings, values) : [`channel kind ${kind} is not available`];
-  const approvalRegistry = createApprovalRegistry();
+  // Platform kinds validate channel/provider configuration and reach the MCP server when activating (COVERAGE-PLATFORM).
+  const approvalRegistry = createApprovalRegistry({ platform: { secrets, validateChannel, providers: registry, publicUrl: config.api.OCSO_PUBLIC_URL } });
   return {
     database,
     db,

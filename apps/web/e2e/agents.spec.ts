@@ -1,6 +1,7 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 import { ACCOUNTS, E2E, apiUrl } from './config';
 import { login, logout, settled } from './helpers';
+import { approvedProfile, approvedProvider } from './platform-setup';
 
 /**
  * Virtual agent overview & configuration (design/02) against the real API:
@@ -21,7 +22,7 @@ const NEW_LINE = '• Offer the reversal path before asking for a statement imag
 
 let api: APIRequestContext;
 const tok = { admin: '', lead: '', lead2: '' };
-const ids = { profile: '', queue: '', agent: '', cards: '', loans: '' };
+const ids = { profile: '', queue: '', agent: '', cards: '', loans: '', arjun: '' };
 
 async function call<T = Record<string, unknown>>(method: 'GET' | 'POST' | 'PATCH', path: string, token: string | null, body?: unknown): Promise<T> {
   const res = await api.fetch(path, { method, headers: token ? { authorization: `Bearer ${token}` } : {}, ...(body !== undefined ? { data: body } : {}) });
@@ -53,13 +54,15 @@ test.beforeAll(async ({ playwright }) => {
   tok.lead2 = await loginApi(LEAD2.email, LEAD2.password);
   await call('PATCH', `/v1/users/${lead2.id}`, tok.admin, { teamIds: [ids.loans] });
   await call('POST', '/v1/users', tok.lead, { name: EXEC.name, email: EXEC.email, role: 'SERVICE', password: EXEC.password, teamIds: [ids.cards], languages: [], maxConcurrent: 5 });
-  const provider = await call<{ id: string }>('POST', '/v1/model-providers', tok.admin, { kind: 'DEV_SCRIPTED', name: 'AG Scripted', settings: { latencyMs: 50, chunkDelayMs: 15 } });
-  ids.profile = (await call<{ id: string }>('POST', '/v1/model-profiles', tok.admin, { name: 'ag-support', providerId: provider.id, model: 'scripted-1', retries: 0 })).id;
+  // A provider is a draft until a checker of platform changes (Ada, a Head) approves enabling it (PM/research/11 §4).
+  const provider = { id: await approvedProvider(api, tok.admin, { id: lead.id, token: tok.lead }, { kind: 'DEV_SCRIPTED', name: 'AG Scripted', settings: { latencyMs: 50, chunkDelayMs: 15 } }) };
+  // Agents go live only on a model profile a platform checker approved.
+  ids.profile = await approvedProfile(api, tok.admin, { id: lead.id, token: tok.lead }, { name: 'ag-support', providerId: provider.id, model: 'scripted-1', retries: 0 });
   ids.queue = (await call<{ id: string }>('POST', '/v1/queues', tok.lead, { name: 'AG Cards & EMI · Tier 2' })).id;
   // A second agent so the list and the comparison have more than one row.
   await call('POST', '/v1/agents', tok.lead, { name: 'Riya', slug: 'riya-ag', purpose: 'collections', conversationType: 'COLLECTIONS', modelProfileId: ids.profile, teamIds: [ids.cards] });
   // Lou's own agent, in AG Loans.
-  await call('POST', '/v1/agents', tok.lead2, { name: 'Arjun', slug: 'arjun-ag', purpose: 'loan sales', conversationType: 'SALES', modelProfileId: ids.profile, teamIds: [ids.loans] });
+  ids.arjun = (await call<{ id: string }>('POST', '/v1/agents', tok.lead2, { name: 'Arjun', slug: 'arjun-ag', purpose: 'loan sales', conversationType: 'SALES', modelProfileId: ids.profile, teamIds: [ids.loans] })).id;
 });
 
 test.afterAll(async () => {
@@ -211,6 +214,52 @@ test('adds an escalation rule', async ({ page }) => {
   await expect(row).toContainText('P1');
   await expect(row).toContainText('this agent');
   await expect(row).toContainText('AG Cards & EMI · Tier 2 (default)');
+  // Maker–checker (PM/research/11 §4): a new rule is a draft, off until a checker approves turning it on.
+  await expect(row).toContainText('draft');
+  await logout(page);
+});
+
+test('a Lead’s escalation rule goes on only once a Head approves it', async ({ page }) => {
+  await login(page, LEAD2);
+  await page.goto(`/agents/${ids.arjun}?tab=escalation`);
+  await page.getByRole('button', { name: 'Add rule' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Add escalation rule' });
+  await dialog.getByLabel('Rule name').fill('Mis-selling complaint');
+  await dialog.getByLabel('Trigger').selectOption('POLICY');
+  await dialog.getByLabel('Keywords').fill('mis-sold, forced');
+  await dialog.getByRole('button', { name: 'Add rule' }).click();
+  await expect(dialog).toBeHidden();
+  const rules = page.getByRole('table', { name: 'Escalation rules' });
+  const row = rules.getByRole('row', { name: /Mis-selling complaint/ });
+  await expect(row).toContainText('draft');
+  // Turning it on asks for a checker: AG Loans has no Head, so Ada (another team's Head) is the eligible one.
+  await row.getByRole('button', { name: 'Turn on Mis-selling complaint' }).click();
+  const modal = page.getByRole('dialog', { name: 'Submit for approval' });
+  await modal.getByLabel('checker').selectOption({ label: LEAD.name });
+  await modal.getByLabel('reason').fill('Complaints team asked for this');
+  await modal.getByRole('button', { name: 'Submit for approval' }).click();
+  await expect(page.getByText('Sent for approval')).toBeVisible();
+  await page.reload();
+  await expect(rules.getByRole('row', { name: /Mis-selling complaint/ }).getByRole('link', { name: /Pending approval · awaiting Ada Lead/ })).toBeVisible();
+  await expect(rules.getByRole('row', { name: /Mis-selling complaint/ })).toContainText('draft');
+  await logout(page);
+
+  await login(page, LEAD);
+  await page.goto('/approvals');
+  await page.getByRole('table', { name: 'Approvals' }).getByRole('link', { name: /Turn on escalation rule "Mis-selling complaint" for Arjun/ }).click();
+  const d = page.getByRole('dialog', { name: /Turn on escalation rule/ });
+  await expect(d.getByRole('table', { name: 'Proposed change' })).toContainText('enabled');
+  await d.getByRole('button', { name: 'Approve' }).click();
+  await expect(d).toContainText('approved');
+  await logout(page);
+
+  await login(page, LEAD2);
+  await page.goto(`/agents/${ids.arjun}?tab=escalation`);
+  const on = page.getByRole('table', { name: 'Escalation rules' }).getByRole('row', { name: /Mis-selling complaint/ });
+  await expect(on.getByRole('button', { name: 'Turn off Mis-selling complaint' })).toBeVisible();
+  // Turning it off is a stop: immediate, no checker.
+  await on.getByRole('button', { name: 'Turn off Mis-selling complaint' }).click();
+  await expect(on.getByRole('button', { name: 'Turn on Mis-selling complaint' })).toBeVisible();
   await logout(page);
 });
 

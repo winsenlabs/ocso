@@ -7,6 +7,7 @@ import {
   ApprovalDecisionService,
   ApprovalService,
   createApprovalRegistry,
+  recordInstalledApproval,
   type ActorContext,
   type ApprovalRegistry,
   type ProposalDetail,
@@ -60,6 +61,8 @@ export async function createApprovalFixture(): Promise<ApprovalFixture> {
   const profile = uuidv7();
   await t.db.insert(modelProviders).values({ id: provider, kind: 'DEV_SCRIPTED', name: 'Scripted' });
   await t.db.insert(modelProfiles).values({ id: profile, name: 'support-fast', providerId: provider, model: 'scripted-1' });
+  // Pre-existing platform configuration (grandfathered, like 0031): agents go live only on approved profiles.
+  await recordInstalledApproval(t.db, { kind: 'model_profile', id: profile, title: 'support-fast' }, 'Test fixture: existing profile');
   const registry = createApprovalRegistry();
   const published: Array<{ topic: string; payload: unknown }> = [];
   const queue = { publish: async (topic: string, payload: unknown) => void published.push({ topic, payload }) };

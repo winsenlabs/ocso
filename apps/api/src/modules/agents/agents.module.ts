@@ -4,10 +4,11 @@ import type { Db } from '@ocso/db';
 import { DB } from '../../infrastructure/tokens.js';
 import { AgentStatsService } from './agent-stats.service.js';
 import { AgentsController } from './agents.controller.js';
+import { EscalationRulesController } from './escalation-rules.controller.js';
 import { PromptsController } from './prompts.controller.js';
 
 @Module({
-  controllers: [AgentsController, PromptsController],
+  controllers: [AgentsController, PromptsController, EscalationRulesController],
   providers: [
     AgentStatsService,
     { provide: AgentService, inject: [DB], useFactory: (db: Db) => new AgentService(db) },

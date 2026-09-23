@@ -4,6 +4,7 @@ import { DomainError, validation } from '@ocso/domain';
 import { deploymentSettings, users, uuidv7, type Db } from '@ocso/db';
 import { z } from 'zod';
 import { seedDefaultAlertRules } from '../alerts/seed.js';
+import { recordInstalledApproval } from '../approvals/installed.js';
 import { recordAudit } from '../audit/audit.js';
 import { setPasswordCredential } from './credentials.js';
 import { hashPassword, passwordProblems } from './password.js';
@@ -52,6 +53,8 @@ export class SetupService {
       // Better Auth user + credential account (ADR-025); the address is the one the operator just typed.
       await tx.insert(users).values({ id: userId, email: input.adminEmail.toLowerCase(), name: input.adminName, role: 'TECH', emailVerified: true });
       await setPasswordCredential(tx, userId, passwordHash);
+      // Nobody could check the first admin: recorded as installed configuration, like the grandfather migration (PM/research/11 §4).
+      await recordInstalledApproval(tx, { kind: 'user', id: userId, title: `First Tech admin ${input.adminName}` }, 'First Tech admin created by setup, before anyone could check it');
       await tx
         .update(deploymentSettings)
         .set({ orgName: input.orgName, timezone: input.timezone, setupCompletedAt: new Date(), updatedBy: userId })

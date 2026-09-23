@@ -9,8 +9,10 @@ import { CATEGORY_LABELS, listProblemText } from '@/components/workspace/lib/tem
 import { loadChannelTemplates, loadTemplateChannels, type TemplateChannel, type TemplateView } from '@/lib/api/templates';
 import { formatAge } from '@/lib/format';
 import { hasPermission, requireSession } from '@/lib/session';
-import { DeleteTemplateButton, TemplatesLive } from './template-actions';
+import { PendingBadge } from '@/components/approvals/pending-badge';
+import { DeleteTemplateButton, SubmitDraftButton, TemplatesLive } from './template-actions';
 import { TemplateBuilder } from './template-builder';
+import { formFromTemplate } from './lib/draft-form';
 
 type Params = Record<string, string | string[] | undefined>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
@@ -43,16 +45,28 @@ export async function TemplatesBody({ searchParams }: { searchParams: Promise<Pa
   }
   const channel = channels.find((c) => c.id === one(params['channel'])) ?? channels[0]!;
   const creating = one(params['new']) === '1';
+  const editId = one(params['edit']);
+  const editing = editId ? (await loadChannelTemplates(channel.id)).templates.find((t) => t.submission?.recordId === editId && t.submission.draft && !t.submission.approval) : undefined;
+  const can = { delete: hasPermission(session, Permission.MESSAGE_TEMPLATES_DELETE) };
   return (
     <div className="tpl-page">
       <ChannelPicker channels={channels} current={channel.id} />
-      {creating ? (
+      {creating || editing ? (
         <>
-          <SecHead title={`New template · ${channel.name}`} desc={`${channel.kindLabel} · submitted to ${termsOf(channel).reviewer} for review`} />
-          <TemplateBuilder channel={channel} terms={termsOf(channel)} listHref={templatesHref(channel.id)} />
+          <SecHead
+            title={editing ? `Edit draft · ${editing.name}` : `New template · ${channel.name}`}
+            desc={`${channel.kindLabel} · saved as a draft; a checker approves it before it goes to ${termsOf(channel).reviewer} for review`}
+          />
+          <TemplateBuilder
+            key={editing?.id ?? 'new'}
+            channel={channel}
+            terms={termsOf(channel)}
+            listHref={templatesHref(channel.id)}
+            draft={editing ? { recordId: editing.submission!.recordId, form: formFromTemplate(editing) } : null}
+          />
         </>
       ) : (
-        <ChannelTemplates channel={channel} refresh={one(params['refresh']) === '1'} submitted={one(params['submitted']) ?? null} />
+        <ChannelTemplates channel={channel} can={can} refresh={one(params['refresh']) === '1'} submitted={one(params['submitted']) ?? null} drafted={one(params['drafted']) ?? null} />
       )}
     </div>
   );
@@ -71,7 +85,9 @@ function ChannelPicker({ channels, current }: { channels: TemplateChannel[]; cur
   );
 }
 
-async function ChannelTemplates({ channel, refresh, submitted }: { channel: TemplateChannel; refresh: boolean; submitted: string | null }) {
+type Can = { delete: boolean };
+
+async function ChannelTemplates({ channel, can, refresh, submitted, drafted }: { channel: TemplateChannel; can: Can; refresh: boolean; submitted: string | null; drafted: string | null }) {
   const list = await loadChannelTemplates(channel.id, refresh);
   const approved = list.templates.filter((t) => t.status === 'APPROVED').length;
   return (
@@ -95,7 +111,14 @@ async function ChannelTemplates({ channel, refresh, submitted }: { channel: Temp
       {submitted ? (
         <div className="alert" role="status">
           <span>
-            <b>{submitted}</b> was submitted for {termsOf(channel).reviewer} approval. Review usually takes minutes (up to 24 hours); this list and your notifications update when {termsOf(channel).reviewer} decides.
+            <b>{submitted}</b> is waiting for a checker. Once they approve, it goes to {termsOf(channel).reviewer} for review (usually minutes, up to 24 hours); this list and your notifications update as it moves.
+          </span>
+        </div>
+      ) : null}
+      {drafted ? (
+        <div className="alert" role="status">
+          <span>
+            <b>{drafted}</b> was saved as a draft. {termsOf(channel).reviewer} never sees it until you submit it and a checker approves.
           </span>
         </div>
       ) : null}
@@ -111,7 +134,7 @@ async function ChannelTemplates({ channel, refresh, submitted }: { channel: Temp
       ) : (
         <div className="tpl-list" role="list" aria-label="Templates">
           {list.templates.map((t) => (
-            <TemplateRow key={t.id} channelId={channel.id} template={t} />
+            <TemplateRow key={t.id} channelId={channel.id} template={t} can={can} />
           ))}
         </div>
       )}
@@ -119,9 +142,12 @@ async function ChannelTemplates({ channel, refresh, submitted }: { channel: Temp
   );
 }
 
-function TemplateRow({ channelId, template: t }: { channelId: string; template: TemplateView }) {
+function TemplateRow({ channelId, template: t, can }: { channelId: string; template: TemplateView; can: Can }) {
   const text = [t.header?.text, t.body, t.footer].filter(Boolean).join('\n');
-  const submitted = t.submission ? `submitted by ${t.submission.submittedBy?.name ?? 'a former user'} ${formatAge(t.submission.submittedAt)} ago` : null;
+  const sub = t.submission;
+  const draft = Boolean(sub?.draft);
+  const waiting = sub?.approval ?? null;
+  const by = sub ? `${draft ? 'drafted' : 'submitted'} by ${sub.submittedBy?.name ?? (sub.providerMade ? 'the provider console' : 'a former user')} ${formatAge(sub.submittedAt)} ago` : null;
   return (
     <div className="tpl-row" role="listitem" aria-label={`${t.name} (${t.language})`}>
       <div>
@@ -130,15 +156,36 @@ function TemplateRow({ channelId, template: t }: { channelId: string; template: 
         {t.buttons.length ? <p className="mono-sm">buttons: {t.buttons.map((b) => b.text).join(' · ')}</p> : null}
         {t.rejectionReason ? <p className="why">{t.rejectionReason}</p> : null}
         {t.status === 'APPROVED' && !t.unsupportedReason ? <p className="mono-sm">execs can send it from a conversation’s composer (Template)</p> : null}
+        {draft ? <p className="mono-sm">a draft: only OCSO has it — submit it for a checker’s approval to send it for review</p> : null}
         {t.unsupportedReason ? <p className="mono-sm">{t.unsupportedReason}</p> : null}
       </div>
       <div className="side">
         <span className="rowsplit">
           {t.category ? <StatusChip tone="muted">{CATEGORY_LABELS[t.category]}</StatusChip> : null}
-          <StatusChip tone={STATUS_TONE[t.status]}>{TEMPLATE_STATUS_LABELS[t.status]}</StatusChip>
+          <StatusChip tone={STATUS_TONE[t.status]}>{draft ? 'Draft' : TEMPLATE_STATUS_LABELS[t.status]}</StatusChip>
         </span>
-        {submitted ? <span className="mono-sm">{submitted}</span> : null}
-        <DeleteTemplateButton channelId={channelId} templateId={t.id} name={t.name} />
+        {waiting ? (
+          <PendingBadge
+            state={{
+              approved: !draft,
+              pending: { id: waiting.proposalId, action: waiting.action, status: waiting.activating ? 'APPROVED' : 'SUBMITTED', checkerId: null, checkerName: waiting.checkerName, makerId: null, submittedAt: '', activating: waiting.activating },
+              updateNeedsApproval: true,
+              checkPermission: '',
+            }}
+          />
+        ) : null}
+        {by ? <span className="mono-sm">{by}</span> : null}
+        <span className="rowsplit">
+          {draft && !waiting ? (
+            <>
+              <Link className="btn tiny ghost" href={templatesHref(channelId, { edit: sub!.recordId })} aria-label={`Edit ${t.name}`}>
+                Edit
+              </Link>
+              <SubmitDraftButton channelId={channelId} recordId={sub!.recordId} name={t.name} />
+            </>
+          ) : null}
+          {can.delete ? <DeleteTemplateButton channelId={channelId} templateId={t.id} recordId={sub?.recordId ?? null} name={t.name} draft={draft} disabled={Boolean(waiting)} /> : null}
+        </span>
       </div>
     </div>
   );

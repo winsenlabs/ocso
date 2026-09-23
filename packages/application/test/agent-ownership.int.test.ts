@@ -79,8 +79,9 @@ describe('managing agents', () => {
     await expect(rules.list(f.p.leadB, f.agent.maya)).rejects.toMatchObject(notFound);
     await expect(rules.create(b, f.agent.maya, EscalationRuleInput.parse({ name: 'x', trigger: 'RISK' }))).rejects.toMatchObject(notFound);
     // A rule is addressed through its own agent: Maya's rule is not found under Arjun.
-    await expect(rules.update(b, f.agent.arjun, f.mayaRule, { enabled: false })).rejects.toMatchObject({ code: 'escalation_rule_not_found' });
-    await expect(rules.remove(b, f.agent.arjun, f.mayaRule)).rejects.toMatchObject({ code: 'escalation_rule_not_found' });
+    await expect(rules.disable(b, f.agent.arjun, f.mayaRule)).rejects.toMatchObject({ code: 'escalation_rule_not_found' });
+    await expect(rules.update(b, f.agent.arjun, f.mayaRule, { name: 'renamed' })).rejects.toMatchObject({ code: 'escalation_rule_not_found' });
+    await expect(rules.assertRuleOf(b, f.agent.arjun, f.mayaRule)).rejects.toMatchObject({ code: 'escalation_rule_not_found' });
     const grants = new AgentToolGrantService(f.t.db);
     await expect(grants.list(b, f.agent.maya)).rejects.toMatchObject(notFound);
     await expect(grants.set(b, f.agent.maya, { grants: [] })).rejects.toMatchObject(notFound);

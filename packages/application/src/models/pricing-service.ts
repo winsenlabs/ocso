@@ -11,6 +11,9 @@ import { baseModelFor, insertCatalogPrice } from './catalog/catalog-prices.js';
 import { ModelCatalogService } from './catalog/catalog-service.js';
 import type { CatalogPriceInput, PricingInput, PricingPatch } from './inputs.js';
 import { modelsWithoutPrice, type MissingPrice } from './pricing-missing.js';
+import { pricingGoverned } from './pricing-approval.js';
+import { approvalRequiredError } from '../approvals/guard.js';
+import { assertPlatformWrite } from '../settings/platform-approvals.js';
 
 export type PricingRow = typeof modelPricing.$inferSelect;
 
@@ -40,6 +43,9 @@ export interface PricingServiceDeps {
  * Price table used for usage cost metadata (docs/05 §3, ADR-027): rows the
  * Tech admin enters (manual) and rows pre-filled from the open-source model
  * catalog (catalog). Editing a catalog row makes it manual.
+ * Maker–checker (PM/research/11 §4, pricing-approval.ts): a row a person adds
+ * is a DRAFT until approved; a live row changes, and any row is removed, only
+ * by proposal. Catalog refreshes by the system stay direct and audited.
  */
 export class PricingService {
   private readonly db: Db;
@@ -76,6 +82,8 @@ export class PricingService {
           cacheWritePerMTokMicros: input.cacheWritePerMTokMicros,
           outputPerMTokMicros: input.outputPerMTokMicros,
           origin: 'manual',
+          // A draft: prices nothing until its ACTIVATE proposal is approved (pricing-approval.ts).
+          status: 'DRAFT',
           ...(input.effectiveFrom ? { effectiveFrom: new Date(input.effectiveFrom) } : {}),
         })
         .returning();
@@ -83,7 +91,7 @@ export class PricingService {
         action: 'model_pricing.create',
         targetType: 'model_pricing',
         targetId: id,
-        summary: `Added pricing for ${input.providerKind} ${input.modelPattern}`,
+        summary: `Added pricing for ${input.providerKind} ${input.modelPattern} (draft until approved)`,
         after: input,
       });
       await emitEvent(tx, actor, 'config.changed', { area: 'model_pricing', entityId: id });
@@ -94,6 +102,10 @@ export class PricingService {
   async update(actor: ActorContext, id: string, patch: PricingPatch): Promise<PricingRow> {
     authorize(actor, Permission.PRICING_MANAGE);
     return this.db.transaction(async (tx) => {
+      const [exists] = await tx.select({ id: modelPricing.id }).from(modelPricing).where(eq(modelPricing.id, id));
+      if (!exists) throw notFound('model_pricing', id);
+      // A draft only; a live price (approved, or a catalog row) changes by proposal: 409 approval_required.
+      await assertPlatformWrite(tx, 'model_pricing', id, 'UPDATE', (t) => pricingGoverned(t, id));
       const [before] = await tx.select().from(modelPricing).where(eq(modelPricing.id, id)).for('update');
       if (!before) throw notFound('model_pricing', id);
       const { effectiveFrom, ...fields } = patch;
@@ -144,19 +156,11 @@ export class PricingService {
     return this.db.transaction((tx) => insertCatalogPrice(tx, actor, target, match, now));
   }
 
+  /** Removing a price row is always a proposal (DELETE, pricing-approval.ts): 409 approval_required here. */
   async delete(actor: ActorContext, id: string): Promise<void> {
     authorize(actor, Permission.PRICING_MANAGE);
-    await this.db.transaction(async (tx) => {
-      const [before] = await tx.delete(modelPricing).where(eq(modelPricing.id, id)).returning();
-      if (!before) throw notFound('model_pricing', id);
-      await recordAudit(tx, actor, {
-        action: 'model_pricing.delete',
-        targetType: 'model_pricing',
-        targetId: id,
-        summary: `Removed pricing for ${before.providerKind} ${before.modelPattern}`,
-        before,
-      });
-      await emitEvent(tx, actor, 'config.changed', { area: 'model_pricing', entityId: id });
-    });
+    const [row] = await this.db.select({ id: modelPricing.id }).from(modelPricing).where(eq(modelPricing.id, id));
+    if (!row) throw notFound('model_pricing', id);
+    throw approvalRequiredError('model_pricing', id, 'DELETE');
   }
 }

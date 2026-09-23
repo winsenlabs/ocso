@@ -67,7 +67,11 @@ describe('worker settings reflect the deployment apply status (ADR-023)', () => 
     expect(deployment.body).toMatchObject({ driver: 'compose', deployment: { replicaControl: 'operator' }, describeError: null });
     expect(deployment.body.describedAt).toEqual(expect.any(String));
 
-    const patched = await h.http().patch('/v1/settings/workers').set(as('admin')).send({ minWarmWorkers: 3 }).expect(200);
+    // A settings change is a proposal the lead (a Head) approves; then it is PENDING at the deployment.
+    const leadId = (await h.http().get('/v1/auth/me').set(as('lead')).expect(200)).body.id;
+    const proposed = await h.http().patch('/v1/settings/workers').set(as('admin')).send({ minWarmWorkers: 3, approval: { checkerId: leadId, reason: 'One more warm worker' } }).expect(202);
+    await h.http().post(`/v1/approvals/${proposed.body.proposal.id}/decision`).set(as('lead')).send({ decision: 'APPROVE', reason: 'ok', contentHash: proposed.body.proposal.contentHash }).expect(200);
+    const patched = await h.http().get('/v1/settings/workers').set(as('admin')).expect(200);
     expect(patched.body).toMatchObject({ minWarmWorkers: 3, scaling: { status: 'PENDING', lastOutcome: 'ADVISORY', inSync: false } });
 
     await worker.reconcile('config_changed');

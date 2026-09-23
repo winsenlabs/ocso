@@ -162,6 +162,7 @@ export const APPROVAL_MAKE_PERMISSIONS = [
   Permission.USERS_MANAGE_TEAM,
   Permission.PERMISSIONS_MANAGE,
   Permission.DEPLOYMENT_SETTINGS_MANAGE,
+  Permission.PRICING_MANAGE,
 ] as const satisfies readonly Permission[];
 
 export function isPermission(value: string): value is Permission {

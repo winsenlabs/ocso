@@ -3,7 +3,7 @@
 import { refresh } from 'next/cache';
 import { Permission } from '@ocso/auth';
 import { z } from 'zod';
-import { COMPONENT_KEYS, CONVERSATION_TYPES, ESCALATION_TRIGGERS, PRIORITIES, RULE_OPS } from '@/components/agents/data/agent-schemas';
+import { COMPONENT_KEYS, CONVERSATION_TYPES } from '@/components/agents/data/agent-schemas';
 import { hoursIssues, type BusinessHours, type HoursIssues } from '@/components/agents/lib/business-hours';
 import { api } from '../api/client';
 import { ApiError, describeApiError } from '../api/errors';
@@ -177,59 +177,7 @@ export async function activateVersionAction(agentId: string, versionId: string, 
   });
 }
 
-// ─────────── Escalation rules ───────────
-
-const RuleInput = z.object({
-  name: z.string().trim().min(1, 'Enter a name').max(120),
-  trigger: z.enum(ESCALATION_TRIGGERS),
-  condition: z.object({
-    keywords: z.array(z.string().trim().min(2).max(80)).max(50).optional(),
-    consecutiveToolFailures: z.number().int().min(1).max(10).optional(),
-    customerRequestsHuman: z.boolean().optional(),
-    amountAbove: z.number().positive().optional(),
-  }),
-  mode: z.enum(['AUTO_ASSIGN', 'OPEN_PICKUP']),
-  targetQueueId: Id.nullable(),
-  priority: z.enum(PRIORITIES),
-  enabled: z.boolean(),
-});
-export type RuleInputT = z.input<typeof RuleInput>;
-
-export async function saveRuleAction(agentId: string, ruleId: string | null, input: Partial<RuleInputT>): Promise<ActionResult> {
-  const schema = z.object({ agentId: Id, ruleId: Id.nullable(), body: ruleId ? RuleInput.partial() : RuleInput });
-  return run(Permission.ESCALATION_MANAGE, 'manage escalation rules', schema, { agentId, ruleId, body: input }, async (i) => {
-    const base = `${agentPath(i.agentId)}/escalation-rules`;
-    if (i.ruleId) await api.put(`${base}/${enc(i.ruleId)}`, i.body, z.object({ id: z.string() }));
-    else await api.post(base, i.body, z.object({ id: z.string() }));
-    return null;
-  });
-}
-
-export async function deleteRuleAction(agentId: string, ruleId: string): Promise<ActionResult> {
-  return run(Permission.ESCALATION_MANAGE, 'manage escalation rules', z.object({ agentId: Id, ruleId: Id }), { agentId, ruleId }, async (i) => {
-    await api.command('DELETE', `${agentPath(i.agentId)}/escalation-rules/${enc(i.ruleId)}`);
-    return null;
-  });
-}
-
-// ─────────── Tool grants ───────────
-
-const Grant = z.object({
-  toolId: Id,
-  enabled: z.boolean(),
-  alwaysConfirm: z.boolean(),
-  argumentRules: z
-    .array(z.object({ path: z.string().min(1), op: z.enum(RULE_OPS), value: z.unknown().optional(), effect: z.enum(['REQUIRE_CONFIRMATION', 'DENY']), message: z.string().trim().min(1).max(300) }))
-    .max(20, 'At most 20 argument rules per tool'),
-});
-export type GrantInput = z.input<typeof Grant>;
-
-export async function setToolGrantsAction(agentId: string, grants: GrantInput[]): Promise<ActionResult> {
-  return run(Permission.AGENT_TOOLS_MANAGE, 'change agent tools', z.object({ agentId: Id, grants: z.array(Grant).max(500) }), { agentId, grants }, async (i) => {
-    await api.put(`${agentPath(i.agentId)}/tools`, { grants: i.grants }, z.object({ agentId: z.string() }));
-    return null;
-  });
-}
+// Escalation rules and tool grants (maker–checker): lib/actions/agent-config.ts.
 
 // ─────────── Corrections (docs/09 §7) ───────────
 

@@ -21,7 +21,8 @@ const State = z.enum(CONTROL_STATES as [ControlState, ...ControlState[]]);
  */
 const ROUTER_PLACEHOLDER = { id: '', name: 'Router', conversationType: '', status: 'ROUTING' };
 
-export const INBOX_VIEWS = ['all', 'mine', 'waiting', 'ai', 'human', 'priority', 'resolved'] as const;
+// 'routing': a router is still deciding (ROUTING) — wave-2 filter.
+export const INBOX_VIEWS = ['all', 'mine', 'waiting', 'ai', 'human', 'priority', 'resolved', 'routing'] as const;
 export type InboxView = (typeof INBOX_VIEWS)[number];
 
 export const ConversationSummarySchema = z.object({
@@ -93,6 +94,11 @@ export const ConversationDetailSchema = z.object({
       outcome: z.string().nullable(),
       ruleIndex: z.number().nullable(),
       attributes: z.record(z.string(), z.string()),
+      // The routing card (wave 2): what the customer answered, the deciding rule in words, the version.
+      answers: z.record(z.string(), z.string()).default({}),
+      rule: z.string().nullable().default(null),
+      routerVersion: z.number().nullable().default(null),
+      decidedAt: z.string().nullable().default(null),
     })
     .passthrough()
     .nullable()

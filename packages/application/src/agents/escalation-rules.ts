@@ -1,54 +1,52 @@
 import { and, asc, eq, isNull, or } from 'drizzle-orm';
 import { Permission, assertCan, type Principal } from '@ocso/auth';
-import { notFound } from '@ocso/domain';
+import { notFound, validation } from '@ocso/domain';
 import { escalationRules, uuidv7, type Db, type DbOrTx } from '@ocso/db';
-import { z } from 'zod';
+import { assertChangeAllowed, isApproved } from '../approvals/guard.js';
+import { approvalStates, type ListedApprovalState } from '../approvals/object-states.js';
+import { discardUnsubmittedDraft } from '../approvals/unsubmitted-draft.js';
 import { recordAudit } from '../audit/audit.js';
 import { bumpGeneration } from '../cache/generations.js';
 import type { ActorContext } from '../shared/context.js';
 import { assertAgentManageable, assertAgentReadable } from './access.js';
 import { assertAgentUnlocked, lockAgentConfig } from './approval-lock.js';
-import { patchOf } from '../shared/patch.js';
+import { ESCALATION_RULE_KIND, escalationRuleApproval } from './escalation-rule-approval.js';
+import { EscalationRuleInput, type EscalationRulePatch, type EscalationRuleRow } from './escalation-rule-inputs.js';
 
-/** Deterministic trigger conditions evaluated in code (docs/01 §6); the prompt covers judgement calls. */
-export const EscalationCondition = z.object({
-  keywords: z.array(z.string().trim().min(2).max(80)).max(50).optional(),
-  consecutiveToolFailures: z.number().int().min(1).max(10).optional(),
-  customerRequestsHuman: z.boolean().optional(),
-  amountAbove: z.number().positive().optional(),
-});
+export * from './escalation-rule-inputs.js';
+export { ESCALATION_RULE_KIND, escalationRuleApproval } from './escalation-rule-approval.js';
 
-export const EscalationRuleInput = z.object({
-  name: z.string().trim().min(1).max(120),
-  trigger: z.enum(['CUSTOMER_REQUEST', 'AGENT_DECISION', 'POLICY', 'INTENT', 'RISK', 'TOOL_FAILURE', 'SLA', 'LOW_CONFIDENCE', 'BUSINESS_RULE', 'SENSITIVE_ACTION']),
-  condition: EscalationCondition.default({}),
-  mode: z.enum(['AUTO_ASSIGN', 'OPEN_PICKUP']).default('OPEN_PICKUP'),
-  targetQueueId: z.uuid().nullable().default(null),
-  priority: z.enum(['P1', 'P2', 'P3', 'P4']).default('P3'),
-  enabled: z.boolean().default(true),
-});
-export type EscalationRuleInput = z.infer<typeof EscalationRuleInput>;
-export const EscalationRulePatch = patchOf(EscalationRuleInput);
-export type EscalationRulePatch = z.infer<typeof EscalationRulePatch>;
-export type EscalationRuleRow = typeof escalationRules.$inferSelect;
+/** A rule with its maker–checker state (the Escalation tab shows "Pending approval" and whether it was ever approved). */
+export type EscalationRuleView = EscalationRuleRow & { approval: ListedApprovalState };
+
+/**
+ * What a PUT on a rule means (PM/research/11 §4): turning it off is a stop
+ * (immediate); turning it on is ACTIVATE (always a proposal); any other change
+ * is applied to a draft directly, and is an UPDATE proposal once the rule has
+ * been approved. `enabled` goes alone.
+ */
+export type EscalationRuleChange = { kind: 'disable' } | { kind: 'activate' } | { kind: 'update'; patch: Omit<EscalationRulePatch, 'enabled'> } | { kind: 'none' };
 
 /**
  * Escalation rules per agent (and platform-wide) — design/02 Escalation tab.
  * Agent rules are read with the agent (readable) and changed only by leads of
  * an owning team (ADR-026); a rule is addressed through its own agent, so a
  * rule id of another agent is not found. Platform-wide rules (agentId null)
- * are listed with every agent and are read-only through these routes.
+ * are listed with every agent and are read-only through these routes. A new
+ * rule is a disabled draft; turning it on needs a checker (escalation-rule-approval.ts).
  */
 export class EscalationRuleService {
   constructor(private readonly db: Db) {}
 
-  async list(principal: Principal, agentId: string): Promise<EscalationRuleRow[]> {
+  async list(principal: Principal, agentId: string): Promise<EscalationRuleView[]> {
     await assertAgentReadable(this.db, principal, agentId);
-    return this.db
+    const rows = await this.db
       .select()
       .from(escalationRules)
       .where(or(eq(escalationRules.agentId, agentId), isNull(escalationRules.agentId)))
       .orderBy(asc(escalationRules.priority), asc(escalationRules.name));
+    const states = await approvalStates(this.db, ESCALATION_RULE_KIND, rows.map((r) => r.id));
+    return rows.map((r) => ({ ...r, approval: states.get(r.id)! }));
   }
 
   private async canManage(actor: ActorContext, agentId: string): Promise<void> {
@@ -56,39 +54,79 @@ export class EscalationRuleService {
     await assertAgentManageable(this.db, actor.principal!, agentId);
   }
 
-  async create(actor: ActorContext, agentId: string, input: EscalationRuleInput): Promise<EscalationRuleRow> {
+  /** 404 unless the rule belongs to this agent and the caller manages the agent. */
+  async assertRuleOf(actor: ActorContext, agentId: string, id: string): Promise<EscalationRuleRow> {
     await this.canManage(actor, agentId);
+    const [rule] = await this.db.select().from(escalationRules).where(and(eq(escalationRules.id, id), eq(escalationRules.agentId, agentId)));
+    if (!rule) throw notFound(ESCALATION_RULE_KIND, id);
+    return rule;
+  }
+
+  /** A new rule is always a disabled draft: inert until an approved ACTIVATE turns it on. */
+  async create(actor: ActorContext, agentId: string, raw: EscalationRuleInput): Promise<EscalationRuleRow> {
+    await this.canManage(actor, agentId);
+    const { enabled: _ignored, ...input } = EscalationRuleInput.parse(raw);
     return this.db.transaction(async (tx) => {
       await lockAgentUnlocked(tx, agentId);
-      const [row] = await tx.insert(escalationRules).values({ id: uuidv7(), agentId, ...input }).returning();
-      await recordAudit(tx, actor, { action: 'escalation_rule.create', targetType: 'escalation_rule', targetId: row!.id, summary: `Escalation rule "${input.name}"`, after: input });
+      const [row] = await tx.insert(escalationRules).values({ id: uuidv7(), agentId, ...input, enabled: false }).returning();
+      await recordAudit(tx, actor, { action: 'escalation_rule.create', targetType: ESCALATION_RULE_KIND, targetId: row!.id, summary: `Escalation rule "${input.name}" (draft, off until approved)`, after: { ...input, enabled: false } });
       await bumpGeneration(tx, actor.correlationId, `agent:${agentId}`, 'policy_changed');
       return row!;
     });
   }
 
-  async update(actor: ActorContext, agentId: string, id: string, input: EscalationRulePatch): Promise<EscalationRuleRow> {
-    await this.canManage(actor, agentId);
+  /** Classify a PUT (see EscalationRuleChange). */
+  async plan(actor: ActorContext, agentId: string, id: string, patch: EscalationRulePatch): Promise<EscalationRuleChange> {
+    const rule = await this.assertRuleOf(actor, agentId, id);
+    const { enabled, ...fields } = patch;
+    const changed = Object.entries(fields).some(([, v]) => v !== undefined);
+    const toggles = enabled !== undefined && enabled !== rule.enabled;
+    if (toggles && changed) throw validation('enabled_alone', 'Turn a rule on or off on its own, then change it');
+    if (toggles) return { kind: enabled ? 'activate' : 'disable' };
+    return changed ? { kind: 'update', patch: fields } : { kind: 'none' };
+  }
+
+  /** A draft's change, applied directly (409 approval_required once the rule has been approved; approval_open while one waits). */
+  async update(actor: ActorContext, agentId: string, id: string, patch: Omit<EscalationRulePatch, 'enabled'>): Promise<EscalationRuleRow> {
+    await this.assertRuleOf(actor, agentId, id);
     return this.db.transaction(async (tx) => {
       await lockAgentUnlocked(tx, agentId);
-      const [before] = await tx.select().from(escalationRules).where(and(eq(escalationRules.id, id), eq(escalationRules.agentId, agentId)));
-      if (!before) throw notFound('escalation_rule', id);
-      const [row] = await tx.update(escalationRules).set({ ...input, updatedAt: new Date() }).where(eq(escalationRules.id, id)).returning();
-      await recordAudit(tx, actor, { action: 'escalation_rule.update', targetType: 'escalation_rule', targetId: id, summary: `Updated "${before.name}"`, before, after: input });
+      await assertChangeAllowed(tx, escalationRuleApproval, id, 'UPDATE');
+      const [before] = await tx.select().from(escalationRules).where(eq(escalationRules.id, id));
+      const [row] = await tx.update(escalationRules).set({ ...patch, updatedAt: new Date() }).where(eq(escalationRules.id, id)).returning();
+      await recordAudit(tx, actor, { action: 'escalation_rule.update', targetType: ESCALATION_RULE_KIND, targetId: id, summary: `Updated "${before!.name}"`, before, after: patch });
       await bumpGeneration(tx, actor.correlationId, `agent:${agentId}`, 'policy_changed');
       return row!;
     });
   }
 
-  async remove(actor: ActorContext, agentId: string, id: string): Promise<void> {
-    await this.canManage(actor, agentId);
-    await this.db.transaction(async (tx) => {
-      await lockAgentUnlocked(tx, agentId);
-      const [before] = await tx.delete(escalationRules).where(and(eq(escalationRules.id, id), eq(escalationRules.agentId, agentId))).returning();
-      if (!before) throw notFound('escalation_rule', id);
-      await recordAudit(tx, actor, { action: 'escalation_rule.delete', targetType: 'escalation_rule', targetId: id, summary: `Deleted "${before.name}"`, before });
+  /** Turning a rule off is a stop: immediate, never a proposal, and never refused because a proposal is open. */
+  async disable(actor: ActorContext, agentId: string, id: string): Promise<EscalationRuleRow> {
+    await this.assertRuleOf(actor, agentId, id);
+    return this.db.transaction(async (tx) => {
+      await lockAgentConfig(tx, agentId);
+      const [before] = await tx.select().from(escalationRules).where(eq(escalationRules.id, id)).for('update');
+      if (!before?.enabled) return before!; // already off: nothing changes, nothing to audit
+      const [row] = await tx.update(escalationRules).set({ enabled: false, updatedAt: new Date() }).where(eq(escalationRules.id, id)).returning();
+      await recordAudit(tx, actor, { action: 'escalation_rule.disable', targetType: ESCALATION_RULE_KIND, targetId: id, summary: `Turned off "${row!.name}"`, before: { enabled: true }, after: { enabled: false } });
       await bumpGeneration(tx, actor.correlationId, `agent:${agentId}`, 'policy_changed');
+      return row!;
     });
+  }
+
+  /** Undo a rule this request created when its ACTIVATE could not be submitted (never once anything was proposed). */
+  async discardFailedCreate(actor: ActorContext, rule: EscalationRuleRow): Promise<void> {
+    await discardUnsubmittedDraft(this.db, actor, {
+      kind: ESCALATION_RULE_KIND,
+      id: rule.id,
+      name: `"${rule.name}"`,
+      remove: async (tx) => void (await tx.delete(escalationRules).where(and(eq(escalationRules.id, rule.id), eq(escalationRules.enabled, false)))),
+    });
+  }
+
+  /** Whether the rule has been approved (then every change is a proposal). */
+  approved(id: string): Promise<boolean> {
+    return isApproved(this.db, ESCALATION_RULE_KIND, id);
   }
 
   /** Rules relevant to a runtime trigger for an agent (agent rules first, then global). */
@@ -101,7 +139,7 @@ export class EscalationRuleService {
   }
 }
 
-/** The agent's escalation rules are part of what an open agent proposal shows its checker (11b): locked while one is open. */
+/** The agent's escalation rules are part of what an open agent proposal shows its checker (11b): drafts wait while one is open. */
 async function lockAgentUnlocked(tx: DbOrTx, agentId: string): Promise<void> {
   await lockAgentConfig(tx, agentId);
   await assertAgentUnlocked(tx, agentId);

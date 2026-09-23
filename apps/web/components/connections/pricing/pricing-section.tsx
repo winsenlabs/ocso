@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { LifecycleActions } from '../lifecycle-actions';
 import { DataTable } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SecHead } from '@/components/ui/sec-head';
@@ -134,6 +135,14 @@ export function PricingSection({
           { key: 'read', header: 'Cache read', cell: (p) => <span className="mono">{formatPerMTok(p.cachedInputPerMTokMicros, p.currency)}</span> },
           { key: 'write', header: 'Cache write', cell: (p) => <span className="mono">{formatPerMTok(p.cacheWritePerMTokMicros, p.currency)}</span> },
           { key: 'from', header: 'Effective', cell: (p) => <span className="mono-sm">{formatDateTime(p.effectiveFrom, timezone)}</span> },
+          {
+            // A price a person enters is a draft that prices nothing until a second person approves it.
+            key: 'approval',
+            header: 'Approval',
+            cell: (p) => (
+              <LifecycleActions kind="model_pricing" id={p.id} name={`price for ${p.modelPattern}`} state={p.status === 'DRAFT' ? 'draft' : 'live'} approval={p.approval} activateLabel="Apply price" canStop={false} canDelete={false} />
+            ),
+          },
         ]}
       />
       {missing ? <MissingPrices missing={missing} kinds={kinds} /> : null}

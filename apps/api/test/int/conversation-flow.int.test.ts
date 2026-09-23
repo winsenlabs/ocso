@@ -5,7 +5,7 @@ import { ChannelRegistry } from '@ocso/channels';
 import { InMemorySecretRows, LocalSecretStore, parseMasterKey } from '@ocso/secrets';
 import { LocalBlobStore } from '@ocso/blob';
 import { MemoryQueue } from '@ocso/queue';
-import { SettingsService } from '@ocso/application';
+import { SettingsService, recordInstalledApproval } from '@ocso/application';
 import { createAjvValidator } from '@ocso/tools';
 import { createLogger } from '@ocso/observability';
 import {
@@ -21,10 +21,12 @@ import {
   createToolProviderRegistry,
 } from '@ocso/agent-runtime';
 import { ScriptedAdapter } from '@ocso/agent-runtime/testing';
+import { liveChannel, type Checker } from './platform.js';
 import { completeSetup, startApi, type ApiHarness } from './harness.js';
 import { setTeams } from './teams.js';
 import { routeChannel } from './routing.js';
 
+let channelChecker: Checker;
 let h: ApiHarness;
 let admin: string;
 let lead: string;
@@ -41,6 +43,8 @@ beforeAll(async () => {
     h.http().post('/v1/users').set(auth(admin)).send({ email, name: email.split('@')[0], role, password: 'a password 12345', ...extra }).expect(201);
   const leadId = (await mk('lead@ocso.test', 'HEAD')).body.id;
   lead = await h.loginAs('lead@ocso.test', 'a password 12345');
+  // The lead (a Head, holding approvals.check.channels) approves the admin's channels (PM/research/11 §4).
+  channelChecker = { id: leadId, token: lead };
   ids.team = (await h.http().post('/v1/teams').set(auth(lead)).send({ name: 'Cards' }).expect(201)).body.id;
   await setTeams(h, admin, leadId, [ids.team!]); // the lead's team owns Maya (ADR-026)
   await mk('exec@ocso.test', 'SERVICE', { teamIds: [ids.team] });
@@ -53,18 +57,15 @@ beforeAll(async () => {
   await h.db.db.insert(modelProviders).values({ id: ids.provider, kind: 'DEV_SCRIPTED', name: 'Scripted' });
   ids.profile = uuidv7();
   await h.db.db.insert(modelProfiles).values({ id: ids.profile, name: 'support-primary', providerId: ids.provider, model: 'scripted', retries: 0 });
+  // An existing profile (grandfathered like 0031): agents go live only on approved profiles.
+  await recordInstalledApproval(h.db.db, { kind: 'model_profile', id: ids.profile, title: 'support-primary' }, 'Test fixture: existing profile');
 
   const agent = await h.http().post('/v1/agents').set(auth(lead)).send({ name: 'Maya', purpose: 'customer support', conversationType: 'SUPPORT', modelProfileId: ids.profile, defaultQueueId: ids.queue, teamIds: [ids.team] }).expect(201);
   ids.agent = agent.body.id;
   // Going live is a maker–checker approval (PM/research/11 §4): the lead is the owning team's only Head, so bootstrap.
   await h.http().post(`/v1/agents/${ids.agent}/status`).set(auth(lead)).send({ status: 'LIVE', approval: { bootstrap: true, reason: 'Sole Head of the owning team' } }).expect(202);
 
-  const channel = await h
-    .http()
-    .post('/v1/channels')
-    .set(auth(admin))
-    .send({ kind: 'WEBCHAT', name: 'Web chat', status: 'ACTIVE', secrets: { visitorTokenSecret: randomBytes(32).toString('hex') } })
-    .expect(201);
+  const channel = { body: await liveChannel<{ id: string; publicKey: string }>(h, admin, channelChecker, { kind: 'WEBCHAT', name: 'Web chat', secrets: { visitorTokenSecret: randomBytes(32).toString('hex') } }) };
   ids.webchatKey = channel.body.publicKey;
   // channel → pass-through router → Maya's queue (PM/research/11 §5).
   await routeChannel(h, channel.body.id, ids.agent!, ids.queue);
@@ -193,18 +194,14 @@ describe('WhatsApp webhook', () => {
   let key: string;
 
   beforeAll(async () => {
-    const channel = await h
-      .http()
-      .post('/v1/channels')
-      .set(auth(admin))
-      .send({
+    const channel = {
+      body: await liveChannel<{ id: string; publicKey: string }>(h, admin, channelChecker, {
         kind: 'WHATSAPP',
         name: 'WhatsApp Business',
-        status: 'ACTIVE',
         settings: { phoneNumberId: '1098765432' },
         secrets: { accessToken: 'EAAG-test-token', appSecret, verifyToken: 'verify-me-please' },
-      })
-      .expect(201);
+      }),
+    };
     key = channel.body.publicKey;
     await routeChannel(h, channel.body.id, ids.agent!, ids.queue);
   });

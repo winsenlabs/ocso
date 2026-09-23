@@ -29,7 +29,8 @@ export interface ConversationClientProps {
   tools: ConversationTools;
   customer: CustomerProfile | null;
   copilot: CopilotState;
-  transferQueues: Option[];
+  /** Transfer targets with the AI agent each would hand the conversation to. */
+  transferQueues: Array<Option & { agentName?: string | null }>;
   transferUsers: Option[];
   /** The conversation's channel as its kind describes it (GET /v1/channels/kinds). */
   channelInfo: ChannelInfo;
@@ -169,7 +170,7 @@ export function ConversationClient(props: ConversationClientProps) {
       {dialog === 'return' ? <ReturnToAiDialog conversationId={detail.id} agentName={detail.agent.name} passedNotes={passedNotes} onClose={() => setDialog(null)} /> : null}
       {dialog === 'resolve' ? <ResolveDialog conversationId={detail.id} currentTags={tags.tags} onClose={() => setDialog(null)} /> : null}
       {dialog === 'transfer' ? (
-        <TransferDialog conversationId={detail.id} queues={props.transferQueues} users={props.transferUsers} currentQueueId={detail.queue?.id ?? null} onClose={() => setDialog(null)} />
+        <TransferDialog conversationId={detail.id} queues={props.transferQueues} users={props.transferUsers} currentQueueId={detail.queue?.id ?? null} currentAgentName={detail.agent.name} onClose={() => setDialog(null)} />
       ) : null}
     </>
   );

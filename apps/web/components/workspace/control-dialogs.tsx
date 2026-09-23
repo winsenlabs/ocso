@@ -119,8 +119,16 @@ export function ResolveDialog({ conversationId, currentTags, onClose }: DialogPr
 }
 
 /** Transfer to another queue (anyone who may transfer) or a named person (leads with assign rights). */
-export function TransferDialog({ conversationId, queues, users, currentQueueId, onClose }: DialogProps & { queues: Option[]; users: Option[]; currentQueueId: string | null }) {
+export function TransferDialog({
+  conversationId,
+  queues,
+  users,
+  currentQueueId,
+  currentAgentName,
+  onClose,
+}: DialogProps & { queues: Array<Option & { agentName?: string | null }>; users: Option[]; currentQueueId: string | null; currentAgentName?: string | undefined }) {
   const [queueId, setQueueId] = useState('');
+  const chosen = queues.find((q) => q.id === queueId);
   const [userId, setUserId] = useState('');
   const { pending, error, run } = useActionRunner();
   const target = { ...(queueId ? { queueId } : {}), ...(userId ? { userId } : {}) };
@@ -143,10 +151,21 @@ export function TransferDialog({ conversationId, queues, users, currentQueueId, 
               {queues.map((q) => (
                 <option key={q.id} value={q.id} disabled={q.id === currentQueueId && !users.length}>
                   {q.name}
+                  {q.agentName ? ` · ${q.agentName}` : ''}
                   {q.id === currentQueueId ? ' (current)' : ''}
                 </option>
               ))}
             </select>
+            {chosen ? (
+              // The queue is the service unit: its one AI agent takes the conversation (PM/research/11 §5.5).
+              <span className="hint" role="status">
+                {chosen.agentName
+                  ? chosen.agentName === currentAgentName
+                    ? `${chosen.agentName} stays the agent.`
+                    : `Receiving agent: ${chosen.agentName}${currentAgentName ? ` (instead of ${currentAgentName})` : ''} — it gets the history and a handover.`
+                  : 'This queue has no AI agent: the current agent stays.'}
+              </span>
+            ) : null}
           </div>
         ) : null}
         {users.length > 0 ? (

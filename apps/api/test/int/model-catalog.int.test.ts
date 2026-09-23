@@ -169,8 +169,14 @@ describe('prices from the catalog', () => {
     const mini = list.body.models.find((m: { id: string }) => m.id === 'gpt-5.4-mini');
     expect(mini.configuredPrice).toMatchObject({ origin: 'catalog', catalogSource: 'models.dev', inputPerMTokMicros: 750_000 });
     const [row] = (await h.http().get('/v1/model-pricing').set(auth(admin)).expect(200)).body;
-    const edited = await h.http().patch(`/v1/model-pricing/${row.id}`).set(auth(admin)).send({ inputPerMTokMicros: 700_000 }).expect(200);
-    expect(edited.body).toMatchObject({ origin: 'manual', inputPerMTokMicros: 700_000 });
+    // A catalog price is live: a person's edit is a proposal a second person approves (then the row is manual).
+    await h.http().patch(`/v1/model-pricing/${row.id}`).set(auth(admin)).send({ inputPerMTokMicros: 700_000 }).expect(409);
+    const leadId = (await h.http().get('/v1/auth/me').set(auth(lead)).expect(200)).body.id;
+    const proposed = await h.http().patch(`/v1/model-pricing/${row.id}`).set(auth(admin)).send({ inputPerMTokMicros: 700_000, approval: { checkerId: leadId, reason: 'Negotiated price' } }).expect(202);
+    const { proposal } = proposed.body;
+    await h.http().post(`/v1/approvals/${proposal.id}/decision`).set(auth(lead)).send({ decision: 'APPROVE', reason: 'ok', contentHash: proposal.contentHash }).expect(200);
+    const edited = (await h.http().get('/v1/model-pricing').set(auth(admin)).expect(200)).body.find((p: { id: string }) => p.id === row.id);
+    expect(edited).toMatchObject({ origin: 'manual', inputPerMTokMicros: 700_000 });
   });
 
   it('"missing" lists models in use without a price; from-catalog adds one when the catalog prices it', async () => {

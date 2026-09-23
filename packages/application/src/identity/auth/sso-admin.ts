@@ -5,6 +5,7 @@ import { Permission, assertCan } from '@ocso/auth';
 import { conflict, forbidden, notFound, validation } from '@ocso/domain';
 import { authSsoProviders, type Db } from '@ocso/db';
 import { recordAudit } from '../../audit/audit.js';
+import { assertPlatformWrite } from '../../settings/platform-approvals.js';
 import type { ActorContext } from '../../shared/context.js';
 import { SsoProviderInput, SsoProviderPatch, toSsoProviderView, type SsoProviderView } from './sso-types.js';
 import type { AuthServer } from './server.js';
@@ -17,6 +18,11 @@ export { SsoProviderInput, SsoProviderPatch, type SsoProviderView } from './sso-
  * uses them; its own provider-management endpoints are closed over HTTP, and
  * its per-owner access rule is satisfied by making the acting admin the owner.
  * Client secrets are write-only: they never leave the API.
+ *
+ * Maker–checker (PM/research/11 §4, sso-approval.ts): a new provider is a
+ * draft (sign-in refused) until its ACTIVATE proposal is approved; deleting
+ * it is a DELETE proposal; once approved, edits are UPDATE proposals.
+ * Disabling is immediate.
  */
 export class SsoProviderService {
   constructor(
@@ -36,10 +42,16 @@ export class SsoProviderService {
     return rows.map((r) => toSsoProviderView(r, this.config.publicUrl));
   }
 
-  /** Any SSO provider configured? (the sign-in page shows "Sign in with SSO"). */
+  /** Any SSO provider usable? (the sign-in page shows "Sign in with SSO"; drafts and disabled ones are not). */
   async anyConfigured(): Promise<boolean> {
-    const [row] = await this.db.select({ id: authSsoProviders.id }).from(authSsoProviders).limit(1);
+    const [row] = await this.db.select({ id: authSsoProviders.id }).from(authSsoProviders).where(eq(authSsoProviders.status, 'ACTIVE')).limit(1);
     return Boolean(row);
+  }
+
+  /** The row id of a provider (the object id of its approvals). */
+  async objectId(actor: ActorContext, providerId: string): Promise<string> {
+    this.assertAdmin(actor);
+    return (await this.get(providerId)).id;
   }
 
   async create(actor: ActorContext, raw: SsoProviderInput, session: { headers: Headers }): Promise<SsoProviderView> {
@@ -102,12 +114,16 @@ export class SsoProviderService {
     return view;
   }
 
-  /** Name, domains and provisioning policy (secrets and endpoints: delete and re-add the provider). */
+  /**
+   * Name, domains and provisioning policy of a draft (secrets and endpoints: delete and re-add the provider).
+   * Once approved this answers 409 approval_required: the change is an UPDATE proposal (sso-approval.ts).
+   */
   async update(actor: ActorContext, providerId: string, raw: SsoProviderPatch): Promise<SsoProviderView> {
     this.assertAdmin(actor);
     const patch = SsoProviderPatch.parse(raw);
     const before = await this.get(providerId);
     await this.db.transaction(async (tx) => {
+      await assertPlatformWrite(tx, 'sso_provider', before.id);
       await tx
         .update(authSsoProviders)
         .set({
@@ -122,13 +138,16 @@ export class SsoProviderService {
     return this.get(providerId);
   }
 
-  async remove(actor: ActorContext, providerId: string, session: { headers: Headers }): Promise<void> {
+  /** Stop action: immediate, never gated, allowed while a proposal is open. Re-enabling is an ACTIVATE proposal. */
+  async disable(actor: ActorContext, providerId: string): Promise<SsoProviderView> {
     this.assertAdmin(actor);
     const before = await this.get(providerId);
-    // Better Auth lets only the provider's owner delete it; any Tech admin may, so take ownership first.
-    await this.db.update(authSsoProviders).set({ userId: actor.principal!.userId }).where(eq(authSsoProviders.providerId, providerId));
-    await this.call(() => this.auth.deleteSsoProvider(session.headers, providerId));
-    await recordAudit(this.db, actor, { action: 'sso.provider_delete', targetType: 'sso_provider', targetId: providerId, summary: `Removed SSO provider ${before.name}`, before });
+    if (before.status === 'DISABLED') return before;
+    await this.db.transaction(async (tx) => {
+      await tx.update(authSsoProviders).set({ status: 'DISABLED', updatedAt: new Date() }).where(eq(authSsoProviders.id, before.id));
+      await recordAudit(tx, actor, { action: 'sso.provider_disable', targetType: 'sso_provider', targetId: providerId, summary: `Disabled SSO provider ${before.name}`, before: { status: before.status }, after: { status: 'DISABLED' } });
+    });
+    return this.get(providerId);
   }
 
   private async get(providerId: string): Promise<SsoProviderView> {

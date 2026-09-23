@@ -41,6 +41,11 @@ const QueueForm = z
     preferAccountOwner: z.boolean(),
     slaPolicyId: Uuid.nullable(),
     teamIds: z.array(Uuid).max(50),
+    /** The queue's one AI agent (PM/research/11 §5.5). */
+    agentId: Uuid.nullable().optional(),
+    attributes: z.record(z.string(), z.string()).optional(),
+    businessHours: z.object({ timezone: z.string().trim().min(1, 'Choose a time zone').max(64), humanHours: z.record(z.string(), z.tuple([z.string(), z.string()])) }).nullable().optional(),
+    transferTargetIds: z.array(Uuid).max(50, 'At most 50 transfer targets').optional(),
   })
   .transform((q) => ({ ...q, description: q.description || null, autoAssignAfterSeconds: q.mode === 'OPEN_PICKUP' ? q.autoAssignAfterSeconds : null }));
 export type QueueFormData = z.output<typeof QueueForm>;
@@ -56,9 +61,37 @@ export interface QueueFormFields {
   preferAccountOwner: boolean;
   slaPolicyId: string;
   teamIds: string[];
+  /** '' = no agent yet. Omitted by forms that do not edit routing. */
+  agentId?: string | undefined;
+  /** Attribute rows as typed (blank rows ignored). */
+  attributes?: Array<{ key: string; value: string }> | undefined;
+  /** null = the agent's hours. */
+  businessHours?: { timezone: string; humanHours: Record<string, [string, string]> } | null | undefined;
+  transferTargetIds?: string[] | undefined;
+}
+
+/** Attribute keys are lower snake case (the router's attribute names). */
+export const ATTRIBUTE_KEY = /^[a-z][a-z0-9_]{0,39}$/;
+
+/** Attribute rows → `{ key: value }` (lower-cased values), or the first problem. */
+export function parseAttributes(rows: ReadonlyArray<{ key: string; value: string }>): { ok: true; data: Record<string, string> } | { ok: false; message: string } {
+  const out: Record<string, string> = {};
+  for (const row of rows) {
+    const key = row.key.trim();
+    const value = row.value.trim().toLowerCase();
+    if (!key && !value) continue;
+    if (!ATTRIBUTE_KEY.test(key)) return { ok: false, message: `“${key || '(blank)'}”: keys are lower case letters, digits and _, starting with a letter` };
+    if (!value) return { ok: false, message: `Give ${key} a value` };
+    if (value.length > 60) return { ok: false, message: `${key}: at most 60 characters` };
+    if (key in out) return { ok: false, message: `${key} is listed twice` };
+    out[key] = value;
+  }
+  return { ok: true, data: out };
 }
 
 export function parseQueueForm(f: QueueFormFields): Result<QueueFormData> {
+  const attributes = f.attributes ? parseAttributes(f.attributes) : null;
+  if (attributes && !attributes.ok) return { ok: false, fieldErrors: { attributes: attributes.message } };
   const accept = f.acceptTimeoutSeconds.trim() === '' ? 120 : Number(f.acceptTimeoutSeconds);
   const parsed = QueueForm.safeParse({
     name: f.name,
@@ -71,6 +104,10 @@ export function parseQueueForm(f: QueueFormFields): Result<QueueFormData> {
     preferAccountOwner: f.preferAccountOwner,
     slaPolicyId: f.slaPolicyId || null,
     teamIds: f.teamIds,
+    ...(f.agentId !== undefined ? { agentId: f.agentId || null } : {}),
+    ...(attributes?.ok ? { attributes: attributes.data } : {}),
+    ...(f.businessHours !== undefined ? { businessHours: f.businessHours } : {}),
+    ...(f.transferTargetIds !== undefined ? { transferTargetIds: f.transferTargetIds } : {}),
   });
   return parsed.success ? { ok: true, data: parsed.data } : { ok: false, fieldErrors: errorsOf(parsed.error.issues) };
 }

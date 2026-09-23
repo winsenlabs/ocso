@@ -1,25 +1,27 @@
 import { execFileSync } from 'node:child_process';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 import { ACCOUNTS, E2E, apiUrl, databaseUrl } from './config';
-import { login } from './helpers';
+import { login, logout } from './helpers';
 
 /**
  * Per-user permissions (PM/research/11 §3.6) through the Team page: a Head
  * opens a teammate's Permissions tab (grouped, with source chips), revokes one
- * permission (a decrease: applies at once) and asks to grant another (an
- * increase: the dialog says it needs approval and the API's approval_required
- * comes back — nothing changes). A mixed change applies its reduction and
- * holds only the increase. A user waiting for approval carries a badge and can
- * be discarded.
+ * permission (a decrease: applies at once) and grants another (an increase:
+ * the dialog asks for a checker — a second Head of the team — and nothing
+ * changes until that Head approves it in Approvals). A mixed change applies its
+ * reduction at once and sends only the increase. A user waiting for approval
+ * carries a badge and can be discarded.
  */
 test.describe.configure({ mode: 'serial' });
 
 const HEAD = { name: 'Hana Head', email: 'pm.head@e2e.ocso.test', password: 'correct-horse-battery-pmhead' };
 const MEMBER = { name: 'Sami Service', email: 'pm.member@e2e.ocso.test', password: 'correct-horse-battery-pmmember' };
 const NEWBIE = { name: 'Nia Newcomer', email: 'pm.new@e2e.ocso.test', password: 'correct-horse-battery-pmnew' };
+/** A second Head in the team: the checker of the first Head's increases (PM/research/11 §3.4). */
+const CHECKER = { name: 'Pia Checker', email: 'pm.checker@e2e.ocso.test', password: 'correct-horse-battery-pmcheck' };
 
 let api: APIRequestContext;
-const ids = { member: '', newbie: '' };
+const ids = { member: '', newbie: '', checker: '' };
 
 async function call<T = Record<string, unknown>>(method: 'GET' | 'POST', path: string, token: string | null, body?: unknown): Promise<T> {
   const res = await api.fetch(path, { method, headers: token ? { authorization: `Bearer ${token}` } : {}, ...(body !== undefined ? { data: body } : {}) });
@@ -38,11 +40,13 @@ test.beforeAll(async ({ playwright }) => {
   const admin = await loginApi(ACCOUNTS.admin.email, ACCOUNTS.admin.password);
   // The e2e stack skips access approval (development only), so these colleagues start active.
   await call('POST', '/v1/users', admin, person(HEAD, 'HEAD'));
+  ids.checker = (await call<{ id: string }>('POST', '/v1/users', admin, person(CHECKER, 'HEAD'))).id;
   ids.member = (await call<{ id: string }>('POST', '/v1/users', admin, person(MEMBER, 'SERVICE'))).id;
   ids.newbie = (await call<{ id: string }>('POST', '/v1/users', admin, person(NEWBIE, 'SERVICE'))).id;
   const head = await loginApi(HEAD.email, HEAD.password);
   const team = await call<{ id: string }>('POST', '/v1/teams', head, { name: 'PM Cards' });
   await call('POST', `/v1/teams/${team.id}/members`, head, { userId: ids.member });
+  await call('POST', `/v1/teams/${team.id}/members`, head, { userId: ids.checker });
   // A governed deployment creates new users PENDING_APPROVAL; this stack skips that, so mark one by hand.
   execFileSync('psql', [databaseUrl, '-qc', `UPDATE users SET status = 'PENDING_APPROVAL' WHERE id = '${ids.newbie}'`]);
 });
@@ -94,12 +98,32 @@ test('a revoke applies at once; a grant needs approval and changes nothing', asy
   await dialog.getByLabel('Reason').fill('Covering queue setup this month');
   await expect(dialog.getByText('increase · needs approval')).toBeVisible();
   await expect(dialog.getByText(/must approve it before it applies/)).toBeVisible();
-  await dialog.getByRole('button', { name: 'Request approval' }).click();
-  await expect(dialog.getByRole('status').filter({ hasText: 'Approval required' })).toBeVisible();
-  await expect(dialog).toContainText('Nothing was changed');
-  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await dialog.getByRole('button', { name: 'Choose a checker…' }).click();
+  // The checker holds Check access changes and is never the maker nor the teammate whose access changes.
+  const modal = page.getByRole('dialog', { name: 'Submit for approval' });
+  await expect(modal.getByLabel('checker')).not.toContainText(MEMBER.name);
+  await expect(modal.getByLabel('checker')).not.toContainText(HEAD.name);
+  await modal.getByLabel('checker').selectOption({ label: CHECKER.name });
+  await modal.getByLabel('reason').fill('Queue setup cover while the Lead is away');
+  await modal.getByRole('button', { name: 'Submit for approval' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Sent for approval' })).toBeVisible();
   await page.reload();
   await expect(page.getByRole('dialog', { name: MEMBER.name }).getByText('Manage queues')).toHaveCount(0);
+  await logout(page);
+
+  // The second Head approves it from Approvals; then it applies.
+  await login(page, CHECKER);
+  await page.goto('/approvals');
+  await page.getByRole('table', { name: 'Approvals' }).getByRole('link', { name: new RegExp(`Change ${MEMBER.name}'s access`) }).click();
+  const proposal = page.getByRole('dialog', { name: new RegExp(`Change ${MEMBER.name}'s access`) });
+  await expect(proposal.getByRole('table', { name: 'Proposed change' })).toContainText('queues.manage');
+  await proposal.getByRole('button', { name: 'Approve' }).click();
+  await expect(proposal).toContainText('approved');
+  await logout(page);
+
+  await login(page, HEAD);
+  const after = await openPermissions(page);
+  await expect(after.getByRole('listitem').filter({ hasText: 'Manage queues' })).toContainText('until');
 });
 
 test('a mixed change applies its reduction at once and holds only the increase', async ({ page }) => {
@@ -114,10 +138,12 @@ test('a mixed change applies its reduction at once and holds only the increase',
   await dialog.getByLabel('Reason').fill('Rotation change with an SLA project');
   await expect(dialog.getByText('mixed · reductions apply at once, the rest needs approval')).toBeVisible();
   await expect(dialog.getByText(/reductions in this change apply as soon as you save/)).toBeVisible();
-  await dialog.getByRole('button', { name: 'Request approval' }).click();
-  await expect(dialog.getByRole('status').filter({ hasText: 'Approval required' })).toBeVisible();
-  await expect(dialog).toContainText('reductions in this change were applied');
-  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await dialog.getByRole('button', { name: 'Choose a checker…' }).click();
+  const modal = page.getByRole('dialog', { name: 'Submit for approval' });
+  await modal.getByLabel('checker').selectOption({ label: CHECKER.name });
+  await modal.getByLabel('reason').fill('SLA project for the quarter');
+  await modal.getByRole('button', { name: 'Submit for approval' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Sent for approval' })).toBeVisible();
   const reopened = await openPermissions(page);
   await expect(reopened.getByRole('listitem').filter({ hasText: 'Use the reply copilot' })).toContainText('revoked');
   await expect(reopened.getByText('Manage SLAs')).toHaveCount(0);

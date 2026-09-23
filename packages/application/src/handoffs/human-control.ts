@@ -174,6 +174,8 @@ export class HumanControlService {
       this.assertHandler(actor, conv.assignedUserId);
       const target = input.queueId ? await transferTarget(tx, input.queueId) : null;
       if (input.queueId && !target) throw notFound('queue', input.queueId);
+      // Customers move only into queues a checker approved (their own queue is where they already are).
+      if (target && !target.approved && target.queue.id !== conv.queueId) throw conflict('queue_not_approved', `${target.queue.name} has not been approved for routing yet.`);
       const agentNote = target?.agent && target.agent.id !== conv.agentId ? ` · agent ${target.agent.name}` : '';
       const description = `transferred by ${nameOf(actor)}${target ? ` to ${target.queue.name}${agentNote}` : ''}`;
       await endOpenAssignment(tx, conversationId, 'transferred', now);

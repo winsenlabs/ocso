@@ -4,7 +4,7 @@ import { PostgresAuditStore } from '@ocso/audit-store';
 import type { Principal } from '@ocso/auth';
 import { agentTeams, auditEvents, auditIncidents, teamMembers, users, uuidv7, virtualAgents } from '@ocso/db';
 import { createTestAuditDatabase, createTestDatabase, type TestAuditDatabase, type TestDatabase } from '@ocso/db/testing';
-import { AuditShipper, DeploymentSettingsInput, RetentionService, SettingsService, auditTeams, reconcileAudit, recordAudit, systemActor, type ActorContext } from '../../src/index.js';
+import { AuditShipper, DeploymentSettingsInput, RetentionService, applyDeploymentSettings, auditTeams, reconcileAudit, recordAudit, systemActor, type ActorContext } from '../../src/index.js';
 import { createTeam } from '../support/ownership.js';
 import { FlakyStore, backdateAudit, failure } from './support.js';
 
@@ -159,9 +159,10 @@ describe('the local audit window setting', () => {
     const tech: Principal = { userId: uuidv7(), role: 'TECH', displayName: 'Tia', teamIds: [], via: 'UI' };
     await t.db.insert(users).values({ id: tech.userId, email: 'tia@x.test', name: 'Tia', role: 'TECH' });
     expect(DeploymentSettingsInput.safeParse({ auditLocalWindowDays: 89 }).success).toBe(false);
-    const after = await new SettingsService(t.db).updateDeployment(as(tech), { auditLocalWindowDays: 120 });
+    // Applied as an approved settings proposal would (settings-approval.ts); the direct path is approval_required.
+    const after = await applyDeploymentSettings(t.db, as(tech), { auditLocalWindowDays: 120 });
     expect(after.auditLocalWindowDays).toBe(120);
-    await new SettingsService(t.db).updateDeployment(as(tech), { auditLocalWindowDays: 90 });
+    await applyDeploymentSettings(t.db, as(tech), { auditLocalWindowDays: 90 });
   });
 });
 

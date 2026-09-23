@@ -111,13 +111,15 @@ describe('queue writes', () => {
     await service().update(f.actor, q, { agentId: f.agents.arjun, transferTargetIds: [f.queues.sales] });
   });
 
-  it('changing who answers on a queue live routing uses is an approval; removing its agent is refused', async () => {
-    await expect(service().update(f.actor, f.queues.cards, { agentId: f.agents.arjun })).rejects.toMatchObject({ code: 'approval_required', details: { objectKind: 'queue', fields: ['agent'] } });
-    await expect(service().update(f.actor, f.queues.cards, { agentId: null })).rejects.toMatchObject({ code: 'queue_routed' });
-    // Settings that do not change who answers stay direct.
-    await service().update(f.actor, f.queues.cards, { acceptTimeoutSeconds: 90 });
-    const [row] = await f.t.db.select({ agentId: queues.agentId, accept: queues.acceptTimeoutSeconds }).from(queues).where(eq(queues.id, f.queues.cards));
-    expect(row).toEqual({ agentId: f.agents.maya, accept: 90 });
+  it('every change to a queue live routing uses is an approval (wave 2: the queue descriptor); stops stay direct', async () => {
+    await expect(service().update(f.actor, f.queues.cards, { agentId: f.agents.arjun })).rejects.toMatchObject({ code: 'approval_required', details: { objectKind: 'queue', objectId: f.queues.cards, action: 'UPDATE' } });
+    await expect(service().update(f.actor, f.queues.cards, { agentId: null })).rejects.toMatchObject({ code: 'approval_required' });
+    await expect(service().update(f.actor, f.queues.cards, { acceptTimeoutSeconds: 90 })).rejects.toMatchObject({ code: 'approval_required' });
+    // Removing a transfer target is a stop: applied at once.
+    await f.t.db.update(queues).set({ transferTargetIds: [f.queues.sales] }).where(eq(queues.id, f.queues.cards));
+    await service().update(f.actor, f.queues.cards, { transferTargetIds: [] });
+    const [row] = await f.t.db.select({ agentId: queues.agentId, accept: queues.acceptTimeoutSeconds, targets: queues.transferTargetIds }).from(queues).where(eq(queues.id, f.queues.cards));
+    expect(row).toEqual({ agentId: f.agents.maya, accept: 120, targets: [] });
     // Deleting the agent a routed queue depends on is blocked too.
     expect((await routedQueueBlockers(f.t.db, f.agents.maya)).map((p) => p.code)).toContain('agent_serves_routed_queue');
   });

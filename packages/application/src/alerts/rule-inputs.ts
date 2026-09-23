@@ -36,12 +36,18 @@ export const AlertRuleInput = z.object({
   destinationIds: fields.destinationIds.default([]),
   dedupeWindowSeconds: fields.dedupeWindowSeconds.default(3600),
   autoResolve: fields.autoResolve.default(true),
-  enabled: fields.enabled.default(true),
+  /** Ignored on create: a new rule is a disabled draft until an approved ACTIVATE turns it on (PM/research/11 §4). */
+  enabled: fields.enabled.default(false),
 });
 export type AlertRuleInput = z.infer<typeof AlertRuleInput>;
 
 export const AlertRulePatch = z.object(fields).partial();
 export type AlertRulePatch = z.infer<typeof AlertRulePatch>;
+
+/** What an approved alert-rule UPDATE applies: the patch without `enabled` (on is ACTIVATE, off a stop) and `kind` (fixed once approved). */
+export const AlertRulePatchFields = AlertRulePatch.omit({ enabled: true, kind: true });
+export const AlertRuleApprovalPatch = AlertRulePatchFields.strict();
+export type AlertRuleApprovalPatch = z.infer<typeof AlertRuleApprovalPatch>;
 
 export const AlertRuleListQuery = z.object({
   kind: z.enum(ALERT_KINDS).optional(),

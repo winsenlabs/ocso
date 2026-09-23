@@ -4,7 +4,8 @@ import { createTestDatabase, type TestDatabase } from '@ocso/db/testing';
 import { uuidv7, virtualAgents } from '@ocso/db';
 import type { Principal } from '@ocso/auth';
 import { InMemorySecretRows, LocalSecretStore, parseMasterKey } from '@ocso/secrets';
-import { AgentToolGrantService, McpConnectionService, PersonalConnectionService, type ActorContext, type ConnectionView } from '../src/index.js';
+import { AgentToolGrantService, McpConnectionService, PersonalConnectionService, sweepApprovalSecrets, type ActorContext, type ConnectionView } from '../src/index.js';
+import { platformApprover, type PlatformApprover } from './support/platform-approvals.js';
 import { startDemo, type DemoServer } from '../../mcp/test/helpers/demo-server.js';
 import { createTeam, ownAgents } from './support/ownership.js';
 
@@ -24,6 +25,7 @@ let secrets: LocalSecretStore;
 let svc: McpConnectionService;
 let personal: PersonalConnectionService;
 let template: ConnectionView;
+let approver: PlatformApprover;
 const agentId = uuidv7();
 
 const q = async <T = Record<string, any>>(text: string, params: unknown[] = []) => (await t.pool.query(text, params)).rows as T[];
@@ -39,6 +41,7 @@ beforeAll(async () => {
   secrets = new LocalSecretStore(new InMemorySecretRows(), parseMasterKey('k1', randomBytes(32).toString('base64')));
   svc = new McpConnectionService({ db: t.db, secrets, publicUrl: 'http://localhost:3000' });
   personal = new PersonalConnectionService(t.db);
+  approver = await platformApprover(t.db, { secrets });
   demo = await startDemo({ mode: 'bearer', token: TOKEN });
 });
 afterAll(async () => {
@@ -61,7 +64,10 @@ describe('USER-scope templates and personal connections', () => {
       ],
     });
     await expect(svc.approve(actor(admin), template.id, { allowedAgentIds: '*' })).rejects.toMatchObject({ code: 'mcp_user_scope_agents' });
-    template = await svc.approve(actor(admin), template.id, { allowedAgentIds: [] });
+    await svc.approve(actor(admin), template.id, { allowedAgentIds: [] });
+    // Publishing a template is an approval (deferred: the worker re-contacts the server).
+    expect(await approver.finish((await approver.approve(actor(admin), 'mcp_connection', template.id, 'ACTIVATE')).id)).toBe('ACTIVATED');
+    template = await svc.get(actor(admin), template.id);
     expect(template.status).toBe('ACTIVE');
     expect((await personal.listTemplates(actor(ravi))).map((c) => c.id)).toEqual([template.id]);
     expect(await svc.runDueHealthChecks()).toEqual([]); // templates are never probed
@@ -96,9 +102,9 @@ describe('USER-scope templates and personal connections', () => {
     const personalTool = tools.find((tool) => tool.name === 'crm.get_customer')!;
     await expect(new AgentToolGrantService(t.db).set(actor(lead), agentId, { grants: [{ toolId: personalTool.id }] })).rejects.toMatchObject({ code: 'tool_not_grantable' });
 
-    // Re-classifying the template propagates to every personal instance.
+    // Re-classifying the (approved) template is an UPDATE proposal; once approved it propagates to every personal instance.
     const templateTools = await svc.listTools(actor(admin), template.id);
-    await svc.classifyTools(actor(admin), template.id, {
+    await approver.approve(actor(admin), 'mcp_connection', template.id, 'UPDATE', {
       tools: [{ toolId: templateTools.find((tool) => tool.name === 'disputes.raise_case')!.id, riskClass: 'SENSITIVE', approved: false }],
     });
     const after = await svc.listTools(actor(ravi), mine.id);
@@ -119,8 +125,11 @@ describe('USER-scope templates and personal connections', () => {
     expect(await secrets.describe(ravisConn!.auth.tokenRef!)).toBeNull();
     expect(await q(`SELECT 1 FROM mcp_connections WHERE id = $1`, [ravisConn!.id])).toHaveLength(0);
 
-    await svc.delete(actor(admin), template.id);
+    // Deleting a shared template is an approval; its secrets (and every instance's) go after it commits.
+    await expect(svc.delete(actor(admin), template.id)).rejects.toMatchObject({ code: 'approval_required' });
+    await approver.approve(actor(admin), 'mcp_connection', template.id, 'DELETE');
     expect(await q(`SELECT 1 FROM mcp_connections WHERE id = ANY($1::uuid[])`, [[template.id, meeras.id]])).toHaveLength(0);
+    await sweepApprovalSecrets(t.db, secrets);
     expect(await secrets.describe(meeraRef)).toBeNull();
     expect(await secrets.describe(template.auth.tokenRef!)).toBeNull();
   });

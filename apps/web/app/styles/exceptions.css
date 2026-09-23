@@ -1,0 +1,19 @@
+/* The exception report (PM/research/11 §7): live view, reports, sign-off. */
+.exc-head{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.exc-totals{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.exc-sections{display:grid;gap:12px;margin-top:12px}
+.exc-desc{margin:0;font-size:12px;color:var(--ink-3)}
+.exc-items{list-style:none;margin:0;padding:0;display:grid}
+.exc-items li{display:grid;gap:3px;padding:9px 0;border-top:1px solid var(--border)}
+.exc-items li:first-child{border-top:0;padding-top:2px}
+.exc-title{font-size:12.5px;font-weight:600;overflow-wrap:anywhere}
+.exc-detail{font-size:12px;color:var(--ink-2);overflow-wrap:anywhere}
+.exc-clean{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:8px 16px;font-size:12px;color:var(--ink-2)}
+.exc-report{display:grid;gap:12px}
+.exc-adhoc{margin-top:14px;max-width:360px}
+.exc-adhoc input[type="date"]{background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 9px;font:inherit;font-size:12.5px;color:var(--ink)}
+.exc-attest{border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;margin:0;display:grid;gap:6px}
+.exc-attest legend{font-size:12px;font-weight:600;padding:0 4px}
+.exc-check{display:flex;gap:8px;align-items:flex-start;font-size:12px;color:var(--ink-2)}
+.exc-check input{margin-top:2px}
+.exc-regenerate{max-width:520px}

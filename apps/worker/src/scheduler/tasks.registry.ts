@@ -4,6 +4,7 @@ import {
   McpConnectionService,
   ModelCatalogService,
   relayOutboxToWebhooks,
+  sweepApprovalSecrets,
   systemActor,
   type AlertDeliveryService,
   type AlertEngine,
@@ -31,6 +32,8 @@ export interface SubsystemDeps {
   audit: { tasks(): ScheduledTask[] };
   /** Routers: expire unanswered questions (fallback) and re-signal stalled routing (PM/research/11 §5.3). */
   routing: { sweep(correlationId: string): Promise<unknown> };
+  /** Weekly exception report, storage samples, health-sample roll-ups (apps/worker/src/exceptions, PM/research/11 §7). */
+  exceptions: { tasks(): ScheduledTask[] };
 }
 
 /**
@@ -57,6 +60,9 @@ export function subsystemTasks(deps: SubsystemDeps): ScheduledTask[] {
     ...deps.approvals.tasks(),
     ...deps.audit.tasks(),
     { name: 'routing-timeout', everySeconds: 60, run: ({ correlationId }) => deps.routing.sweep(correlationId) },
+    ...deps.exceptions.tasks(),
+    // Maker–checker secrets: delete what approved changes released (after their commit) and orphaned staged values.
+    { name: 'approval-secret-sweep', everySeconds: 60, run: () => sweepApprovalSecrets(deps.db, deps.secrets) },
   ];
 }
 

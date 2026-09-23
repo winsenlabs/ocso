@@ -1,6 +1,7 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 import { ACCOUNTS, E2E, apiUrl } from './config';
 import { expectNavLinksResolve, login, logout } from './helpers';
+import { approvedChannel, approvedProfile, approvedProvider } from './platform-setup';
 
 /**
  * Maker–checker end to end (PM/research/11 §4, 11b): a Lead submits taking an
@@ -47,8 +48,9 @@ test.beforeAll(async ({ playwright }) => {
   ids.team = (await call<{ id: string }>('POST', '/v1/teams', tok.head, { name: 'AP Cards' })).id;
   for (const who of ['lead', 'head', 'head2', 'service']) await call('PATCH', `/v1/users/${ids[who]}`, tok.admin, { teamIds: [ids.team] });
   tok.lead = await loginApi(LEAD.email, LEAD.password);
-  const provider = (await call<{ id: string }>('POST', '/v1/model-providers', tok.admin, { kind: 'DEV_SCRIPTED', name: 'AP Scripted', settings: { latencyMs: 10, chunkDelayMs: 5 } })).id;
-  ids.profile = (await call<{ id: string }>('POST', '/v1/model-profiles', tok.admin, { name: 'ap-support', providerId: provider, model: 'scripted-1', retries: 0 })).id;
+  // A provider is a disabled draft until a Head approves enabling it (PM/research/11 §4).
+  const provider = await approvedProvider(api, tok.admin, { id: ids.head!, token: tok.head }, { kind: 'DEV_SCRIPTED', name: 'AP Scripted', settings: { latencyMs: 10, chunkDelayMs: 5 } });
+  ids.profile = await approvedProfile(api, tok.admin, { id: ids.head!, token: tok.head }, { name: 'ap-support', providerId: provider, model: 'scripted-1', retries: 0 });
   ids.nova = await newAgent('Nova');
 });
 

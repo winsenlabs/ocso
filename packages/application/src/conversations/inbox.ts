@@ -7,7 +7,8 @@ import { conversationScope, type VisibilityPolicy } from './access.js';
 import { maskIdentity } from './masking.js';
 import { TagSchema } from './tags.js';
 
-export const INBOX_VIEWS = ['all', 'mine', 'waiting', 'ai', 'human', 'priority', 'resolved'] as const;
+// 'routing': a router is still deciding (ROUTING) — the wave-2 inbox filter (PM/research/11 §5.7).
+export const INBOX_VIEWS = ['all', 'mine', 'waiting', 'ai', 'human', 'priority', 'resolved', 'routing'] as const;
 export type InboxView = (typeof INBOX_VIEWS)[number];
 
 export const InboxQuery = z.object({
@@ -70,6 +71,8 @@ function viewPredicate(view: InboxView, principal: Principal): SQL | undefined {
       return and(open, inArray(conversations.priority, ['P1', 'P2']));
     case 'resolved':
       return eq(conversations.controlState, 'RESOLVED');
+    case 'routing':
+      return eq(conversations.controlState, 'ROUTING');
   }
 }
 
@@ -142,10 +145,10 @@ export class InboxService {
   private async counts(principal: Principal, base: SQL | undefined): Promise<Record<InboxView, number>> {
     const f = (view: InboxView) => sql<number>`count(*) FILTER (WHERE ${viewPredicate(view, principal)})::int`;
     const [row] = await this.db
-      .select({ all: f('all'), mine: f('mine'), waiting: f('waiting'), ai: f('ai'), human: f('human'), priority: f('priority'), resolved: f('resolved') })
+      .select({ all: f('all'), mine: f('mine'), waiting: f('waiting'), ai: f('ai'), human: f('human'), priority: f('priority'), resolved: f('resolved'), routing: f('routing') })
       .from(conversations)
       .where(base);
-    return row ?? { all: 0, mine: 0, waiting: 0, ai: 0, human: 0, priority: 0, resolved: 0 };
+    return row ?? { all: 0, mine: 0, waiting: 0, ai: 0, human: 0, priority: 0, resolved: 0, routing: 0 };
   }
 
   private searchPredicate(term: string): SQL {

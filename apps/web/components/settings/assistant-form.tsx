@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
+import { SettingsApprovalFields } from './approval-fields';
 import { SelectField } from '@/components/forms/field';
 import { AlertBanner } from '@/components/ui/alert-banner';
 import { IDLE } from '@/lib/actions/form-state';
@@ -27,9 +28,10 @@ export function AssistantForm({ profiles, profileId, confirmLowWrites }: { profi
         <input type="checkbox" name="internalAgentConfirmLowWrites" defaultChecked={confirmLowWrites} />
         Also require confirmation for low-risk changes (sensitive changes always require it)
       </label>
+      <SettingsApprovalFields idPrefix="assistant" errors={state.fieldErrors} />
       <div className="rowsplit">
         <button type="submit" className="btn accent" disabled={pending}>
-          {pending ? 'Saving…' : 'Save'}
+          {pending ? 'Submitting…' : 'Submit for approval'}
         </button>
       </div>
     </form>

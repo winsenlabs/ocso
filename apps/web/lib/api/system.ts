@@ -1,5 +1,6 @@
 import 'server-only';
 import { z } from 'zod';
+import { ProposedSchema } from '@/components/approvals/lib/schemas';
 import { api } from './client';
 
 /**
@@ -104,5 +105,6 @@ export type WorkerDeployment = z.infer<typeof WorkerDeploymentSchema>;
 export type DeploymentFactView = z.infer<typeof DeploymentFact>;
 
 export const loadWorkerSettings = () => api.get('/v1/settings/workers', WorkerSettingsSchema);
-export const updateWorkerSettings = (patch: WorkerSettingsPatch) => api.patch('/v1/settings/workers', patch, WorkerSettingsSchema);
+/** Worker settings are deployment settings: a change is a proposal (202) naming its checker (PM/research/11 §4). */
+export const updateWorkerSettings = (patch: WorkerSettingsPatch & { approval: { checkerId: string; reason: string } | { bootstrap: true; reason: string } }) => api.patch('/v1/settings/workers', patch, z.union([ProposedSchema, WorkerSettingsSchema]));
 export const loadWorkerDeployment = () => api.get('/v1/settings/workers/deployment', WorkerDeploymentSchema);

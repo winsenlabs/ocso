@@ -3,8 +3,9 @@
 import { useMemo, useState, useTransition } from 'react';
 import { AlertBanner } from '@/components/ui/alert-banner';
 import { Modal } from '@/components/ui/modal';
+import { useApprovalRequest } from '@/components/approvals/use-approval-request';
 import { createChannelAction, updateChannelAction, type SavedChannel } from '@/lib/actions/channels';
-import type { Channel, ChannelKind, ChannelStatus } from '@/lib/api/channels';
+import type { Channel, ChannelKind } from '@/lib/api/channels';
 import type { AgentLite } from '@/lib/api/mcp';
 import { Input } from '../profiles/profile-fields';
 import { useCloseTo } from '../routed-modal';
@@ -35,11 +36,11 @@ export function ChannelDialog({ kinds, channel, initialKind, agents, publicOrigi
   const [secrets, setSecrets] = useState<Record<string, string>>({});
   const [generated, setGenerated] = useState<Record<string, string>>({});
   const [agentId, setAgentId] = useState(channel?.defaultAgentId ?? '');
-  const [status, setStatus] = useState<ChannelStatus>((channel?.status as ChannelStatus | undefined) ?? 'ACTIVE');
   const [errors, setErrors] = useState<{ settings: Record<string, string>; secrets: Record<string, string>; fields: Record<string, string> }>({ settings: {}, secrets: {}, fields: {} });
   const [message, setMessage] = useState<string | null>(null);
   const [saved, setSaved] = useState<SavedChannel | null>(null);
   const [pending, start] = useTransition();
+  const approval = useApprovalRequest();
   const stored = useMemo(() => (channel ? new Set(Object.keys(channel.secretRefs)) : null), [channel]);
 
   function chooseKind(next: string) {
@@ -57,29 +58,38 @@ export function ChannelDialog({ kinds, channel, initialKind, agents, publicOrigi
     const built = buildSettings(group, values);
     const typed = Object.fromEntries(Object.entries(secrets).filter(([, v]) => v.trim() !== ''));
     const secretErrors: Record<string, string> = {};
-    if (status === 'ACTIVE') {
-      for (const f of def.secrets) {
-        const missing = f.required && !typed[f.key] && !stored?.has(f.key) && !(f.generate === 'server' && !channel);
-        if (missing) secretErrors[f.key] = 'Required for an active channel';
-      }
+    // The configuration is checked on every save (and again when activation is approved).
+    for (const f of def.secrets) {
+      const missing = f.required && !typed[f.key] && !stored?.has(f.key) && !(f.generate === 'server' && !channel);
+      if (missing) secretErrors[f.key] = 'Required';
     }
     const fieldErrors: Record<string, string> = name.trim() ? {} : { name: 'Enter a name' };
     setErrors({ settings: built.errors, secrets: secretErrors, fields: fieldErrors });
     setMessage(null);
     if (Object.keys(built.errors).length || Object.keys(secretErrors).length || Object.keys(fieldErrors).length) return;
-    const body = { name: name.trim(), settings: built.settings, secrets: typed, defaultAgentId: agentId || null, status };
-    start(async () => {
-      const r = channel ? await updateChannelAction(channel.id, body) : await createChannelAction({ ...body, kind });
+    const body = { name: name.trim(), settings: built.settings, secrets: typed, defaultAgentId: agentId || null };
+    const done = (r: Awaited<ReturnType<typeof createChannelAction>>) => {
       if (r.ok) {
-        setSaved(r.data);
         setSecrets({});
+        if (r.data) setSaved(r.data);
         return;
       }
+      if (r.code === 'approval_required') return;
       const problems = splitProblems(r.message);
       setErrors({ settings: problems.settings, secrets: problems.secrets, fields: problems.fields });
       const matched = Object.keys(problems.settings).length + Object.keys(problems.secrets).length + Object.keys(problems.fields).length;
       setMessage(matched ? `The API rejected the configuration${problems.other.length ? `: ${problems.other.join('; ')}` : ' — see the fields below.'}` : r.message);
-    });
+    };
+    if (!channel) {
+      start(async () => done(await createChannelAction({ ...body, kind })));
+      return;
+    }
+    // A draft saves directly; an approved channel asks for a checker (submit modal) and becomes a proposal.
+    approval.run({ objectKind: 'channel', objectId: channel.id, title: `Change channel ${channel.name}` }, async (choice) => {
+      const r = await updateChannelAction(channel.id, body, choice);
+      if (!r.ok && r.code !== 'approval_required') done(r);
+      return r;
+    }, { onApplied: (data) => done({ ok: true, data }) });
   }
 
   const origins = String(values['allowedOrigins'] ?? '')
@@ -109,23 +119,29 @@ export function ChannelDialog({ kinds, channel, initialKind, agents, publicOrigi
       maxWidth={720}
       footer={
         <>
-          <span className="mono-sm">{status === 'ACTIVE' ? 'active channels are validated before saving' : 'inactive channels receive nothing'}</span>
+          <span className="mono-sm">{!channel || channel.status === 'DRAFT' ? 'a draft receives nothing until its activation is approved' : 'changes to a live channel are approved by a second person'}</span>
           <span className="sp" />
           <button type="button" className="btn" onClick={close}>
             Cancel
           </button>
-          <button type="submit" form="channel-form" className="btn accent" disabled={pending || !def}>
-            {pending ? 'Saving…' : channel ? 'Save channel' : 'Add channel'}
+          <button type="submit" form="channel-form" className="btn accent" disabled={pending || approval.pending || !def}>
+            {pending || approval.pending ? 'Saving…' : channel ? (channel.approval?.updateNeedsApproval ? 'Submit change' : 'Save channel') : 'Add channel'}
           </button>
         </>
       }
     >
       <form id="channel-form" noValidate style={{ display: 'grid', gap: 14 }} onSubmit={(e) => (e.preventDefault(), save())}>
-        {message ? (
+        {message || approval.error ? (
           <AlertBanner tone="error" style={{ margin: 0 }}>
-            {message}
+            {message ?? approval.error}
           </AlertBanner>
         ) : null}
+        {approval.notice ? (
+          <AlertBanner tone="info" style={{ margin: 0 }}>
+            {approval.notice}
+          </AlertBanner>
+        ) : null}
+        {approval.modal}
         {channel ? null : (
           <div className="fld">
             <label htmlFor="ch-kind">Channel type</label>
@@ -139,17 +155,7 @@ export function ChannelDialog({ kinds, channel, initialKind, agents, publicOrigi
             {def?.description ? <span className="hint">{def.description}</span> : null}
           </div>
         )}
-        <div className="fld-row">
-          <Input id="ch-name" label="Name" value={name} onChange={setName} error={errors.fields['name']} />
-          <div className="fld">
-            <label htmlFor="ch-status">Status</label>
-            <select id="ch-status" value={status} onChange={(e) => setStatus(e.target.value as ChannelStatus)}>
-              <option value="ACTIVE">Active — receives and sends messages</option>
-              <option value="DISABLED">Disabled</option>
-              {channel?.status === 'DRAFT' ? <option value="DRAFT">Draft</option> : null}
-            </select>
-          </div>
-        </div>
+        <Input id="ch-name" label="Name" value={name} onChange={setName} error={errors.fields['name']} />
         <div className="fld">
           <label htmlFor="ch-agent">Default virtual agent</label>
           <select id="ch-agent" value={agentId} onChange={(e) => setAgentId(e.target.value)}>

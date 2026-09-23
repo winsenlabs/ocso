@@ -58,6 +58,7 @@ const ASSIGNED_LABEL: Record<ControlStateKind, string> = {
   human: 'you',
   returning: 'returning',
   resolved: 'resolved',
+  routing: 'routing',
 };
 
 export function assignmentColumns(timeZone: string): Column<AssignmentRow>[] {

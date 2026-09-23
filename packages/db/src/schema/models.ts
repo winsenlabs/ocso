@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { bigint, boolean, index, integer, jsonb, pgTable, real, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { bigint, boolean, check, index, integer, jsonb, pgTable, real, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { createdAt, id, ts, updatedAt } from './columns.js';
 
 /** A model provider kind (`OPENAI`, `BEDROCK`…). Open: the provider registry, not the schema, decides which kinds exist. */
@@ -97,9 +97,14 @@ export const modelPricing = pgTable('model_pricing', {
   catalogModelId: text(),
   catalogFetchedAt: ts('catalog_fetched_at'),
   effectiveFrom: ts('effective_from').notNull().defaultNow(),
+  /**
+   * DRAFT: a price a person entered that has not been approved yet (PM/research/11 §4) — never used for cost.
+   * ACTIVE: approved, grandfathered, or a catalog row the system maintains (0029).
+   */
+  status: text().$type<'DRAFT' | 'ACTIVE'>().notNull().default('ACTIVE'),
   createdAt: createdAt(),
   updatedAt: ts('updated_at'),
-});
+}, (t) => [check('model_pricing_status_ck', sql`${t.status} IN ('DRAFT', 'ACTIVE')`)]);
 
 /**
  * Latest normalized snapshot per open-source model catalog (ADR-027),

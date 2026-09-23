@@ -7,8 +7,8 @@ import { createRoutingFixture, type RoutingFixture } from './support/routing-fix
 
 /**
  * Router CRUD (PM/research/11 §5.7): the draft is freely editable, versions
- * are immutable, activation and channel attachment are approvals (409 until
- * the approval spine wires routers), the simulator is a dry run.
+ * are immutable, activation is an approval of the newest version
+ * (router-approvals.int.test.ts covers the proposals), the simulator is a dry run.
  */
 let f: RoutingFixture;
 let service: RouterService;
@@ -52,12 +52,14 @@ describe('router service', () => {
     expect(dup.error?.issues.map((i) => i.message)).toContain('option values must be unique within a step');
   });
 
-  it('activation and channel attachment answer 409 approval_required over HTTP', async () => {
+  it('only the newest version can be proposed for activation (the approval pins it)', async () => {
     const created = await service.create(f.actor, { name: 'Needs approval', description: '', definition: menu });
-    const version = await service.freezeVersion(f.actor, created.id, '');
-    await expect(service.requestActivation(f.actor, created.id, version.id)).rejects.toMatchObject({ code: 'approval_required', details: { objectKind: 'router', objectId: created.id, action: 'ACTIVATE' } });
-    await expect(service.requestChannels(f.actor, created.id)).rejects.toMatchObject({ code: 'approval_required' });
-    await expect(service.requestActivation(f.actor, created.id, uuidv7())).rejects.toMatchObject({ category: 'not_found' });
+    const v1 = await service.freezeVersion(f.actor, created.id, '');
+    await expect(service.assertActivatable(f.lead, created.id, v1.id)).resolves.toBeUndefined();
+    const v2 = await service.freezeVersion(f.actor, created.id, '');
+    await expect(service.assertActivatable(f.lead, created.id, v1.id)).rejects.toMatchObject({ code: 'version_not_latest' });
+    await expect(service.assertActivatable(f.lead, created.id, v2.id)).resolves.toBeUndefined();
+    await expect(service.assertActivatable(f.lead, created.id, uuidv7())).rejects.toMatchObject({ category: 'not_found' });
   });
 
   it('activateVersion re-validates (a queue without its agent) and makes the router ACTIVE; attachChannels moves channels', async () => {

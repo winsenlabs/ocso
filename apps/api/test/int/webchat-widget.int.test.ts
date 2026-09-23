@@ -5,11 +5,12 @@ import { ChannelRegistry } from '@ocso/channels';
 import { InMemorySecretRows, LocalSecretStore, parseMasterKey } from '@ocso/secrets';
 import { LocalBlobStore } from '@ocso/blob';
 import { MemoryQueue } from '@ocso/queue';
-import { SettingsService } from '@ocso/application';
+import { SettingsService, recordInstalledApproval } from '@ocso/application';
 import { createAjvValidator } from '@ocso/tools';
 import { createLogger } from '@ocso/observability';
 import { ChannelRuntime, ContextBuilder, HotContextCache, LeaseManager, MediaMaterializer, ModelGateway, ToolRunner, TurnProcessor, UsageRecorder, createToolProviderRegistry } from '@ocso/agent-runtime';
 import { ScriptedAdapter } from '@ocso/agent-runtime/testing';
+import { liveChannel } from './platform.js';
 import { completeSetup, startApi, type ApiHarness } from './harness.js';
 import { setTeams } from './teams.js';
 import { routeChannel } from './routing.js';
@@ -42,11 +43,14 @@ beforeAll(async () => {
   await h.db.db.insert(modelProviders).values({ id: provider, kind: 'DEV_SCRIPTED', name: 'Scripted' });
   const profile = uuidv7();
   await h.db.db.insert(modelProfiles).values({ id: profile, name: 'widget-primary', providerId: provider, model: 'scripted', retries: 0 });
+  // An existing profile (grandfathered like 0031): agents go live only on approved profiles.
+  await recordInstalledApproval(h.db.db, { kind: 'model_profile', id: profile, title: 'widget-primary' }, 'Test fixture: existing profile');
   const agent = (await h.http().post('/v1/agents').set(auth(lead)).send({ name: 'Maya', purpose: 'support', conversationType: 'SUPPORT', modelProfileId: profile, defaultQueueId: queue, teamIds: [team] }).expect(201)).body.id;
   // Going live is a maker–checker approval (PM/research/11 §4): the lead is the owning team's only Head, so bootstrap.
   await h.http().post(`/v1/agents/${agent}/status`).set(auth(lead)).send({ status: 'LIVE', approval: { bootstrap: true, reason: 'Sole Head of the owning team' } }).expect(202);
   const settings = { allowedOrigins: [HOST], audioAttachments: true, branding: { title: 'Meridian help', accentColor: '#0f766e', greeting: 'Hi! Ask us anything.' } };
-  const created = (await h.http().post('/v1/channels').set(auth(admin)).send({ kind: 'WEBCHAT', name: 'Site chat', status: 'ACTIVE', settings, secrets: { visitorTokenSecret: randomBytes(32).toString('hex') } }).expect(201)).body;
+  // A channel is a draft until a Head (approvals.check.channels) approves its activation (PM/research/11 §4).
+  const created = await liveChannel<{ id: string; publicKey: string }>(h, admin, { id: leadId, token: lead }, { kind: 'WEBCHAT', name: 'Site chat', settings, secrets: { visitorTokenSecret: randomBytes(32).toString('hex') } });
   key = created.publicKey;
   await routeChannel(h, created.id, agent, queue);
 

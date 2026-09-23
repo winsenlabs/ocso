@@ -16,7 +16,7 @@ const TONES: Array<[StatusTone, string]> = [
   ['accent', 'draft'],
   ['muted', 'standby'],
 ];
-const CONTROL: ControlStateKind[] = ['ai', 'wait', 'human', 'returning', 'resolved'];
+const CONTROL: ControlStateKind[] = ['ai', 'wait', 'human', 'returning', 'resolved', 'routing'];
 const CHANNELS: ChannelCode[] = ['WA', 'WB', 'AP', 'EM', 'VO', 'IG', 'SM'];
 const PRESENCE: PresenceState[] = ['working', 'waiting', 'blocked', 'onboarding', 'idle', 'off_shift', 'paused', 'error'];
 const AVATARS: AvatarTone[] = ['indigo', 'violet', 'rose', 'amber', 'emerald', 'sky', 'teal', 'walle'];

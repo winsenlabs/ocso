@@ -104,6 +104,12 @@ export interface AuditStoreHealth {
 export interface AuditStore {
   /** The AUDIT_DRIVER that built it; display and logs only (core never compares it). */
   readonly driver: string;
+  /**
+   * How the store scales, for the storage guidance (PM/research/11 §7): a `row` store is outgrown by a very
+   * large or fast-growing trail, a `columnar` one is where that trail belongs. `label` names the engine
+   * for people. Optional; absent reads as `row`.
+   */
+  readonly sizing?: { readonly kind: 'row' | 'columnar'; readonly label: string } | undefined;
   /** Idempotent on id: re-appending a stored record is a no-op. */
   append(records: readonly AuditRecord[]): Promise<void>;
   /** The subset of `ids` the store holds (reconciliation). */

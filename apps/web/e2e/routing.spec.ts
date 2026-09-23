@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 import { ACCOUNTS, E2E, apiUrl, databaseUrl } from './config';
 import { activateRouter } from './routing';
+import { approvedChannel, approvedProfile, approvedProvider } from './platform-setup';
 
 /**
  * A menu router in front of two agents (PM/research/11 §5): the web chat
@@ -38,8 +39,9 @@ test.beforeAll(async ({ playwright }) => {
   tok.lead = await loginApi(LEAD.email, LEAD.password);
   const team = (await call<{ id: string }>('POST', '/v1/teams', tok.lead, { name: 'RT Service' })).id;
   await call('PATCH', `/v1/users/${lead.id}`, tok.admin, { teamIds: [team] });
-  const provider = (await call<{ id: string }>('POST', '/v1/model-providers', tok.admin, { kind: 'DEV_SCRIPTED', name: 'RT Scripted', settings: { latencyMs: 20, chunkDelayMs: 5 } })).id;
-  const profile = (await call<{ id: string }>('POST', '/v1/model-profiles', tok.admin, { name: 'rt-support', providerId: provider, model: 'scripted-1', retries: 0 })).id;
+  // Platform objects start as drafts: a Head approves enabling the provider and activating the channel (PM/research/11 §4).
+  const provider = await approvedProvider(api, tok.admin, { id: lead.id, token: tok.lead }, { kind: 'DEV_SCRIPTED', name: 'RT Scripted', settings: { latencyMs: 20, chunkDelayMs: 5 } });
+  const profile = await approvedProfile(api, tok.admin, { id: lead.id, token: tok.lead }, { name: 'rt-support', providerId: provider, model: 'scripted-1', retries: 0 });
   const agent = async (name: string, slug: string, type: string) =>
     (await call<{ id: string }>('POST', '/v1/agents', tok.lead, { name, slug, purpose: name, conversationType: type, modelProfileId: profile, teamIds: [team] })).id;
   const [nila, kabir] = [await agent('Nila', 'nila-rt', 'SUPPORT'), await agent('Kabir', 'kabir-rt', 'SALES')];
@@ -52,10 +54,9 @@ test.beforeAll(async ({ playwright }) => {
   await call('PATCH', `/v1/queues/${ids.cards}`, tok.lead, { agentId: nila, attributes: { product: 'cards' } });
   await call('PATCH', `/v1/queues/${ids.loans}`, tok.lead, { agentId: kabir, attributes: { product: 'loans' } });
 
-  const channel = await call<{ id: string; publicKey: string }>('POST', '/v1/channels', tok.admin, {
+  const channel = await approvedChannel<{ id: string; publicKey: string }>(api, tok.admin, { id: lead.id, token: tok.lead }, {
     kind: 'WEBCHAT',
     name: 'RT Menu chat',
-    status: 'ACTIVE',
     settings: { branding: { title: 'Meridian help' } },
     secrets: { visitorTokenSecret: randomBytes(32).toString('hex') },
   });

@@ -8,6 +8,7 @@ import { ACCOUNTS, E2E, apiUrl } from './config';
 import { login, logout } from './helpers';
 import { routeChannelToAgent } from './routing';
 import { goLiveApproved } from './approval-setup';
+import { approveOver, approvedChannel, approvedProfile, approvedProvider } from './platform-setup';
 
 /**
  * CS workspace (design/01) end to end against the real API + worker:
@@ -25,6 +26,7 @@ const EXEC = { name: 'Esha Exec', email: 'ws.exec@e2e.ocso.test', password: 'cor
 const MCP_PORT = E2E.apiPort + 2;
 
 let api: APIRequestContext;
+let checker: { checkerId: string; checkerToken: string };
 let mcp: ChildProcess | null = null;
 const tok: Record<'admin' | 'lead' | 'exec', string> = { admin: '', lead: '', exec: '' };
 const ids = { team: '', queue: '', provider: '', profile: '', agent: '', webchatKey: '', visitor: '', conversation: '' };
@@ -78,15 +80,15 @@ test.beforeAll(async ({ playwright }) => {
   ids.queue = (await call<{ id: string }>('POST', '/v1/queues', tok.lead, { name: 'WS Cards & EMI · Tier 2', teamIds: [ids.team] })).id;
 
   // Deterministic development model (ADR-015) behind a real provider/profile.
-  ids.provider = (await call<{ id: string }>('POST', '/v1/model-providers', tok.admin, { kind: 'DEV_SCRIPTED', name: 'WS Scripted', settings: { latencyMs: 50, chunkDelayMs: 15 } })).id;
-  ids.profile = (await call<{ id: string }>('POST', '/v1/model-profiles', tok.admin, { name: 'ws-support', providerId: ids.provider, model: 'scripted-1', retries: 0 })).id;
+  // Platform objects start as drafts: a Head approves enabling the provider and activating the channel (PM/research/11 §4).
+  ids.provider = await approvedProvider(api, tok.admin, { id: lead.id, token: tok.lead }, { kind: 'DEV_SCRIPTED', name: 'WS Scripted', settings: { latencyMs: 50, chunkDelayMs: 15 } });
+  ids.profile = await approvedProfile(api, tok.admin, { id: lead.id, token: tok.lead }, { name: 'ws-support', providerId: ids.provider, model: 'scripted-1', retries: 0 });
   ids.agent = (await call<{ id: string }>('POST', '/v1/agents', tok.lead, { name: 'Maya', slug: 'maya-ws', purpose: 'customer support', conversationType: 'SUPPORT', modelProfileId: ids.profile, defaultQueueId: ids.queue, teamIds: [owners] })).id;
   // Going live is a maker–checker approval (PM/research/11 §4): a second Head of the owning team checks it.
-  await goLiveApproved(api, { adminToken: tok.admin, makerToken: tok.lead, agentId: ids.agent, ownerTeamId: owners, checker: { name: 'WS Checker', email: 'ws.checker@e2e.ocso.test', password: 'correct-horse-battery-wschecker' } });
-  const channel = await call<{ id: string; publicKey: string }>('POST', '/v1/channels', tok.admin, {
+  checker = await goLiveApproved(api, { adminToken: tok.admin, makerToken: tok.lead, agentId: ids.agent, ownerTeamId: owners, checker: { name: 'WS Checker', email: 'ws.checker@e2e.ocso.test', password: 'correct-horse-battery-wschecker' } });
+  const channel = await approvedChannel<{ id: string; publicKey: string }>(api, tok.admin, { id: lead.id, token: tok.lead }, {
     kind: 'WEBCHAT',
     name: 'WS Web chat',
-    status: 'ACTIVE',
     secrets: { visitorTokenSecret: randomBytes(32).toString('hex') },
   });
   ids.webchatKey = channel.publicKey;
@@ -287,15 +289,24 @@ test('a sensitive action the AI proposed is confirmed from the timeline', async 
   await expect.poll(async () => (await fetch(`http://127.0.0.1:${MCP_PORT}/healthz`).then((r) => r.status).catch(() => 0)), { timeout: 20_000 }).toBe(200);
 
   // Tech admin connects the external MCP server and classifies the policy search as sensitive.
-  await call('PATCH', '/v1/settings/deployment', tok.admin, { egressAllowedInternalHosts: ['127.0.0.1'] });
+  // Settings and MCP connections change through approvals (PM/research/11 §4): the second Head checks them.
+  const platformChecker = { id: checker.checkerId, token: checker.checkerToken };
+  const current = await call<{ egressAllowedInternalHosts: string[] }>('GET', '/v1/settings/deployment', tok.admin);
+  if (!current.egressAllowedInternalHosts.includes('127.0.0.1')) {
+    await approveOver(api, tok.admin, platformChecker, { method: 'PATCH', path: '/v1/settings/deployment', body: { egressAllowedInternalHosts: [...current.egressAllowedInternalHosts, '127.0.0.1'] } });
+  }
   const conn = await call<{ id: string }>('POST', '/v1/mcp/connections', tok.admin, { name: 'refund-desk', url: `http://127.0.0.1:${MCP_PORT}/mcp`, network: 'INTERNAL' });
   await call('POST', `/v1/mcp/connections/${conn.id}/discover`, tok.admin);
   const tools = await call<Array<{ id: string; name: string }>>('GET', `/v1/mcp/connections/${conn.id}/tools`, tok.admin);
   const search = tools.find((t) => t.name === 'knowledge.search_policy');
   expect(search, 'demo server exposes knowledge.search_policy').toBeTruthy();
   await call('PUT', `/v1/mcp/connections/${conn.id}/tools`, tok.admin, { tools: [{ toolId: search!.id, riskClass: 'SENSITIVE', approved: true }] });
-  await call('POST', `/v1/mcp/connections/${conn.id}/approve`, tok.admin, { allowedAgentIds: [ids.agent] });
-  await call('PUT', `/v1/agents/${ids.agent}/tools`, tok.lead, { grants: [{ toolId: search!.id }] });
+  await approveOver(api, tok.admin, platformChecker, { method: 'POST', path: `/v1/mcp/connections/${conn.id}/approve`, body: { allowedAgentIds: [ids.agent] } });
+  // Activation is deferred: the worker re-contacts the server, then the connection is live.
+  await expect.poll(async () => (await call<{ status: string }>('GET', `/v1/mcp/connections/${conn.id}`, tok.admin)).status, { timeout: 30_000 }).toBe('ACTIVE');
+  // Maya is live: granting her a tool is an agent_tool_grant proposal the second Head approves (PM/research/11 §4).
+  const grant = await call<{ proposal: { id: string; contentHash: string } }>('PUT', `/v1/agents/${ids.agent}/tools`, tok.lead, { grants: [{ toolId: search!.id }], approval: { checkerId: checker.checkerId, reason: 'E2E: the refund desk policy search' } }, [202]);
+  await call('POST', `/v1/approvals/${grant.proposal.id}/decision`, checker.checkerToken, { decision: 'APPROVE', reason: 'E2E: reviewed', contentHash: grant.proposal.contentHash });
 
   // The scripted model calls the tool on "refund"; policy holds it for a human and escalates.
   const customer = await visitor();

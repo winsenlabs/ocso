@@ -3,6 +3,7 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { modelProfiles, modelProviders, uuidv7 } from '@ocso/db';
+import { liveChannel } from './platform.js';
 import { completeSetup, startApi, type ApiHarness } from './harness.js';
 import { setTeams } from './teams.js';
 import { routeChannel } from './routing.js';
@@ -63,7 +64,8 @@ beforeAll(async () => {
   h = await startApi();
   admin = await completeSetup(h);
   // Channel adapters reach only public https hosts unless the Tech admin allowlists an internal one (ADR-021).
-  await h.http().patch('/v1/settings/deployment').set(auth(admin)).send({ egressAllowedInternalHosts: ['127.0.0.1'] }).expect(200);
+  // Settings change by approval; with nobody else able to check yet, the sole Tech bootstraps (recorded).
+  await h.http().patch('/v1/settings/deployment').set(auth(admin)).send({ egressAllowedInternalHosts: ['127.0.0.1'], approval: { bootstrap: true, reason: 'Sole Tech: local Twilio stub' } }).expect(202);
   const leadId = (await h.http().post('/v1/users').set(auth(admin)).send({ email: 'lead@ocso.test', name: 'lead', role: 'HEAD', password: 'a password 12345' }).expect(201)).body.id as string;
   const lead = await h.loginAs('lead@ocso.test', 'a password 12345');
   const team = (await h.http().post('/v1/teams').set(auth(lead)).send({ name: 'Cards' }).expect(201)).body.id;
@@ -76,18 +78,15 @@ beforeAll(async () => {
   await h.db.db.insert(modelProfiles).values({ id: profile, name: 'support-primary', providerId: provider, model: 'scripted', retries: 0 });
   const agent = (await h.http().post('/v1/agents').set(auth(lead)).send({ name: 'Maya', purpose: 'customer support', conversationType: 'SUPPORT', modelProfileId: profile, defaultQueueId: queue, teamIds: [team] }).expect(201)).body.id;
 
-  const created = await h
-    .http()
-    .post('/v1/channels')
-    .set(auth(admin))
-    .send({
+  // A channel is a draft until the lead (a Head: approvals.check.channels) approves its activation.
+  const created = {
+    body: await liveChannel<{ id: string; publicKey: string; webhookPath: string }>(h, admin, { id: leadId, token: lead }, {
       kind: 'TWILIO_WHATSAPP',
       name: 'WhatsApp (Twilio)',
-      status: 'ACTIVE',
       settings: { accountSid: ACCOUNT_SID, from: 'whatsapp:+14155238886', apiBaseUrl: stubUrl },
       secrets: { authToken: AUTH_TOKEN },
-    })
-    .expect(201);
+    }),
+  };
   channel = created.body;
   await routeChannel(h, created.body.id, agent, queue);
   expect(JSON.stringify(created.body)).not.toContain(AUTH_TOKEN);
@@ -158,7 +157,7 @@ describe('connection test', () => {
       .http()
       .post('/v1/channels')
       .set(auth(admin))
-      .send({ kind: 'TWILIO_WHATSAPP', name: 'WhatsApp (unlisted host)', status: 'ACTIVE', settings: { accountSid: ACCOUNT_SID, from: 'whatsapp:+14155238886', apiBaseUrl: stubUrl.replace('127.0.0.1', 'localhost') }, secrets: { authToken: AUTH_TOKEN } })
+      .send({ kind: 'TWILIO_WHATSAPP', name: 'WhatsApp (unlisted host)', settings: { accountSid: ACCOUNT_SID, from: 'whatsapp:+14155238886', apiBaseUrl: stubUrl.replace('127.0.0.1', 'localhost') }, secrets: { authToken: AUTH_TOKEN } })
       .expect(201);
     const before = stubCalls;
     const blocked = await h.http().post(`/v1/channels/${unlisted.body.id}/test`).set(auth(admin)).expect(200);

@@ -77,6 +77,8 @@ export interface OcsoEventPayloads {
     outcome: 'RULE' | 'MODEL' | 'FALLBACK' | 'PASS_THROUGH' | 'CONTINUE' | 'TIMEOUT' | 'TRANSFER';
     ruleIndex: number | null;
   };
+  /** Exceptions (PM/research/11 §7): a weekly or ad-hoc exception report was frozen and awaits a signature (exceptions.read holders). */
+  'exception_report.ready': { reportId: string; kind: 'WEEKLY' | 'ADHOC'; periodStart: string; periodEnd: string };
 }
 
 export type OcsoEventType = keyof OcsoEventPayloads;

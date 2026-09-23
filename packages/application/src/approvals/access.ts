@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import { APPROVAL_CHECK_PERMISSIONS, Permission, can, effectivePermissions, type Principal } from '@ocso/auth';
 import { approvalProposals, teamMembers, users, type DbOrTx } from '@ocso/db';
+import { forbidden, type ApprovalAction } from '@ocso/domain';
 import { loadPrincipal } from '../identity/sessions.js';
 import type { ApprovalDescriptor, ProposalRow } from './contract.js';
 
@@ -31,6 +32,16 @@ export function approvalScope(principal: Principal): SQL | null {
 /** The named checker holding the kind's check permission, who is not the maker, and the proposal is open. */
 export function mayCheck(principal: Principal, d: ApprovalDescriptor, p: Pick<ProposalRow, 'status' | 'makerId' | 'checkerId'>): boolean {
   return p.status === 'SUBMITTED' && can(principal, d.checkPermission) && p.checkerId === principal.userId && p.makerId !== principal.userId;
+}
+
+/** The maker holds the right to propose this action (the descriptor's mayMake, else its makePermission). */
+export function canMake(principal: Principal, d: ApprovalDescriptor, action: ApprovalAction): boolean {
+  return d.mayMake ? d.mayMake(principal, action) : can(principal, d.makePermission(action));
+}
+
+/** 403 unless the maker may propose this action. */
+export function assertCanMake(principal: Principal, d: ApprovalDescriptor, action: ApprovalAction): void {
+  if (!canMake(principal, d, action)) throw forbidden(d.makePermission(action), `${principal.displayName} cannot propose this ${d.label.toLowerCase()} change`);
 }
 
 /** Reassigning needs approvals.reassign_any or the kind's own check permission. */
@@ -115,8 +126,11 @@ export async function eligibleCheckers(tx: DbOrTx, d: ApprovalDescriptor, propos
   return found.filter((r) => !exclude.includes(r.id));
 }
 
-/** Bootstrap (§4.2): the maker holds the check permission and nobody else anywhere is eligible. */
+/**
+ * Bootstrap (§4.2): the maker holds the check permission (or the descriptor's bootstrapPermission) and nobody
+ * else anywhere is eligible.
+ */
 export async function bootstrapAllowed(tx: DbOrTx, d: ApprovalDescriptor, proposal: ProposalFacts, maker: Principal, excludeAlso: readonly string[] = []): Promise<boolean> {
-  if (!can(maker, d.checkPermission)) return false;
+  if (!can(maker, d.checkPermission) && !(d.bootstrapPermission && can(maker, d.bootstrapPermission))) return false;
   return (await eligibleCheckers(tx, d, { ...proposal, makerId: maker.userId }, excludeAlso)).length === 0;
 }

@@ -1,11 +1,11 @@
 import { eq } from 'drizzle-orm';
-import { assertCan, type Principal } from '@ocso/auth';
+import type { Principal } from '@ocso/auth';
 import { approvalProposals, uuidv7, type DbOrTx } from '@ocso/db';
 import { DomainError, ErrorCategory, approvalTransition, conflict, diffFields, forbidden, notFound, validation, type ApprovalAction } from '@ocso/domain';
 import { TOPICS } from '@ocso/queue';
 import { z } from 'zod';
 import type { ActorContext } from '../shared/context.js';
-import { bootstrapAllowed, isEligibleChecker, loadPerson } from './access.js';
+import { assertCanMake, bootstrapAllowed, isEligibleChecker, loadPerson } from './access.js';
 import { applyDecision } from './activation.js';
 import type { ApprovalDescriptor, ProposalRow } from './contract.js';
 import { approvalOpenError, assertMakeable, lockFor, lockingProposal, requiresApproval } from './guard.js';
@@ -53,7 +53,7 @@ export class ApprovalService extends ApprovalReader {
     const principal = actor.principal!;
     const d = this.registry.get(input.objectKind);
     if (!d.actions.includes(input.action)) throw validation('action_not_approvable', `${d.label}: ${input.action.toLowerCase()} is not an approvable action`);
-    assertCan(principal, d.makePermission(input.action));
+    assertCanMake(principal, d, input.action);
     await assertMakeable(this.db, d, principal, input.objectId, input.action);
     const payload = this.parsePayload(d, input.action, input.payload ?? {});
     const now = this.now();
@@ -64,7 +64,7 @@ export class ApprovalService extends ApprovalReader {
       if (open) throw approvalOpenError(open.kind, open.objectId, open.id);
       const before = snapshotOf(await d.project(tx, input.objectId));
       if (!before) throw notFound(d.kind, input.objectId);
-      const teamIds = await d.teamIds(tx, input.objectId);
+      const teamIds = await d.teamIds(tx, input.objectId, payload);
       const checkerId = input.bootstrap ? principal.userId : input.checkerId!;
       const basis = await contentBasisOf(tx, d, input.objectId, before);
       const row = draftRow({ id: uuidv7(), d, input, payload, before, basis, teamIds, makerId: principal.userId, checkerId, bootstrap: input.bootstrap === true, now });
@@ -104,7 +104,7 @@ export class ApprovalService extends ApprovalReader {
     const notify = await this.db.transaction(async (tx) => {
       const p = await this.lockOwn(tx, principal, id);
       const d = this.registry.get(p.objectKind);
-      assertCan(principal, d.makePermission(p.action));
+      assertCanMake(principal, d, p.action);
       await assertMakeable(tx, d, principal, p.objectId, p.action);
       approvalTransition(p.status, 'EDIT');
       await lockFor(tx, d, p.objectId);
@@ -113,7 +113,9 @@ export class ApprovalService extends ApprovalReader {
       const before = snapshotOf(await d.project(tx, p.objectId));
       if (!before) throw notFound(d.kind, p.objectId);
       const next: ProposalRow = { ...p, payload, checkerId, reason: input.reason ?? p.reason, revision: p.revision + 1, beforeSnapshot: before, editedAfterSubmission: true, updatedAt: now };
-      if (checkerId !== p.checkerId || !p.checkerValid) {
+      // An edited payload may move the object to another owner (a rule retargeted): its teams, and the checker, follow.
+      next.teamIds = await d.teamIds(tx, p.objectId, payload);
+      if (checkerId !== p.checkerId || !p.checkerValid || next.teamIds.join() !== p.teamIds.join()) {
         if (!(await isEligibleChecker(tx, d, next, await loadPerson(tx, checkerId)))) throw validation('checker_not_eligible', 'The named checker cannot approve this change');
         next.checkerValid = true;
         next.notifiedAt = null;

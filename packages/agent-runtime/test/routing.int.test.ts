@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { and, asc, eq } from 'drizzle-orm';
-import { channels, conversationRouting, conversations, queues, toolCalls, turns, uuidv7, virtualAgents } from '@ocso/db';
-import { AgentService, IngressService, QueueService, RoutingEngine, createActiveRouter, systemActor } from '@ocso/application';
+import { channels, conversationRouting, conversations, queues, toolCalls, turns, users, uuidv7, virtualAgents } from '@ocso/db';
+import { AgentService, ApprovalDecisionService, ApprovalService, IngressService, QueueService, RoutingEngine, createActiveRouter, createApprovalRegistry, systemActor, type ActorContext } from '@ocso/application';
 import { MemoryQueue } from '@ocso/queue';
 import { createLogger } from '@ocso/observability';
 import { ModelGateway, RouteProcessor, TRANSFER_TOOL, UsageRecorder, createRouterClassifier } from '../src/index.js';
@@ -27,7 +27,19 @@ beforeAll(async () => {
   await h.t.db.update(virtualAgents).set({ status: 'LIVE' }).where(eq(virtualAgents.id, arjun));
   salesQueue = uuidv7();
   await h.t.db.insert(queues).values({ id: salesQueue, name: 'Sales', agentId: arjun, attributes: { product: 'sales' } });
+  // §5.5: the AI transfers only to approved queues — both get their first approval from a second person.
+  await approveQueues([salesQueue, h.queueId]);
 });
+
+async function approveQueues(queueIds: string[]): Promise<void> {
+  const registry = createApprovalRegistry();
+  const checker: ActorContext = { principal: { userId: uuidv7(), role: 'HEAD', displayName: 'Priya Checker', teamIds: [], via: 'UI' }, correlationId: 'checker' };
+  await h.t.db.insert(users).values({ id: checker.principal!.userId, email: 'checker@x.test', name: 'Priya Checker', role: 'HEAD' });
+  for (const queueId of queueIds) {
+    const proposal = await new ApprovalService(h.t.db, registry).submit(h.lead, { objectKind: 'queue', objectId: queueId, action: 'CREATE', checkerId: checker.principal!.userId, reason: 'Takes transfers' });
+    await new ApprovalDecisionService(h.t.db, registry).decide(checker, proposal.id, { decision: 'APPROVE', reason: 'Reviewed', contentHash: proposal.contentHash });
+  }
+}
 afterAll(async () => {
   await h?.t.drop();
 });

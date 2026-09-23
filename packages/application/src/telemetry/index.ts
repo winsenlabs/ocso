@@ -10,3 +10,4 @@ export * from './token-usage.js';
 export * from './trace-links.js';
 export * from './uptime.js';
 export * from './workers.js';
+export * from './health-rollups.js';

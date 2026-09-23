@@ -3,7 +3,9 @@
 import { useState, useTransition, type ReactNode } from 'react';
 import { AlertBanner } from '@/components/ui/alert-banner';
 import { Modal } from '@/components/ui/modal';
-import { createWebhookAction, deleteWebhookAction, refreshWebhooksAction, rotateWebhookSecretAction, testWebhookAction, updateWebhookAction } from '@/lib/actions/webhooks';
+import { useApprovalRequest } from '@/components/approvals/use-approval-request';
+import { createWebhookAction, refreshWebhooksAction, rotateWebhookSecretAction, testWebhookAction, updateWebhookAction } from '@/lib/actions/webhooks';
+import { DeleteByApproval } from '../lifecycle-actions';
 import type { Webhook } from '@/lib/api/webhooks';
 import { ConfirmAction } from '../confirm-action';
 import { CopyButton } from '../copy-button';
@@ -33,19 +35,21 @@ export function WebhookDialog({ webhook, eventTypes, closeHref, children }: { we
   const [name, setName] = useState(webhook?.name ?? '');
   const [url, setUrl] = useState(webhook?.url ?? 'https://');
   const [events, setEvents] = useState<string[]>(webhook?.events ?? []);
-  const [enabled, setEnabled] = useState(webhook?.enabled ?? true);
   const [secret, setSecret] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: 'info' | 'error'; text: string } | null>(null);
   const [pending, start] = useTransition();
+  const approval = useApprovalRequest();
 
   function save() {
     setMessage(null);
+    if (webhook) {
+      // A draft saves directly; an approved subscription asks for a checker (a proposal).
+      approval.run({ objectKind: 'webhook_subscription', objectId: webhook.id, title: `Change webhook ${webhook.name}` }, (choice) => updateWebhookAction(webhook.id, { name, url, events }, choice), {
+        onApplied: () => setMessage({ tone: 'info', text: 'Saved · change recorded in the audit log' }),
+      });
+      return;
+    }
     start(async () => {
-      if (webhook) {
-        const r = await updateWebhookAction(webhook.id, { name, url, events, enabled });
-        setMessage(r.ok ? { tone: 'info', text: 'Saved · change recorded in the audit log' } : { tone: 'error', text: r.message });
-        return;
-      }
       const r = await createWebhookAction({ name, url, events });
       if (r.ok) setSecret(r.data.signingSecret);
       else setMessage({ tone: 'error', text: r.message });
@@ -86,9 +90,7 @@ export function WebhookDialog({ webhook, eventTypes, closeHref, children }: { we
       footer={
         <>
           {webhook ? (
-            <ConfirmAction label="Delete" buttonClass="btn danger" title={`Delete ${webhook.name}`} confirmLabel="Delete webhook" run={() => deleteWebhookAction(webhook.id)} onDone={close}>
-              Deliveries stop immediately and the signing secret is deleted. Pending deliveries are dropped.
-            </ConfirmAction>
+            <DeleteByApproval kind="webhook_subscription" id={webhook.id} name={webhook.name} detail="Once a second person approves, deliveries stop, pending deliveries are dropped and the signing secret is deleted." />
           ) : null}
           <span className="sp" />
           <button type="button" className="btn" onClick={close}>
@@ -126,12 +128,9 @@ export function WebhookDialog({ webhook, eventTypes, closeHref, children }: { we
           <Input id="wh-name" label="Name" value={name} onChange={setName} />
           <Input id="wh-url" label="Endpoint URL" value={url} onChange={setUrl} hint="https only" />
         </div>
-        {webhook ? (
-          <label className="toggle-row">
-            <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
-            Enabled — disabled endpoints receive nothing
-          </label>
-        ) : null}
+        {webhook ? null : <span className="hint">A new webhook is a disabled draft: enable it from the list once saved (a second person approves).</span>}
+        {approval.error || approval.notice ? <span className={approval.error ? 'err-text' : 'mono-sm'}>{approval.error ?? approval.notice}</span> : null}
+        {approval.modal}
         <EventPicker eventTypes={eventTypes} value={events} onChange={setEvents} />
       </form>
       {webhook ? (

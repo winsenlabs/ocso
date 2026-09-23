@@ -6,6 +6,7 @@ import { expect, test, type APIRequestContext, type BrowserContext, type FrameLo
 import { ACCOUNTS, E2E, apiUrl, webUrl } from './config';
 import { routeChannelToAgent } from './routing';
 import { goLiveApproved } from './approval-setup';
+import { approvedChannel, approvedProfile, approvedProvider } from './platform-setup';
 
 /**
  * Customer web chat end to end: a host site (examples/webchat-host) embeds
@@ -92,15 +93,15 @@ test.beforeAll(async ({ playwright, browser }) => {
   tok.exec = await loginApi(EXEC.email, EXEC.password);
   const queue = (await call<{ id: string }>('POST', '/v1/queues', tok.lead, { name: 'WC Orders · Tier 1', teamIds: [team] })).id;
   // Deterministic development model (ADR-015); slow enough chunks that streaming is observable.
-  const provider = (await call<{ id: string }>('POST', '/v1/model-providers', tok.admin, { kind: 'DEV_SCRIPTED', name: 'WC Scripted', settings: { latencyMs: 100, chunkDelayMs: 80 } })).id;
-  const profile = (await call<{ id: string }>('POST', '/v1/model-profiles', tok.admin, { name: 'wc-support', providerId: provider, model: 'scripted-1', retries: 0 })).id;
+  // Platform objects start as drafts: a Head approves enabling the provider and activating the channel (PM/research/11 §4).
+  const provider = await approvedProvider(api, tok.admin, { id: lead.id, token: tok.lead }, { kind: 'DEV_SCRIPTED', name: 'WC Scripted', settings: { latencyMs: 100, chunkDelayMs: 80 } });
+  const profile = await approvedProfile(api, tok.admin, { id: lead.id, token: tok.lead }, { name: 'wc-support', providerId: provider, model: 'scripted-1', retries: 0 });
   const agent = (await call<{ id: string }>('POST', '/v1/agents', tok.lead, { name: 'Ava', slug: 'ava-wc', purpose: 'order support', conversationType: 'SUPPORT', modelProfileId: profile, defaultQueueId: queue, teamIds: [owners] })).id;
   // Going live is a maker–checker approval (PM/research/11 §4): a second Head of the owning team checks it.
   await goLiveApproved(api, { adminToken: tok.admin, makerToken: tok.lead, agentId: agent, ownerTeamId: owners, checker: { name: 'WC Checker', email: 'wc.checker@e2e.ocso.test', password: 'correct-horse-battery-wcchecker' } });
-  const channel = await call<{ id: string; publicKey: string }>('POST', '/v1/channels', tok.admin, {
+  const channel = await approvedChannel<{ id: string; publicKey: string }>(api, tok.admin, { id: lead.id, token: tok.lead }, {
     kind: 'WEBCHAT',
     name: CHANNEL,
-    status: 'ACTIVE',
     settings: { allowedOrigins: [HOST], branding: { title: 'Example Store help', accentColor: '#0f766e', greeting: 'Hi! Ask us anything about your order.' } },
     secrets: { visitorTokenSecret: randomBytes(32).toString('hex'), hostJwtSecret: HOST_JWT_SECRET },
   });

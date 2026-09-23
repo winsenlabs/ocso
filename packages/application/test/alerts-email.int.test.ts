@@ -8,6 +8,7 @@ import type { Principal } from '@ocso/auth';
 import { EmailSendError, type EmailMessage, type EmailSender } from '@ocso/email';
 import { InMemorySecretRows, LocalSecretStore, parseMasterKey } from '@ocso/secrets';
 import { AlertDeliveryService, EmailSettingsService, NotificationDestinationService, isAlertDeliveryRetryable, type ActorContext } from '../src/index.js';
+import { platformApprover } from './support/platform-approvals.js';
 
 /** EMAIL destinations through the deployment sender (EMAIL_SENDER) and the Settings test send. */
 let t: TestDatabase;
@@ -83,6 +84,8 @@ describe('EMAIL destinations · deployment sender', () => {
 
   it('delivers alerts idempotently per delivery; retries transient sender errors, fails permanent ones', async () => {
     const dest = await destinations().create(ctx(admin), { name: 'Ops email', kind: 'EMAIL', config: { to: ['ops@meridian.test'] }, enabled: true });
+    // Created as a disabled draft; enabled by a second person's approval.
+    await (await platformApprover(t.db, { secrets, deliveries: registry })).approve(ctx(admin), 'notification_destination', dest.id, 'ACTIVATE');
     const alertId = uuidv7();
     await t.db.insert(alerts).values({ id: alertId, fingerprint: `f-${alertId}`, kind: 'TECHNICAL', severity: 'CRITICAL', title: 'Provider down', body: 'All requests failing', audienceRoles: ['TECH'], source: 'Provider · X' });
     const delivery = async () => {

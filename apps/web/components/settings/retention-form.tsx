@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
+import { SettingsApprovalFields } from './approval-fields';
 import { TextField } from '@/components/forms/field';
 import { AlertBanner } from '@/components/ui/alert-banner';
 import { IDLE } from '@/lib/actions/form-state';
@@ -42,9 +43,12 @@ export function RetentionForm({ rows, editable }: { rows: RetentionRow[]; editab
       ))}
       <span className="mono-sm">Application logs and traces are kept by the log/trace backend (CloudWatch or the OTel collector); set their retention there.</span>
       {editable ? (
+        <SettingsApprovalFields idPrefix="retention" errors={errors} />
+      ) : null}
+      {editable ? (
         <div className="rowsplit">
           <button type="submit" className="btn accent" disabled={pending}>
-            {pending ? 'Saving…' : 'Save retention'}
+            {pending ? 'Submitting…' : 'Submit retention for approval'}
           </button>
           <span className="sp" />
           <span className="mono-sm">applied hourly by the worker · audited</span>

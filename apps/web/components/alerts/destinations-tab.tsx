@@ -8,6 +8,7 @@ import { StatusChip } from '@/components/ui/status-chip';
 import { listDestinationKinds, listDestinations } from '@/lib/api/alerts';
 import { hasPermission, type Session } from '@/lib/session';
 import { alertsHref, type AlertsParams } from './alerts-meta';
+import { LifecycleActions } from '@/components/connections/lifecycle-actions';
 import { DestinationDialog } from './destination-dialog';
 import { receivesText } from './destination-form';
 import { TestDestinationButton } from './test-destination-button';
@@ -35,7 +36,7 @@ export async function DestinationsTab({ session, params }: { session: Session; p
       />
       <DataTable
         label="Notification destinations"
-        template="minmax(0,1.1fr) 130px minmax(0,1.2fr) 84px 80px minmax(150px,0.9fr)"
+        template="minmax(0,1.1fr) 130px minmax(0,1.2fr) 84px 80px minmax(170px,1fr) minmax(150px,0.9fr)"
         rows={destinations}
         rowKey={(d) => d.id}
         empty={<EmptyState title="No destination yet">Add {kinds.map((k) => k.label).join(', ') || 'a'} delivery for alert rules.</EmptyState>}
@@ -59,7 +60,15 @@ export async function DestinationsTab({ session, params }: { session: Session; p
             header: 'Secret',
             cell: (d) => <span className="mono-sm">{kindOf.get(d.kind)?.secret ? (d.hasSecret ? 'stored' : 'none') : 'n/a'}</span>,
           },
-          { key: 'on', header: 'State', cell: (d) => <StatusChip tone={d.enabled ? 'good' : 'muted'}>{d.enabled ? 'enabled' : 'disabled'}</StatusChip> },
+          { key: 'on', header: 'State', cell: (d) => <StatusChip tone={d.enabled ? 'good' : 'muted'}>{d.enabled ? 'enabled' : d.approval?.approved ? 'disabled' : 'draft'}</StatusChip> },
+          {
+            // Enabling (and re-enabling) is a second person's approval; disabling is immediate.
+            key: 'approval',
+            header: 'Approval',
+            cell: (d) => (
+              <LifecycleActions kind="notification_destination" id={d.id} name={d.name} state={d.enabled ? 'live' : d.approval?.approved ? 'stopped' : 'draft'} approval={d.approval} activateLabel={d.approval?.approved ? 'Re-enable' : 'Enable'} canDelete={false} />
+            ),
+          },
           { key: 'test', header: 'Test', cell: (d) => <TestDestinationButton id={d.id} name={d.name} /> },
         ]}
       />

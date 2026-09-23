@@ -8,6 +8,7 @@ import { InMemorySecretRows, LocalSecretStore, parseMasterKey } from '@ocso/secr
 import { McpConnectionService, McpOAuthCallbackError, SecretCredentialPort, type ActorContext, type ConnectionView } from '../src/index.js';
 import { startTestAuthServer, type TestAuthServer } from '../../mcp/test/helpers/auth-server.js';
 import { startDemo, type DemoServer } from '../../mcp/test/helpers/demo-server.js';
+import { platformApprover, type PlatformApprover } from './support/platform-approvals.js';
 
 const PUBLIC_URL = 'http://localhost:3000';
 const REDIRECT = `${PUBLIC_URL}/oauth/mcp/callback`;
@@ -22,6 +23,7 @@ let rs: DemoServer;
 let secrets: LocalSecretStore;
 let svc: McpConnectionService;
 let conn: ConnectionView;
+let approver: PlatformApprover;
 
 const q = async <T = Record<string, any>>(text: string, params: unknown[] = []) => (await t.pool.query(text, params)).rows as T[];
 
@@ -53,6 +55,7 @@ beforeAll(async () => {
   await t.pool.query(`UPDATE deployment_settings SET egress_allowed_internal_hosts = ARRAY['127.0.0.1']`);
   secrets = new LocalSecretStore(new InMemorySecretRows(), parseMasterKey('k1', randomBytes(32).toString('base64')));
   svc = new McpConnectionService({ db: t.db, secrets, publicUrl: PUBLIC_URL });
+  approver = await platformApprover(t.db, { secrets });
   authServer = await startTestAuthServer({ expectedResource: () => rs.url });
   rs = await startDemo((mcpUrl) => ({
     mode: 'oauth',
@@ -141,7 +144,10 @@ describe('MCP OAuth 2.1 connection flow', () => {
   it('refreshes expired access tokens during health checks and persists the rotated grant', async () => {
     const [tool] = await svc.listTools(actor(admin), conn.id);
     await svc.classifyTools(actor(admin), conn.id, { tools: [{ toolId: tool!.id, riskClass: 'READ', approved: true }] });
-    expect((await svc.approve(actor(admin), conn.id, { allowedAgentIds: [] })).status).toBe('ACTIVE');
+    // Going live is an approval, finished by the worker (the deferred probe re-contacts the server).
+    await svc.approve(actor(admin), conn.id, { allowedAgentIds: [] });
+    expect(await approver.finish((await approver.approve(actor(admin), 'mcp_connection', conn.id, 'ACTIVATE')).id)).toBe('ACTIVATED');
+    expect((await svc.get(actor(admin), conn.id)).status).toBe('ACTIVE');
 
     const ref = conn.auth.tokenRef!;
     const before = parseOAuthTokenState(await secrets.resolve(ref));

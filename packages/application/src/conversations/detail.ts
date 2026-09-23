@@ -1,5 +1,5 @@
 import { and, desc, eq, isNull } from 'drizzle-orm';
-import { displayId, sessionWindowState, type SessionWindowState } from '@ocso/domain';
+import { RouterRuleSchema, describeRule, displayId, sessionWindowState, type SessionWindowState } from '@ocso/domain';
 import {
   channels,
   conversationRouting,
@@ -11,6 +11,7 @@ import {
   modelProfiles,
   promptVersions,
   queues,
+  routerVersions,
   routers,
   users,
   virtualAgents,
@@ -78,6 +79,16 @@ export interface ConversationRoutingView {
   queueId: string | null;
   awaitingSince: string | null;
   decidedAt: string | null;
+  /** The version that decided, and the deciding rule in words (`language=ta`) — the routing card. */
+  routerVersion: number | null;
+  rule: string | null;
+}
+
+/** The rule at `index` of a stored version definition, in words; null when absent or unreadable. */
+function ruleText(definition: unknown, index: number | null): string | null {
+  if (index === null || !definition || typeof definition !== 'object') return null;
+  const parsed = RouterRuleSchema.safeParse(((definition as { rules?: unknown[] }).rules ?? [])[index]);
+  return parsed.success ? describeRule(parsed.data) : null;
 }
 
 /** Context rail data for the workspace (design/01 right rail). Caller checks access. */
@@ -105,7 +116,12 @@ export async function loadConversationDetail(
     agent?.activePromptVersionId ? db.select({ id: promptVersions.id, version: promptVersions.version }).from(promptVersions).where(eq(promptVersions.id, agent.activePromptVersionId)) : Promise.resolve([]),
     agent?.modelProfileId ? db.select({ id: modelProfiles.id, name: modelProfiles.name }).from(modelProfiles).where(eq(modelProfiles.id, agent.modelProfileId)) : Promise.resolve([]),
     c.resolvedBy ? db.select({ id: users.id, name: users.name }).from(users).where(eq(users.id, c.resolvedBy)) : Promise.resolve([]),
-    db.select({ r: conversationRouting, routerName: routers.name }).from(conversationRouting).leftJoin(routers, eq(routers.id, conversationRouting.routerId)).where(eq(conversationRouting.conversationId, c.id)),
+    db
+      .select({ r: conversationRouting, routerName: routers.name, version: routerVersions.version, definition: routerVersions.definition })
+      .from(conversationRouting)
+      .leftJoin(routers, eq(routers.id, conversationRouting.routerId))
+      .leftJoin(routerVersions, eq(routerVersions.id, conversationRouting.routerVersionId))
+      .where(eq(conversationRouting.conversationId, c.id)),
   ]);
   const hours = channel && options.windowHours ? options.windowHours(channel) : null;
   const sessionWindow = channel && hours !== null ? sessionWindowState(hours, await lastCustomerMessageAt(db, customer.id, channel.id), options.now ?? new Date()) : null;
@@ -165,6 +181,8 @@ export async function loadConversationDetail(
           queueId: routing.r.queueId,
           awaitingSince: routing.r.awaitingSince?.toISOString() ?? null,
           decidedAt: routing.r.decidedAt?.toISOString() ?? null,
+          routerVersion: routing.version ?? null,
+          rule: routing.r.outcome === 'RULE' ? ruleText(routing.definition, routing.r.ruleIndex) : null,
         }
       : null,
   };

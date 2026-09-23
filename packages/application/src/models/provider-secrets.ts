@@ -34,9 +34,9 @@ export class ProviderCredentialStore {
   }
 
   /**
-   * Apply a credential patch: existing refs are rotated in place (the ref and
-   * its metadata survive, version increments), new names get new secrets,
-   * `null` releases a credential.
+   * Apply a credential patch: every value is stored as a NEW secret (never a
+   * rotation in place, which a failed or refused commit could not undo — the
+   * replaced ref is released after the commit instead); `null` releases a credential.
    */
   async apply(
     providerName: string,
@@ -55,18 +55,15 @@ export class ProviderCredentialStore {
           }
           continue;
         }
-        if (existing) {
-          await this.secrets.rotate(existing, value);
-        } else {
-          const meta = await this.secrets.put({
-            name: `${providerName} ${key}`,
-            kind: secretKindFor(key),
-            value,
-            usedBy: `provider:${providerName}`,
-          });
-          change.refs[key] = meta.ref;
-          change.created.push(meta.ref);
-        }
+        const meta = await this.secrets.put({
+          name: `${providerName} ${key}`,
+          kind: secretKindFor(key),
+          value,
+          usedBy: `provider:${providerName}`,
+        });
+        change.refs[key] = meta.ref;
+        change.created.push(meta.ref);
+        if (existing) change.released.push(existing);
         change.changedKeys.push(key);
       }
     } catch (error) {

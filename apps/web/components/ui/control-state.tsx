@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import type { ControlState as DomainControlState } from '@ocso/domain';
 
 /** Visual control states (.cstate): who is driving the conversation. */
-export type ControlStateKind = 'ai' | 'wait' | 'human' | 'returning' | 'resolved';
+export type ControlStateKind = 'ai' | 'wait' | 'human' | 'returning' | 'resolved' | 'routing';
 
 export const CONTROL_STATE_LABELS: Readonly<Record<ControlStateKind, string>> = {
   ai: 'AI active',
@@ -10,15 +10,18 @@ export const CONTROL_STATE_LABELS: Readonly<Record<ControlStateKind, string>> = 
   human: 'Human active',
   returning: 'Returning to AI',
   resolved: 'Resolved',
+  // A router is asking the customer which queue they need (PM/research/11 §5).
+  routing: 'Routing',
 };
 
 /** Domain control state (docs/03 §3) → chip. Escalation requested shows as waiting. */
 export function controlStateKind(state: DomainControlState): ControlStateKind {
   switch (state) {
     case 'AI_ACTIVE':
-    // A router is asking the customer: automation drives (PM/research/11 §5).
-    case 'ROUTING':
       return 'ai';
+    // A router is asking the customer: automation drives, no agent yet (PM/research/11 §5).
+    case 'ROUTING':
+      return 'routing';
     case 'ESCALATION_REQUESTED':
     case 'WAITING_FOR_HUMAN':
       return 'wait';

@@ -4,11 +4,13 @@ import { useRouter } from 'next/navigation';
 import { useMemo, useState, useTransition } from 'react';
 import { AlertBanner } from '@/components/ui/alert-banner';
 import { Modal } from '@/components/ui/modal';
-import { createAlertRuleAction, deleteAlertRuleAction, updateAlertRuleAction, type RuleFormInput } from '@/lib/actions/alerts';
+import { ApprovableButton } from '@/components/approvals/approvable-button';
+import { useApprovalRequest } from '@/components/approvals/use-approval-request';
+import { createAlertRuleAction, deleteAlertRuleAction, updateAlertRuleAction, type RuleFormInput } from '@/lib/actions/alert-rules';
 import type { AlertCondition, AlertKind, AlertRule, AlertSeverity, AudienceRole } from '@/lib/api/alerts';
 import { ROLE_LABEL } from './alerts-meta';
-import { ConfirmButton } from './confirm-button';
 import { CheckList, ParamInputs } from './rule-fields';
+import { ruleObjectKind } from './rule-enabled-toggle';
 import { buildParams, initialParamText, paramFields } from './rule-params';
 
 /** Roles that can read each kind (packages/auth): the API rejects an audience that could not see the alert. */
@@ -23,7 +25,10 @@ export interface DestinationOption {
   enabled: boolean;
 }
 
-/** Create or edit an alert rule (POST / PATCH /v1/alert-rules). Params follow the chosen condition's schema. */
+/**
+ * Create or edit an alert rule (POST / PATCH /v1/alert-rules). Params follow the chosen condition's schema.
+ * Maker–checker (PM/research/11 §4): a new rule is created off; changing an approved rule and deleting go to a checker.
+ */
 export function RuleDialog({
   rule,
   kinds,
@@ -55,9 +60,10 @@ export function RuleDialog({
   const [audience, setAudience] = useState<string[]>(rule?.audienceRoles ?? DEFAULT_AUDIENCE[kind]);
   const [destinationIds, setDestinationIds] = useState<string[]>(rule?.destinationIds ?? []);
   const [autoResolve, setAutoResolve] = useState(rule?.autoResolve ?? true);
-  const [enabled, setEnabled] = useState(rule?.enabled ?? true);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const approval = useApprovalRequest();
+  const busy = pending || approval.pending;
 
   function chooseKind(next: AlertKind) {
     setKind(next);
@@ -92,14 +98,20 @@ export function RuleDialog({
       destinationIds,
       dedupeWindowSeconds: Number(dedupe),
       autoResolve,
-      enabled,
     };
     if (!Number.isInteger(input.windowSeconds) || !Number.isInteger(input.dedupeWindowSeconds)) {
       setError('Window and dedupe must be whole numbers of seconds.');
       return;
     }
+    if (rule) {
+      // A draft saves directly; an approved rule's change continues into the submit-for-approval modal.
+      approval.run({ objectKind: ruleObjectKind(rule.kind), objectId: rule.id, title: `Change alert rule "${rule.name}"` }, (choice) => updateAlertRuleAction(rule.id, input, choice), {
+        onApplied: close,
+      });
+      return;
+    }
     start(async () => {
-      const r = rule ? await updateAlertRuleAction(rule.id, input) : await createAlertRuleAction(input);
+      const r = await createAlertRuleAction(input);
       if (r.ok) close();
       else setError(r.message);
     });
@@ -115,24 +127,44 @@ export function RuleDialog({
       footer={
         <>
           {rule ? (
-            <ConfirmButton label="Delete rule" confirmLabel="Delete" run={() => deleteAlertRuleAction(rule.id)} onDone={close}>
-              Its open alerts are resolved with the note “alert rule deleted”.
-            </ConfirmButton>
+            <ApprovableButton
+              always
+              label="Delete rule"
+              buttonClass="btn danger"
+              tone="danger"
+              title={`Delete alert rule "${rule.name}"`}
+              confirmLabel="Delete"
+              disabled={Boolean(rule.approval.pending)}
+              target={{ objectKind: ruleObjectKind(rule.kind), objectId: rule.id, title: `Delete alert rule "${rule.name}"` }}
+              write={(choice) => deleteAlertRuleAction(rule.id, choice)}
+            >
+              Once a checker approves, its open alerts are resolved with the note “alert rule deleted”.
+            </ApprovableButton>
           ) : null}
           <span className="sp" />
           <button type="button" className="btn" onClick={close}>
-            Cancel
+            {approval.outcome ? 'Close' : 'Cancel'}
           </button>
-          <button type="submit" form="rule-form" className="btn accent" disabled={pending}>
-            {pending ? 'Saving…' : rule ? 'Save rule' : 'Create rule'}
+          <button type="submit" form="rule-form" className="btn accent" disabled={busy || approval.outcome !== null || Boolean(rule?.approval.pending)}>
+            {busy ? 'Saving…' : rule ? 'Save rule' : 'Create rule'}
           </button>
         </>
       }
     >
       <div aria-live="polite">
-        {error ? (
+        {error || approval.error ? (
           <AlertBanner tone="error" style={{ margin: 0 }}>
-            {error}
+            {error ?? approval.error}
+          </AlertBanner>
+        ) : null}
+        {approval.notice ? (
+          <AlertBanner tone="info" style={{ margin: 0 }}>
+            {approval.notice}
+          </AlertBanner>
+        ) : null}
+        {rule?.approval.pending ? (
+          <AlertBanner tone="warn" style={{ margin: 0 }}>
+            A change to this rule is waiting for approval: edit or withdraw it from Approvals first.
           </AlertBanner>
         ) : null}
       </div>
@@ -207,11 +239,15 @@ export function RuleDialog({
           <input type="checkbox" checked={autoResolve} onChange={(e) => setAutoResolve(e.target.checked)} />
           Resolve automatically when the condition clears
         </label>
-        <label className="toggle-row">
-          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
-          Enabled
-        </label>
+        <p className="mono-sm" style={{ margin: 0 }}>
+          {!rule
+            ? 'The rule is created off. Turn it on from the list: a checker approves it.'
+            : rule.approval.approved
+              ? 'Approved rule: saving sends the change to a checker; nothing changes until they approve.'
+              : 'A draft: saved directly; it stays off until a checker approves turning it on.'}
+        </p>
       </form>
+      {approval.modal}
     </Modal>
   );
 }

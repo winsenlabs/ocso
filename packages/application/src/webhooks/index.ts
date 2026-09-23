@@ -3,3 +3,4 @@ export * from './envelope.js';
 export * from './subscriptions.js';
 export * from './relay.js';
 export * from './delivery.js';
+export * from './webhook-approval.js';

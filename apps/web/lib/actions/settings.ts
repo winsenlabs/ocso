@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { describeApiError } from '../api/errors';
 import { updateDeploymentSettings } from '../api/settings';
 import { getSession } from '../session';
+import { approvalFromForm, outcomeMessage } from './form-approval';
 import { field, fieldErrorsFrom, type FormState } from './form-state';
 
 const DeploymentForm = z.object({
@@ -29,9 +30,13 @@ export async function updateDeploymentAction(_prev: FormState, formData: FormDat
   const values = Object.fromEntries(TEXT_FIELDS.map((k) => [k, field(formData, k)])) as Record<(typeof TEXT_FIELDS)[number], string>;
   const parsed = DeploymentForm.safeParse(values);
   if (!parsed.success) return { status: 'error', fieldErrors: fieldErrorsFrom(parsed.error.issues), values };
+  const approval = approvalFromForm(formData);
+  if (!approval.ok) return { ...approval.state, values };
 
+  let res: unknown;
   try {
-    await updateDeploymentSettings({
+    res = await updateDeploymentSettings({
+      approval: approval.approval,
       orgName: parsed.data.orgName,
       deploymentLabel: parsed.data.deploymentLabel,
       regionLabel: parsed.data.regionLabel || null,
@@ -45,5 +50,5 @@ export async function updateDeploymentAction(_prev: FormState, formData: FormDat
     return { status: 'error', message: describeApiError(err), values };
   }
   refresh();
-  return { status: 'success', message: 'Deployment settings saved · change recorded in the audit log' };
+  return outcomeMessage(res, 'Deployment settings saved · change recorded in the audit log');
 }

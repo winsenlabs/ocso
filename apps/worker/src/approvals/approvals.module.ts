@@ -11,6 +11,8 @@ import {
   voidOrphanProposals,
   type ApprovalNotifyJob,
   type ApprovalRegistry,
+  type BusinessApprovalDeps,
+  type PlatformApprovalDeps,
 } from '@ocso/application';
 import type { WorkerEnv } from '@ocso/config';
 import type { Db } from '@ocso/db';
@@ -18,7 +20,10 @@ import { EmailSendError, type EmailSender } from '@ocso/email';
 import type { Logger } from '@ocso/observability';
 import { TOPICS, backoffSeconds, type HandlerResult, type QueueAdapter, type QueueSubscription } from '@ocso/queue';
 import { DB, EMAIL_SENDER, ENV, LOGGER, QUEUE } from '../infrastructure/tokens.js';
+import { RuntimeModule } from '../runtime/runtime.module.js';
 import type { ScheduledTask } from '../scheduler/scheduler.service.js';
+import { BUSINESS_APPROVAL_DEPS, businessApprovalDepsProvider } from './business-deps.js';
+import { PLATFORM_APPROVAL_DEPS, platformApprovalDepsProvider } from './platform-deps.js';
 
 /** The approval registry (`ApprovalRegistry`), built by the same composition point as the API's. */
 export const APPROVAL_REGISTRY = Symbol('APPROVAL_REGISTRY');
@@ -81,8 +86,16 @@ export class ApprovalsWorker {
 }
 
 @Module({
+  // ChannelRuntime: message-template approvals finish at the channel's provider (business-deps.ts).
+  imports: [RuntimeModule],
   providers: [
-    { provide: APPROVAL_REGISTRY, useFactory: () => createApprovalRegistry() },
+    businessApprovalDepsProvider,
+    platformApprovalDepsProvider,
+    {
+      provide: APPROVAL_REGISTRY,
+      inject: [BUSINESS_APPROVAL_DEPS, PLATFORM_APPROVAL_DEPS],
+      useFactory: (business: BusinessApprovalDeps, platform: PlatformApprovalDeps) => createApprovalRegistry({ business, platform }),
+    },
     {
       provide: ApprovalDecisionService,
       inject: [DB, APPROVAL_REGISTRY, QUEUE, LOGGER],
@@ -95,6 +108,6 @@ export class ApprovalsWorker {
     },
     ApprovalsWorker,
   ],
-  exports: [ApprovalsWorker],
+  exports: [ApprovalsWorker, APPROVAL_REGISTRY],
 })
 export class WorkerApprovalsModule {}
