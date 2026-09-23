@@ -129,7 +129,7 @@ still accepts free text.
 - **Snapshots.** The latest validated snapshot per source lives in `model_catalog_snapshots`. The
   vendored snapshot in `@ocso/model-providers/catalog/` is the offline fallback.
 - **Refresh.** The worker leader checks hourly and downloads when a source is 24 h old (1 h after a
-  failure). Tech Admins can run `POST /v1/model-catalog/refresh`. Downloads go through the SSRF guard
+  failure). Tech admins can run `POST /v1/model-catalog/refresh`. Downloads go through the SSRF guard
   plus a host allowlist; `GET /v1/model-catalog` shows the status.
 - **`model_pricing` stays the costing source of truth.** It has `origin` (`catalog` | `manual`),
   `catalog_source`, `catalog_provider`, `catalog_model_id`, `catalog_fetched_at` and `tiers`.

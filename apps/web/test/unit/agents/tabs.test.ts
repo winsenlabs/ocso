@@ -4,19 +4,19 @@ import { AgentSchema, PromptSchema } from '../../../components/agents/data/agent
 import { agentPresence, formatDay, shortHash } from '../../../components/agents/lib/labels';
 import { agentHref, analyticsDays, permittedAgentTabs, resolveAgentTab } from '../../../components/agents/lib/tabs';
 
-const tabsFor = (role: 'CS_LEAD' | 'CS_EXEC' | 'PLATFORM_TECH_ADMIN') => permittedAgentTabs(new Set(permissionsForRole(role))).map((t) => t.key);
+const tabsFor = (role: 'HEAD' | 'SERVICE' | 'TECH') => permittedAgentTabs(new Set(permissionsForRole(role))).map((t) => t.key);
 
 describe('agent tabs by role', () => {
-  it('gives the CS Lead every tab', () => {
-    expect(tabsFor('CS_LEAD')).toEqual(['overview', 'prompt', 'tools', 'channels', 'routing', 'escalation', 'analytics', 'versions', 'quality', 'settings']);
+  it('gives the Lead every tab', () => {
+    expect(tabsFor('HEAD')).toEqual(['overview', 'prompt', 'tools', 'channels', 'routing', 'escalation', 'analytics', 'versions', 'quality', 'settings']);
   });
 
-  it('gives the CS Exec read-only tabs without business analytics, channels or quality', () => {
-    expect(tabsFor('CS_EXEC')).toEqual(['overview', 'prompt', 'tools', 'routing', 'escalation', 'versions', 'settings']);
+  it('gives the Service member read-only tabs without business analytics, channels or quality', () => {
+    expect(tabsFor('SERVICE')).toEqual(['overview', 'prompt', 'tools', 'routing', 'escalation', 'versions', 'settings']);
   });
 
-  it('gives the Tech Admin technical tabs, not analytics or quality', () => {
-    const tabs = tabsFor('PLATFORM_TECH_ADMIN');
+  it('gives the Tech admin technical tabs, not analytics or quality', () => {
+    const tabs = tabsFor('TECH');
     expect(tabs).toContain('channels');
     expect(tabs).not.toContain('analytics');
     expect(tabs).not.toContain('quality');

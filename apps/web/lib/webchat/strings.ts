@@ -36,6 +36,7 @@ const en = {
   'delivery.failed': 'Not sent',
   'delivery.retry': 'Retry',
   'delivery.discard': 'Remove',
+  'choices.label': 'Options',
   'composer.label': 'Message',
   'composer.placeholder': 'Write a message…',
   'composer.placeholderHuman': 'Write to {name}…',

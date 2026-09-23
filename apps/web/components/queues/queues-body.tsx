@@ -4,6 +4,7 @@ import { NotPermitted } from '@/components/shell/placeholder-page';
 import { PageHead } from '@/components/ui/page-head';
 import { SecHead } from '@/components/ui/sec-head';
 import { Tile, Tiles } from '@/components/ui/tile';
+import { listAgents, optional } from '@/lib/api/agents';
 import { loadInbox } from '@/lib/api/conversations';
 import { listQueues, listSlaPolicies, type Queue } from '@/lib/api/queues';
 import { listTeams } from '@/lib/api/teams';
@@ -26,6 +27,12 @@ function rowView(q: Queue): QueueRowView {
     preferAccountOwner: q.preferAccountOwner,
     slaPolicyId: q.slaPolicyId,
     teamIds: q.teamIds,
+    agentId: q.agentId,
+    attributes: q.attributes,
+    businessHours: q.businessHours,
+    transferTargetIds: q.transferTargetIds,
+    approved: q.approval.approved,
+    pending: q.approval.pending,
     waiting: q.waiting,
     oldestWaitingSince: q.oldestWaitingSince,
     onShift: q.onShift,
@@ -69,7 +76,7 @@ export async function QueuesBody() {
       </>
     );
   }
-  const [queues, policies, teams] = await Promise.all([listQueues(), listSlaPolicies(), listTeams()]);
+  const [queues, policies, teams, agents] = await Promise.all([listQueues(), listSlaPolicies(), listTeams(), canManage ? optional(listAgents()) : Promise.resolve(null)]);
   const fractions = Object.fromEntries(queues.flatMap((q) => {
     const p = policies.find((x) => x.id === q.slaPolicyId);
     return p ? [[q.id, p.atRiskFraction] as const] : [];
@@ -102,6 +109,7 @@ export async function QueuesBody() {
           queues={queues.map(rowView)}
           teams={teams.map((t) => ({ value: t.id, label: t.name }))}
           policies={policies.map((p) => ({ value: p.id, label: p.name }))}
+          agents={(agents ?? []).map((a) => ({ value: a.id, label: `${a.name}${a.status === 'LIVE' ? '' : ` (${a.status.toLowerCase()})`}` }))}
           canManage={canManage}
         />
       </div>

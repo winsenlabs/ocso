@@ -1,7 +1,11 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useState } from 'react';
+import { ApprovableButton } from '@/components/approvals/approvable-button';
 import { EmptyState } from '@/components/ui/empty-state';
+import { StatusChip } from '@/components/ui/status-chip';
+import { submitSlaPolicyAction } from '@/lib/actions/queues';
 import { SecHead } from '@/components/ui/sec-head';
 import { formatDuration } from '@/lib/format';
 import { CONVERSATION_TYPES, PRIORITY_KEYS } from './forms';
@@ -9,6 +13,37 @@ import { SlaFormModal, type SlaDraft } from './sla-form-modal';
 
 export interface SlaCardView extends SlaDraft {
   queues: string[];
+  pending: { id: string; action: string; checkerName: string | null } | null;
+}
+
+/** Draft · pending · approved (PM/research/11 §4): queues may be approved only with an approved policy. */
+function ApprovalState({ p, canManage }: { p: SlaCardView; canManage: boolean }) {
+  if (p.pending) {
+    return (
+      <Link href={`/approvals?box=sent&approval=${encodeURIComponent(p.pending.id)}`}>
+        <StatusChip tone="warn">{`pending · ${p.pending.checkerName ?? 'checker'}`}</StatusChip>
+      </Link>
+    );
+  }
+  if (p.approved) return <StatusChip tone="good">approved</StatusChip>;
+  return (
+    <>
+      <StatusChip tone="muted">draft</StatusChip>
+      {canManage ? (
+        <ApprovableButton
+          label="Submit"
+          ariaLabel={`Submit ${p.name} for approval`}
+          title={`Approve SLA policy ${p.name}`}
+          confirmLabel="Submit for approval"
+          target={{ objectKind: 'sla_policy', objectId: p.id, title: `Approve SLA policy ${p.name}` }}
+          write={(approval) => submitSlaPolicyAction(p.id, approval)}
+          always
+        >
+          Queues can be approved with {p.name} once a checker approves it as it is now.
+        </ApprovableButton>
+      ) : null}
+    </>
+  );
 }
 
 function PolicyCard({ p, onEdit }: { p: SlaCardView; onEdit: (() => void) | null }) {
@@ -18,6 +53,7 @@ function PolicyCard({ p, onEdit }: { p: SlaCardView; onEdit: (() => void) | null
       <div className="t">
         <h3>{p.name}</h3>
         <span className="mono-sm">at risk after {Math.round(p.atRiskFraction * 100)}%</span>
+        <ApprovalState p={p} canManage={onEdit !== null} />
         {onEdit ? (
           <button type="button" className="btn tiny" style={{ marginLeft: 'auto' }} onClick={onEdit} aria-label={`Edit ${p.name}`}>
             Edit

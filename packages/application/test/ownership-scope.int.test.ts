@@ -85,7 +85,7 @@ describe('analytics', () => {
     // Cards (served by team Cards) and Loans (Maya routes there).
     expect(queues.queues.map((q) => q.name).sort()).toEqual(['Cards & EMI', 'Loans desk']);
     const home = await new HomeService(f.t.db).home(f.p.leadB);
-    if (home.role !== 'CS_LEAD') throw new Error('expected the lead home');
+    if (home.role !== 'HEAD') throw new Error('expected the lead home');
     expect(home.lead.agents.map((a) => a.name)).toEqual(['Arjun', 'Sana']);
     expect(home.lead.tiles.conversations).toBe(1);
     expect(home.lead.queues.map((q) => q.name)).toEqual(['Loans desk']);
@@ -121,9 +121,9 @@ describe('alerts', () => {
   const queue = new MemoryQueue();
 
   beforeAll(async () => {
-    const base = { kind: 'BUSINESS' as const, severity: 'WARNING' as const, body: 'b', source: 's', audienceRoles: ['CS_LEAD', 'CS_EXEC'] };
+    const base = { kind: 'BUSINESS' as const, severity: 'WARNING' as const, body: 'b', source: 's', audienceRoles: ['HEAD', 'SERVICE'] };
     // A platform-wide rule (agentId null) opens alerts that each carry the agent they are about.
-    const [rule] = await f.t.db.insert(alertRules).values({ id: uuidv7(), name: 'Escalation rate', kind: 'BUSINESS', condition: 'escalation_rate_above', audienceRoles: ['CS_LEAD'] }).returning();
+    const [rule] = await f.t.db.insert(alertRules).values({ id: uuidv7(), name: 'Escalation rate', kind: 'BUSINESS', condition: 'escalation_rate_above', audienceRoles: ['HEAD'] }).returning();
     await f.t.db.insert(alerts).values([
       { ...base, id: ids.maya, ruleId: rule!.id, fingerprint: 'f-maya', title: 'Escalation rate · Maya', context: { agentId: f.agent.maya } },
       { ...base, id: ids.arjun, ruleId: rule!.id, fingerprint: 'f-arjun', title: 'Escalation rate · Arjun', context: { agentId: f.agent.arjun } },
@@ -147,12 +147,12 @@ describe('alerts', () => {
 
   it('keeps the platform-wide rule visible to every lead, agent rules only to their agents’ leads', async () => {
     const rules = new AlertRuleService(f.t.db, queue, routing);
-    const mayaRule = await rules.create(actor(f.p.leadA), AlertRuleInput.parse({ name: 'Maya CSAT', kind: 'BUSINESS', condition: 'csat_below', agentId: f.agent.maya, audienceRoles: ['CS_LEAD'] }));
+    const mayaRule = await rules.create(actor(f.p.leadA), AlertRuleInput.parse({ name: 'Maya CSAT', kind: 'BUSINESS', condition: 'csat_below', agentId: f.agent.maya, audienceRoles: ['HEAD'] }));
     const listed = async (who: 'leadA' | 'leadB') => (await rules.list(actor(f.p[who]), { kind: 'BUSINESS' })).map((r) => r.name).sort();
     expect(await listed('leadA')).toEqual(['Escalation rate', 'Maya CSAT']);
     expect(await listed('leadB')).toEqual(['Escalation rate']);
     await expect(rules.get(actor(f.p.leadB), mayaRule.id)).rejects.toMatchObject(notFound);
     await expect(rules.update(actor(f.p.leadB), mayaRule.id, { enabled: false })).rejects.toMatchObject(notFound);
-    await expect(rules.create(actor(f.p.leadB), AlertRuleInput.parse({ name: 'x', kind: 'BUSINESS', condition: 'csat_below', agentId: f.agent.maya, audienceRoles: ['CS_LEAD'] }))).rejects.toMatchObject({ code: 'unknown_agent' });
+    await expect(rules.create(actor(f.p.leadB), AlertRuleInput.parse({ name: 'x', kind: 'BUSINESS', condition: 'csat_below', agentId: f.agent.maya, audienceRoles: ['HEAD'] }))).rejects.toMatchObject({ code: 'unknown_agent' });
   });
 });

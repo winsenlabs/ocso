@@ -30,15 +30,15 @@ export async function HomeContent() {
     );
   }
   switch (home.role) {
-    case 'PLATFORM_TECH_ADMIN':
+    case 'TECH':
       return <AdminHome session={session} data={home.admin} />;
-    case 'CS_LEAD': {
+    case 'HEAD': {
       const alerts = hasPermission(session, Permission.ALERTS_BUSINESS_READ)
         ? await listAlerts({ status: 'UNRESOLVED', kind: 'BUSINESS', limit: 3 }).then((p) => p.items, () => null)
         : null;
       return <LeadHome session={session} data={home.lead} alerts={alerts} />;
     }
-    case 'CS_EXEC':
+    case 'SERVICE':
       return <ExecHome session={session} data={home.exec} />;
   }
 }

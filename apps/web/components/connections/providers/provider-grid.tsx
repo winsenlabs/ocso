@@ -6,6 +6,7 @@ import type { Provider, ProviderKindView } from '@/lib/api/models';
 import { formatAge, formatCompact, formatLatency, formatPercent } from '@/lib/format';
 import { cachingSummary, providerMark, providerStatus, providerTone } from '../models/meta';
 import { connectionsHref } from '../url';
+import { LifecycleActions } from '../lifecycle-actions';
 import { ProviderCardFooter } from './provider-card-footer';
 
 const KV = 'minmax(72px,84px) minmax(0,1fr)';
@@ -64,6 +65,18 @@ function Card({ provider, kind, canManage }: { provider: Provider; kind: Provide
           canManage={canManage}
           editHref={connectionsHref({ tab: 'providers', dialog: 'provider-edit', id: provider.id })}
           chips={chips}
+          lifecycle={
+            // A new provider is a disabled draft: enabling (and re-enabling) is a second person's approval.
+            <LifecycleActions
+              kind="model_provider"
+              id={provider.id}
+              name={provider.name}
+              state={provider.enabled ? 'live' : provider.approval?.approved ? 'stopped' : 'draft'}
+              approval={provider.approval}
+              activateLabel={provider.approval?.approved ? 'Re-enable' : 'Enable'}
+              canDelete={false}
+            />
+          }
         />
       }
     >

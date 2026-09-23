@@ -6,6 +6,7 @@ import {
   renderConversationFrame,
   renderCustomerContext,
   renderHandover,
+  renderRouting,
   renderSummary,
   wrap,
 } from './render-context.js';
@@ -47,6 +48,7 @@ function conversationBlocks(input: CompileInput): SystemBlock[] {
   const rendered: Array<[string, string | null]> = [
     ['conversation', renderConversationFrame(input)],
     ['channel', renderChannel(input)],
+    ['routing', renderRouting(input)],
     ['customer_context', renderCustomerContext(input)],
     ['conversation_summary', renderSummary(input)],
     ['handover', renderHandover(input)],

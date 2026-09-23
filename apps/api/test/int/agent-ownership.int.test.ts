@@ -9,7 +9,7 @@ import { createTeam, setTeams } from './teams.js';
 
 /**
  * Team-scoped agent ownership over HTTP (ADR-026): lead B gets 404 on every
- * route of lead A's agent, the owners route is Tech Admin governance, and the
+ * route of lead A's agent, the owners route is Tech admin governance, and the
  * realtime filter uses the same scopes as the REST reads.
  */
 
@@ -23,9 +23,9 @@ beforeAll(async () => {
   h = await startApi();
   tok.admin = await completeSetup(h);
   const mk = async (email: string, role: string) => (await h.http().post('/v1/users').set(auth(tok.admin)).send({ email, name: email.split('@')[0], role, password: PASSWORD }).expect(201)).body.id as string;
-  ids.leadA = await mk('lead.a@ocso.test', 'CS_LEAD');
-  ids.leadB = await mk('lead.b@ocso.test', 'CS_LEAD');
-  ids.execB = await mk('exec.b@ocso.test', 'CS_EXEC');
+  ids.leadA = await mk('lead.a@ocso.test', 'HEAD');
+  ids.leadB = await mk('lead.b@ocso.test', 'HEAD');
+  ids.execB = await mk('exec.b@ocso.test', 'SERVICE');
   for (const k of ['leadA', 'leadB', 'execB'] as const) tok[k] = await h.loginAs(`${k.replace('lead', 'lead.').replace('exec', 'exec.').toLowerCase()}@ocso.test`, PASSWORD);
   ids.cards = await createTeam(h, tok.leadA, 'Cards');
   ids.loans = await createTeam(h, tok.leadB, 'Loans');
@@ -44,7 +44,7 @@ beforeAll(async () => {
     { id: ids.c2, customerId: customer, agentId: ids.maya!, type: 'SUPPORT', controlState: 'WAITING_FOR_HUMAN', queueId: ids.loansQueue! },
   ]);
   ids.alert = uuidv7();
-  await h.db.db.insert(alerts).values({ id: ids.alert, fingerprint: 'f-maya', kind: 'BUSINESS', severity: 'WARNING', title: 'Escalation rate · Maya', body: 'b', source: 's', audienceRoles: ['CS_LEAD'], context: { agentId: ids.maya! } });
+  await h.db.db.insert(alerts).values({ id: ids.alert, fingerprint: 'f-maya', kind: 'BUSINESS', severity: 'WARNING', title: 'Escalation rate · Maya', body: 'b', source: 's', audienceRoles: ['HEAD'], context: { agentId: ids.maya! } });
 });
 afterAll(async () => {
   await h?.close();
@@ -100,7 +100,7 @@ describe('agents API with team ownership', () => {
     expect(a.body.items.map((i: { id: string }) => i.id).sort()).toEqual([ids.c1, ids.c2].sort());
   });
 
-  it('lets only the Tech Admin reassign across teams, audited', async () => {
+  it('lets only the Tech admin reassign across teams, audited', async () => {
     await h.http().put(`/v1/agents/${ids.maya}/owners`).set(auth(tok.execB)).send({ teamIds: [ids.loans] }).expect(403);
     await h.http().put(`/v1/agents/${ids.maya}/owners`).set(auth(tok.leadA)).send({ teamIds: [ids.loans] }).expect(400);
     await h.http().put(`/v1/agents/${ids.maya}/owners`).set(auth(tok.admin)).send({ teamIds: [] }).expect(400);
@@ -109,7 +109,7 @@ describe('agents API with team ownership', () => {
     await h.http().get(`/v1/agents/${ids.maya}`).set(auth(tok.leadB)).expect(200);
     await h.http().patch(`/v1/agents/${ids.maya}`).set(auth(tok.admin)).send({ purpose: 'x' }).expect(403);
     const audit = await h.http().get(`/v1/audit?targetId=${ids.maya}`).set(auth(tok.admin)).expect(200);
-    expect(JSON.stringify(audit.body)).toContain('Owning teams of Maya: Cards → Cards, Loans (reassigned by Tech Admin)');
+    expect(JSON.stringify(audit.body)).toContain('Owning teams of Maya: Cards → Cards, Loans (reassigned by Tech admin)');
     await h.http().put(`/v1/agents/${ids.maya}/owners`).set(auth(tok.admin)).send({ teamIds: [ids.cards] }).expect(200);
   });
 });
@@ -119,8 +119,8 @@ describe('realtime filter', () => {
 
   it('delivers conversation, alert and config events only within the lead’s scope', async () => {
     const settings = new SettingsService(h.db.db);
-    const leadB = new RealtimeAccess(h.db.db, settings, principal(ids.leadB!, 'CS_LEAD', [ids.loans!]));
-    const leadA = new RealtimeAccess(h.db.db, settings, principal(ids.leadA!, 'CS_LEAD', [ids.cards!]));
+    const leadB = new RealtimeAccess(h.db.db, settings, principal(ids.leadB!, 'HEAD', [ids.loans!]));
+    const leadA = new RealtimeAccess(h.db.db, settings, principal(ids.leadA!, 'HEAD', [ids.cards!]));
     const conv = (id: string) => createEvent('conversation.updated', { fields: ['controlState'] }, { correlationId: 'rt', conversationId: id, agentId: ids.maya });
     const alert = createEvent('alert.opened', { alertId: ids.alert!, severity: 'WARNING', kind: 'BUSINESS' }, { correlationId: 'rt', agentId: ids.maya });
     const config = createEvent('config.changed', { area: 'agent', entityId: ids.maya! }, { correlationId: 'rt', agentId: ids.maya });

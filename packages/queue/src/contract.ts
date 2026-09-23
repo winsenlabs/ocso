@@ -16,6 +16,12 @@ export const TOPICS = {
   ALERT_DELIVER: 'alert.deliver',
   WEBHOOK_DELIVER: 'webhook.deliver',
   EVALUATION_RUN: 'evaluation.run',
+  /** Maker–checker notifications (in-app realtime is emitted in the decision's transaction; this sends email). */
+  APPROVAL_NOTIFY: 'approval.notify',
+  /** Finish a DEFERRED activation after approval (re-validates first). */
+  APPROVAL_ACTIVATE: 'approval.activate',
+  /** Routing (PM/research/11 §5.3): run a ROUTING conversation's router over new customer messages. */
+  CONVERSATION_ROUTE: 'conversation.route',
 } as const;
 export type Topic = (typeof TOPICS)[keyof typeof TOPICS];
 

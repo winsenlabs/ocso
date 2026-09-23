@@ -27,7 +27,7 @@ export const mcpConnections = pgTable(
     serverInfo: jsonb().$type<Record<string, unknown>>().notNull().default({}),
     protocolVersion: text(),
     confirmationPolicy: text().$type<'SENSITIVE_ONLY' | 'ALL_WRITES' | 'NONE'>().notNull().default('SENSITIVE_ONLY'),
-    /** `["*"]` = any agent the CS Lead enables; otherwise explicit agent ids. */
+    /** `["*"]` = any agent the Lead enables; otherwise explicit agent ids. */
     allowedAgentIds: text().array().notNull().default(sql`'{}'::text[]`),
     grantedScopes: text().array().notNull().default(sql`'{}'::text[]`),
     sendCustomerClaims: boolean().notNull().default(false),
@@ -81,7 +81,7 @@ export const tools = pgTable(
     approved: boolean().notNull().default(false),
     enabled: boolean().notNull().default(true),
     requiredScopes: text().array().notNull().default(sql`'{}'::text[]`),
-    humanRoles: text().array().notNull().default(sql`'{CS_EXEC,CS_LEAD}'::text[]`),
+    humanRoles: text().array().notNull().default(sql`'{SERVICE,LEAD,HEAD}'::text[]`),
     changedSinceApproval: boolean().notNull().default(false),
     discoveredAt: ts('discovered_at').notNull().defaultNow(),
     removedAt: ts('removed_at'),

@@ -26,7 +26,7 @@ function columns(scope: TeamScope): Column<Team>[] {
     {
       key: 'agents',
       header: 'Agents',
-      // Other teams' agents are hidden from CS Leads (ADR-026): no count rather than a wrong one.
+      // Other teams' agents are hidden from Leads (ADR-026): no count rather than a wrong one.
       cell: (t) => {
         const n = scope.allAgentsVisible || mine.has(t.id) ? count(scope.agents, t.id) : null;
         return <span className="mono" title={n === null ? 'Agents of teams you are not in are not visible to you' : undefined}>{n ?? '—'}</span>;
@@ -48,7 +48,7 @@ export function TeamsTable({ teams, scope, selected }: { teams: Team[]; scope: T
       template="minmax(0,1fr) 90px 90px 90px"
       empty={
         <EmptyState size="sm" title="No teams yet">
-          Teams own virtual agents and serve queues. A CS Lead who creates a team joins it.
+          Teams own virtual agents and serve queues. A Lead who creates a team joins it.
         </EmptyState>
       }
     />

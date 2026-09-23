@@ -10,6 +10,7 @@ import { escalationReasons, type EscalationReason } from './escalation-reasons.j
 import { correctionOpportunities } from './quality-signals.js';
 import { QueueAnalyticsService, type QueueAnalyticsRow } from './queue-analytics.js';
 import { int, previousWindow, windowOf } from './values.js';
+import { CHANNEL_AGENT_REACH } from '../routing/reach.js';
 
 export interface AgentCard {
   agentId: string;
@@ -56,7 +57,7 @@ export const SPIKE_MIN_POINTS = 0.05;
 export const SPIKE_MIN_CONVERSATIONS = 20;
 
 /**
- * CS Lead home (design/06 lead): 7-day tiles, agent cards, queues, decisions,
+ * Lead home (design/06 lead): 7-day tiles, agent cards, queues, decisions,
  * escalation reasons — all over the agents the lead's teams own (ADR-026).
  * Counts and labels only.
  */
@@ -74,7 +75,7 @@ export async function leadHome(db: Db, principal: Principal, now: Date, timezone
     db.execute<{ id: string; name: string; conversation_type: string; status: string; version: number | null; channels: Array<{ kind: string; name: string }> | null }>(sql`
       SELECT a.id, a.name, a.conversation_type, a.status, pv.version,
              (SELECT json_agg(json_build_object('kind', ch.kind, 'name', ch.name) ORDER BY ch.name)
-                FROM agent_channels ac JOIN channels ch ON ch.id = ac.channel_id WHERE ac.agent_id = a.id) AS channels
+                FROM channels ch WHERE ch.id IN (SELECT reach.channel_id FROM (${CHANNEL_AGENT_REACH}) AS reach WHERE reach.agent_id = a.id)) AS channels
         FROM virtual_agents a
         LEFT JOIN prompt_versions pv ON pv.id = a.active_prompt_version_id
        ${scope ? sql`WHERE a.id IN (${scope})` : sql``}

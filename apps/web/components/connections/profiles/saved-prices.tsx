@@ -38,7 +38,7 @@ export function SavedPrices({ prices, canPricing }: { prices: readonly PriceChec
                     Add price
                   </Link>
                 ) : (
-                  <span className="mono-sm">ask a Tech Admin to add one</span>
+                  <span className="mono-sm">ask a Tech admin to add one</span>
                 )}
               </>
             )}

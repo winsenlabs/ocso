@@ -37,6 +37,17 @@ ephemeral "random_password" "setup_token" {
   special = false
 }
 
+# The audit store's writer (worker, INSERT/SELECT) and reader (api, SELECT) roles; the migrate task creates both.
+ephemeral "random_password" "audit_writer" {
+  length  = 40
+  special = false
+}
+
+ephemeral "random_password" "audit_reader" {
+  length  = 40
+  special = false
+}
+
 module "rds" {
   source = "./modules/rds"
   name   = local.prefix
@@ -79,5 +90,12 @@ module "secrets" {
   bootstrap_values = jsonencode({
     DATABASE_URL     = "postgres://${module.rds.username}:${ephemeral.random_password.db.result}@${module.rds.address}:${module.rds.port}/${module.rds.db_name}"
     OCSO_SETUP_TOKEN = ephemeral.random_password.setup_token.result
+    # Audit store (ADR-032; audit.tf): the writer URL (worker), the reader URL (api) and the owner
+    # URL only the migrate task gets — the audit instance's own master unless separate_instance = false.
+    AUDIT_DATABASE_URL = "postgres://ocso_audit_writer:${ephemeral.random_password.audit_writer.result}@${local.audit_host}/${var.audit_database_name}"
+    AUDIT_READER_URL   = "postgres://ocso_audit_reader:${ephemeral.random_password.audit_reader.result}@${local.audit_host}/${var.audit_database_name}"
+    AUDIT_DATABASE_OWNER_URL = (var.audit_store.separate_instance
+      ? "postgres://ocso_audit:${ephemeral.random_password.audit_owner.result}@${local.audit_host}/${var.audit_database_name}"
+    : "postgres://${module.rds.username}:${ephemeral.random_password.db.result}@${local.audit_host}/${var.audit_database_name}")
   })
 }

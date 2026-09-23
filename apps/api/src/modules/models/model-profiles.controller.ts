@@ -1,19 +1,33 @@
-import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Patch, Post } from '@nestjs/common';
-import { Permission } from '@ocso/auth';
-import { ProfileInput, ProfilePatch, ProfileService, type ActorContext } from '@ocso/application';
+import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Patch, Post, Res } from '@nestjs/common';
+import { Permission, can, type Principal } from '@ocso/auth';
+import { ApprovalService, ProfileInput, ProfilePatch, ProfileService, WithApproval, requestApproval, type ActorContext } from '@ocso/application';
+import type { Response } from 'express';
 import { z } from 'zod';
-import { Actor, Authenticated, RequirePermission } from '../../common/decorators.js';
+import { Actor, Authenticated, CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
+import { approvalResponse } from '../approvals/approval-response.js';
+import { proposeOnly, withApprovalState, OptionalApproval, type ApprovalBody } from '../settings/platform-approvals.js';
 
-/** Logical model profiles (docs/06 §2). */
+const PatchBody = ProfilePatch.extend(WithApproval.shape);
+type PatchBody = z.infer<typeof PatchBody>;
+
+/**
+ * Logical model profiles (docs/06 §2). Maker–checker (PM/research/11 §4, approvals.check.platform): a profile
+ * nothing live uses and never approved is a draft, edited directly; `POST :id/activate` approves it for use;
+ * once approved or in use by something live every edit is an UPDATE proposal; deleting is a DELETE proposal.
+ */
 @Controller('v1/model-profiles')
 export class ModelProfilesController {
-  constructor(@Inject(ProfileService) private readonly profiles: ProfileService) {}
+  constructor(
+    @Inject(ProfileService) private readonly profiles: ProfileService,
+    @Inject(ApprovalService) private readonly approvals: ApprovalService,
+  ) {}
 
-  /** providers.read OR agents.read (CS Leads pick profiles for agents); checked in the service. */
+  /** providers.read OR agents.read (Leads pick profiles for agents); checked in the service. */
   @Get()
   @Authenticated()
-  list(@Actor() actor: ActorContext) {
-    return this.profiles.list(actor);
+  async list(@Actor() actor: ActorContext, @CurrentPrincipal() principal: Principal) {
+    const rows = await this.profiles.list(actor);
+    return can(principal, Permission.PROVIDERS_READ) ? withApprovalState(this.approvals, principal, 'model_profile', rows) : rows;
   }
 
   /** Dry-run policy check for the profile dialog (residency, allowlist, fallback rules). */
@@ -26,8 +40,9 @@ export class ModelProfilesController {
 
   @Get(':id')
   @Authenticated()
-  get(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string) {
-    return this.profiles.get(actor, id);
+  async get(@Actor() actor: ActorContext, @CurrentPrincipal() principal: Principal, @Param('id', { schema: z.uuid() }) id: string) {
+    const row = await this.profiles.get(actor, id);
+    return can(principal, Permission.PROVIDERS_READ) ? (await withApprovalState(this.approvals, principal, 'model_profile', [row]))[0] : row;
   }
 
   @Post()
@@ -38,14 +53,23 @@ export class ModelProfilesController {
 
   @Patch(':id')
   @RequirePermission(Permission.MODEL_PROFILES_MANAGE)
-  update(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string, @Body({ schema: ProfilePatch }) body: ProfilePatch) {
-    return this.profiles.update(actor, id, body);
+  update(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string, @Body({ schema: PatchBody }) body: PatchBody, @Res({ passthrough: true }) res: Response) {
+    const { approval, ...patch } = body;
+    return approvalResponse(res, requestApproval(this.approvals, actor, { objectKind: 'model_profile', objectId: id, action: 'UPDATE', payload: patch }, approval, () => this.profiles.update(actor, id, patch)));
   }
 
-  @Delete(':id')
-  @HttpCode(204)
+  /** "Approve for use": always a proposal (ACTIVATE). */
+  @Post(':id/activate')
+  @HttpCode(202)
   @RequirePermission(Permission.MODEL_PROFILES_MANAGE)
-  async remove(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string): Promise<void> {
-    await this.profiles.delete(actor, id);
+  activate(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string, @Body({ schema: OptionalApproval }) body: ApprovalBody, @Res({ passthrough: true }) res: Response) {
+    return proposeOnly(res, this.approvals, actor, { kind: 'model_profile', id, action: 'ACTIVATE' }, body?.approval);
+  }
+
+  /** Always a proposal (DELETE): 202 `{proposal}` with `approval`, else 409 approval_required. */
+  @Delete(':id')
+  @RequirePermission(Permission.MODEL_PROFILES_MANAGE)
+  remove(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string, @Body({ schema: OptionalApproval }) body: ApprovalBody, @Res({ passthrough: true }) res: Response) {
+    return proposeOnly(res, this.approvals, actor, { kind: 'model_profile', id, action: 'DELETE' }, body?.approval);
   }
 }

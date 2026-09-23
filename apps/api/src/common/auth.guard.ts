@@ -38,7 +38,7 @@ export class AuthGuard implements CanActivate {
     const result = await this.auth.getSession(new Headers({ authorization: `Bearer ${token}` }));
     const principal = result ? await loadPrincipal(this.db, result.user.id, 'UI', result.session.id) : null;
     if (!result || !principal) throw unauthenticated();
-    const mfa = await this.authPolicy.mfaState(principal.role, result.session.authMethod, result.user.twoFactorEnabled);
+    const mfa = await this.authPolicy.mfaState(principal.role, result.session.authMethod, result.user.twoFactorEnabled, principal.permissions);
     req.principal = principal;
     req.authSession = { id: result.session.id, bearer: token, authMethod: result.session.authMethod, expiresAt: result.session.expiresAt, mfa };
 

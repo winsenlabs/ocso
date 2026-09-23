@@ -4,11 +4,14 @@ import { NotPermitted } from '@/components/shell/placeholder-page';
 import { AlertBanner } from '@/components/ui/alert-banner';
 import { SecHead } from '@/components/ui/sec-head';
 import { listAlerts } from '@/lib/api/alerts';
+import { loadAuditStoreStatus } from '@/lib/api/audit-store';
+import { loadStorageReport } from '@/lib/api/storage';
 import { listProviderKinds } from '@/lib/api/models';
 import { loadWorkerSettings } from '@/lib/api/system';
 import { loadLatency, loadMcpHealth, loadPrivilegedChanges, loadProviderHealth, loadTelemetryOverview, loadUsage, loadWorkersTelemetry } from '@/lib/api/telemetry';
 import { formatDuration, formatPercent, formatTime } from '@/lib/format';
 import { hasPermission, requireSession } from '@/lib/session';
+import { AuditStorePanel } from './audit-store-panel';
 import { ChangesCard } from './changes-card';
 import { LatencyCard } from './latency-card';
 import { LiveRefresh } from './live-refresh';
@@ -16,6 +19,7 @@ import { McpHealthTable } from './mcp-health';
 import { ProviderHealthGrid } from './provider-health';
 import { QueueCard } from './queue-card';
 import { StatusBar } from './status-bar';
+import { StoragePanel } from './storage-panel';
 import { SystemTiles } from './system-tiles';
 import { UsageCard } from './usage-card';
 import { WorkerConfig } from './worker-config';
@@ -28,7 +32,9 @@ export async function SystemOverview() {
   const tz = session.user.deployment.timezone;
   const canAlerts = hasPermission(session, Permission.ALERTS_TECHNICAL_READ);
   const canProviders = hasPermission(session, Permission.PROVIDERS_READ);
-  const [overview, latency, usage, workers, providers, mcp, changes, settings, critical, kinds] = await Promise.all([
+  const canAuditStore = hasPermission(session, Permission.SYSTEM_READ) || hasPermission(session, Permission.AUDIT_VERIFY);
+  const canStorage = hasPermission(session, Permission.SYSTEM_READ);
+  const [overview, latency, usage, workers, providers, mcp, changes, settings, critical, kinds, auditStore, storage] = await Promise.all([
     loadTelemetryOverview(),
     loadLatency(60),
     loadUsage(),
@@ -40,6 +46,10 @@ export async function SystemOverview() {
     canAlerts ? listAlerts({ status: 'OPEN', kind: 'TECHNICAL', severity: 'CRITICAL', limit: 1 }).then((p) => p.items[0] ?? null) : Promise.resolve(null),
     // Provider marks come from the provider definitions; without them the grid shows generic marks.
     canProviders ? listProviderKinds().catch(() => []) : Promise.resolve([]),
+    // The audit store (ADR-032): never blocks the page — a failed load shows as unavailable.
+    canAuditStore ? loadAuditStoreStatus().catch(() => null) : Promise.resolve(undefined),
+    // Storage growth (PM/research/11 §7): daily samples; like the audit store, never blocks the page.
+    canStorage ? loadStorageReport().catch(() => null) : Promise.resolve(undefined),
   ]);
   const cfg = workers.config;
   const turnAge = overview.queue.turn.oldestAgeSeconds;
@@ -101,6 +111,16 @@ export async function SystemOverview() {
 
       <ProviderHealthGrid providers={providers} kinds={kinds} manageHref={canProviders ? '/connections?tab=providers' : null} />
       <McpHealthTable data={mcp} manageHref={hasPermission(session, Permission.MCP_READ) ? '/connections?tab=mcp' : null} />
+      {auditStore !== undefined ? (
+        <div style={{ marginBottom: 14 }} id="audit-store">
+          <AuditStorePanel data={auditStore} timeZone={tz} canVerify={hasPermission(session, Permission.AUDIT_VERIFY)} />
+        </div>
+      ) : null}
+      {storage !== undefined ? (
+        <div style={{ marginBottom: 14 }} id="storage">
+          <StoragePanel data={storage} timeZone={tz} />
+        </div>
+      ) : null}
 
       <div className="row2 sys-bottom">
         <QueueCard queue={overview.queue} ageThreshold={cfg.scaleOutQueueAgeSeconds} depthThreshold={cfg.scaleOutQueueDepth} />

@@ -3,20 +3,24 @@
 import { refresh } from 'next/cache';
 import { ROLES } from '@ocso/auth';
 import { z } from 'zod';
-import { createSsoProvider, deleteSsoProvider, saveAuthPolicy, updateSsoProvider } from '../api/auth-settings';
-import { describeApiError } from '../api/errors';
+import { createSsoProvider, saveAuthPolicy, updateSsoProvider } from '../api/auth-settings';
+import { ApiError, describeApiError } from '../api/errors';
+import { approvalFromForm, outcomeMessage } from './form-approval';
 import { field, fieldErrorsFrom, type FormState } from './form-state';
 
-/** "Require MFA for roles" (Tech Admin; the API enforces who may change it). */
+/** "Require MFA for roles" (Tech admin; the API enforces who may change it). */
 export async function saveMfaPolicyAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const roles = formData.getAll('requireMfaRoles').filter((r): r is (typeof ROLES)[number] => typeof r === 'string' && (ROLES as readonly string[]).includes(r));
+  const approval = approvalFromForm(formData);
+  if (!approval.ok) return approval.state;
+  let res: unknown;
   try {
-    await saveAuthPolicy(roles);
+    res = await saveAuthPolicy(roles, approval.approval);
   } catch (err) {
     return { status: 'error', message: describeApiError(err) };
   }
   refresh();
-  return { status: 'success', message: roles.length ? 'MFA is now required for the selected roles at their next sign-in.' : 'MFA is no longer required for any role.' };
+  return outcomeMessage(res, roles.length ? 'MFA is now required for the selected roles at their next sign-in.' : 'MFA is no longer required for any role.');
 }
 
 const domains = z
@@ -59,27 +63,25 @@ export async function createSsoProviderAction(_prev: FormState, formData: FormDa
     return { status: 'error', message: describeApiError(err), values };
   }
   refresh();
-  return { status: 'success', message: `Added ${values.name}` };
+  return { status: 'success', message: `Added ${values.name} as a draft: sign-in through it starts once its activation is approved.` };
 }
 
-export type SsoActionResult = { ok: boolean; message: string };
+export type SsoActionResult = { ok: true; data: { message: string } } | { ok: false; message: string; code?: string | undefined };
 
-export async function setAutoProvisionAction(providerId: string, autoProvision: boolean): Promise<SsoActionResult> {
+const SsoApproval = z.union([z.object({ checkerId: z.uuid(), reason: z.string().trim().min(3).max(500) }), z.object({ bootstrap: z.literal(true), reason: z.string().trim().min(3).max(500).optional() })]);
+
+/** A draft provider changes directly; an approved one needs `approval` (a proposal). */
+export async function setAutoProvisionAction(providerId: string, autoProvision: boolean, approval?: z.input<typeof SsoApproval>): Promise<SsoActionResult> {
+  const choice = approval === undefined ? undefined : SsoApproval.safeParse(approval);
+  if (choice && !choice.success) return { ok: false, message: choice.error.issues.map((i) => i.message).join('; ') };
+  let res: unknown;
   try {
-    await updateSsoProvider(providerId, { autoProvision });
+    res = await updateSsoProvider(providerId, { autoProvision, ...(choice?.success ? { approval: choice.data } : {}) });
   } catch (err) {
-    return { ok: false, message: describeApiError(err) };
+    return { ok: false, message: describeApiError(err), code: err instanceof ApiError ? err.code : undefined };
   }
   refresh();
-  return { ok: true, message: autoProvision ? 'Unknown users are now created as CS Execs.' : 'Only invited users can sign in with this provider.' };
+  if (res && typeof res === 'object' && 'proposal' in res) return { ok: true, data: { message: 'Sent for approval.' } };
+  return { ok: true, data: { message: autoProvision ? 'Unknown users are now created as Service members.' : 'Only invited users can sign in with this provider.' } };
 }
 
-export async function deleteSsoProviderAction(providerId: string): Promise<SsoActionResult> {
-  try {
-    await deleteSsoProvider(providerId);
-  } catch (err) {
-    return { ok: false, message: describeApiError(err) };
-  }
-  refresh();
-  return { ok: true, message: 'Provider removed.' };
-}

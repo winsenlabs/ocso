@@ -136,7 +136,7 @@ export function TemplatePicker({ list, query, onQuery, refreshing, onRefresh, on
       ) : null}
       {!list.problem && list.templates.length === 0 ? (
         <p className="mono-sm tplnote">
-          No message templates on {list.channel.name} yet. A CS Lead creates them under Message templates; {reviewer} reviews each one (usually minutes, up to 24 hours).
+          No message templates on {list.channel.name} yet. A Lead creates them under Message templates; {reviewer} reviews each one (usually minutes, up to 24 hours).
         </p>
       ) : null}
       {list.templates.length > 0 && approved === 0 ? (

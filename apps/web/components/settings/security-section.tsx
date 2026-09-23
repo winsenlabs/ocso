@@ -8,7 +8,7 @@ import { MfaPolicyForm } from './mfa-policy-form';
 import { SsoProviders } from './sso-providers';
 
 /**
- * Sign-in security for the Platform Tech Admin (ADR-025): which roles must use
+ * Sign-in security for the Tech admin (ADR-025): which roles must use
  * a second factor, and the SSO identity providers bound to email domains.
  */
 export async function SecuritySection() {
@@ -22,7 +22,7 @@ export async function SecuritySection() {
   return (
     <div className="row2" style={{ marginTop: 24 }}>
       <div>
-        <SecHead title="Sign-in security" desc="two-factor policy · Platform Tech Admin" />
+        <SecHead title="Sign-in security" desc="two-factor policy · Tech admin" />
         {error ? <AlertBanner tone="error">{error}</AlertBanner> : null}
         {policy ? <MfaPolicyForm roles={ROLES.map((r) => ({ value: r, label: ROLE_LABELS[r] }))} selected={policy.requireMfaRoles} /> : null}
       </div>

@@ -2,10 +2,11 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { TEMPLATE_CATEGORIES, TEMPLATE_CATEGORY_GUIDANCE, type DraftIssue, type TemplateCategory } from '@ocso/domain';
 import { TemplatePreview } from '@/components/workspace/template-preview';
-import { createTemplateAction } from '@/lib/actions/templates';
+import { useApprovalRequest } from '@/components/approvals/use-approval-request';
+import { saveTemplateDraftAction, submitTemplateAction } from '@/lib/actions/templates';
 import { AuthenticationFields, ButtonFields, HeaderFields } from './builder-parts';
 import { EMPTY_FORM, LANGUAGE_SUGGESTIONS, bodyVariables, builderState, nextVariable, type BuilderForm, type TemplateRules } from './lib/builder';
 
@@ -17,17 +18,24 @@ export interface TemplateBuilderProps {
   terms: TemplateRules & { reviewer: string };
   /** Where to go after submitting or cancelling. */
   listHref: string;
+  /** Editing a saved draft (never at the provider): its record and the form it fills. */
+  draft?: { recordId: string; form: BuilderForm } | null;
 }
 
 /**
  * "New template" (docs/07 §3): write a message template, see it as the
- * customer will, and submit it to the provider for review (e.g. WhatsApp's).
- * The same rules as the API run on every keystroke; advisory warnings (e.g. a
- * utility template that reads as marketing) do not block submitting.
+ * customer will, and save it as a draft or submit it. Maker–checker
+ * (PM/research/11 §4): the provider (e.g. WhatsApp) sees it only after a
+ * checker approves the submission. The same rules as the API run on every
+ * keystroke; advisory warnings (e.g. a utility template that reads as
+ * marketing) do not block submitting.
  */
-export function TemplateBuilder({ channel, terms, listHref }: TemplateBuilderProps) {
+export function TemplateBuilder({ channel, terms, listHref, draft: existing = null }: TemplateBuilderProps) {
   const router = useRouter();
-  const [form, setForm] = useState<BuilderForm>(EMPTY_FORM);
+  const [form, setForm] = useState<BuilderForm>(existing?.form ?? EMPTY_FORM);
+  // Once saved, later saves edit the same draft (never a second one).
+  const [recordId, setRecordId] = useState<string | null>(existing?.recordId ?? null);
+  const approval = useApprovalRequest();
   const [touched, setTouched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -36,17 +44,24 @@ export function TemplateBuilder({ channel, terms, listHref }: TemplateBuilderPro
   const auth = form.category === 'AUTHENTICATION';
   const variables = auth ? [] : bodyVariables(form.body);
 
-  const submit = () => {
+  const save = (thenSubmit: boolean) => {
     setTouched(true);
     setError(null);
-    if (!state.draft || state.check.problems.length) return;
+    if (!state.draft || (thenSubmit && state.check.problems.length)) return;
     const draft = state.draft;
     start(async () => {
-      const result = await createTemplateAction(channel.id, draft);
+      const result = await saveTemplateDraftAction(channel.id, draft, recordId ?? undefined);
       if (!result.ok) return setError(result.message);
-      router.push(`${listHref}&submitted=${encodeURIComponent(result.name)}`);
+      setRecordId(result.recordId);
+      if (!thenSubmit) return router.push(`${listHref}&drafted=${encodeURIComponent(result.name)}`);
+      approval.run({ objectKind: 'message_template', objectId: result.recordId, title: `Submit template ${result.name}` }, (choice) => submitTemplateAction(channel.id, result.recordId, choice), {
+        always: true,
+      });
     });
   };
+  useEffect(() => {
+    if (approval.outcome) router.push(`${listHref}&submitted=${encodeURIComponent(form.name)}`);
+  }, [approval.outcome, form.name, listHref, router]);
 
   return (
     <div className="tpl-builder">
@@ -56,7 +71,7 @@ export function TemplateBuilder({ channel, terms, listHref }: TemplateBuilderPro
         aria-label="New message template"
         onSubmit={(e) => {
           e.preventDefault();
-          submit();
+          save(true);
         }}
       >
         <div className="fld-row">
@@ -128,23 +143,27 @@ export function TemplateBuilder({ channel, terms, listHref }: TemplateBuilderPro
 
         <Issues items={touched ? state.check.problems : []} tone="err" />
         <Issues items={state.check.warnings} tone="warn" />
-        {error ? (
+        {error || approval.error ? (
           <div className="alert error" role="alert">
-            <span>{error}</span>
+            <span>{error ?? approval.error}</span>
           </div>
         ) : null}
         <span className="rowsplit">
-          <button type="submit" className="btn accent" disabled={pending}>
-            {pending ? 'Submitting…' : `Submit for ${terms.reviewer} approval`}
+          <button type="submit" className="btn accent" disabled={pending || approval.pending}>
+            {pending ? 'Saving…' : 'Save and submit for approval'}
+          </button>
+          <button type="button" className="btn" disabled={pending || approval.pending} onClick={() => save(false)}>
+            Save draft
           </button>
           <Link className="btn ghost" href={listHref}>
             Cancel
           </Link>
           <span className="mono-sm">
-            {terms.reviewer} usually reviews within minutes (up to 24 hours) · sent via {channel.name}
+            a checker approves it first; then {terms.reviewer} reviews it (usually minutes, up to 24 hours) · sent via {channel.name}
           </span>
         </span>
       </form>
+      {approval.modal}
       <TemplatePreview rendered={state.preview} caption="Preview with your example values" />
     </div>
   );

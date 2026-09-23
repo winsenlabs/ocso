@@ -3,7 +3,7 @@
  * Stable components come first so provider prefix caches stay warm.
  */
 
-/** Components a CS Lead edits per virtual agent (versioned in prompt_versions). */
+/** Components a Lead edits per virtual agent (versioned in prompt_versions). */
 export const BUSINESS_COMPONENT_KEYS = [
   'identity',
   'objective',
@@ -18,7 +18,7 @@ export type BusinessComponentKey = (typeof BUSINESS_COMPONENT_KEYS)[number];
 
 export type PromptComponents = Readonly<Record<BusinessComponentKey, string>>;
 
-export type ComponentOwner = 'PLATFORM' | 'CS_LEAD';
+export type ComponentOwner = 'PLATFORM' | 'HEAD';
 
 export interface ComponentDescriptor {
   key: BusinessComponentKey | 'runtime_contract';
@@ -37,29 +37,29 @@ export const COMPONENT_DESCRIPTORS: readonly ComponentDescriptor[] = [
     tag: 'ocso_runtime_contract',
     help: 'Injected by OCSO. Turn structure, tool protocol, refusal handling, rendering rules.',
   },
-  { key: 'identity', label: 'Identity', owner: 'CS_LEAD', tag: 'identity', help: 'Who the agent is and how it presents itself.' },
-  { key: 'objective', label: 'Objective', owner: 'CS_LEAD', tag: 'objective', help: 'What a successful conversation achieves.' },
-  { key: 'behavior', label: 'Behavior', owner: 'CS_LEAD', tag: 'behavior', help: 'How the agent conducts the conversation.' },
+  { key: 'identity', label: 'Identity', owner: 'HEAD', tag: 'identity', help: 'Who the agent is and how it presents itself.' },
+  { key: 'objective', label: 'Objective', owner: 'HEAD', tag: 'objective', help: 'What a successful conversation achieves.' },
+  { key: 'behavior', label: 'Behavior', owner: 'HEAD', tag: 'behavior', help: 'How the agent conducts the conversation.' },
   {
     key: 'policies',
     label: 'Policies and compliance',
-    owner: 'CS_LEAD',
+    owner: 'HEAD',
     tag: 'policies',
     help: 'Rules that must never be broken. Authorization is still enforced in code.',
   },
   {
     key: 'tool_instructions',
     label: 'Tool instructions',
-    owner: 'CS_LEAD',
+    owner: 'HEAD',
     tag: 'tool_instructions',
-    help: 'When and how to use tools. Tool schemas are owned by the Tech Admin via MCP approval.',
+    help: 'When and how to use tools. Tool schemas are owned by the Tech admin via MCP approval.',
   },
-  { key: 'escalation', label: 'Escalation rules', owner: 'CS_LEAD', tag: 'escalation_policy', help: 'When to hand off to a human and how to summarize.' },
-  { key: 'channel_constraints', label: 'Channel constraints', owner: 'CS_LEAD', tag: 'channel_constraints', help: 'Your style and content rules per channel; OCSO adds each channel’s own length, formatting and media limits.' },
+  { key: 'escalation', label: 'Escalation rules', owner: 'HEAD', tag: 'escalation_policy', help: 'When to hand off to a human and how to summarize.' },
+  { key: 'channel_constraints', label: 'Channel constraints', owner: 'HEAD', tag: 'channel_constraints', help: 'Your style and content rules per channel; OCSO adds each channel’s own length, formatting and media limits.' },
   {
     key: 'business_context',
     label: 'Business context',
-    owner: 'CS_LEAD',
+    owner: 'HEAD',
     tag: 'business_context',
     help: 'Stable organization facts: products, hours, published policies.',
   },

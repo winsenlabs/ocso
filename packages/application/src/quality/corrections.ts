@@ -211,6 +211,7 @@ async function resolveAgent(tx: DbOrTx, input: CorrectionInput): Promise<string>
   }
   const [conv] = await tx.select({ agentId: conversations.agentId }).from(conversations).where(eq(conversations.id, input.conversationId));
   if (!conv) throw notFound('conversation', input.conversationId);
+  if (!conv.agentId) throw validation('conversation_routing', 'The conversation has no agent yet (a router is still deciding)');
   if (input.agentId && input.agentId !== conv.agentId) throw validation('agent_mismatch', 'The conversation belongs to a different agent');
   if (input.interactionSeq !== undefined) {
     const [turn] = await tx

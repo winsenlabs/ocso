@@ -3,6 +3,8 @@ import { AskOcsoProvider } from '@/components/shell/ask-ocso-context';
 import { SidebarFallback } from '@/components/shell/shell-fallback';
 import { ShellSidebar } from '@/components/shell/shell-sidebar';
 import { TemplateNoticesSlot } from '@/components/templates/template-notices-slot';
+import { ApprovalNoticesSlot } from '@/components/approvals/approval-notices-slot';
+import { ExceptionReportNoticeSlot } from '@/components/exceptions/report-notice-slot';
 
 /**
  * Authenticated app frame: sidebar + main. Only the sidebar reads the session
@@ -26,6 +28,14 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       {/* WhatsApp template review results for their submitter (docs/07 §3). */}
       <Suspense fallback={null}>
         <TemplateNoticesSlot />
+      </Suspense>
+      {/* Maker–checker outcomes and requests (PM/research/11 §4). */}
+      <Suspense fallback={null}>
+        <ApprovalNoticesSlot />
+      </Suspense>
+      {/* The exception report is ready to sign (PM/research/11 §7). */}
+      <Suspense fallback={null}>
+        <ExceptionReportNoticeSlot />
       </Suspense>
     </AskOcsoProvider>
   );

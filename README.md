@@ -21,9 +21,33 @@ Status: pre-1.0, under active development. See [Status and known gaps](#status-a
   escalation requested, waiting for a human, human active, AI resuming, resolved). Escalation rules,
   queues with SLA policies, auto-assign or open pickup, transfers, internal notes, copilot reply drafts,
   and return to the AI. Every control change is audited.
-- **Roles and team-scoped ownership.** Platform Tech Admin, CS Lead and CS Exec, with permissions checked
-  in code. Virtual agents are owned by teams, and a CS Lead sees and manages only the agents their teams
-  own, with those agents' conversations, analytics and alerts.
+- **Role presets, per-user permissions and team-scoped ownership.** Four presets, with permissions checked
+  in code (ADR-029):
+  - **Tech** runs the platform (providers, channels, MCP, users, settings, audit verification). It never
+    reads conversation content.
+  - **Head** has full authority inside their teams, checks Leads' and other Heads' changes, and signs the
+    exception report.
+  - **Lead** runs their teams' agents, prompts, queues and routers, and proposes changes but cannot check them.
+  - **Service** handles the conversations of their teams' queues.
+
+  On top of a preset, a user can be given per-user grants (optionally with an expiry) and revokes. Taking
+  access away applies at once; widening it needs approval. Virtual agents are owned by teams, and a Head or
+  Lead sees and manages only the agents their teams own, with those agents' conversations, analytics and alerts.
+- **Maker–checker approvals.** Every change to live configuration is a proposal that a named second
+  person approves: agents, prompts, tool grants, escalation and alert rules, routers, queues, SLA policies,
+  channels, message templates, providers, profiles, prices, MCP connections, SSO, deployment settings, users
+  and permission grants (ADR-030). The checker approves exactly the content they saw, which is enforced by
+  content hashes. Stops (pause, disable, revoke) are always immediate. When nobody else can check, for
+  example a deployment with a single Tech admin, the maker may approve their own change as a recorded
+  bootstrap approval.
+- **Routing.** A customer reaches an agent through channel → router → queue → agent (ADR-031). Routers ask
+  menu questions, classify with a model or use known facts, then pick a queue. The queue is the service
+  unit: one AI agent, its human teams, SLA, hours and transfer targets.
+- **Auditor-grade audit store.** Audit events are written in the same transaction as each change, then
+  shipped to a separate append-only database (PostgreSQL or ClickHouse). There they are hash-chained,
+  checkpointed with Ed25519 signatures, exported daily and verifiable offline (ADR-032). A weekly signed
+  exception report lists where the controls were bypassed or failed, and a storage report shows growth
+  (ADR-033).
 - **Sign-in and account security.** Better Auth: email and password with invites, TOTP with backup
   codes, passkeys, OIDC and SAML single sign-on, MFA required per role, session management and a
   break-glass recovery path.
@@ -40,14 +64,14 @@ Status: pre-1.0, under active development. See [Status and known gaps](#status-a
 - **Workers that survive failure.** Conversations are leased to workers in PostgreSQL. Scale workers up
   or down, or kill one mid-turn, and another resumes the conversation. The chaos test checks that every
   customer message still gets exactly one reply.
-- **Observability and alerts.** Separate views for the Tech Admin (workers, queues, latency, tokens,
-  prompt-cache hits, cost, provider and MCP health) and for CS Leads (containment, escalations, SLA,
+- **Observability and alerts.** Separate views for Tech (workers, queues, latency, tokens,
+  prompt-cache hits, cost, provider and MCP health) and for Heads and Leads (containment, escalations, SLA,
   CSAT, reviews, prompt corrections). Alert rules with a lifecycle, delivered in-app, by email, to Slack,
   Microsoft Teams, PagerDuty or a signed webhook. OpenTelemetry export.
 - **Ask OCSO.** An internal agent (⌘J / Ctrl+J) that answers questions about the deployment with the
   asking user's permissions and asks before it changes anything.
-- **Operations.** Signed outbound webhooks for events, an append-only audit log, per-class data
-  retention, and a first-run setup flow.
+- **Operations.** Signed outbound webhooks for events, per-class data retention, a storage growth
+  report, and a first-run setup flow.
 
 ## Everything is a plugin
 
@@ -64,8 +88,9 @@ channel name (build rules [§2 and §4](docs/99-BUILD-RULES.md)).
 | Alert destinations | `AlertDeliveryAdapter` — `packages/alerts/src/contract.ts` | In-app, email, Slack, Teams, webhook, PagerDuty | Per-event dispatch (events declared by the adapter), retries, encrypted secrets, test button; the form renders from the adapter's JSON Schema |
 | Alert conditions | `EvaluatorDefinition` — `packages/application/src/alerts/evaluators/contract.ts` | Technical and business conditions | Scheduling, dedupe, open/acknowledged/resolved lifecycle, rule form from JSON Schema |
 | Email | `EmailDriverDefinition` / `EmailSender` — `packages/email/src/` | Resend, SMTP, log | Templates, start-up validation by the driver, test button |
+| Audit store | `AuditStore` + `AuditStoreDriverDefinition` — `packages/audit-store/src/contract.ts` | PostgreSQL (own database, trigger-enforced append-only), ClickHouse (tamper-evident) | Outbox shipping, reconciliation, hash chain and signed checkpoints, exports, verification, team-scoped reads; selected by `AUDIT_DRIVER`, provisioned by `audit-migrate` |
 | Blob, secrets, queue, deployment | Driver definitions for `BlobStore`, `SecretStore`, `QueueAdapter`, `DeploymentAdapter` | Volume or S3; local AES-256-GCM or AWS Secrets Manager; PostgreSQL or SQS; Compose or ECS | Driver registries chosen by one environment variable each; each driver checks its own settings; core asks drivers for capabilities, never their names |
-| Scheduled tasks | `ScheduledTask` — `apps/worker/src/scheduler/scheduler.service.ts` | Lease recovery, auto-assign, alert evaluation, retention and more | Leader election across workers, intervals, error isolation |
+| Scheduled tasks | `ScheduledTask` — `apps/worker/src/scheduler/scheduler.service.ts` | Lease recovery, auto-assign, alert evaluation, retention, routing timeouts, approval sweeps, the audit store tasks, the weekly exception report and more | Leader election across workers, intervals, error isolation |
 | Ask OCSO tools | `InternalTool` — `packages/internal-agent/src/contract.ts` | 12 read and write tools | Permission filtering, re-authorization, confirmation for writes, audit |
 | Sign-in and SSO | Better Auth plugins; identity providers at runtime | Password, TOTP, passkeys, OIDC, SAML | Endpoint allowlist, MFA policy, audit |
 
@@ -89,7 +114,7 @@ plugin boundary still leaks.
 
 ```
   Customers                                                 Staff (browser)
-  WhatsApp via Meta or Twilio, web chat widget              CS Exec, CS Lead, Platform Tech Admin
+  WhatsApp via Meta or Twilio, web chat widget              Service, Lead, Head, Tech
         │                                                          │
         ▼                                                          ▼
   ┌─────────────────────── web · Next.js · the only published port (3000) ───────────────────────┐
@@ -107,9 +132,12 @@ plugin boundary still leaks.
                      │                                                      │
                      ▼                                                      ▼
   ┌──────────────────────────────── PostgreSQL 18 · system of record ─────────────────────────────────┐
-  │ conversations and parts, configuration, audit, encrypted secrets, jobs, leases, outbox + NOTIFY    │
+  │ conversations and parts, configuration, approvals, encrypted secrets, jobs, leases, outbox + NOTIFY│
+  │ audit_events: the audit outbox and a local window of recent events                                 │
   └────────────────────────────────────────────────────────────────────────────────────────────────────┘
-     Blob store: a local volume or S3.
+     Audit store: its own database (PostgreSQL or ClickHouse). The worker ships to it as an
+     INSERT/SELECT-only writer; the api reads it as a SELECT-only reader.
+     Blob store: a local volume or S3 (also holds the signed audit exports).
      Outbound, through plugins: model providers · MCP servers · WhatsApp APIs · email · alert destinations
 ```
 
@@ -117,6 +145,8 @@ plugin boundary still leaks.
   Queue messages are only wake-ups. Worker memory is a cache.
 - **API and worker scale independently.** They share packages and one Docker build, but run as separate
   processes. Any worker can pick up any conversation.
+- **The audit store is separate.** Audit events commit with the change in PostgreSQL, then the worker
+  ships them to the audit store within seconds. OCSO keeps serving while the store is down.
 - **The browser only talks to the web app.** The staff API (`/v1`) is not reachable from outside; the
   web app calls it over the internal network (ADR-020).
 
@@ -136,7 +166,8 @@ calls and the web chat's `useChat`), the official MCP TypeScript SDK and Better 
 | `packages/agent-runtime` | Turn processing, conversation leases, model gateway (fallbacks, usage), tool runner, context building and turn cache, delivery |
 | `packages/alerts` | Alert delivery adapters and their registry; rule and rendering helpers |
 | `packages/application` | Application services: sign-in (Better Auth), users and teams, agents and prompts, conversations and handoffs, routing, channels, MCP, models, alert engine and evaluators, analytics, audit, retention, webhooks |
-| `packages/auth` | Roles, permissions and the principal |
+| `packages/audit-store` | The audit store contract, the postgres and clickhouse drivers, hash chain, Ed25519 signing, and the `audit-migrate` and `audit-verify` bins |
+| `packages/auth` | Role presets, permissions, the permission catalogue and the principal |
 | `packages/blob` | `BlobStore` contract; local and S3 drivers; media checks |
 | `packages/bootstrap` | Composition shared by api and worker: registries and driver selection |
 | `packages/channels` | `ChannelAdapter` contract and registry; WhatsApp (Meta), WhatsApp (Twilio), web chat |
@@ -168,14 +199,26 @@ You need Docker Engine 26+ with Compose v2.30+. 4 vCPU and 8 GB RAM are enough f
 ```bash
 git clone https://github.com/winsenlabs/ocso.git && cd ocso
 cp .env.example .env
-docker compose up -d --build     # keygen → postgres → migrate → api + worker → web
+docker compose up -d --build     # keygen → postgres + audit-db → migrate → api + worker → web
 docker compose ps                # api, worker, web healthy; keygen and migrate exited (0)
 ```
 
-On first start the `keygen` one-shot writes every missing secret (database password, SecretStore master
-key, blob signing key, Better Auth secret, first-run setup token) to the `secrets` volume. Nothing secret
-goes into `compose.yaml`, `.env` or git. Back up that volume with the database: without the master key,
-stored credentials cannot be decrypted.
+| Service | What it does |
+|---|---|
+| `keygen` | One-shot: writes missing secrets to the `secrets` volume |
+| `postgres` | PostgreSQL 18, the system of record (`pgdata`) |
+| `audit-db` | PostgreSQL 18 for the audit store, a separate server (`auditdata`) |
+| `migrate` | One-shot: applies `packages/db/migrations`, then runs `audit-migrate`, which creates the audit store schema, the writer and reader roles and the minimum retention |
+| `api` | Control plane; reads the audit store as the SELECT-only reader |
+| `worker` | AI turns and the scheduler. Its leader also runs the audit tasks: `audit-ship` (outbox to store), `audit-reconcile`, `audit-seal` (hash chain, signed checkpoints), `audit-export` and `audit-verify-full`, plus `exception-weekly` (the weekly exception report), `storage-sample` and `health-rollup` |
+| `web` | Staff UI and BFF, the only published port |
+
+On first start the `keygen` one-shot writes every missing secret to the `secrets` volume: the database
+password, SecretStore master key, blob signing key, Better Auth secret, first-run setup token, the audit
+database's owner, writer and reader credentials, and the audit signing key. Nothing secret goes into
+`compose.yaml`, `.env` or git. Back up that volume with both databases. Without the master key, stored
+credentials cannot be decrypted. Without the audit signing key, old checkpoints can no longer be matched
+to this deployment.
 
 Open <http://localhost:3000>. You are sent to `/setup`, which asks for the one-time setup token:
 
@@ -184,7 +227,9 @@ docker compose logs api | grep "setup token"
 ```
 
 Then follow [docs/operations/setup-guide.md](docs/operations/setup-guide.md): model providers and
-profiles, channels, MCP servers, teams, then your first virtual agent.
+profiles, channels, MCP servers, teams, then your first virtual agent. Configuration changes need a
+second person's approval. While you are the only Tech admin, you approve your own platform changes as
+recorded bootstrap approvals. Add a second checker as soon as you can.
 
 **Try the demo instead** (a fictional bank with users, teams, queues, three live agents, a web chat
 channel and an example MCP server; only on a fresh database):
@@ -227,8 +272,8 @@ There are two places to configure OCSO, split by who needs them and when.
 | | Deployment bootstrap | Application configuration |
 |---|---|---|
 | **Where** | Environment (`.env`) and secret files on the `secrets` volume | The web app; stored in PostgreSQL |
-| **Who** | The operator | Platform Tech Admin and CS Leads |
-| **What** | Database, SecretStore master key, blob signing key, Better Auth secret, setup and recovery tokens, email driver and Resend/SMTP credentials, public URL, session lifetimes, trusted proxy hops, queue/blob/secrets/deployment drivers, OpenTelemetry | Model providers and their credentials, model profiles and prices, channels and their tokens, MCP servers and their OAuth tokens, virtual agents, prompts, tool grants, escalation rules, queues, SLA policies, teams and users, alert rules and destinations, outbound webhooks, SSO providers, MFA policy, retention, worker scaling settings |
+| **Who** | The operator | Tech, Heads and Leads; every change to live configuration is approved by a second person (ADR-030) |
+| **What** | Database, audit store database and its roles, audit signing key, SecretStore master key, blob signing key, Better Auth secret, setup and recovery tokens, email driver and Resend/SMTP credentials, public URL, session lifetimes, trusted proxy hops, queue/blob/secrets/deployment drivers, OpenTelemetry | Model providers and their credentials, model profiles and prices, channels and their tokens, MCP servers and their OAuth tokens, virtual agents, prompts, tool grants, escalation rules, routers, queues, SLA policies, teams, users and per-user permissions, alert rules and destinations, outbound webhooks, SSO providers, MFA policy, retention, worker scaling settings |
 | **Secrets** | Generated by `keygen` or written by the operator as files | Entered once, stored encrypted in the SecretStore, never shown again |
 
 The line is deliberate. What the deployment needs before anyone can sign in (the database, the keys
@@ -245,8 +290,11 @@ The full variable list is in [.env.example](.env.example) and `packages/config/s
   route without an explicit `@Public`, `@Authenticated`, `@RequirePermission` or
   `@RequireAnyPermission`. `apps/api/test/unit/route-access.test.ts` fails the build if a route has
   none, and pins the complete list of public routes.
-- **Permissions in code.** Roles map to permissions in `packages/auth`. Services add resource checks and
-  team scope (ADR-026). Nothing a model says can grant a permission; the internal agent acts with the
+- **Permissions in code.** Presets map to permissions in `packages/auth`, adjusted by per-user grants and
+  revokes (ADR-029). Services add resource checks and team scope (ADR-026).
+- **Maker–checker.** A change to live configuration applies only after a named, eligible second person
+  approves the exact content they saw (ADR-030). Self-approval is possible only as a recorded bootstrap
+  when nobody else can check, and it appears in the weekly exception report. Nothing a model says can grant a permission; the internal agent acts with the
   user's own permissions.
 - **Small public surface.** Only the web app is published. `/v1` accepts only a signed Bearer session
   token, never cookies. Better Auth endpoints are an allowlist, pinned by
@@ -258,9 +306,11 @@ The full variable list is in [.env.example](.env.example) and `packages/config/s
 - **Secrets stay server-side.** Credentials are envelope-encrypted with the master key (or kept in AWS
   Secrets Manager), resolved only when used, and kept out of logs, traces, prompts, audit payloads and
   API responses.
-- **Audit.** Privileged configuration changes, sign-in events and conversation control changes go to an
-  append-only audit log; the database rejects updates and deletes on it. Every tool call is recorded
-  with sanitized arguments.
+- **Audit.** Privileged configuration changes, approvals, sign-in events and conversation control changes
+  are written to an audit outbox in the same transaction. The worker ships them to a separate audit store
+  whose credentials cannot rewrite it (ADR-032). The PostgreSQL driver refuses updates, deletes and truncates
+  by trigger, while ClickHouse is tamper-evident only. A hash chain and signed checkpoints let anyone verify
+  the log offline (`audit-verify`). Every tool call is recorded with sanitized arguments.
 - **Hardened containers.** Non-root, read-only root filesystem, no new privileges, all capabilities
   dropped; PostgreSQL on a network with no internet access.
 
@@ -340,7 +390,8 @@ OCSO is pre-1.0. APIs, the database schema and the plugin contracts can still ch
 - **Deployment.** Docker Compose on a single host is the supported deployment. Terraform for ECS Fargate
   and the ECS scaling adapter exist, but AWS work is on hold: the Terraform has only been validated
   (`terraform validate`), never applied to a real account, and does not yet wire the Better Auth secret
-  or email ([aws.md §10](docs/operations/aws.md#10-known-gaps-and-follow-ups)).
+  or email ([aws.md §10](docs/operations/aws.md#10-known-gaps-and-follow-ups)). The audit store additions
+  (a second RDS instance, bootstrap keys, signing-key secret) have not been validated at all.
 - **Plugins are compile-time.** Third-party plugins as npm packages wait for the plugin SDK. Some web
   app screens and a few core defaults still name specific kinds
   ([details](docs/plugins/README.md#where-the-boundary-leaks-today)).
@@ -354,7 +405,13 @@ OCSO is pre-1.0. APIs, the database schema and the plugin contracts can still ch
 - **Channels not yet built:** `SMS`, `RCS`, `VOICE` and `CUSTOM_APP` are reserved kinds with no adapter.
   Web chat is the only embeddable channel.
 - **MCP** uses Streamable HTTP only; there is no stdio transport.
-- **Teams:** agents are team-owned, but queue configuration is still shared across teams (ADR-026).
+- **Teams:** agents are team-owned. Queues are visible to every `queues.read` holder, and writes are
+  team-scoped and approved (ADR-031).
+- **Governance, awaiting owner rulings:** Service members see their team's proposals read-only, and a
+  platform-wide fallback checker is used when nobody in the owning teams can check (ADR-030 deviations
+  10 and 11).
+- **Audit exports** are an independent copy only on write-once storage. OCSO does not configure or check
+  S3 Object Lock on `audit-exports/`; enable it yourself.
 - **Sign-in:** no email one-time codes as a second factor, and no "SSO only" enforcement per domain.
 - **CI:** the Playwright job runs on every pull request but does not block merges yet.
 

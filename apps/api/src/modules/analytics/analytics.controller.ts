@@ -10,7 +10,7 @@ import { escalationReasonsReport } from './escalation-reasons.report.js';
 const Id = z.uuid();
 
 /**
- * CS Lead business analytics (design/02 Overview + Analytics tabs, docs/11 §3).
+ * Lead business analytics (design/02 Overview + Analytics tabs, docs/11 §3).
  * Every metric carries its formula in `definition`; no composite quality score.
  */
 @Controller('v1/analytics')

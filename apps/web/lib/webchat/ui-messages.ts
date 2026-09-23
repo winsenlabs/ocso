@@ -32,7 +32,23 @@ export interface OcsoMessageMetadata {
 
 export type OcsoDataParts = {
   unavailable: { mediaType: string; filename: string | null };
+  /** A question with options (PM/research/11 §5.4 CHOICES); the widget shows buttons. */
+  choices: { options: Array<{ id: string; label: string }> };
 };
+
+/** Schema of the CHOICES part (@ocso/domain CHOICES_SCHEMA). */
+const CHOICES_SCHEMA = 'ocso.choices';
+
+function choicesOf(part: Extract<WebChatPart, { type: 'STRUCTURED' }>): { text: string; options: Array<{ id: string; label: string }> } | null {
+  if (part.schema !== CHOICES_SCHEMA || !part.data) return null;
+  const text = typeof part.data['text'] === 'string' ? part.data['text'] : '';
+  const raw = Array.isArray(part.data['options']) ? (part.data['options'] as unknown[]) : [];
+  const options = raw.flatMap((o) => {
+    const v = o as { id?: unknown; label?: unknown };
+    return typeof v?.id === 'string' && typeof v.label === 'string' && v.label ? [{ id: v.id, label: v.label }] : [];
+  });
+  return text && options.length ? { text, options } : null;
+}
 
 export type OcsoUIMessage = UIMessage<OcsoMessageMetadata, OcsoDataParts>;
 export type OcsoUIPart = OcsoUIMessage['parts'][number];
@@ -78,8 +94,11 @@ export function toUIParts(parts: readonly WebChatPart[]): OcsoUIPart[] {
         const caption = 'caption' in part && part.caption ? [{ type: 'text' as const, text: part.caption, state: 'done' as const }] : [];
         return [file, ...caption];
       }
-      case 'STRUCTURED':
+      case 'STRUCTURED': {
+        const choices = choicesOf(part);
+        if (choices) return [{ type: 'text', text: choices.text, state: 'done' }, { type: 'data-choices', data: { options: choices.options } }];
         return part.fallbackText ? [{ type: 'text', text: part.fallbackText, state: 'done' }] : [];
+      }
       case 'LOCATION':
         return [{ type: 'text', text: [part.name, part.address, `${part.latitude}, ${part.longitude}`].filter(Boolean).join(' · '), state: 'done' }];
       case 'CONTACT':

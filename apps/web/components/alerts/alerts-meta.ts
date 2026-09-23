@@ -3,6 +3,7 @@
  * The /alerts screen keeps its filters, tab and open drawer in the URL so
  * links from the home and control center land on the same view.
  */
+import { ROLE_LABELS } from '@ocso/auth';
 import type { StatusTone } from '@/components/ui/status-chip';
 
 export const SEVERITY_TONE: Record<string, StatusTone> = { CRITICAL: 'danger', WARNING: 'warn', INFO: 'muted' };
@@ -13,7 +14,7 @@ export const STATE_CHIP: Record<string, { tone: StatusTone; label: string }> = {
 };
 export const DELIVERY_TONE: Record<string, StatusTone> = { SENT: 'good', PENDING: 'muted', FAILED: 'danger', SKIPPED: 'muted' };
 
-export const ROLE_LABEL: Record<string, string> = { PLATFORM_TECH_ADMIN: 'Tech Admin', CS_LEAD: 'CS Lead', CS_EXEC: 'CS Exec' };
+export const ROLE_LABEL: Record<string, string> = { ...ROLE_LABELS };
 
 export type AlertTab = 'inbox' | 'rules' | 'destinations';
 export type StatusFilter = 'UNRESOLVED' | 'OPEN' | 'ACKNOWLEDGED' | 'RESOLVED' | 'ALL';

@@ -3,7 +3,7 @@ import type { TelemetryOverview } from '@/lib/api/telemetry';
 import { formatCompact, formatDuration, formatLatency, formatNumber, formatPercent } from '@/lib/format';
 
 /**
- * Tech Admin tile row (design/03): last-hour window except the "today" figures.
+ * Tech admin tile row (design/03): last-hour window except the "today" figures.
  * Tool failure is the worst tool over 24 h with at least 5 finished calls; "none" when no such tool failed.
  */
 export function SystemTiles({ overview, scaleOutQueueAgeSeconds }: { overview: TelemetryOverview; scaleOutQueueAgeSeconds: number | null }) {

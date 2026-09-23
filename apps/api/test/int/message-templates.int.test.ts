@@ -1,21 +1,24 @@
 import { createHmac, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ChannelRuntime, DeliveryService, templateProviderSource } from '@ocso/agent-runtime';
-import { pollPendingTemplates } from '@ocso/application';
+import { ApprovalDecisionService, createApprovalRegistry, pollPendingTemplates, systemActor } from '@ocso/application';
 import type { BlobStore } from '@ocso/blob';
-import { modelProfiles, modelProviders, uuidv7 } from '@ocso/db';
+import { eq } from 'drizzle-orm';
+import { modelProfiles, modelProviders, uuidv7, virtualAgents } from '@ocso/db';
 import { BLOB_STORE } from '../../src/infrastructure/tokens.js';
+import { liveChannel } from './platform.js';
 import { completeSetup, startApi, type ApiHarness } from './harness.js';
 import { setTeams } from './teams.js';
 import { seededContent, startTwilioStub, type TwilioStub } from './twilio-stub.js';
+import { routeChannel } from './routing.js';
 
 /**
  * Message templates (WhatsApp through Twilio) over the real API against a
  * local Twilio stub (Messages + Content API): the workspace list (cached),
  * the adapter's 24-hour window on the conversation and on free-form replies,
  * sending an approved template (validation, holder rule, idempotency,
- * reopen-and-send, delivery through the adapter), and the CS Lead create →
- * review → approved → sendable loop.
+ * reopen-and-send, delivery through the adapter), and the Lead draft →
+ * approval → provider review → approved → sendable loop (PM/research/11 §4).
  */
 
 const ACCOUNT_SID = 'ACa1b2c3d4e5f60718293a4b5c6d7e8f90';
@@ -56,13 +59,15 @@ beforeAll(async () => {
   ]);
   h = await startApi();
   tokens.admin = await completeSetup(h);
-  // Channel adapters reach only public https hosts unless the Tech Admin allowlists an internal one (the stub is on loopback).
-  await api().patch('/v1/settings/deployment').set(auth(tokens.admin)).send({ egressAllowedInternalHosts: ['127.0.0.1'] }).expect(200);
+  // Channel adapters reach only public https hosts unless the Tech admin allowlists an internal one (the stub is on loopback).
+  // Deployment settings are approvable (PM/research/11 §4); the setup admin is the only checker yet, so it bootstraps.
+  const egress = await api().patch('/v1/settings/deployment').set(auth(tokens.admin)).send({ egressAllowedInternalHosts: ['127.0.0.1'], approval: { bootstrap: true } });
+  expect([200, 202]).toContain(egress.status);
   const mk = async (email: string, role: string) => (await api().post('/v1/users').set(auth(tokens.admin)).send({ email, name: email.split('@')[0], role, password: 'a password 12345' }).expect(201)).body.id as string;
-  const leadId = await mk('lead@ocso.test', 'CS_LEAD');
-  const otherLeadId = await mk('other-lead@ocso.test', 'CS_LEAD');
-  const execId = await mk('exec@ocso.test', 'CS_EXEC');
-  const exec2Id = await mk('exec2@ocso.test', 'CS_EXEC');
+  const leadId = await mk('lead@ocso.test', 'HEAD');
+  const otherLeadId = await mk('other-lead@ocso.test', 'HEAD');
+  const execId = await mk('exec@ocso.test', 'SERVICE');
+  const exec2Id = await mk('exec2@ocso.test', 'SERVICE');
   for (const [key, email] of [['lead', 'lead@ocso.test'], ['otherLead', 'other-lead@ocso.test'], ['exec', 'exec@ocso.test'], ['exec2', 'exec2@ocso.test']] as const) tokens[key] = await h.loginAs(email, 'a password 12345');
   ids.team = (await api().post('/v1/teams').set(auth(tokens.lead)).send({ name: 'Cards' }).expect(201)).body.id;
   ids.otherTeam = (await api().post('/v1/teams').set(auth(tokens.otherLead)).send({ name: 'Loans' }).expect(201)).body.id;
@@ -75,12 +80,15 @@ beforeAll(async () => {
   const profile = uuidv7();
   await h.db.db.insert(modelProfiles).values({ id: profile, name: 'support-primary', providerId: provider, model: 'scripted', retries: 0 });
   const agent = (await api().post('/v1/agents').set(auth(tokens.lead)).send({ name: 'Maya', purpose: 'customer support', conversationType: 'SUPPORT', modelProfileId: profile, defaultQueueId: ids.queue, teamIds: [ids.team] }).expect(201)).body.id;
-  const channel = await api()
-    .post('/v1/channels')
-    .set(auth(tokens.admin))
-    .send({ kind: 'TWILIO_WHATSAPP', name: 'WhatsApp (Twilio)', status: 'ACTIVE', defaultAgentId: agent, settings: { accountSid: ACCOUNT_SID, from: 'whatsapp:+14155238886', apiBaseUrl: stub.url, contentApiBaseUrl: stub.url }, secrets: { authToken: AUTH_TOKEN } })
-    .expect(201);
+  // A channel is a draft until a Head (approvals.check.channels) approves its activation (PM/research/11 §4).
+  const channel = {
+    body: await liveChannel<{ id: string; webhookPath: string }>(h, tokens.admin!, { id: leadId, token: tokens.lead! }, { kind: 'TWILIO_WHATSAPP', name: 'WhatsApp (Twilio)', settings: { accountSid: ACCOUNT_SID, from: 'whatsapp:+14155238886', apiBaseUrl: stub.url, contentApiBaseUrl: stub.url }, secrets: { authToken: AUTH_TOKEN } }),
+  };
   ids.channel = channel.body.id;
+  // Maya is live (routing hands customers of an agent that does not answer straight to a person).
+  await h.db.db.update(virtualAgents).set({ status: 'LIVE' }).where(eq(virtualAgents.id, agent));
+  // channel → pass-through router → Maya's queue (PM/research/11 §5): the lead's team reaches the channel through Maya.
+  await routeChannel(h, channel.body.id, agent, ids.queue);
   ids.webhookPath = channel.body.webhookPath;
 
   await inbound('My card was charged twice', 'SM2f6c1e0b9a8d7c6b5a4f3e2d1c0b9a8f');
@@ -212,7 +220,7 @@ describe('sending a template', () => {
   });
 });
 
-describe('creating templates (CS Lead) and the review loop', () => {
+describe('creating templates (Lead), approval, and the review loop', () => {
   const draft = {
     name: 'card_blocked_update',
     language: 'en',
@@ -222,31 +230,56 @@ describe('creating templates (CS Lead) and the review loop', () => {
     examples: { '1': 'Priya', '2': '4821' },
   };
   let created: { id: string; status: string };
+  // The worker's half of an approved submission or deletion (the approval.activate consumer).
+  const finish = (proposalId: string) => {
+    const registry = createApprovalRegistry({ business: { templateProviders: templateProviderSource(h.app.get(ChannelRuntime)) } });
+    return new ApprovalDecisionService(h.db.db, registry).finishActivation(systemActor('approval-activation', 'templates-test', 'Approval activation'), proposalId);
+  };
+  const decide = async (token: string, proposalId: string) => {
+    const shown = await api().get(`/v1/approvals/${proposalId}`).set(auth(token)).expect(200);
+    return api().post(`/v1/approvals/${proposalId}/decision`).set(auth(token)).send({ decision: 'APPROVE', contentHash: shown.body.contentHash }).expect(200);
+  };
+  const me = async (token: string) => (await api().get('/v1/auth/me').set(auth(token)).expect(200)).body.id as string;
+  const submissions = () => stub.requests.filter((r) => r.path.endsWith('/ApprovalRequests/whatsapp')).length;
 
-  it('only message_templates.manage holders whose teams use the channel may create; drafts are validated', async () => {
+  it('only message_templates.manage holders whose teams use the channel may draft; problems block the submission, not the draft', async () => {
     await api().post(`/v1/channels/${ids.channel}/templates`).set(auth(tokens.exec)).send(draft).expect(403);
     await api().post(`/v1/channels/${ids.channel}/templates`).set(auth(tokens.otherLead)).send(draft).expect(404);
-    const bad = await api().post(`/v1/channels/${ids.channel}/templates`).set(auth(tokens.lead)).send({ ...draft, name: 'Card Blocked', body: '{{1}} blocked' }).expect(400);
-    expect(bad.body.error.code).toBe('invalid_template');
-    expect(bad.body.error.details.problems.map((p: { field: string }) => p.field)).toEqual(expect.arrayContaining(['name', 'body']));
+    const bad = await api().post(`/v1/channels/${ids.channel}/templates`).set(auth(tokens.lead)).send({ ...draft, name: 'Card Blocked', body: '{{1}} blocked' }).expect(201);
+    expect(bad.body.problems.map((p: { field: string }) => p.field)).toEqual(expect.arrayContaining(['name', 'body']));
+    const refused = await api().post(`/v1/channels/${ids.channel}/templates/drafts/${bad.body.template.id}/submit`).set(auth(tokens.lead)).send({ approval: { checkerId: await me(tokens.otherLead), reason: 'Try it' } }).expect(400);
+    expect(refused.body.error.code).toBe('validation_failed');
     const channels = await api().get('/v1/message-templates/channels').set(auth(tokens.lead)).expect(200);
     expect(channels.body).toEqual([expect.objectContaining({ id: ids.channel, kindLabel: 'WhatsApp — Twilio', templates: { reviewer: 'WhatsApp', placeholderScope: 'template' } })]);
     expect((await api().get('/v1/message-templates/channels').set(auth(tokens.otherLead)).expect(200)).body).toEqual([]);
     await api().get('/v1/message-templates/channels').set(auth(tokens.exec)).expect(403);
   });
 
-  it('creates the content, submits it for review, records and audits it', async () => {
+  it('a draft never reaches the provider; its approved submission does, once, from the worker', async () => {
+    const before = submissions();
     const res = await api().post(`/v1/channels/${ids.channel}/templates`).set(auth(tokens.lead)).send(draft).expect(201);
-    created = res.body.template;
-    expect(res.body.template).toMatchObject({ name: 'card_blocked_update', status: 'PENDING', category: 'UTILITY', contentType: 'whatsapp/card', submission: { submittedBy: { name: 'lead' } } });
-    expect(res.body.warnings).toEqual([]);
-    const submitted = stub.requests.find((r) => r.path.endsWith('/ApprovalRequests/whatsapp'));
-    expect(JSON.parse(submitted!.body)).toEqual({ name: 'card_blocked_update', category: 'UTILITY' });
-    const actions = await h.db.pool.query(`SELECT action FROM audit_events WHERE target_type = 'message_template' ORDER BY occurred_at`);
-    expect(actions.rows.map((r: { action: string }) => r.action)).toEqual(['message_template.create', 'message_template.submit']);
+    expect(res.body).toMatchObject({ template: { name: 'card_blocked_update', status: 'DRAFT', submission: { draft: true, submittedBy: { name: 'lead' } } }, problems: [], warnings: [] });
+    const recordId = res.body.template.id as string;
     await api().post(`/v1/channels/${ids.channel}/templates`).set(auth(tokens.lead)).send(draft).expect(409);
-    const list = await api().get(`/v1/channels/${ids.channel}/templates`).set(auth(tokens.exec)).expect(200);
-    expect(list.body.templates.find((t: { id: string }) => t.id === created.id)).toMatchObject({ status: 'PENDING' });
+    // Submitting is always a proposal: 409 approval_required without a checker.
+    const needs = await api().post(`/v1/channels/${ids.channel}/templates/drafts/${recordId}/submit`).set(auth(tokens.lead)).expect(409);
+    expect(needs.body.error).toMatchObject({ code: 'approval_required', details: { objectKind: 'message_template', action: 'CREATE', objectId: recordId } });
+    // Cards has no other Head: the platform-wide fallback makes the Loans Head the checker.
+    const proposed = await api().post(`/v1/channels/${ids.channel}/templates/drafts/${recordId}/submit`).set(auth(tokens.lead)).send({ approval: { checkerId: await me(tokens.otherLead), reason: 'Card block notice' } }).expect(202);
+    await api().put(`/v1/channels/${ids.channel}/templates/drafts/${recordId}`).set(auth(tokens.lead)).send(draft).expect(409);
+    expect(submissions()).toBe(before);
+    await decide(tokens.otherLead, proposed.body.proposal.id);
+    expect(submissions()).toBe(before);
+    expect(await finish(proposed.body.proposal.id)).toBe('ACTIVATED');
+    expect(await finish(proposed.body.proposal.id)).toBe('SKIPPED');
+    expect(submissions()).toBe(before + 1);
+    const submitted = stub.requests.filter((r) => r.path.endsWith('/ApprovalRequests/whatsapp')).at(-1);
+    expect(JSON.parse(submitted!.body)).toEqual({ name: 'card_blocked_update', category: 'UTILITY' });
+    const actions = await h.db.pool.query(`SELECT action FROM audit_events WHERE target_type = 'message_template' AND target_id = $1 ORDER BY occurred_at`, [recordId]);
+    expect(actions.rows.map((r: { action: string }) => r.action)).toEqual(['message_template.create', 'message_template.submit']);
+    const list = await api().get(`/v1/channels/${ids.channel}/templates?refresh=true`).set(auth(tokens.exec)).expect(200);
+    created = list.body.templates.find((t: { name: string }) => t.name === 'card_blocked_update');
+    expect(created).toMatchObject({ status: 'PENDING', contentType: 'whatsapp/card' });
     expect((await templateMessage(tokens.exec, { templateId: created.id, variables: { '1': 'Priya', '2': '4821' } }).expect(400)).body.error.code).toBe('template_not_approved');
   });
 
@@ -268,17 +301,26 @@ describe('creating templates (CS Lead) and the review loop', () => {
     );
   });
 
-  it('a rejection carries the reason; delete removes it at the provider and from the list', async () => {
+  it('a rejection carries the reason; deleting (Head, approved) removes it at the provider and from the list', async () => {
     const other = await api().post(`/v1/channels/${ids.channel}/templates`).set(auth(tokens.admin)).send({ ...draft, name: 'card_blocked_v2' }).expect(201);
-    stub.approve(other.body.template.id, 'rejected', 'INVALID_FORMAT');
+    const submit = await api().post(`/v1/channels/${ids.channel}/templates/drafts/${other.body.template.id}/submit`).set(auth(tokens.admin)).send({ approval: { checkerId: await me(tokens.lead), reason: 'Second version' } }).expect(202);
+    await decide(tokens.lead, submit.body.proposal.id);
+    await finish(submit.body.proposal.id);
+    const providerId = (await h.db.pool.query(`SELECT provider_template_id FROM message_templates WHERE id = $1`, [other.body.template.id])).rows[0].provider_template_id as string;
+    stub.approve(providerId, 'rejected', 'INVALID_FORMAT');
     await pollPendingTemplates(h.db.db, templateProviderSource(h.app.get(ChannelRuntime)), { correlationId: 'test-poll-2' });
-    const status = await api().get(`/v1/channels/${ids.channel}/templates/${other.body.template.id}`).set(auth(tokens.lead)).expect(200);
+    const status = await api().get(`/v1/channels/${ids.channel}/templates/${providerId}`).set(auth(tokens.lead)).expect(200);
     expect(status.body).toMatchObject({ status: 'REJECTED', rejectionReason: 'INVALID_FORMAT' });
-    await api().delete(`/v1/channels/${ids.channel}/templates/${other.body.template.id}`).set(auth(tokens.exec)).expect(403);
-    await api().delete(`/v1/channels/${ids.channel}/templates/${other.body.template.id}`).set(auth(tokens.lead)).expect(204);
-    expect(stub.contents.has(other.body.template.id)).toBe(false);
+    await api().delete(`/v1/channels/${ids.channel}/templates/${providerId}`).set(auth(tokens.exec)).expect(403);
+    const needs = await api().delete(`/v1/channels/${ids.channel}/templates/${providerId}`).set(auth(tokens.lead)).expect(409);
+    expect(needs.body.error).toMatchObject({ code: 'approval_required', details: { objectKind: 'message_template', action: 'DELETE' } });
+    const del = await api().delete(`/v1/channels/${ids.channel}/templates/${providerId}`).set(auth(tokens.lead)).send({ approval: { checkerId: await me(tokens.otherLead), reason: 'Rejected, replace it' } }).expect(202);
+    await decide(tokens.otherLead, del.body.proposal.id);
+    expect(stub.contents.has(providerId)).toBe(true);
+    expect(await finish(del.body.proposal.id)).toBe('ACTIVATED');
+    expect(stub.contents.has(providerId)).toBe(false);
     const list = await api().get(`/v1/channels/${ids.channel}/templates`).set(auth(tokens.lead)).expect(200);
-    expect(list.body.templates.map((t: { id: string }) => t.id)).not.toContain(other.body.template.id);
+    expect(list.body.templates.map((t: { id: string }) => t.id)).not.toContain(providerId);
     const { rows } = await h.db.pool.query(`SELECT count(*)::int AS n FROM audit_events WHERE action = 'message_template.delete'`);
     expect(rows[0].n).toBe(1);
   });

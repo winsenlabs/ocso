@@ -32,7 +32,7 @@ export interface ConnectionRecord {
   status: ConnectionStatus;
   scope: ConnectionScope;
   ownerUserId: string | null;
-  /** Agents allowed to use this connection; `ALL` means any agent the CS Lead enables. */
+  /** Agents allowed to use this connection; `ALL` means any agent the Lead enables. */
   allowedAgentIds: readonly string[] | 'ALL';
   grantedScopes: readonly string[];
   confirmationPolicy: ConfirmationPolicy;

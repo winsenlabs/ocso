@@ -10,8 +10,12 @@ import { emitEvent } from '../events/outbox.js';
 import { nowOf, type ActorContext } from '../shared/context.js';
 import { authorize, isForeignKeyViolation, isUniqueViolation } from './access.js';
 import type { ProviderInput, ProviderPatch, ProviderTestInput } from './inputs.js';
+import type { ProviderChange } from './provider-approval.js';
+import { approvalRequiredError } from '../approvals/guard.js';
+import { assertPlatformWrite, definedOnly } from '../settings/platform-approvals.js';
+import { stageSecrets, unstageSecrets } from '../settings/secret-refs.js';
 import { NO_MEDIA, resolveCredentials, validateProviderConfig, type ProviderRow } from './provider-config.js';
-import { ProviderCredentialStore, type CredentialChange } from './provider-secrets.js';
+import { ProviderCredentialStore, secretKindFor, type CredentialChange } from './provider-secrets.js';
 import { runProviderTest, testErrorText, type ProviderTestResult } from './provider-test.js';
 import { profilesByProvider, profilesUsingProvider } from './references.js';
 import { EMPTY_USAGE_STATS, modelUsageStats } from './usage-stats.js';
@@ -38,7 +42,13 @@ const auditSnapshot = (r: Pick<ProviderRow, 'kind' | 'name' | 'region' | 'reside
   credentialKeys: Object.keys(r.secretRefs),
 });
 
-/** Model provider administration (docs/06, ADR-006, ADR-012). Tech Admin owns writes. */
+/** What a person edits directly on a draft or proposes for an approved provider (`enabled` moves through setEnabled / ACTIVATE). */
+export type ProviderEdit = Omit<ProviderPatch, 'enabled'>;
+
+/**
+ * Model provider administration (docs/06, ADR-006, ADR-012). Tech admin owns writes.
+ * Maker–checker (PM/research/11 §4, provider-approval.ts): a new provider is a disabled draft.
+ */
 export class ProviderService {
   private readonly credentials: ProviderCredentialStore;
   private readonly adapterDeps: AdapterDeps;
@@ -74,13 +84,14 @@ export class ProviderService {
     const row = await this.commit(change, async (tx) => {
       const [inserted] = await tx
         .insert(modelProviders)
-        .values({ ...source, settings, secretRefs: change.refs, enabled: input.enabled, maxConcurrency: input.maxConcurrency })
+        // A draft: disabled (nothing can call it) until its ACTIVATE proposal is approved.
+        .values({ ...source, settings, secretRefs: change.refs, enabled: false, maxConcurrency: input.maxConcurrency })
         .returning();
       await recordAudit(tx, actor, {
         action: 'model_provider.create',
         targetType: 'model_provider',
         targetId: id,
-        summary: `Added ${input.kind} provider ${input.name}`,
+        summary: `Added ${input.kind} provider ${input.name} (disabled until approved)`,
         after: auditSnapshot(inserted!),
       });
       await emitEvent(tx, actor, 'config.changed', { area: 'model_provider', entityId: id });
@@ -89,9 +100,16 @@ export class ProviderService {
     return this.view(row);
   }
 
-  async update(actor: ActorContext, id: string, patch: ProviderPatch): Promise<ProviderView> {
+  /**
+   * A draft's configuration (a provider never approved), written directly; once approved this answers 409
+   * approval_required and the change is an UPDATE proposal (stageChange). `enabled` is not changed here:
+   * disabling is setEnabled(false), enabling is always an ACTIVATE proposal.
+   */
+  async update(actor: ActorContext, id: string, patch: ProviderEdit): Promise<ProviderView> {
     authorize(actor, Permission.PROVIDERS_MANAGE);
     const before = await this.row(this.deps.db, id);
+    // Refuse before any secret is touched (and again under the lock below).
+    await this.deps.db.transaction((tx) => assertPlatformWrite(tx, 'model_provider', id));
     const next = {
       id,
       kind: before.kind,
@@ -104,12 +122,10 @@ export class ProviderService {
     if (patch.settings !== undefined || patch.credentials !== undefined || next.region !== before.region) {
       settings = validateProviderConfig(this.deps.registry, next, await this.mergedCredentials(before, patch.credentials ?? {}), this.adapterDeps);
     }
-    if (patch.enabled === true && !this.deps.registry.get(before.kind)) {
-      throw validation('provider_kind_not_available', `Provider ${before.kind} is not available in this deployment`, { kind: before.kind });
-    }
     if (next.name.toLowerCase() !== before.name.toLowerCase()) await this.assertNameFree(next.name, id);
     const change = patch.credentials ? await this.credentials.apply(next.name, before.secretRefs, patch.credentials) : null;
     const row = await this.commit(change, async (tx) => {
+      await assertPlatformWrite(tx, 'model_provider', id);
       const [updated] = await tx
         .update(modelProviders)
         .set({
@@ -118,7 +134,6 @@ export class ProviderService {
           residencyZone: next.residencyZone,
           settings,
           secretRefs: change?.refs ?? before.secretRefs,
-          ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
           ...(patch.maxConcurrency !== undefined ? { maxConcurrency: patch.maxConcurrency } : {}),
           updatedAt: new Date(),
         })
@@ -141,39 +156,60 @@ export class ProviderService {
     return this.view(row);
   }
 
-  setEnabled(actor: ActorContext, id: string, enabled: boolean): Promise<ProviderView> {
-    return this.update(actor, id, { enabled });
+  /**
+   * The payload of an UPDATE proposal. New credential values are stored as NEW secrets — never rotated in
+   * place, the live provider keeps its values until approval — and travel as refs; `null` removes a credential.
+   * The whole configuration is validated now, so an invalid change is refused at submit.
+   */
+  async stageChange(actor: ActorContext, id: string, patch: ProviderEdit): Promise<{ payload: ProviderChange; discard: () => Promise<void> }> {
+    authorize(actor, Permission.PROVIDERS_MANAGE);
+    const before = await this.row(this.deps.db, id);
+    const next = {
+      id,
+      kind: before.kind,
+      name: patch.name ?? before.name,
+      region: patch.region !== undefined ? patch.region : before.region,
+      residencyZone: patch.residencyZone !== undefined ? patch.residencyZone : before.residencyZone,
+      settings: patch.settings ?? before.settings,
+    };
+    validateProviderConfig(this.deps.registry, next, await this.mergedCredentials(before, patch.credentials ?? {}), this.adapterDeps);
+    const values = Object.fromEntries(Object.entries(patch.credentials ?? {}).filter((e): e is [string, string] => e[1] !== null));
+    const removed = Object.entries(patch.credentials ?? {}).filter(([, v]) => v === null).map(([k]) => k);
+    const owner = { kind: 'model_provider', objectId: id, makerId: actor.principal!.userId };
+    const staged = await stageSecrets(this.deps.db, this.deps.secrets, owner, { name: `provider ${next.name}`, kind: secretKindFor, usedBy: `provider:${next.name}` }, values);
+    const { credentials: _c, ...fields } = patch;
+    const payload: ProviderChange = { ...definedOnly(fields), ...(staged.length ? { credentials: staged } : {}), ...(removed.length ? { removeCredentials: removed } : {}) };
+    return { payload, discard: () => unstageSecrets(this.deps.db, this.deps.secrets, staged.map((c) => c.ref)) };
   }
 
+  /**
+   * Disabling is a stop action: immediate, never gated, allowed while a proposal is open. Enabling (first
+   * time or resume) is an ACTIVATE proposal: 409 approval_required here.
+   */
+  async setEnabled(actor: ActorContext, id: string, enabled: boolean): Promise<ProviderView> {
+    authorize(actor, Permission.PROVIDERS_MANAGE);
+    if (enabled) {
+      await this.row(this.deps.db, id);
+      throw approvalRequiredError('model_provider', id, 'ACTIVATE');
+    }
+    const row = await this.deps.db.transaction(async (tx) => {
+      const [locked] = await tx.select().from(modelProviders).where(eq(modelProviders.id, id)).for('update');
+      if (!locked) throw notFound('model_provider', id);
+      if (!locked.enabled) return locked;
+      const [updated] = await tx.update(modelProviders).set({ enabled: false, updatedAt: new Date() }).where(eq(modelProviders.id, id)).returning();
+      await recordAudit(tx, actor, { action: 'model_provider.disable', targetType: 'model_provider', targetId: id, summary: `Disabled provider ${locked.name}`, before: { enabled: true }, after: { enabled: false } });
+      await emitEvent(tx, actor, 'config.changed', { area: 'model_provider', entityId: id });
+      await this.bumpProfiles(tx, actor, id);
+      return updated!;
+    });
+    return this.view(row);
+  }
+
+  /** Deleting a provider is always a proposal (DELETE): 409 approval_required here. */
   async delete(actor: ActorContext, id: string): Promise<void> {
     authorize(actor, Permission.PROVIDERS_MANAGE);
-    const removed = await this.deps.db
-      .transaction(async (tx) => {
-        const [row] = await tx.select().from(modelProviders).where(eq(modelProviders.id, id)).for('update');
-        if (!row) throw notFound('model_provider', id);
-        const users = await profilesUsingProvider(tx, id);
-        if (users.length) {
-          throw new DomainError(ErrorCategory.CONFLICT, 'model_provider_in_use', `${row.name} is used by model profiles; reassign them first`, {
-            profiles: users.map((p) => p.name),
-          });
-        }
-        await tx.delete(modelProviders).where(eq(modelProviders.id, id));
-        await recordAudit(tx, actor, {
-          action: 'model_provider.delete',
-          targetType: 'model_provider',
-          targetId: id,
-          summary: `Removed provider ${row.name}`,
-          before: auditSnapshot(row),
-        });
-        await emitEvent(tx, actor, 'config.changed', { area: 'model_provider', entityId: id });
-        return row;
-      })
-      .catch((error: unknown) => {
-        // A profile created concurrently still holds the FK.
-        if (isForeignKeyViolation(error)) throw conflict('model_provider_in_use', 'The provider is used by a model profile');
-        throw error;
-      });
-    await this.credentials.discard(Object.values(removed.secretRefs));
+    await this.row(this.deps.db, id);
+    throw approvalRequiredError('model_provider', id, 'DELETE');
   }
 
   async test(actor: ActorContext, id: string, input: ProviderTestInput = {}): Promise<ProviderTestResult> {

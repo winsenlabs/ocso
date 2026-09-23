@@ -18,9 +18,9 @@ interface Props {
 }
 
 const DESC: Record<OwnerMode | 'read', string> = {
-  lead: 'CS Leads of these teams manage this agent; others cannot see it. You can add or remove your own teams.',
-  admin: 'Governance: reassign the teams whose CS Leads manage this agent, e.g. when a lead leaves. The change is audited.',
-  read: 'CS Leads of these teams manage this agent.',
+  lead: 'Leads of these teams manage this agent; others cannot see it. You can add or remove your own teams.',
+  admin: 'Governance: reassign the teams whose Leads manage this agent, e.g. when a lead leaves. The change is audited.',
+  read: 'Leads of these teams manage this agent.',
 };
 
 /** "Owning teams" card on the Settings tab (ADR-026). */
@@ -58,7 +58,7 @@ export function OwnersCard({ agentId, owners, mode, teams, myTeamIds }: Props) {
             <fieldset className="checks" style={{ border: 'none', padding: 0, margin: 0 }}>
               <legend className="sr-only">Owning teams</legend>
               {choices.map((c) => (
-                <label key={c.id} title={c.locked ? 'Owned by a team you are not in: its leads or the Tech Admin can change it' : undefined}>
+                <label key={c.id} title={c.locked ? 'Owned by a team you are not in: its leads or the Tech admin can change it' : undefined}>
                   <input
                     type="checkbox"
                     checked={selected.includes(c.id)}
@@ -71,7 +71,7 @@ export function OwnersCard({ agentId, owners, mode, teams, myTeamIds }: Props) {
               ))}
             </fieldset>
           ) : (
-            <p className="mono-sm">No teams exist yet. A CS Lead creates teams on the Team page.</p>
+            <p className="mono-sm">No teams exist yet. A Lead creates teams on the Team page.</p>
           )}
           {problem ? <p className="err-text" role="alert">{problem}</p> : null}
           {warning ? <AlertBanner tone="warn" style={{ margin: '10px 0 0' }}>{warning}</AlertBanner> : null}

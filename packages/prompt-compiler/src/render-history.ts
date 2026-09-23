@@ -3,6 +3,8 @@ import { neutralize } from './render-context.js';
 import type { HistoryEntry, ModelInputCapabilities } from './types.js';
 
 const HUMAN_MARKER = (name?: string) => `[human colleague${name ? ` ${neutralize(name)}` : ''}]`;
+/** Router questions are shown to the model as its own side of the conversation, marked as automated. */
+const ROUTER_MARKER = '(automated menu)';
 
 function renderPart(
   part: InteractionPart,
@@ -27,7 +29,7 @@ function renderPart(
 
 function roleOf(entry: HistoryEntry): 'user' | 'assistant' | null {
   if (entry.actorType === 'CUSTOMER') return 'user';
-  if (entry.actorType === 'AGENT' || entry.actorType === 'HUMAN') return 'assistant';
+  if (entry.actorType === 'AGENT' || entry.actorType === 'HUMAN' || entry.actorType === 'ROUTER') return 'assistant';
   return null; // SYSTEM entries are represented in the conversation frame / summary
 }
 
@@ -48,6 +50,7 @@ export function renderHistory(
     const includeMedia = entries.length - index <= mediaWindow;
     const content: ModelContentPart[] = [];
     if (entry.actorType === 'HUMAN') content.push({ type: 'text', text: HUMAN_MARKER(entry.actorName) });
+    if (entry.actorType === 'ROUTER') content.push({ type: 'text', text: ROUTER_MARKER });
     for (const part of entry.parts) {
       const rendered = renderPart(part, includeMedia, caps);
       if (rendered) content.push(rendered);

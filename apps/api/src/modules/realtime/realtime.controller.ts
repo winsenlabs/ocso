@@ -51,7 +51,7 @@ export class RealtimeController {
     const keepalive = interval(20_000).pipe(map((): MessageEvent => ({ type: 'ping', data: {} })));
     // The session is re-checked every SESSION_STREAM_RECHECK_SECONDS: revoked, expired, idle,
     // disabled user or unmet MFA policy ends the stream (ADR-025); the client's reconnect then gets 401.
-    const sessionEnded = endsWhenSessionEnds(this.liveness, req.authSession?.id, this.env.SESSION_STREAM_RECHECK_SECONDS * 1000);
+    const sessionEnded = endsWhenSessionEnds(this.liveness, req.authSession?.id, this.env.SESSION_STREAM_RECHECK_SECONDS * 1000, principal);
     return merge(of<MessageEvent>({ type: 'ready', data: { at: new Date().toISOString() } }), events, keepalive).pipe(
       takeUntil(merge(fromEvent(signal, 'abort'), sessionEnded)),
     );

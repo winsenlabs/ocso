@@ -25,9 +25,9 @@ Depending on role, it may:
 The internal agent assumes the permissions of the current authenticated user.
 
 Examples:
-- CS Exec cannot ask it to reveal platform secrets.
-- CS Lead cannot access restricted raw infrastructure controls unless explicitly permitted.
-- Tech Admin can inspect technical telemetry.
+- A Service member cannot ask it to reveal platform secrets.
+- A Head or Lead cannot access restricted raw infrastructure controls unless explicitly permitted.
+- Tech can inspect technical telemetry.
 
 All agent-issued administrative actions are attributable to the initiating human.
 

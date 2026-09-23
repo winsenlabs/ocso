@@ -7,7 +7,8 @@ import { conversationScope, type VisibilityPolicy } from './access.js';
 import { maskIdentity } from './masking.js';
 import { TagSchema } from './tags.js';
 
-export const INBOX_VIEWS = ['all', 'mine', 'waiting', 'ai', 'human', 'priority', 'resolved'] as const;
+// 'routing': a router is still deciding (ROUTING) — the wave-2 inbox filter (PM/research/11 §5.7).
+export const INBOX_VIEWS = ['all', 'mine', 'waiting', 'ai', 'human', 'priority', 'resolved', 'routing'] as const;
 export type InboxView = (typeof INBOX_VIEWS)[number];
 
 export const InboxQuery = z.object({
@@ -27,7 +28,8 @@ export interface ConversationSummary {
   displayId: string;
   customer: { id: string; name: string | null; identity: string | null };
   channel: { id: string | null; kind: string | null; name: string | null };
-  agent: { id: string; name: string; conversationType: string };
+  /** Null while a router is still deciding (ROUTING). */
+  agent: { id: string; name: string; conversationType: string } | null;
   controlState: string;
   priority: string;
   assignedUser: { id: string; name: string } | null;
@@ -62,13 +64,15 @@ function viewPredicate(view: InboxView, principal: Principal): SQL | undefined {
     case 'waiting':
       return inArray(conversations.controlState, ['WAITING_FOR_HUMAN', 'ESCALATION_REQUESTED']);
     case 'ai':
-      return inArray(conversations.controlState, ['AI_ACTIVE', 'AI_RESUMING']);
+      return inArray(conversations.controlState, ['AI_ACTIVE', 'AI_RESUMING', 'ROUTING']);
     case 'human':
       return eq(conversations.controlState, 'HUMAN_ACTIVE');
     case 'priority':
       return and(open, inArray(conversations.priority, ['P1', 'P2']));
     case 'resolved':
       return eq(conversations.controlState, 'RESOLVED');
+    case 'routing':
+      return eq(conversations.controlState, 'ROUTING');
   }
 }
 
@@ -103,7 +107,7 @@ export class InboxService {
       })
       .from(conversations)
       .innerJoin(customers, eq(customers.id, conversations.customerId))
-      .innerJoin(virtualAgents, eq(virtualAgents.id, conversations.agentId))
+      .leftJoin(virtualAgents, eq(virtualAgents.id, conversations.agentId))
       .leftJoin(channels, eq(channels.id, conversations.channelId))
       .leftJoin(users, eq(users.id, conversations.assignedUserId))
       .leftJoin(queues, eq(queues.id, conversations.queueId))
@@ -118,7 +122,7 @@ export class InboxService {
         displayId: displayId('conv', r.c.id),
         customer: { id: r.c.customerId, name: r.customerName, identity: maskIdentity(r.identity) },
         channel: { id: r.c.channelId, kind: r.channelKind, name: r.channelName },
-        agent: { id: r.c.agentId, name: r.agentName, conversationType: r.agentType },
+        agent: r.c.agentId && r.agentName && r.agentType ? { id: r.c.agentId, name: r.agentName, conversationType: r.agentType } : null,
         controlState: r.c.controlState,
         priority: r.c.priority,
         assignedUser: r.c.assignedUserId && r.assigneeName ? { id: r.c.assignedUserId, name: r.assigneeName } : null,
@@ -141,10 +145,10 @@ export class InboxService {
   private async counts(principal: Principal, base: SQL | undefined): Promise<Record<InboxView, number>> {
     const f = (view: InboxView) => sql<number>`count(*) FILTER (WHERE ${viewPredicate(view, principal)})::int`;
     const [row] = await this.db
-      .select({ all: f('all'), mine: f('mine'), waiting: f('waiting'), ai: f('ai'), human: f('human'), priority: f('priority'), resolved: f('resolved') })
+      .select({ all: f('all'), mine: f('mine'), waiting: f('waiting'), ai: f('ai'), human: f('human'), priority: f('priority'), resolved: f('resolved'), routing: f('routing') })
       .from(conversations)
       .where(base);
-    return row ?? { all: 0, mine: 0, waiting: 0, ai: 0, human: 0, priority: 0, resolved: 0 };
+    return row ?? { all: 0, mine: 0, waiting: 0, ai: 0, human: 0, priority: 0, resolved: 0, routing: 0 };
   }
 
   private searchPredicate(term: string): SQL {

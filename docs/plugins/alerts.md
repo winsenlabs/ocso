@@ -187,7 +187,7 @@ Conditions are plain strings, so there is no kinds constant to update.
   no per-condition UI code.
 - Alerts are shown to the roles in the rule's audience. Technical and business alerts each have their
   own read and manage permissions, and an alert about one agent is shown only to people who can read
-  that agent (for a CS Lead, their teams' agents).
+  that agent (for a Head or Lead, their teams' agents).
 
 Tests to copy: `packages/application/test/alerts-evaluators-technical.int.test.ts` and
 `alerts-evaluators-business.int.test.ts` (seed rows, evaluate, assert observations), and

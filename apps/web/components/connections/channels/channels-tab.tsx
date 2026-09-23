@@ -12,6 +12,7 @@ import { listAgentsLite, type AgentLite } from '@/lib/api/mcp';
 import { formatAge } from '@/lib/format';
 import { hasPermission, type Session } from '@/lib/session';
 import { connectionsHref, idParam, param } from '../url';
+import { LifecycleActions } from '../lifecycle-actions';
 import { ChannelDialog } from './channel-dialog';
 import { identitySettingOf } from './settings-form';
 
@@ -73,7 +74,7 @@ export async function ChannelsTab({ session, params }: { session: Session; param
         <EmptyState title="No channels configured yet">
           {canManage
             ? `Add a channel: ${kinds.map((k) => k.label ?? k.kind).join(', ') || 'no channel kinds are installed'}. Each asks for exactly what its provider needs.`
-            : 'A Platform Tech Admin adds channels; each appears here with its status, inbound path, credentials (by name) and default agent.'}
+            : 'A Tech admin adds channels; each appears here with its status, inbound path, credentials (by name) and default agent.'}
         </EmptyState>
       ) : (
         <div className="g g3 conn-grid" role="list" aria-label="Channels">
@@ -99,6 +100,9 @@ export async function ChannelsTab({ session, params }: { session: Session; param
                           Templates
                         </Link>
                       ) : null}
+                      {canManage ? (
+                        <LifecycleActions kind="channel" id={c.id} name={c.name} state={c.status === 'ACTIVE' ? 'live' : c.status === 'DISABLED' ? 'stopped' : 'draft'} approval={c.approval} />
+                      ) : null}
                       <span className="sp" />
                       <span className="mono-sm">{c.lastInboundAt ? `last inbound ${formatAge(c.lastInboundAt)} ago` : 'nothing received yet'}</span>
                     </div>
@@ -113,12 +117,16 @@ export async function ChannelsTab({ session, params }: { session: Session; param
                       { k: c.embedPath && !c.webhookPath ? 'widget' : 'inbound', v: <span className="mono-sm">{c.webhookPath ?? c.embedPath ?? '—'}</span> },
                       { k: 'credentials', v: secrets.length ? `${secrets.join(', ')} set` : 'none set' },
                       {
-                        k: 'agent',
-                        v: c.defaultAgentId ? (
-                          agentName(c.defaultAgentId)
+                        // channel → router → queue → agent (PM/research/11 §5.7): the channel shows its router.
+                        k: 'router',
+                        v: c.router ? (
+                          <Link href={`/routers/${encodeURIComponent(c.router.id)}`}>
+                            {c.router.name}
+                            {c.router.status === 'ACTIVE' ? '' : ` (${c.router.status.toLowerCase()})`}
+                            {c.defaultAgentId ? ` · ${agentName(c.defaultAgentId)}` : ''}
+                          </Link>
                         ) : (
-                          // Ingress routes new conversations to the default agent (or the only attached one).
-                          <span className="warn-text">none: new customer messages are rejected unless exactly one agent uses this channel</span>
+                          <span className="warn-text">none: new customer messages are rejected until a router is attached (Routers)</span>
                         ),
                       },
                     ]}

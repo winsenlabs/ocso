@@ -10,5 +10,6 @@ export * from './tools.js';
 export * from './drivers/registry.js';
 export * from './drivers/first-party.js';
 export * from './adapters.js';
+export * from './audit.js';
 export * from './deployment.js';
 export * from './pg-notifier.js';

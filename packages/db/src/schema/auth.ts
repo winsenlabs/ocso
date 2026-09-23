@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { bigint, boolean, index, integer, pgTable, smallint, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { bigint, boolean, check, index, integer, pgTable, smallint, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { createdAt, id, ts, updatedAt } from './columns.js';
 import { users } from './identity.js';
 
@@ -111,7 +111,7 @@ export const authPasskeys = pgTable(
 );
 
 /**
- * SSO identity providers (OIDC or SAML 2.0), managed by the Tech Admin through
+ * SSO identity providers (OIDC or SAML 2.0), managed by the Tech admin through
  * OCSO's API. `domain` is a comma-separated list of email domains.
  */
 export const authSsoProviders = pgTable(
@@ -127,12 +127,17 @@ export const authSsoProviders = pgTable(
     domain: text().notNull(),
     /** Display name on the sign-in page. */
     name: text().notNull().default('Single sign-on'),
-    /** Create unknown users (as CS Exec) on first sign-in; default: invited users only. */
+    /** Create unknown users (as Service member) on first sign-in; default: invited users only. */
     autoProvision: boolean().notNull().default(false),
+    /**
+     * DRAFT until approved (PM/research/11 §4): sign-in through it is refused. DISABLED is the immediate stop.
+     * Better Auth never writes this column, so a newly registered provider takes the DRAFT default (0029).
+     */
+    status: text().$type<'DRAFT' | 'ACTIVE' | 'DISABLED'>().notNull().default('DRAFT'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [uniqueIndex('auth_sso_providers_provider_uq').on(t.providerId)],
+  (t) => [uniqueIndex('auth_sso_providers_provider_uq').on(t.providerId), check('auth_sso_providers_status_ck', sql`${t.status} IN ('DRAFT', 'ACTIVE', 'DISABLED')`)],
 );
 
 /** Better Auth rate limiter (database storage: shared by every API instance). */
@@ -147,7 +152,7 @@ export const authRateLimits = pgTable(
   (t) => [uniqueIndex('auth_rate_limits_key_uq').on(t.key), index('auth_rate_limits_last_idx').on(t.lastRequest)],
 );
 
-/** Singleton (id = 1): authentication policy the Tech Admin controls in Settings. */
+/** Singleton (id = 1): authentication policy the Tech admin controls in Settings. */
 export const authPolicy = pgTable('auth_policy', {
   id: smallint().primaryKey().default(1),
   /** Roles that must use a second factor (TOTP, passkey or SSO) to reach the app. */

@@ -1,0 +1,30 @@
+/* Maker–checker queue (PM/research/11 §4): filters, bulk bar, diff, decision form, notices. */
+.ap-filters{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.ap-filters .grp{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+.ap-bulk{position:sticky;bottom:0;z-index:5;display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;padding:10px 12px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-sm)}
+.ap-bulk input[type="text"]{flex:1;min-width:180px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 9px;font:inherit;font-size:12.5px;color:var(--ink)}
+.ap-row-title{display:flex;gap:6px;align-items:center}
+.ap-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--warn,#d97706);flex:none}
+.ap-diff{display:grid;gap:0;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden}
+.ap-diff .r{display:grid;grid-template-columns:minmax(110px,0.7fr) minmax(0,1fr) minmax(0,1fr);gap:10px;padding:7px 10px;border-top:1px solid var(--border);font-size:12px;align-items:start}
+.ap-diff .r:first-child{border-top:0}
+.ap-diff .h{font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-4)}
+.ap-diff .v{white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto}
+.ap-diff .v.before{color:var(--ink-3);text-decoration:line-through;text-decoration-color:color-mix(in srgb,var(--danger,#dc2626) 45%,transparent)}
+.ap-diff .v.after{color:var(--ink)}
+.ap-diff .k{font-family:var(--font-mono);font-size:11px;color:var(--ink-2)}
+.ap-diff .mark{font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;margin-left:4px;color:var(--ink-4)}
+.ap-form{display:grid;gap:8px}
+.ap-form textarea,.ap-form select{width:100%;box-sizing:border-box;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;font:inherit;font-size:12.5px;color:var(--ink)}
+.ap-form textarea{min-height:64px;resize:vertical}
+.ap-form label{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-4)}
+.ap-history{display:grid;gap:6px;margin:0;padding:0;list-style:none;font-size:12px}
+.ap-history li{display:grid;grid-template-columns:auto 1fr;gap:8px}
+.ap-notices{position:fixed;right:16px;bottom:16px;z-index:61;display:grid;gap:8px;max-width:min(420px,calc(100vw - 32px))}
+.ap-notices .alert{margin:0;align-items:flex-start;box-shadow:0 6px 24px rgb(0 0 0 / .12)}
+.ap-notices .alert>span{flex:1}
+.ap-badge{display:inline-flex;gap:6px;align-items:center}
+.ap-live summary{cursor:pointer;margin-bottom:6px}
+.ap-snapshot .r{grid-template-columns:minmax(110px,0.45fr) minmax(0,1fr)}
+.ap-text{display:grid;gap:6px;margin:0}
+.ap-text dd{margin:0;white-space:pre-wrap}

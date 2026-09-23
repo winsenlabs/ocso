@@ -1,4 +1,4 @@
-import type { Role } from '@ocso/auth';
+import type { Role, UserStatus } from '@ocso/auth';
 import type { users } from '@ocso/db';
 
 /**
@@ -12,7 +12,8 @@ export interface UserView {
   email: string;
   name: string;
   role: Role;
-  status: 'ACTIVE' | 'DISABLED';
+  /** PENDING_APPROVAL: created, inert, cannot sign in until approved. */
+  status: UserStatus;
   availability: 'AVAILABLE' | 'AWAY' | 'OFFLINE';
   maxConcurrent: number;
   languages: string[];

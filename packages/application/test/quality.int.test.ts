@@ -26,11 +26,11 @@ let agentId: string;
 let convId: string;
 // Everyone is in the team that owns Maya (ADR-026); scoping itself is covered in agent-ownership.int.test.ts.
 const TEAM = uuidv7();
-const principal = (userId: string, role: Principal['role']): Principal => ({ userId, role, displayName: role === 'CS_LEAD' ? 'Anjali Rao' : 'Someone', teamIds: [TEAM], via: 'UI' });
+const principal = (userId: string, role: Principal['role']): Principal => ({ userId, role, displayName: role === 'HEAD' ? 'Anjali Rao' : 'Someone', teamIds: [TEAM], via: 'UI' });
 const ctx = (p: Principal): ActorContext => ({ principal: p, correlationId: 'quality-test' });
-const lead = principal('00000000-0000-7000-8000-00000000001a', 'CS_LEAD');
-const exec = principal('00000000-0000-7000-8000-00000000001e', 'CS_EXEC');
-const admin = principal('00000000-0000-7000-8000-00000000001d', 'PLATFORM_TECH_ADMIN');
+const lead = principal('00000000-0000-7000-8000-00000000001a', 'HEAD');
+const exec = principal('00000000-0000-7000-8000-00000000001e', 'SERVICE');
+const admin = principal('00000000-0000-7000-8000-00000000001d', 'TECH');
 
 async function conversation(state = 'RESOLVED', resolvedAt: Date | null = new Date(Date.now() - 60_000)) {
   const customerId = uuidv7();

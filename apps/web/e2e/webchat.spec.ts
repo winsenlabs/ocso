@@ -4,6 +4,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type APIRequestContext, type BrowserContext, type FrameLocator, type Page } from '@playwright/test';
 import { ACCOUNTS, E2E, apiUrl, webUrl } from './config';
+import { routeChannelToAgent } from './routing';
+import { goLiveApproved } from './approval-setup';
+import { approvedChannel, approvedProfile, approvedProvider } from './platform-setup';
 
 /**
  * Customer web chat end to end: a host site (examples/webchat-host) embeds
@@ -79,30 +82,32 @@ test.beforeAll(async ({ playwright, browser }) => {
     await call('POST', '/v1/setup', null, { setupToken: E2E.setupToken, orgName: 'E2E Bank', adminName: ACCOUNTS.admin.name, adminEmail: ACCOUNTS.admin.email, adminPassword: ACCOUNTS.admin.password, timezone: 'Asia/Kolkata' });
   }
   tok.admin = await loginApi(ACCOUNTS.admin.email, ACCOUNTS.admin.password);
-  const lead = await call<{ id: string }>('POST', '/v1/users', tok.admin, { name: LEAD.name, email: LEAD.email, role: 'CS_LEAD', password: LEAD.password, teamIds: [], languages: [], maxConcurrent: 5 });
+  const lead = await call<{ id: string }>('POST', '/v1/users', tok.admin, { name: LEAD.name, email: LEAD.email, role: 'HEAD', password: LEAD.password, teamIds: [], languages: [], maxConcurrent: 5 });
   tok.lead = await loginApi(LEAD.email, LEAD.password);
   const team = (await call<{ id: string }>('POST', '/v1/teams', tok.lead, { name: 'WC Orders' })).id;
   // The lead manages the agent through an owning team of their own, outside the queue's team (ADR-026).
   const owners = (await call<{ id: string }>('POST', '/v1/teams', tok.lead, { name: 'WC Agent owners' })).id;
   await call('PATCH', `/v1/users/${lead.id}`, tok.admin, { teamIds: [owners] });
-  // The exec's team is not one of the lead's, so the Tech Admin creates them (a lead creates execs only into their own teams).
-  await call('POST', '/v1/users', tok.admin, { name: EXEC.name, email: EXEC.email, role: 'CS_EXEC', password: EXEC.password, teamIds: [team], languages: [], maxConcurrent: 5 });
+  // The exec's team is not one of the lead's, so the Tech admin creates them (a lead creates execs only into their own teams).
+  await call('POST', '/v1/users', tok.admin, { name: EXEC.name, email: EXEC.email, role: 'SERVICE', password: EXEC.password, teamIds: [team], languages: [], maxConcurrent: 5 });
   tok.exec = await loginApi(EXEC.email, EXEC.password);
   const queue = (await call<{ id: string }>('POST', '/v1/queues', tok.lead, { name: 'WC Orders · Tier 1', teamIds: [team] })).id;
   // Deterministic development model (ADR-015); slow enough chunks that streaming is observable.
-  const provider = (await call<{ id: string }>('POST', '/v1/model-providers', tok.admin, { kind: 'DEV_SCRIPTED', name: 'WC Scripted', settings: { latencyMs: 100, chunkDelayMs: 80 } })).id;
-  const profile = (await call<{ id: string }>('POST', '/v1/model-profiles', tok.admin, { name: 'wc-support', providerId: provider, model: 'scripted-1', retries: 0 })).id;
+  // Platform objects start as drafts: a Head approves enabling the provider and activating the channel (PM/research/11 §4).
+  const provider = await approvedProvider(api, tok.admin, { id: lead.id, token: tok.lead }, { kind: 'DEV_SCRIPTED', name: 'WC Scripted', settings: { latencyMs: 100, chunkDelayMs: 80 } });
+  const profile = await approvedProfile(api, tok.admin, { id: lead.id, token: tok.lead }, { name: 'wc-support', providerId: provider, model: 'scripted-1', retries: 0 });
   const agent = (await call<{ id: string }>('POST', '/v1/agents', tok.lead, { name: 'Ava', slug: 'ava-wc', purpose: 'order support', conversationType: 'SUPPORT', modelProfileId: profile, defaultQueueId: queue, teamIds: [owners] })).id;
-  await call('POST', `/v1/agents/${agent}/status`, tok.lead, { status: 'LIVE' });
-  const channel = await call<{ publicKey: string }>('POST', '/v1/channels', tok.admin, {
+  // Going live is a maker–checker approval (PM/research/11 §4): a second Head of the owning team checks it.
+  await goLiveApproved(api, { adminToken: tok.admin, makerToken: tok.lead, agentId: agent, ownerTeamId: owners, checker: { name: 'WC Checker', email: 'wc.checker@e2e.ocso.test', password: 'correct-horse-battery-wcchecker' } });
+  const channel = await approvedChannel<{ id: string; publicKey: string }>(api, tok.admin, { id: lead.id, token: tok.lead }, {
     kind: 'WEBCHAT',
     name: CHANNEL,
-    status: 'ACTIVE',
-    defaultAgentId: agent,
     settings: { allowedOrigins: [HOST], branding: { title: 'Example Store help', accentColor: '#0f766e', greeting: 'Hi! Ask us anything about your order.' } },
     secrets: { visitorTokenSecret: randomBytes(32).toString('hex'), hostJwtSecret: HOST_JWT_SECRET },
   });
   ids.key = channel.publicKey;
+  // channel → pass-through router → the agent's queue (PM/research/11 §5).
+  routeChannelToAgent({ channelId: channel.id, agentId: agent, queueId: queue, name: CHANNEL });
   host = await startHost();
 });
 
@@ -229,7 +234,7 @@ test('the host identifies the customer with a signed JWT; the conversation conti
     .poll(async () => (await call<{ customer: { identities: Array<{ kind: string }> } }>('GET', `/v1/conversations/${ids.conversation}`, tok.exec)).customer.identities.map((i) => i.kind), { timeout: 10_000 })
     .toContain('webchat_customer_ref');
 
-  await page.getByRole('button', { name: 'Sign out' }).click();
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(log(chat).locator('.wc-row')).toHaveCount(0);
   await expect(chat.getByText('Hi! Ask us anything about your order.')).toBeVisible();
 });

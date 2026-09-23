@@ -4,12 +4,14 @@ import { ChannelRuntime } from '@ocso/agent-runtime';
 import type { ChannelAdapter, ChannelRegistry, ChannelRuntimeConfig, EmbeddedChat, EmbedVisitor } from '@ocso/channels';
 import { notFound } from '@ocso/domain';
 import { channels, conversations, customerIdentities, virtualAgents, type Db } from '@ocso/db';
+import { passThroughAgentOf } from '@ocso/application';
 import { CHANNEL_REGISTRY, DB } from '../../infrastructure/tokens.js';
 
 export interface VisitorConversation {
   id: string;
   customerId: string;
-  agentName: string;
+  /** Null while a router is still deciding (ROUTING). */
+  agentName: string | null;
   controlState: string;
   assignedUserId: string | null;
 }
@@ -42,10 +44,15 @@ export class WebChatIdentityService {
     return { ...(await this.runtime.load(row.id)), embed };
   }
 
-  /** Name of the channel's default virtual agent (the assistant the customer talks to). */
+  /**
+   * The assistant a new visitor talks to: the agent of the channel's
+   * pass-through router (its queue's agent). A router that asks first has no
+   * single assistant yet, so the widget shows the generic label.
+   */
   async assistantName(ctx: WebChatContext): Promise<string | null> {
-    if (!ctx.row.defaultAgentId) return null;
-    const [row] = await this.db.select({ name: virtualAgents.name }).from(virtualAgents).where(eq(virtualAgents.id, ctx.row.defaultAgentId));
+    const agentId = (await passThroughAgentOf(this.db, [ctx.row.id])).get(ctx.row.id);
+    if (!agentId) return null;
+    const [row] = await this.db.select({ name: virtualAgents.name }).from(virtualAgents).where(eq(virtualAgents.id, agentId));
     return row?.name ?? null;
   }
 
@@ -66,7 +73,7 @@ export class WebChatIdentityService {
         assignedUserId: conversations.assignedUserId,
       })
       .from(conversations)
-      .innerJoin(virtualAgents, eq(virtualAgents.id, conversations.agentId))
+      .leftJoin(virtualAgents, eq(virtualAgents.id, conversations.agentId))
       .where(and(eq(conversations.customerId, customerId), eq(conversations.channelId, channelId)))
       .orderBy(desc(conversations.lastInteractionAt))
       .limit(1);

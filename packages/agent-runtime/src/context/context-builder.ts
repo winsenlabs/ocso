@@ -1,18 +1,21 @@
 import { and, desc, eq, gt } from 'drizzle-orm';
-import { readGenerations, type CacheScope } from '@ocso/application';
+import { aiTransferTargets, readGenerations, type CacheScope } from '@ocso/application';
 import {
+  conversationRouting,
   conversationSummaries,
   customers,
   handoffs,
   internalNotes,
   promptVersions,
+  queues,
   type DbOrTx,
   type virtualAgents,
   type conversations,
   type channels,
 } from '@ocso/db';
-import { compilePrompt, type CompiledPrompt, type CompileInput, type HandoverContext, type ModelInputCapabilities, type PromptComponents } from '@ocso/prompt-compiler';
-import { loadAgentToolCatalog, type AgentToolCatalog } from '../tools/catalog.js';
+import { compilePrompt, type CompiledPrompt, type CompileInput, type HandoverContext, type ModelInputCapabilities, type PromptComponents, type RoutingContext } from '@ocso/prompt-compiler';
+import { loadAgentToolCatalog, withConversationTool, type AgentToolCatalog } from '../tools/catalog.js';
+import { transferToolFor } from '../tools/transfer-tool.js';
 import { basicChannelContext, type ChannelContextResolver } from './channel-context.js';
 import { loadHistory, loadPending } from './history.js';
 import type { CacheLayer, CachedAgentPrefix, ConversationCacheEntry, HotContextCache } from './turn-cache.js';
@@ -55,7 +58,11 @@ export class ContextBuilder {
     private readonly options: ContextBuilderOptions,
   ) {}
 
-  async build(conv: ConversationRow, agent: AgentRow, channel: ChannelRow | null, capabilities: ModelInputCapabilities, resumingFromHuman: boolean): Promise<TurnContext> {
+  /**
+   * `handoverFrom`: HUMAN when a colleague returned the conversation (AI_RESUMING), AGENT when another agent
+   * transferred it here since this agent's last turn; the latest HANDOVER summary is then included.
+   */
+  async build(conv: ConversationRow, agent: AgentRow, channel: ChannelRow | null, capabilities: ModelInputCapabilities, handoverFrom: 'HUMAN' | 'AGENT' | null): Promise<TurnContext> {
     const scopes: CacheScope[] = [`agent:${agent.id}`, `customer:${conv.customerId}`, 'policy', 'global'];
     if (conv.channelId) scopes.push(`channel:${conv.channelId}`);
     if (agent.modelProfileId) scopes.push(`profile:${agent.modelProfileId}`);
@@ -74,16 +81,18 @@ export class ContextBuilder {
     // replies, which land after lastProcessedSeq) is history.
     const pendingSeqs = new Set(pending.map((p) => p.seq));
     const recent = history.filter((h) => !pendingSeqs.has(h.seq));
-    const handover = resumingFromHuman ? await this.handover(conv.id) : null;
+    const handover = handoverFrom === 'HUMAN' ? await this.handover(conv.id) : handoverFrom === 'AGENT' ? await this.transferHandover(conv.id) : null;
+    const { routing, catalog } = await this.routing(conv, agent.id, prefix.catalog);
 
     const compileInput: CompileInput = {
       agent: { id: agent.id, name: agent.name, conversationType: agent.conversationType },
       promptVersion: { id: prefix.promptVersionId, version: 0, components: prefix.components as PromptComponents },
-      tools: prefix.catalog.specs,
+      tools: catalog.specs,
       channel: channel ? (this.options.channelContext ?? basicChannelContext)(channel) : null,
       customer,
       summary: summary?.context ?? null,
       handover,
+      routing,
       recent,
       current: pending,
       capabilities: {
@@ -98,7 +107,7 @@ export class ContextBuilder {
     return {
       compileInput,
       compiled: compilePrompt(compileInput),
-      catalog: prefix.catalog,
+      catalog,
       pendingSeqTo: pending.at(-1)?.seq ?? conv.lastProcessedSeq,
       windowStartSeq: history[0]?.seq ?? conv.lastProcessedSeq + 1,
       cacheLayer: layer,
@@ -145,6 +154,34 @@ export class ContextBuilder {
       return [...entry.history, ...delta].filter((h) => h.seq > summaryCovers).slice(-window);
     }
     return loadHistory(this.db, conv.id, summaryCovers, conv.lastSeq, window);
+  }
+
+  /**
+   * The conversation's queue and routing attributes (the prompt's routing block), and — when the queue has
+   * transfer targets with an agent — the transfer tool with those queues as its enum. Read per turn: queue
+   * configuration is not part of the agent's cached prefix.
+   */
+  private async routing(conv: ConversationRow, agentId: string, base: AgentToolCatalog): Promise<{ routing: RoutingContext | null; catalog: AgentToolCatalog }> {
+    if (!conv.queueId) return { routing: null, catalog: base };
+    const [queue] = await this.db.select({ name: queues.name }).from(queues).where(eq(queues.id, conv.queueId));
+    if (!queue) return { routing: null, catalog: base };
+    const [row] = await this.db.select({ attributes: conversationRouting.attributes }).from(conversationRouting).where(eq(conversationRouting.conversationId, conv.id));
+    const targets = await aiTransferTargets(this.db, conv.queueId, conv.agentId);
+    const catalog = targets.length
+      ? withConversationTool(base, transferToolFor(targets.map((t) => ({ name: t.queue.name, agentName: t.agentName, attributes: t.queue.attributes }))), agentId)
+      : base;
+    return { routing: { queueName: queue.name, attributes: row?.attributes ?? {} }, catalog };
+  }
+
+  /** The summary another agent left when it transferred the conversation here. */
+  private async transferHandover(conversationId: string): Promise<HandoverContext | null> {
+    const [summary] = await this.db
+      .select({ text: conversationSummaries.text })
+      .from(conversationSummaries)
+      .where(and(eq(conversationSummaries.conversationId, conversationId), eq(conversationSummaries.kind, 'HANDOVER')))
+      .orderBy(desc(conversationSummaries.version))
+      .limit(1);
+    return summary ? { summary: summary.text, notes: [], from: 'AGENT' } : null;
   }
 
   private async handover(conversationId: string): Promise<HandoverContext | null> {

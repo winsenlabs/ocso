@@ -27,7 +27,7 @@ async function SetupContent() {
     <AuthCard
       wide
       title="Set up OCSO"
-      sub="Create the first Platform Tech Admin for this deployment. This page is available only until the first user exists."
+      sub="Create the first Tech admin for this deployment. This page is available only until the first user exists."
       foot={
         <>
           <span>one deployment = one organization</span>

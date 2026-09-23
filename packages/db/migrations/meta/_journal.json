@@ -148,6 +148,83 @@
       "when": 1790100810084,
       "tag": "0020_one_agent_per_channel",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790145049226,
+      "tag": "0021_roles_rename",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1790145049672,
+      "tag": "0022_permission_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1790145050128,
+      "tag": "0023_approvals",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790145050575,
+      "tag": "0024_routing",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1790145051026,
+      "tag": "0025_routing_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1790145051482,
+      "tag": "0026_audit_outbox",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1790145051947,
+      "tag": "0027_approvals_coverage_business",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1790145052413,
+      "tag": "0028_exceptions_storage",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1790152340755,
+      "tag": "0029_approvals_coverage_platform",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1790152341299,
+      "tag": "0030_routing_web",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1790152341832,
+      "tag": "0031_approvals_grandfather",
+      "breakpoints": true
     }
   ]
 }

@@ -3,7 +3,7 @@
 import { refresh } from 'next/cache';
 import { Permission } from '@ocso/auth';
 import { z } from 'zod';
-import { describeApiError } from '../api/errors';
+import { ApiError, describeApiError } from '../api/errors';
 import {
   CAPABILITY_KEYS,
   createPricing,
@@ -25,7 +25,8 @@ import { addCatalogPrice, listProviderModels, refreshCatalog, type CatalogRefres
 import { getSession } from '../session';
 
 /** Result of a connections-screen server action (called directly from client components). */
-export type ActionResult<T = null> = { ok: true; data: T } | { ok: false; message: string };
+/** `code`: the API's error code, e.g. `approval_required` (the screen then asks for a checker). */
+export type ActionResult<T = null> = { ok: true; data: T } | { ok: false; message: string; code?: string | undefined };
 
 async function guard(permission: Permission, what: string): Promise<string | null> {
   const session = await getSession();
@@ -44,7 +45,7 @@ async function run<I, T>(permission: Permission, what: string, schema: z.ZodType
     if (reload) refresh();
     return { ok: true, data };
   } catch (err) {
-    return { ok: false, message: describeApiError(err) };
+    return { ok: false, message: describeApiError(err), code: err instanceof ApiError ? err.code : undefined };
   }
 }
 
@@ -66,19 +67,23 @@ const ProviderCreate = z.object({
   enabled: z.boolean(),
   maxConcurrency: z.number().int().min(1).max(10_000),
 });
-const ProviderUpdate = ProviderCreate.omit({ kind: true, credentials: true }).extend({ credentials: z.record(z.string(), Secret.nullable()) });
+const ProviderUpdate = ProviderCreate.omit({ kind: true, credentials: true, enabled: true }).extend({ credentials: z.record(z.string(), Secret.nullable()) });
+const Approval = z.union([z.object({ checkerId: Id, reason: z.string().trim().min(3).max(500) }), z.object({ bootstrap: z.literal(true), reason: z.string().trim().min(3).max(500).optional() })]);
+type ApprovalChoice = z.input<typeof Approval>;
 
+/** A new provider is a disabled draft; enabling it is a proposal (Activate on its card). */
 export async function createProviderAction(input: z.input<typeof ProviderCreate>): Promise<ActionResult<{ id: string; name: string }>> {
   return run(Permission.PROVIDERS_MANAGE, 'add model providers', ProviderCreate, input, async (body) => {
-    const p = await createProvider(body);
+    const p = await createProvider({ ...body, enabled: false });
     return { id: p.id, name: p.name };
   });
 }
 
-export async function updateProviderAction(id: string, input: z.input<typeof ProviderUpdate>): Promise<ActionResult<{ name: string }>> {
-  return run(Permission.PROVIDERS_MANAGE, 'change model providers', z.object({ id: Id, body: ProviderUpdate }), { id, body: input }, async ({ id: pid, body }) => {
-    const p = await updateProvider(pid, body);
-    return { name: p.name };
+/** A draft changes directly; an approved provider needs `approval` (the answer is then a proposal: `data` null). */
+export async function updateProviderAction(id: string, input: z.input<typeof ProviderUpdate>, approval?: ApprovalChoice): Promise<ActionResult<{ name: string } | null>> {
+  return run(Permission.PROVIDERS_MANAGE, 'change model providers', z.object({ id: Id, body: ProviderUpdate, approval: Approval.optional() }), { id, body: input, approval }, async ({ id: pid, body, approval: a }) => {
+    const p = await updateProvider(pid, { ...body, ...(a ? { approval: a } : {}) });
+    return 'proposal' in p ? null : { name: p.name };
   });
 }
 
@@ -118,9 +123,14 @@ export async function validateProfileAction(input: ProfileInputT): Promise<Actio
   return run(Permission.MODEL_PROFILES_MANAGE, 'change model profiles', ProfileInput, input, validateProfile, false);
 }
 
-export async function saveProfileAction(id: string | null, input: ProfileInputT): Promise<ActionResult<ProfileSaveResult>> {
-  const Input = z.object({ id: Id.nullable(), body: ProfileInput });
-  return run(Permission.MODEL_PROFILES_MANAGE, 'change model profiles', Input, { id, body: input }, (i) => (i.id ? updateProfile(i.id, i.body) : createProfile(i.body)));
+/** A draft profile saves directly; one approved or in use by something live needs `approval` (then `data` null: a proposal). */
+export async function saveProfileAction(id: string | null, input: ProfileInputT, approval?: ApprovalChoice): Promise<ActionResult<ProfileSaveResult | null>> {
+  const Input = z.object({ id: Id.nullable(), body: ProfileInput, approval: Approval.optional() });
+  return run(Permission.MODEL_PROFILES_MANAGE, 'change model profiles', Input, { id, body: input, approval }, async (i) => {
+    if (!i.id) return createProfile(i.body);
+    const r = await updateProfile(i.id, { ...i.body, ...(i.approval ? { approval: i.approval } : {}) });
+    return 'proposal' in r ? null : r;
+  });
 }
 
 export async function deleteProfileAction(id: string): Promise<ActionResult> {
@@ -141,10 +151,11 @@ const PricingInput = z.object({
   outputPerMTokMicros: Micros,
 });
 
-export async function savePricingAction(id: string | null, input: z.input<typeof PricingInput>): Promise<ActionResult> {
-  const Input = z.object({ id: Id.nullable(), body: PricingInput });
-  return run(Permission.PRICING_MANAGE, 'change model pricing', Input, { id, body: input }, async (i) => {
-    await (i.id ? updatePricing(i.id, i.body) : createPricing(i.body));
+/** A new price is a draft (prices nothing until approved); a live row's change needs `approval` (a proposal). */
+export async function savePricingAction(id: string | null, input: z.input<typeof PricingInput>, approval?: ApprovalChoice): Promise<ActionResult> {
+  const Input = z.object({ id: Id.nullable(), body: PricingInput, approval: Approval.optional() });
+  return run(Permission.PRICING_MANAGE, 'change model pricing', Input, { id, body: input, approval }, async (i) => {
+    await (i.id ? updatePricing(i.id, { ...i.body, ...(i.approval ? { approval: i.approval } : {}) }) : createPricing(i.body));
     return null;
   });
 }

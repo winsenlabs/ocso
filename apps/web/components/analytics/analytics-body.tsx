@@ -39,7 +39,7 @@ function notesFor(o: Overview, c: AgentComparison, q: QueueAnalytics) {
   ]);
 }
 
-/** CS Lead analytics (docs/11 §3): overview, agent-by-agent comparison and queue performance. */
+/** Lead analytics (docs/11 §3): overview, agent-by-agent comparison and queue performance. */
 export async function AnalyticsBody({ searchParams }: { searchParams: SearchParams }) {
   const [session, params] = await Promise.all([requireSession(), searchParams]);
   if (!hasPermission(session, Permission.ANALYTICS_BUSINESS_READ)) return <NotPermitted role={session.roleLabel} />;

@@ -28,6 +28,8 @@ export const TARGET_TYPES = [
   'prompt_version',
   'queue',
   'sla_policy',
+  'approval',
+  'audit_store',
 ] as const;
 
 export interface AuditParams {

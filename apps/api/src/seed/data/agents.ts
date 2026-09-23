@@ -16,9 +16,9 @@ export interface DemoAgent {
   description: string;
   profile: ProfileKey;
   queue: QueueKey;
-  /** Owning teams (ADR-026): only CS Leads of these teams see and manage the agent. */
+  /** Owning teams (ADR-026): only Leads of these teams see and manage the agent. */
   owners: TeamKey[];
-  /** The CS Lead (a member of an owning team) who builds and publishes it. */
+  /** The Lead (a member of an owning team) who builds and publishes it. */
   lead: LeadKey;
   multimodal: { imageInput: boolean; documentInput: boolean; audioInput: boolean; maxMediaPerTurn: number };
   /** Reason recorded on the curated prompt version (also the idempotency key for that step). */

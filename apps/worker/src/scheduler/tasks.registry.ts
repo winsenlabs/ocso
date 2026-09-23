@@ -4,6 +4,7 @@ import {
   McpConnectionService,
   ModelCatalogService,
   relayOutboxToWebhooks,
+  sweepApprovalSecrets,
   systemActor,
   type AlertDeliveryService,
   type AlertEngine,
@@ -25,6 +26,14 @@ export interface SubsystemDeps {
   alertDelivery: AlertDeliveryService;
   claims: CustomerClaimsIssuer;
   scaling: ScalingService;
+  /** Maker–checker leader sweeps (apps/worker/src/approvals). */
+  approvals: { tasks(): ScheduledTask[] };
+  /** Audit store shipping, reconciliation, sealing and exports (apps/worker/src/audit, ADR-032). */
+  audit: { tasks(): ScheduledTask[] };
+  /** Routers: expire unanswered questions (fallback) and re-signal stalled routing (PM/research/11 §5.3). */
+  routing: { sweep(correlationId: string): Promise<unknown> };
+  /** Weekly exception report, storage samples, health-sample roll-ups (apps/worker/src/exceptions, PM/research/11 §7). */
+  exceptions: { tasks(): ScheduledTask[] };
 }
 
 /**
@@ -47,6 +56,13 @@ export function subsystemTasks(deps: SubsystemDeps): ScheduledTask[] {
     { name: 'scaling-reconcile', everySeconds: 300, run: () => deps.scaling.reconcile('periodic') },
     // Model catalog (ADR-027): hourly check, downloads when a source is a day old (an hour after a failure).
     ...(deps.env.OCSO_MODEL_CATALOG_REFRESH ? [{ name: 'model-catalog-refresh', everySeconds: 3600, run: () => refreshModelCatalog(deps.db) }] : []),
+    // Maker–checker: checker validity (flags, never reassigns), notice/activation redispatch, orphan voiding.
+    ...deps.approvals.tasks(),
+    ...deps.audit.tasks(),
+    { name: 'routing-timeout', everySeconds: 60, run: ({ correlationId }) => deps.routing.sweep(correlationId) },
+    ...deps.exceptions.tasks(),
+    // Maker–checker secrets: delete what approved changes released (after their commit) and orphaned staged values.
+    { name: 'approval-secret-sweep', everySeconds: 60, run: () => sweepApprovalSecrets(deps.db, deps.secrets) },
   ];
 }
 

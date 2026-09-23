@@ -9,9 +9,9 @@ import { removalFor, teamChoices, teamDiff, type Person, type TeamEditMode, type
 import { RemovalConfirm } from './removal-confirm';
 
 const HINT: Record<TeamEditMode, string> = {
-  admin: 'CS Leads manage the agents their teams own; everyone gets work from the queues their teams serve.',
+  admin: 'Leads manage the agents their teams own; everyone gets work from the queues their teams serve.',
   exec: 'You change only your own teams. The exec’s other teams are shown locked.',
-  self: 'You can leave your teams here. Joining another team needs a Platform Tech Admin.',
+  self: 'You can leave your teams here. Joining another team needs a Tech admin.',
 };
 
 /** Edit one person's teams from the People table; removals are confirmed with their consequences first. */
@@ -82,7 +82,7 @@ export function UserTeamsModal({ person, mode, scope, onClose }: { person: Perso
           <fieldset className="checks" style={{ border: 'none', padding: 0, margin: 0 }}>
             <legend className="sr-only">Teams</legend>
             {choices.map((c) => (
-              <label key={c.id} title={c.locked ? 'A team you are not in: its leads or a Platform Tech Admin can change it' : undefined}>
+              <label key={c.id} title={c.locked ? 'A team you are not in: its leads or a Tech admin can change it' : undefined}>
                 <input
                   type="checkbox"
                   checked={selected.includes(c.id)}
@@ -95,7 +95,7 @@ export function UserTeamsModal({ person, mode, scope, onClose }: { person: Perso
             ))}
           </fieldset>
         ) : (
-          <p className="mono-sm">No teams exist yet. A CS Lead creates teams on this page.</p>
+          <p className="mono-sm">No teams exist yet. A Lead creates teams on this page.</p>
         )}
         <p className="mono-sm" style={{ margin: 0 }}>
           {HINT[mode]}

@@ -124,6 +124,7 @@ export function WebChatApp({ publicKey, config }: { publicKey: string; config: W
         t={t}
         onRetry={chat.retry}
         onDiscard={chat.discard}
+        onChoose={(label) => void chat.send(label, [])}
       />
       <Composer ref={composer} config={config} placeholder={placeholder} t={t} onSend={(text, attachments) => void chat.send(text, attachments)} upload={chat.upload} />
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ObjectApprovalStateSchema, ProposalRefSchema } from '@/components/approvals/lib/schemas';
 
 /**
  * Response contracts for the virtual-agent screens (design/02). Shapes mirror
@@ -50,12 +51,13 @@ export const AgentSchema = z.object({
   avatarTone: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
-  /** Owning teams (ADR-026): only their CS Leads manage the agent. Empty = unowned (Tech Admin assigns). */
+  /** Owning teams (ADR-026): only their Leads manage the agent. Empty = unowned (Tech admin assigns). */
   teams: z.array(z.object({ id: z.string(), name: z.string() })),
   stats: AgentStatsSchema.nullable(),
 });
 export type Agent = z.infer<typeof AgentSchema>;
-export const AgentDetailSchema = AgentSchema.extend({ channelIds: z.array(z.string()) });
+/** `approval`: maker–checker state (approved? pending proposal?) for the header badge and the submit modal. */
+export const AgentDetailSchema = AgentSchema.extend({ channelIds: z.array(z.string()), approval: ObjectApprovalStateSchema.optional() });
 export type AgentDetail = z.infer<typeof AgentDetailSchema>;
 
 export const PromptComponentSchema = z.object({
@@ -130,6 +132,10 @@ export const EscalationConditionSchema = z.object({
 });
 export type EscalationCondition = z.infer<typeof EscalationConditionSchema>;
 
+/** A list row's approval state (rules, templates): approved at least once, and the open (or activating) proposal. */
+export const ListedApprovalSchema = z.object({ approved: z.boolean(), pending: ProposalRefSchema.nullable() });
+export type ListedApproval = z.infer<typeof ListedApprovalSchema>;
+
 export const EscalationRuleSchema = z.object({
   id: z.string(),
   /** null = platform-wide rule. */
@@ -143,6 +149,8 @@ export const EscalationRuleSchema = z.object({
   enabled: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  /** Maker–checker (PM/research/11 §4): approved at least once (then every change is a proposal), and the proposal waiting on it. */
+  approval: ListedApprovalSchema.catch({ approved: false, pending: null }),
 });
 export type EscalationRule = z.infer<typeof EscalationRuleSchema>;
 

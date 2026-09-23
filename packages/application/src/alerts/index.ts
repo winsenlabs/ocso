@@ -7,6 +7,8 @@ export * from './message.js';
 export * from './lifecycle.js';
 export * from './alerts.js';
 export * from './alert-rules.js';
+export * from './alert-rule-approval.js';
+export * from './alert-rule-validation.js';
 export * from './destinations.js';
 export * from './delivery.js';
 export * from './seed.js';
@@ -22,3 +24,4 @@ export {
   type QueueStatsFn,
 } from './evaluators/contract.js';
 export { BUILT_IN_EVALUATORS, EvaluatorRegistry, createDefaultEvaluatorRegistry } from './evaluators/registry.js';
+export * from './destination-approval.js';

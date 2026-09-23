@@ -43,7 +43,7 @@ export type InheritedClassification = Pick<ToolRow, 'riskClass' | 'humanRoles' |
  */
 export function inheritedClassification(templateTool: ToolRow | undefined, fingerprint: string, suggestedRisk: ToolRow['riskClass']): InheritedClassification {
   if (!templateTool) {
-    return { riskClass: suggestedRisk, humanRoles: ['CS_EXEC', 'CS_LEAD'], requiredScopes: [], enabled: true, approved: false, changedSinceApproval: false };
+    return { riskClass: suggestedRisk, humanRoles: ['SERVICE', 'LEAD', 'HEAD'], requiredScopes: [], enabled: true, approved: false, changedSinceApproval: false };
   }
   return {
     riskClass: templateTool.riskClass,

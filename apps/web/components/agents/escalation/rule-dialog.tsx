@@ -3,7 +3,8 @@
 import { useState, type FormEvent } from 'react';
 import { AlertBanner } from '@/components/ui/alert-banner';
 import { Modal } from '@/components/ui/modal';
-import { saveRuleAction } from '@/lib/actions/agents';
+import { useApprovalRequest } from '@/components/approvals/use-approval-request';
+import { saveRuleAction } from '@/lib/actions/agent-config';
 import { ESCALATION_TRIGGERS, PRIORITIES, type EscalationRule } from '../data/agent-schemas';
 import type { Option } from '../data/options';
 import { TRIGGER_LABELS } from '../lib/labels';
@@ -23,6 +24,8 @@ interface Props {
  */
 export function RuleDialog({ agentId, rule, queues, onClose }: Props) {
   const action = useAgentAction();
+  // An approved rule's change is a proposal: the same Save continues into the submit-for-approval modal.
+  const approval = useApprovalRequest();
   const [local, setLocal] = useState<string | null>(null);
   const c = rule?.condition ?? {};
 
@@ -48,26 +51,30 @@ export function RuleDialog({ agentId, rule, queues, onClose }: Props) {
       mode: text('mode') as EscalationRule['mode'],
       targetQueueId: text('targetQueueId') || null,
       priority: text('priority') as EscalationRule['priority'],
-      enabled: f.get('enabled') === 'on',
     };
-    action.run(() => saveRuleAction(agentId, rule?.id ?? null, body), onClose);
+    if (!rule) {
+      action.run(() => saveRuleAction(agentId, null, body), onClose);
+      return;
+    }
+    approval.run({ objectKind: 'escalation_rule', objectId: rule.id, title: `Change escalation rule "${rule.name}"` }, (choice) => saveRuleAction(agentId, rule.id, body, choice), { onApplied: onClose });
   }
 
-  const error = local ?? action.error;
+  const error = local ?? action.error ?? approval.error;
+  const busy = action.pending || approval.pending;
   return (
     <Modal
       title={rule ? `Edit rule · ${rule.name}` : 'Add escalation rule'}
       sub="applies to this agent · audited"
-      onClose={() => !action.pending && onClose()}
+      onClose={() => !busy && onClose()}
       maxWidth={620}
       footer={
         <>
           <span className="sp" />
-          <button type="button" className="btn" onClick={onClose} disabled={action.pending}>
-            Cancel
+          <button type="button" className="btn" onClick={onClose} disabled={busy}>
+            {approval.outcome ? 'Close' : 'Cancel'}
           </button>
-          <button type="submit" form="rule-form" className="btn accent" disabled={action.pending}>
-            {action.pending ? 'Saving…' : rule ? 'Save rule' : 'Add rule'}
+          <button type="submit" form="rule-form" className="btn accent" disabled={busy || approval.outcome !== null}>
+            {busy ? 'Saving…' : rule ? 'Save rule' : 'Add rule'}
           </button>
         </>
       }
@@ -141,10 +148,20 @@ export function RuleDialog({ agentId, rule, queues, onClose }: Props) {
             ))}
           </select>
         </div>
-        <label className="toggle-row">
-          <input type="checkbox" name="enabled" defaultChecked={rule?.enabled ?? true} /> Rule is on
-        </label>
+        <p className="mono-sm" style={{ margin: 0 }}>
+          {rule
+            ? rule.approval.approved
+              ? 'This rule has been approved: saving sends the change to a checker; nothing changes until they approve.'
+              : 'A draft: saved directly. It stays off until a checker approves turning it on.'
+            : 'A new rule starts off. Turn it on from the list; a checker approves it.'}
+        </p>
       </form>
+      {approval.notice ? (
+        <AlertBanner tone="info" style={{ margin: '10px 0 0' }}>
+          {approval.notice}
+        </AlertBanner>
+      ) : null}
+      {approval.modal}
     </Modal>
   );
 }

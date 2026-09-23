@@ -184,7 +184,7 @@ module "migrate" {
   cpu_architecture = var.cpu_architecture
 
   environment = merge(local.database_env, { NODE_ENV = "production" })
-  secrets     = { DATABASE_URL = "${local.bootstrap_arn}:DATABASE_URL::" }
+  secrets     = local.migrate_secrets
 
   execution_role_arn = module.iam.execution_role_arns["app"]
   task_role_arn      = module.iam.task_role_arns["migrate"]

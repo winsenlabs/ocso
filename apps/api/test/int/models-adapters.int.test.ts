@@ -3,7 +3,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ModelGateway, UsageRecorder } from '@ocso/agent-runtime';
 import { ProfileInput, ProfileService, ProviderService, SettingsService, type ActorContext } from '@ocso/application';
 import { CachedProviderAdapterSource, createProviderRegistry } from '@ocso/bootstrap';
-import { uuidv7 } from '@ocso/db';
+import { users, uuidv7 } from '@ocso/db';
+import { approveInDb } from './platform.js';
 import { createTestDatabase, type TestDatabase } from '@ocso/db/testing';
 import { InMemorySecretRows, LocalSecretStore, parseMasterKey } from '@ocso/secrets';
 
@@ -17,7 +18,7 @@ let source: CachedProviderAdapterSource;
 const sentKeys: Array<string | null> = [];
 
 const admin: ActorContext = {
-  principal: { userId: uuidv7(), role: 'PLATFORM_TECH_ADMIN', displayName: 'Admin', teamIds: [], via: 'UI' },
+  principal: { userId: uuidv7(), role: 'TECH', displayName: 'Admin', teamIds: [], via: 'UI' },
   correlationId: 'adapters',
 };
 
@@ -33,10 +34,13 @@ const recordingFetch: typeof fetch = async (input, init) => {
 
 const media = { resolve: () => Promise.reject(new Error('no media in this test')) };
 
+let registry: ReturnType<typeof createProviderRegistry>;
+let secrets: LocalSecretStore;
+
 beforeAll(async () => {
   t = await createTestDatabase();
-  const registry = createProviderRegistry({ OCSO_ENABLE_DEV_PROVIDERS: true });
-  const secrets = new LocalSecretStore(new InMemorySecretRows(), parseMasterKey('k1', randomBytes(32).toString('base64')));
+  registry = createProviderRegistry({ OCSO_ENABLE_DEV_PROVIDERS: true });
+  secrets = new LocalSecretStore(new InMemorySecretRows(), parseMasterKey('k1', randomBytes(32).toString('base64')));
   providers = new ProviderService({ db: t.db, secrets, registry });
   profiles = new ProfileService({ db: t.db, registry });
   source = new CachedProviderAdapterSource({ db: t.db, secrets, registry, media, fetch: recordingFetch });
@@ -94,6 +98,9 @@ describe('CachedProviderAdapterSource', () => {
 
   it('reports media capabilities of a profile primary and serves the model gateway end to end', async () => {
     const provider = (await providers.list(admin)).find((p) => p.kind === 'DEV_SCRIPTED')!;
+    // A new provider is a disabled draft the gateway refuses: enabling it is a second person's approval.
+    await t.db.insert(users).values({ id: admin.principal!.userId, email: 'adapters-admin@ocso.test', name: 'Admin', role: 'TECH' }).onConflictDoNothing();
+    await approveInDb(t.db, admin, { objectKind: 'model_provider', objectId: provider.id, action: 'ACTIVATE' }, { secrets, providers: registry });
     const profile = await profiles.create(admin, ProfileInput.parse({ name: 'support-primary', providerId: provider.id, model: 'scripted-1' }));
     expect(await source.capabilitiesForProfile(profile.id)).toEqual({ imageInput: true, fileInput: true, audioInput: true });
 

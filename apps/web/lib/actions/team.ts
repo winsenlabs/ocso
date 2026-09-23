@@ -2,11 +2,11 @@
 
 import { refresh } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { Permission, ROLES, ROLE_LABELS } from '@ocso/auth';
+import { Permission, ROLES, ROLE_LABELS, ROLE_PERMISSIONS } from '@ocso/auth';
 import { z } from 'zod';
-import { describeApiError } from '../api/errors';
+import { ApiError, describeApiError } from '../api/errors';
 import { createTeam } from '../api/teams';
-import { createUser, resendInvite, sendPasswordReset } from '../api/users';
+import { createUser, discardUser, resendInvite, sendPasswordReset, submitUserCreation } from '../api/users';
 import { getSession } from '../session';
 import { field, fieldErrorsFrom, type FormState } from './form-state';
 
@@ -19,8 +19,11 @@ const CreateUserForm = z.object({
   maxConcurrent: z.coerce.number('Enter a number').int().min(1, 'At least 1').max(50, 'At most 50'),
 });
 
-/** Result of inviting someone: the set-password link comes back only when email is not configured (log driver). */
-export type InviteState = FormState & { inviteLink?: string; expiresAt?: string };
+/**
+ * Result of inviting someone: the set-password link comes back only when email is not configured (log driver).
+ * `pendingUser`: created pending approval — the dialog then asks for a checker (PM/research/11 §3.4).
+ */
+export type InviteState = FormState & { inviteLink?: string; expiresAt?: string; pendingUser?: { id: string; name: string; role: string } };
 
 /**
  * POST /v1/users: invites the user (ADR-025) — they choose their own password
@@ -38,9 +41,14 @@ export async function createUserAction(_prev: InviteState, formData: FormData): 
   });
   if (!parsed.success) return { status: 'error', fieldErrors: fieldErrorsFrom(parsed.error.issues), values };
 
+  // Containment (PM/research/11 §3.4): without users.manage, only presets whose rights fit inside your own.
   const canManageAll = session.permissions.has(Permission.USERS_MANAGE);
-  if (!canManageAll && parsed.data.role !== 'CS_EXEC') {
-    return { status: 'error', fieldErrors: { role: 'CS Leads can create CS Exec accounts only.' }, values };
+  if (!canManageAll && ![...ROLE_PERMISSIONS[parsed.data.role]].every((p) => session.permissions.has(p))) {
+    return { status: 'error', fieldErrors: { role: 'You can create colleagues whose rights do not exceed yours.' }, values };
+  }
+  // A new user must land in one of your teams unless you manage everyone (the API refuses it otherwise).
+  if (!canManageAll && !parsed.data.teamIds.some((t) => session.user.teamIds.includes(t))) {
+    return { status: 'error', fieldErrors: { teamIds: 'Place them in at least one of your teams.' }, values };
   }
   let created;
   try {
@@ -50,6 +58,13 @@ export async function createUserAction(_prev: InviteState, formData: FormData): 
   }
   refresh();
   const label = `${parsed.data.name} · ${ROLE_LABELS[parsed.data.role]}`;
+  if (created.onboarding.kind === 'pending_approval') {
+    return {
+      status: 'success',
+      message: `Created ${label} · pending approval: they can sign in once a checker approves them`,
+      pendingUser: { id: created.id, name: parsed.data.name, role: ROLE_LABELS[parsed.data.role] },
+    };
+  }
   if (created.onboarding.kind !== 'invite') return { status: 'success', message: `Created ${label}` };
   const { delivery, link, expiresAt } = created.onboarding;
   if (link) return { status: 'success', message: `Invited ${label}`, inviteLink: link, expiresAt };
@@ -73,6 +88,38 @@ export async function userAccessAction(userId: string, kind: 'invite' | 'reset')
   } catch (err) {
     return { ok: false, message: describeApiError(err) };
   }
+}
+
+const UserApproval = z.union([z.object({ checkerId: z.uuid(), reason: z.string().trim().min(3).max(500) }), z.object({ bootstrap: z.literal(true), reason: z.string().trim().max(500).optional() })]);
+
+/**
+ * Submit a pending user's creation to a checker (PATCH /v1/users/:id { approval }): 202 with the proposal. The
+ * checker holds approvals.check.permissions and is never the maker nor the new user; on approval they become
+ * active and the invite is sent.
+ */
+export async function submitPendingUserAction(userId: string, approval?: z.input<typeof UserApproval>): Promise<{ ok: true; data: null } | { ok: false; message: string; code?: string | undefined }> {
+  if (!(await getSession())) return { ok: false, message: 'Your session has ended. Sign in again.' };
+  const parsed = z.object({ userId: z.uuid(), approval: UserApproval.optional() }).safeParse({ userId, approval });
+  if (!parsed.success) return { ok: false, message: 'Name a checker and give a reason.' };
+  try {
+    await submitUserCreation(parsed.data.userId, parsed.data.approval);
+  } catch (err) {
+    return { ok: false, message: describeApiError(err), code: err instanceof ApiError ? err.code : undefined };
+  }
+  refresh();
+  return { ok: true, data: null };
+}
+
+/** Discard a user whose creation was never approved (DELETE /v1/users/:id). */
+export async function discardUserAction(userId: string): Promise<{ ok: boolean; message: string }> {
+  if (!(await getSession())) return { ok: false, message: 'Your session has ended. Sign in again.' };
+  try {
+    await discardUser(userId);
+  } catch (err) {
+    return { ok: false, message: describeApiError(err) };
+  }
+  refresh();
+  return { ok: true, message: 'Discarded.' };
 }
 
 const CreateTeamForm = z.object({

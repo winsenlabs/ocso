@@ -2,9 +2,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { completeSetup, startApi, type ApiHarness } from './harness.js';
 
 /**
- * Team membership (ADR-026): the CS Lead who creates a team joins it; a CS Lead
- * manages CS Exec memberships (and their own) only on teams they belong to; the
- * Tech Admin manages every membership.
+ * Team membership (ADR-026): the Lead who creates a team joins it; a Lead
+ * manages Service member memberships (and their own) only on teams they belong to; the
+ * Tech admin manages every membership.
  */
 let h: ApiHarness;
 const t = { admin: '', lead: '', lead2: '' };
@@ -18,9 +18,10 @@ beforeAll(async () => {
   const mk = async (key: string, role: string) => {
     ids[key] = (await h.http().post('/v1/users').set(as('admin')).send({ email: `${key}@ocso.test`, name: key, role, password: PASSWORD }).expect(201)).body.id;
   };
-  await mk('lead', 'CS_LEAD');
-  await mk('lead2', 'CS_LEAD');
-  await mk('exec', 'CS_EXEC');
+  await mk('lead', 'HEAD');
+  await mk('lead2', 'HEAD');
+  await mk('exec', 'SERVICE');
+  await mk('tech2', 'TECH');
   t.lead = await h.loginAs('lead@ocso.test', PASSWORD);
   t.lead2 = await h.loginAs('lead2@ocso.test', PASSWORD);
 });
@@ -39,18 +40,19 @@ describe('team membership', () => {
     ids['loans'] = (await h.http().post('/v1/teams').set(as('lead2')).send({ name: 'Loans' }).expect(201)).body.id;
   });
 
-  it('a lead adds and removes CS Execs on their own teams only', async () => {
+  it('a lead adds and removes Service members on their own teams only', async () => {
     await h.http().post(`/v1/teams/${ids['cards']}/members`).set(as('lead')).send({ userId: ids['exec'] }).expect(204);
     expect(await members(ids['cards']!)).toEqual([ids['exec'], ids['lead']].sort());
     await h.http().post(`/v1/teams/${ids['loans']}/members`).set(as('lead')).send({ userId: ids['exec'] }).expect(403);
-    await h.http().post(`/v1/teams/${ids['cards']}/members`).set(as('lead')).send({ userId: ids['lead2'] }).expect(403);
+    // Containment (PM/research/11 §3.4): a Head shapes colleagues whose rights fit inside their own, never more powerful ones.
+    await h.http().post(`/v1/teams/${ids['cards']}/members`).set(as('lead')).send({ userId: ids['tech2'] }).expect(403);
     await h.http().patch(`/v1/users/${ids['exec']}`).set(as('lead')).send({ teamIds: [ids['cards'], ids['loans']] }).expect(403);
     await h.http().delete(`/v1/teams/${ids['cards']}/members/${ids['exec']}`).set(as('lead')).expect(204);
     await h.http().patch(`/v1/users/${ids['exec']}`).set(as('lead')).send({ teamIds: [ids['cards']] }).expect(200);
   });
 
-  it('a lead creates CS Execs only into their own teams', async () => {
-    const exec = (email: string, teamIds: string[]) => ({ email, name: email, role: 'CS_EXEC', password: PASSWORD, teamIds });
+  it('a lead creates Service members only into their own teams', async () => {
+    const exec = (email: string, teamIds: string[]) => ({ email, name: email, role: 'SERVICE', password: PASSWORD, teamIds });
     await h.http().post('/v1/users').set(as('lead2')).send(exec('poacher@ocso.test', [ids['cards']!])).expect(403);
     await h.http().post('/v1/users').set(as('lead2')).send(exec('poacher@ocso.test', [ids['loans']!, ids['cards']!])).expect(403);
     const mortgages = (await h.http().post('/v1/teams').set(as('lead2')).send({ name: 'Mortgages' }).expect(201)).body.id as string;
@@ -59,7 +61,7 @@ describe('team membership', () => {
     expect(await members(ids['cards']!)).not.toContain(created.body.id);
   });
 
-  it('a lead may leave a team, and then no longer manages it; the Tech Admin manages everything', async () => {
+  it('a lead may leave a team, and then no longer manages it; the Tech admin manages everything', async () => {
     await h.http().delete(`/v1/teams/${ids['cards']}/members/${ids['lead']}`).set(as('lead')).expect(204);
     const lead = await h.loginAs('lead@ocso.test', PASSWORD);
     await h.http().delete(`/v1/teams/${ids['cards']}/members/${ids['exec']}`).set({ authorization: `Bearer ${lead}` }).expect(403);
@@ -71,7 +73,7 @@ describe('team membership', () => {
     expect(rows.length).toBeGreaterThanOrEqual(5);
   });
 
-  it('a CS Exec cannot change memberships', async () => {
+  it('a Service member cannot change memberships', async () => {
     const exec = await h.loginAs('exec@ocso.test', PASSWORD);
     await h.http().post(`/v1/teams/${ids['cards']}/members`).set({ authorization: `Bearer ${exec}` }).send({ userId: ids['exec'] }).expect(403);
   });
@@ -84,7 +86,7 @@ describe('team detail and rename', () => {
     expect(Number.isNaN(Date.parse(res.body.createdAt))).toBe(false);
     const members = res.body.members as Array<{ userId: string; name: string; email: string; role: string; status: string; availability: string; addedAt: string }>;
     expect(members.map((m) => m.userId).sort()).toEqual([ids['lead'], ids['lead2']].sort());
-    expect(members.find((m) => m.userId === ids['lead2'])).toMatchObject({ name: 'lead2', email: 'lead2@ocso.test', role: 'CS_LEAD', status: 'ACTIVE' });
+    expect(members.find((m) => m.userId === ids['lead2'])).toMatchObject({ name: 'lead2', email: 'lead2@ocso.test', role: 'HEAD', status: 'ACTIVE' });
     expect(members.every((m) => !Number.isNaN(Date.parse(m.addedAt)))).toBe(true);
     await h.http().get(`/v1/teams/${ids['loans']}`).set(as('admin')).expect(200);
     const exec = await h.loginAs('exec@ocso.test', PASSWORD);
@@ -99,7 +101,7 @@ describe('team detail and rename', () => {
     await h.http().patch(`/v1/teams/${lone}`).set(as('lead2')).send({ name: 'Collections · Tier 2', description: 'Late payers' }).expect(200);
     const team = await h.http().get(`/v1/teams/${lone}`).set(as('lead2')).expect(200);
     expect(team.body).toMatchObject({ name: 'Collections · Tier 2', description: 'Late payers' });
-    // Tech Admin lacks teams.manage (team create/rename is a CS Lead concern); memberships are theirs to manage.
+    // Tech admin lacks teams.manage (team create/rename is a Lead concern); memberships are theirs to manage.
     await h.http().patch(`/v1/teams/${lone}`).set(as('admin')).send({ name: 'Admin rename' }).expect(403);
     const { rows } = await h.db.pool.query(`SELECT count(*)::int AS n FROM audit_events WHERE action = 'team.update'`);
     expect(rows[0].n).toBe(1);

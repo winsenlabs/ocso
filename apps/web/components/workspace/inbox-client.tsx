@@ -21,6 +21,8 @@ const VIEWS: ReadonlyArray<{ key: InboxView; label: string }> = [
   { key: 'human', label: 'Human active' },
   { key: 'priority', label: 'Priority' },
   { key: 'resolved', label: 'Resolved' },
+  // A router is still deciding which queue (PM/research/11 §5.7).
+  { key: 'routing', label: 'Routing' },
 ];
 const VIEW_KEYS = new Set<string>(VIEWS.map((v) => v.key));
 
@@ -93,13 +95,17 @@ export function InboxClient({ defaultView, agents, queues, meId, timeZone, marks
   }, [search]);
 
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // A reload scheduled before the view or filters changed must run the current query, not the one it closed over
+  // (it would abort the newer request and show the old view's rows under the new view's counts).
+  const latestLoad = useRef(load);
+  latestLoad.current = load;
   const scheduleLoad = useCallback(() => {
     if (pending.current) return;
     pending.current = setTimeout(() => {
       pending.current = null;
-      void load();
+      void latestLoad.current();
     }, 400);
-  }, [load]);
+  }, []);
   useEffect(
     () => () => {
       if (pending.current) clearTimeout(pending.current);
@@ -252,6 +258,7 @@ function InboxEmpty({ view, term, tag, waiting, onShowWaiting, onClearTag }: { v
       </EmptyState>
     );
   }
+  if (view === 'routing') return <EmptyState size="sm" title="No router is asking anyone">Conversations whose router is still choosing a queue (a menu or a classifier) appear here.</EmptyState>;
   if (view === 'waiting') return <EmptyState size="sm" title="Nobody is waiting for a human">Escalated conversations in your queues appear here to claim.</EmptyState>;
   return <EmptyState size="sm" title="No conversations here">Nothing in this view right now. New conversations appear live.</EmptyState>;
 }

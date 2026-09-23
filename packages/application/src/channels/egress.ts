@@ -6,7 +6,7 @@ import { loadEgressPolicy } from '../mcp/egress.js';
  * Network egress of channel adapters (provider APIs, media downloads): the
  * SSRF-guarded fetch MCP uses (ADR-021). Provider hosts are public https
  * (graph.facebook.com, api.twilio.com, content.twilio.com, their media
- * CDNs); private and loopback addresses are refused unless the Tech Admin
+ * CDNs); private and loopback addresses are refused unless the Tech admin
  * allowlisted the host (deployment settings, the same list INTERNAL MCP
  * connections use, e.g. a provider stub in Compose). Channel base URLs are
  * admin-entered settings, so this is what keeps them from reaching the

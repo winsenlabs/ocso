@@ -15,8 +15,14 @@ export type { SlaView };
 
 const Ref = z.object({ id: z.string(), name: z.string() });
 const State = z.enum(CONTROL_STATES as [ControlState, ...ControlState[]]);
+/**
+ * While a router is still deciding (ROUTING) the conversation has no agent yet (PM/research/11 §5). Until the
+ * workspace shows the routing card (wave 2), such a conversation reads as answered by "Router" (empty id).
+ */
+const ROUTER_PLACEHOLDER = { id: '', name: 'Router', conversationType: '', status: 'ROUTING' };
 
-export const INBOX_VIEWS = ['all', 'mine', 'waiting', 'ai', 'human', 'priority', 'resolved'] as const;
+// 'routing': a router is still deciding (ROUTING) — wave-2 filter.
+export const INBOX_VIEWS = ['all', 'mine', 'waiting', 'ai', 'human', 'priority', 'resolved', 'routing'] as const;
 export type InboxView = (typeof INBOX_VIEWS)[number];
 
 export const ConversationSummarySchema = z.object({
@@ -24,7 +30,10 @@ export const ConversationSummarySchema = z.object({
   displayId: z.string(),
   customer: z.object({ id: z.string(), name: z.string().nullable(), identity: z.string().nullable() }),
   channel: z.object({ id: z.string().nullable(), kind: z.string().nullable(), name: z.string().nullable() }),
-  agent: z.object({ id: z.string(), name: z.string(), conversationType: z.string() }),
+  agent: z
+    .object({ id: z.string(), name: z.string(), conversationType: z.string() })
+    .nullable()
+    .transform((a) => a ?? { id: ROUTER_PLACEHOLDER.id, name: ROUTER_PLACEHOLDER.name, conversationType: ROUTER_PLACEHOLDER.conversationType }),
   controlState: State,
   priority: z.string(),
   assignedUser: Ref.nullable(),
@@ -73,7 +82,27 @@ export const ConversationDetailSchema = z.object({
     identities: z.array(z.object({ kind: z.string(), value: z.string() })),
   }),
   channel: z.object({ id: z.string(), kind: z.string(), name: z.string() }).nullable(),
-  agent: z.object({ id: z.string(), name: z.string(), conversationType: z.string(), status: z.string() }),
+  agent: z
+    .object({ id: z.string(), name: z.string(), conversationType: z.string(), status: z.string() })
+    .nullable()
+    .transform((a) => a ?? ROUTER_PLACEHOLDER),
+  /** How the router placed the conversation (the routing card, wave 2). */
+  routing: z
+    .object({
+      router: Ref.nullable(),
+      phase: z.string(),
+      outcome: z.string().nullable(),
+      ruleIndex: z.number().nullable(),
+      attributes: z.record(z.string(), z.string()),
+      // The routing card (wave 2): what the customer answered, the deciding rule in words, the version.
+      answers: z.record(z.string(), z.string()).default({}),
+      rule: z.string().nullable().default(null),
+      routerVersion: z.number().nullable().default(null),
+      decidedAt: z.string().nullable().default(null),
+    })
+    .passthrough()
+    .nullable()
+    .default(null),
   promptVersion: z.object({ id: z.string(), version: z.number() }).nullable(),
   modelProfile: Ref.nullable(),
   queue: Ref.nullable(),
@@ -128,7 +157,8 @@ export const TimelineItemSchema = z.discriminatedUnion('kind', [
     kind: z.literal('message'),
     id: z.string(),
     seq: z.number(),
-    actorType: z.enum(['CUSTOMER', 'AGENT', 'HUMAN']),
+    // ROUTER: a router's automated question (PM/research/11 §5).
+    actorType: z.enum(['CUSTOMER', 'AGENT', 'HUMAN', 'ROUTER']),
     actorId: z.string().nullable(),
     actorName: z.string().nullable(),
     direction: z.string(),
@@ -186,7 +216,7 @@ export const CustomerSchema = z.object({
   attributes: z.record(z.string(), z.unknown()),
   createdAt: z.string(),
   identities: z.array(z.object({ kind: z.string(), display: z.string().nullable(), verified: z.boolean().default(false) })),
-  conversations: z.array(z.object({ id: z.string(), controlState: State, openedAt: z.string(), lastPreview: z.string().nullable(), agentId: z.string() })),
+  conversations: z.array(z.object({ id: z.string(), controlState: State, openedAt: z.string(), lastPreview: z.string().nullable(), agentId: z.string().nullable().transform((a) => a ?? '') })),
 });
 export type CustomerProfile = z.infer<typeof CustomerSchema>;
 
@@ -279,7 +309,7 @@ export function loadAgentOptions(): Promise<Option[]> {
 /** Active CS staff a lead may transfer to directly. */
 export async function loadTransferUsers(): Promise<Option[]> {
   const users = await api.get('/v1/users', z.array(UserOption));
-  return users.filter((u) => u.status === 'ACTIVE' && (u.role === 'CS_EXEC' || u.role === 'CS_LEAD')).map(({ id, name }) => ({ id, name }));
+  return users.filter((u) => u.status === 'ACTIVE' && (u.role === 'SERVICE' || u.role === 'LEAD' || u.role === 'HEAD')).map(({ id, name }) => ({ id, name }));
 }
 
 /* ───────────── Home (design/06) — built on the inbox views ───────────── */

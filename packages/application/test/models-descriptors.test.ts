@@ -47,7 +47,7 @@ describe('zod → field descriptors', () => {
   it('lists every registered provider kind with its forms (dev kinds only when enabled)', () => {
     const service = (dev: boolean) =>
       new ProviderService({ db: {} as Db, secrets: {} as SecretStore, registry: createDefaultRegistry({ enableDevProviders: dev }) });
-    const kinds = service(true).kinds(actor('PLATFORM_TECH_ADMIN'));
+    const kinds = service(true).kinds(actor('TECH'));
     const byKind = Object.fromEntries(kinds.map((k) => [k.kind, k]));
     expect(Object.keys(byKind).sort()).toEqual(['ANTHROPIC', 'BEDROCK', 'DEV_SCRIPTED', 'FOUNDRY', 'OPENAI', 'SARVAM', 'VERTEX']);
     expect(byKind['ANTHROPIC']!.credentials).toEqual([expect.objectContaining({ name: 'apiKey', required: true, secret: true, type: 'string' })]);
@@ -61,12 +61,12 @@ describe('zod → field descriptors', () => {
     for (const k of kinds) expect(k).toMatchObject({ label: expect.any(String), mark: expect.stringMatching(/^[A-Z0-9]{1,4}$/), cachingSummary: expect.any(String) });
     expect(byKind['BEDROCK']).toMatchObject({ mark: 'AWS', cachingSummary: expect.stringContaining('cachePoint') });
     expect(byKind['DEV_SCRIPTED']!.settings.find((f) => f.name === 'latencyMs')).toMatchObject({ type: 'integer', min: 0, max: 30_000, default: 300 });
-    expect(service(false).kinds(actor('CS_LEAD')).map((k) => k.kind)).not.toContain('DEV_SCRIPTED');
+    expect(service(false).kinds(actor('HEAD')).map((k) => k.kind)).not.toContain('DEV_SCRIPTED');
   });
 
   it('requires providers.read to list kinds', () => {
     const svc = new ProviderService({ db: {} as Db, secrets: {} as SecretStore, registry: createDefaultRegistry({ enableDevProviders: false }) });
-    expect(() => svc.kinds(actor('CS_EXEC'))).toThrow(expect.objectContaining({ category: 'authorization' }));
+    expect(() => svc.kinds(actor('SERVICE'))).toThrow(expect.objectContaining({ category: 'authorization' }));
     expect(() => svc.kinds({ principal: null, correlationId: 'x' })).toThrow(expect.objectContaining({ category: 'authorization' }));
   });
 });

@@ -1,15 +1,16 @@
-import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Post, Put, Query, Res } from '@nestjs/common';
 import { Permission, type Principal } from '@ocso/auth';
 import {
   AgentService,
+  ApprovalService,
   ComponentsInput,
   CreateVersionInput,
-  EscalationRuleInput,
-  EscalationRulePatch,
-  EscalationRuleService,
   PromptService,
+  WithApproval,
+  requestApproval,
   type ActorContext,
 } from '@ocso/application';
+import type { Response } from 'express';
 import { channelContextFrom, loadAgentToolCatalog } from '@ocso/agent-runtime';
 import type { ChannelRegistry } from '@ocso/channels';
 import { channels, users, type Db } from '@ocso/db';
@@ -19,6 +20,7 @@ import { eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { Actor, CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
 import { CHANNEL_REGISTRY, DB } from '../../infrastructure/tokens.js';
+import { approvalResponse } from '../approvals/approval-response.js';
 
 const Id = z.uuid();
 const DiffQuery = z.object({ from: z.uuid(), to: z.uuid() });
@@ -26,12 +28,11 @@ const PreviewQuery = z.object({ channelId: z.uuid().optional() });
 type PreviewQuery = z.infer<typeof PreviewQuery>;
 type DiffQuery = z.infer<typeof DiffQuery>;
 type Components = z.infer<typeof ComponentsInput>;
-const RulePatch = EscalationRulePatch;
-type RulePatch = z.infer<typeof RulePatch>;
+type ApprovalBody = z.infer<typeof WithApproval>;
 
 /**
- * Structured prompt editing, versioning and escalation rules (design/02
- * Prompt/Versions/Escalation tabs). The services scope every call to agents
+ * Structured prompt editing and versioning (design/02 Prompt/Versions tabs;
+ * escalation rules: escalation-rules.controller.ts). The services scope every call to agents
  * the caller can read (reads) or whose owning team they are in (writes); 404
  * otherwise (ADR-026).
  */
@@ -40,9 +41,9 @@ export class PromptsController {
   constructor(
     @Inject(PromptService) private readonly prompts: PromptService,
     @Inject(AgentService) private readonly agents: AgentService,
-    @Inject(EscalationRuleService) private readonly rules: EscalationRuleService,
     @Inject(DB) private readonly db: Db,
     @Inject(CHANNEL_REGISTRY) private readonly registry: ChannelRegistry,
+    @Inject(ApprovalService) private readonly approvals: ApprovalService,
   ) {}
 
   @Get('prompt')
@@ -114,46 +115,29 @@ export class PromptsController {
     return this.prompts.createVersionFromDraft(actor, agentId, body);
   }
 
+  /**
+   * A draft agent's prompt activates directly (204). Once the agent has been
+   * approved, activation is a proposal (kind prompt_version): 202 `{proposal}`
+   * with `approval`, else 409 approval_required.
+   */
   @Post('prompt/versions/:versionId/activate')
   @HttpCode(204)
   @RequirePermission(Permission.PROMPTS_ACTIVATE)
-  async activate(@Actor() actor: ActorContext, @Param('agentId', { schema: Id }) agentId: string, @Param('versionId', { schema: Id }) versionId: string) {
-    await this.prompts.activate(actor, agentId, versionId);
+  async activate(
+    @Actor() actor: ActorContext,
+    @Param('agentId', { schema: Id }) agentId: string,
+    @Param('versionId', { schema: Id }) versionId: string,
+    @Body({ schema: WithApproval.optional() }) body: ApprovalBody | undefined,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    await this.prompts.assertVersionOf(actor, agentId, versionId);
+    const outcome = await approvalResponse(res, requestApproval(this.approvals, actor, { objectKind: 'prompt_version', objectId: versionId, action: 'ACTIVATE' }, body?.approval, () => this.prompts.activate(actor, agentId, versionId)));
+    return outcome ?? undefined;
   }
 
   @Get('prompt/diff')
   @RequirePermission(Permission.AGENTS_READ)
   diff(@CurrentPrincipal() principal: Principal, @Param('agentId', { schema: Id }) agentId: string, @Query({ schema: DiffQuery }) q: DiffQuery) {
     return this.prompts.diff(principal, agentId, q.from, q.to);
-  }
-
-  @Get('escalation-rules')
-  @RequirePermission(Permission.AGENTS_READ)
-  listRules(@CurrentPrincipal() principal: Principal, @Param('agentId', { schema: Id }) agentId: string) {
-    return this.rules.list(principal, agentId);
-  }
-
-  @Post('escalation-rules')
-  @RequirePermission(Permission.ESCALATION_MANAGE)
-  createRule(@Actor() actor: ActorContext, @Param('agentId', { schema: Id }) agentId: string, @Body({ schema: EscalationRuleInput }) body: EscalationRuleInput) {
-    return this.rules.create(actor, agentId, body);
-  }
-
-  @Put('escalation-rules/:ruleId')
-  @RequirePermission(Permission.ESCALATION_MANAGE)
-  updateRule(
-    @Actor() actor: ActorContext,
-    @Param('agentId', { schema: Id }) agentId: string,
-    @Param('ruleId', { schema: Id }) ruleId: string,
-    @Body({ schema: RulePatch }) body: RulePatch,
-  ) {
-    return this.rules.update(actor, agentId, ruleId, body);
-  }
-
-  @Delete('escalation-rules/:ruleId')
-  @HttpCode(204)
-  @RequirePermission(Permission.ESCALATION_MANAGE)
-  async deleteRule(@Actor() actor: ActorContext, @Param('agentId', { schema: Id }) agentId: string, @Param('ruleId', { schema: Id }) ruleId: string) {
-    await this.rules.remove(actor, agentId, ruleId);
   }
 }

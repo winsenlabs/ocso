@@ -7,25 +7,29 @@ import { WORKER_FORM_FIELDS, apiFieldErrors, changedFields, parseWorkerForm, typ
 import { ApiError, describeApiError } from '../api/errors';
 import { loadWorkerSettings, updateWorkerSettings } from '../api/system';
 import { getSession } from '../session';
+import { approvalFromForm, outcomeMessage } from './form-approval';
 import { field, type FormState } from './form-state';
 
-/** PATCH /v1/settings/workers (system.configure — Platform Tech Admin). Bounds are the API's; its messages land on the fields. */
+/** PATCH /v1/settings/workers (system.configure — Tech admin). Bounds are the API's; its messages land on the fields. */
 export async function updateWorkerSettingsAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const session = await getSession();
   if (!session) redirect('/login');
   if (!session.permissions.has(Permission.SYSTEM_CONFIGURE)) {
-    return { status: 'error', message: 'Only a Platform Tech Admin can change the worker configuration.' };
+    return { status: 'error', message: 'Only a Tech admin can change the worker configuration.' };
   }
   const raw = Object.fromEntries(WORKER_FORM_FIELDS.map((f) => [f.name, field(formData, f.name)]));
   const values = { ...raw, autoscalingEnabled: formData.get('autoscalingEnabled') === 'on' ? 'on' : '' };
   const parsed = parseWorkerForm(raw, formData.get('autoscalingEnabled') === 'on');
   if (!parsed.ok) return { status: 'error', fieldErrors: parsed.fieldErrors, values };
+  const approval = approvalFromForm(formData);
+  if (!approval.ok) return { ...approval.state, values };
 
+  let res: unknown;
   try {
     const current = await loadWorkerSettings();
     const patch = changedFields(current as WorkerValues, parsed.values);
     if (Object.keys(patch).length === 0) return { status: 'success', message: 'Nothing changed.', values };
-    await updateWorkerSettings(patch);
+    res = await updateWorkerSettings({ ...patch, approval: approval.approval });
   } catch (err) {
     if (err instanceof ApiError && err.category === 'validation') {
       const { fieldErrors, rest } = apiFieldErrors(err.message);
@@ -40,5 +44,5 @@ export async function updateWorkerSettingsAction(_prev: FormState, formData: For
     return { status: 'error', message: describeApiError(err), values };
   }
   refresh();
-  return { status: 'success', message: 'Worker configuration saved · the worker leader applies it within seconds · change recorded in the audit log' };
+  return outcomeMessage(res, 'Worker configuration saved · the worker leader applies it within seconds · change recorded in the audit log');
 }

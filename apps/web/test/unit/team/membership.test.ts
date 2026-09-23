@@ -22,12 +22,12 @@ const TEAMS = [
 ];
 const person = (id: string, role: Person['role'], teamIds: string[], status: Person['status'] = 'ACTIVE'): Person => ({ id, name: id[0]!.toUpperCase() + id.slice(1), email: `${id}@bank.test`, role, status, teamIds });
 const PEOPLE = [
-  person('tara', 'PLATFORM_TECH_ADMIN', []),
-  person('leo', 'CS_LEAD', ['cards', 'loans']),
-  person('lou', 'CS_LEAD', ['loans']),
-  person('esha', 'CS_EXEC', ['cards']),
-  person('eli', 'CS_EXEC', []),
-  person('gone', 'CS_EXEC', [], 'DISABLED'),
+  person('tara', 'TECH', []),
+  person('leo', 'HEAD', ['cards', 'loans']),
+  person('lou', 'HEAD', ['loans']),
+  person('esha', 'SERVICE', ['cards']),
+  person('eli', 'SERVICE', []),
+  person('gone', 'SERVICE', [], 'DISABLED'),
 ];
 const ADMIN: MembershipViewer = { id: 'tara', manageAll: true, manageTeams: false, teamIds: [] };
 const LEAD: MembershipViewer = { id: 'leo', manageAll: false, manageTeams: true, teamIds: ['cards', 'loans'] };
@@ -43,12 +43,12 @@ const QUEUES = [
 const at = (id: string) => PEOPLE.find((p) => p.id === id)!;
 
 describe('who may change a membership (mirrors TeamService)', () => {
-  it('lets the Tech Admin change anyone on any team', () => {
+  it('lets the Tech admin change anyone on any team', () => {
     expect(canChangeMembership(ADMIN, 'sales', at('lou'))).toBe(true);
     expect(managesTeam(ADMIN, 'sales')).toBe(true);
   });
 
-  it('lets a CS Lead change CS Execs and themselves, only on their own teams', () => {
+  it('lets a Lead change Service members and themselves, only on their own teams', () => {
     expect(canChangeMembership(LEAD, 'cards', at('esha'))).toBe(true);
     expect(canChangeMembership(LEAD, 'cards', at('leo'))).toBe(true);
     expect(canChangeMembership(LEAD, 'loans', at('lou'))).toBe(false);
@@ -57,7 +57,7 @@ describe('who may change a membership (mirrors TeamService)', () => {
     expect(managesTeam(LEAD, 'sales')).toBe(false);
   });
 
-  it('renaming is for CS Leads of the team (the Tech Admin lacks teams.manage)', () => {
+  it('renaming is for Leads of the team (the Tech admin lacks teams.manage)', () => {
     expect(canEditTeamDetails(LEAD, 'cards')).toBe(true);
     expect(canEditTeamDetails(LEAD, 'sales')).toBe(false);
     expect(canEditTeamDetails(ADMIN, 'cards')).toBe(false);
@@ -65,14 +65,14 @@ describe('who may change a membership (mirrors TeamService)', () => {
 });
 
 describe('add-member picker', () => {
-  it('offers a lead active CS Execs not yet in the team, filtered by name or email', () => {
+  it('offers a lead active Service members not yet in the team, filtered by name or email', () => {
     expect(eligibleMembers(LEAD, 'cards', PEOPLE, ['leo', 'esha']).map((p) => p.id)).toEqual(['eli']);
     expect(eligibleMembers(LEAD, 'loans', PEOPLE, ['leo', 'lou']).map((p) => p.id)).toEqual(['eli', 'esha']);
     expect(eligibleMembers(LEAD, 'loans', PEOPLE, ['leo', 'lou'], 'ESHA@').map((p) => p.id)).toEqual(['esha']);
     expect(eligibleMembers(LEAD, 'sales', PEOPLE, [])).toEqual([]);
   });
 
-  it('offers the Tech Admin every active person, never disabled users', () => {
+  it('offers the Tech admin every active person, never disabled users', () => {
     expect(eligibleMembers(ADMIN, 'sales', PEOPLE, []).map((p) => p.id)).toEqual(['eli', 'esha', 'leo', 'lou', 'tara']);
   });
 });
@@ -114,17 +114,17 @@ describe('what a removal changes', () => {
     const text = describeRemoval(e);
     expect(text.warn).toBe(true);
     expect(text.lines[0]).toBe('Leo will no longer manage Maya: no other team of theirs owns it.');
-    expect(text.lines).toContain('Cards will have no CS Lead left to manage its agents.');
+    expect(text.lines).toContain('Cards will have no Lead left to manage its agents.');
   });
 
-  it('warns a lead leaving their last agent-owning team that only a Tech Admin can undo it', () => {
+  it('warns a lead leaving their last agent-owning team that only a Tech admin can undo it', () => {
     const lou = at('lou');
     const { warn, lines } = describeRemoval(removalEffect({ ...base, viewerId: 'lou', person: lou, removed: ['loans'] }));
     expect(warn).toBe(true);
     expect(lines).toEqual([
       'You will lose access to Arjun and Riya: none of your remaining teams owns them.',
-      'This is your last team: you will manage no agents until a Platform Tech Admin adds you to one.',
-      'Only a Platform Tech Admin can add you back.',
+      'This is your last team: you will manage no agents until a Tech admin adds you to one.',
+      'Only a Tech admin can add you back.',
     ]);
   });
 
@@ -134,12 +134,12 @@ describe('what a removal changes', () => {
     expect(e.noTeamsLeft).toBe(false);
   });
 
-  it('describes queues for a CS Exec, and no change for a Tech Admin', () => {
+  it('describes queues for a Service member, and no change for a Tech admin', () => {
     const exec = describeRemoval(removalEffect({ ...base, person: at('esha'), removed: ['cards'] }));
     expect(exec.warn).toBe(false);
     expect(exec.lines).toEqual(['Esha will no longer get work from, or see conversations in, Cards T2 and Shared.', 'Esha will be in no team: no queue will route work to them.']);
     const admin = describeRemoval(removalEffect({ ...base, person: { ...at('tara'), teamIds: ['cards'] }, removed: ['cards'] }));
-    expect(admin).toEqual({ warn: false, lines: ['Tech Admins read every agent whatever their teams: their access does not change.'] });
+    expect(admin).toEqual({ warn: false, lines: ['Tech admins read every agent whatever their teams: their access does not change.'] });
   });
 
   it('says so when nothing changes, and when agents could not be loaded', () => {

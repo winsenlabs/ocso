@@ -13,7 +13,7 @@ import { MIGRATIONS_DIR, testAdminUrl } from '../src/testing.js';
  * ADR-026 backfill (0016_agent_team_ownership): an agent that existed before
  * team ownership is owned by the teams serving its default queue; an agent
  * whose default queue has no team, or that has no default queue, stays
- * unowned (Tech Admin only until assigned).
+ * unowned (Tech admin only until assigned).
  */
 
 const OWNERSHIP = '0016_agent_team_ownership.sql';

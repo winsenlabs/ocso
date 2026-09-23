@@ -8,28 +8,48 @@ const labels = (role: Role) => navFor(role).flatMap((g) => (g.label ? [g.label] 
 const items = (role: Role) => navFor(role).flatMap((g) => g.items.map((i) => i.label));
 
 describe('buildNav (design/OCSONav.dc.html, derived from permissions)', () => {
-  it('gives CS Exec only "My work"', () => {
-    expect(labels('CS_EXEC')).toEqual(['My work']);
-    expect(items('CS_EXEC')).toEqual(['Home', 'Search', 'Conversations', 'Pickup queue', 'Customers', 'Alerts', 'My connections', 'Settings']);
+  it('gives Service member only "My work"', () => {
+    expect(labels('SERVICE')).toEqual(['My work']);
+    expect(items('SERVICE')).toEqual(['Home', 'Search', 'Conversations', 'Pickup queue', 'Customers', 'Alerts', 'My connections', 'Settings']);
   });
 
-  it('gives CS Lead Operations, Quality and Governance', () => {
-    expect(labels('CS_LEAD')).toEqual(['Operations', 'Quality', 'Governance']);
-    expect(items('CS_LEAD')).toEqual([
+  it('gives Lead Operations, Quality and Governance', () => {
+    expect(labels('HEAD')).toEqual(['Operations', 'Quality', 'Governance']);
+    expect(items('HEAD')).toEqual([
       'Home', 'Search',
-      'Conversations', 'Virtual agents', 'Queues', 'Customers', 'Message templates',
+      'Conversations', 'Virtual agents', 'Queues', 'Routers', 'Customers', 'Message templates',
       'Analytics', 'Reviews', 'Prompt corrections', 'Escalation reasons',
-      'Alerts', 'SLA policies', 'Team',
+      'Alerts', 'SLA policies', 'Team', 'Approvals', 'Exceptions',
       'My connections', 'Settings',
     ]);
   });
 
-  it('gives Platform Tech Admin Platform, Integrations and Oversight — no conversation content', () => {
-    expect(labels('PLATFORM_TECH_ADMIN')).toEqual(['Platform', 'Integrations', 'Oversight']);
-    expect(items('PLATFORM_TECH_ADMIN')).not.toContain('Conversations');
-    expect(items('PLATFORM_TECH_ADMIN')).toContain('Team & roles');
-    expect(items('PLATFORM_TECH_ADMIN')).toContain('Message templates');
-    expect(items('CS_EXEC')).not.toContain('Message templates');
+  it('gives Tech admin Platform, Integrations and Oversight — no conversation content', () => {
+    expect(labels('TECH')).toEqual(['Platform', 'Integrations', 'Oversight']);
+    expect(items('TECH')).not.toContain('Conversations');
+    expect(items('TECH')).toContain('Team & roles');
+    expect(items('TECH')).toContain('Message templates');
+    expect(items('SERVICE')).not.toContain('Message templates');
+  });
+
+  it('shows Approvals to maker–checker readers in Governance (Head, Lead) and Oversight (Tech), and hides it without approvals.read', () => {
+    expect(navFor('HEAD').find((g) => g.key === 'governance')?.items.map((i) => i.key)).toContain('approvals');
+    expect(navFor('LEAD').find((g) => g.key === 'governance')?.items.map((i) => i.key)).toContain('approvals');
+    expect(navFor('TECH').find((g) => g.key === 'oversight')?.items.map((i) => i.key)).toContain('approvals');
+    const withoutRead = new Set(permissionsForRole('HEAD').filter((p) => p !== 'approvals.read'));
+    expect(buildNav(withoutRead).flatMap((g) => g.items.map((i) => i.key))).not.toContain('approvals');
+  });
+
+  it('shows Exceptions to exceptions.read holders (Head in Governance, Tech in Oversight), not to a Lead', () => {
+    expect(navFor('HEAD').find((g) => g.key === 'governance')?.items.map((i) => i.key)).toContain('exceptions');
+    expect(navFor('TECH').find((g) => g.key === 'oversight')?.items.map((i) => i.key)).toContain('exceptions');
+    expect(navFor('LEAD').flatMap((g) => g.items.map((i) => i.key))).not.toContain('exceptions');
+  });
+
+  it('shows Routers to routers.read holders (Lead and Head in Operations, Tech in Oversight), never to Service', () => {
+    expect(navFor('LEAD').find((g) => g.key === 'operations')?.items.map((i) => i.key)).toContain('routers');
+    expect(navFor('TECH').find((g) => g.key === 'oversight')?.items.map((i) => i.key)).toContain('routers');
+    expect(navFor('SERVICE').flatMap((g) => g.items.map((i) => i.key))).not.toContain('routers');
   });
 
   it('drops items whose permission is missing and empty groups', () => {
@@ -39,17 +59,17 @@ describe('buildNav (design/OCSONav.dc.html, derived from permissions)', () => {
   });
 
   it('picks the role home from permissions', () => {
-    expect(homeVariant(new Set(permissionsForRole('CS_EXEC')))).toBe('exec');
-    expect(homeVariant(new Set(permissionsForRole('CS_LEAD')))).toBe('lead');
-    expect(homeVariant(new Set(permissionsForRole('PLATFORM_TECH_ADMIN')))).toBe('admin');
+    expect(homeVariant(new Set(permissionsForRole('SERVICE')))).toBe('exec');
+    expect(homeVariant(new Set(permissionsForRole('HEAD')))).toBe('lead');
+    expect(homeVariant(new Set(permissionsForRole('TECH')))).toBe('admin');
   });
 });
 
 describe('activeNavKey', () => {
-  const admin = navFor('PLATFORM_TECH_ADMIN');
+  const admin = navFor('TECH');
 
   it('highlights My connections for the personal tab', () => {
-    expect(activeNavKey(navFor('CS_EXEC'), '/connections', 'mine')).toBe('bottom:my-connections');
+    expect(activeNavKey(navFor('SERVICE'), '/connections', 'mine')).toBe('bottom:my-connections');
   });
 
   it('prefers the longest matching path', () => {

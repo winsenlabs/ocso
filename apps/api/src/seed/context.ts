@@ -2,6 +2,9 @@ import type { Principal, Role } from '@ocso/auth';
 import {
   AgentService,
   AgentToolGrantService,
+  ApprovalDecisionService,
+  ApprovalService,
+  createApprovalRegistry,
   ChannelService,
   EscalationRuleService,
   McpConnectionService,
@@ -12,12 +15,15 @@ import {
   SettingsService,
   TeamService,
   UserService,
+  identityGovernanceWith,
   type ActorContext,
+  type AuditStore,
 } from '@ocso/application';
 import {
   FIRST_PARTY_PLUGINS,
   assertDrivers,
   createChannelRegistry,
+  createAuditStore,
   createDriverRegistries,
   createProviderRegistry,
   createSecretStore,
@@ -45,6 +51,9 @@ export interface SeedServices {
   channels: ChannelService;
   mcp: McpConnectionService;
   toolGrants: AgentToolGrantService;
+  /** Maker–checker: the seed takes its agents live through proposals like anyone else, checked by the other Head. */
+  approvals: ApprovalService;
+  approvalDecisions: ApprovalDecisionService;
 }
 
 export interface SeedContext {
@@ -52,6 +61,8 @@ export interface SeedContext {
   db: Db;
   config: SeedConfig;
   secrets: SecretStore;
+  /** The audit store (ADR-032): the seed's marker may have left the main database's local window. Closed by the caller. */
+  auditStore: AuditStore;
   services: SeedServices;
   correlationId: string;
   log: (line: string) => void;
@@ -63,22 +74,31 @@ export function createSeedContext(database: Database, config: SeedConfig, plugin
   const drivers = createDriverRegistries(plugins);
   assertDrivers(config.api, drivers);
   const secrets = createSecretStore(config.api, db, drivers);
+  const auditStore = createAuditStore(config.api, { info: () => {}, warn: (msg) => console.warn(`seed: ${msg}`) }, drivers);
   const registry = createProviderRegistry(config.api, plugins);
   const channelRegistry = createChannelRegistry({ db }, plugins);
   const validateChannel = (kind: string, settings: unknown, values: Record<string, string>): string[] =>
     channelRegistry.has(kind) ? channelRegistry.get(kind).validateConfig(settings, values) : [`channel kind ${kind} is not available`];
+  // Platform kinds validate channel/provider configuration and reach the MCP server when activating (COVERAGE-PLATFORM).
+  const approvalRegistry = createApprovalRegistry({ platform: { secrets, validateChannel, providers: registry, publicUrl: config.api.OCSO_PUBLIC_URL } });
+  const approvals = new ApprovalService(db, approvalRegistry);
+  // People and their access go through maker–checker like everything else (PM/research/11 §3.4): the demo never
+  // skips access approval (OCSO_DEV_SKIP_ACCESS_APPROVAL is not consulted). The first Head is the only bootstrap.
+  const identity = identityGovernanceWith(approvals);
   return {
     database,
     db,
     config,
     secrets,
+    auditStore,
     correlationId: `demo-seed-${Date.now().toString(36)}`,
     log: (line) => console.log(`seed: ${line}`),
     services: {
       settings: new SettingsService(db),
-      // The demo's people get the documented demo password (an operator tool, not the invite flow).
-      users: new UserService(db, { allowInitialPasswords: true }),
-      teams: new TeamService(db),
+      // The demo's people get the documented demo password (an operator tool, not the invite flow); each is
+      // created pending and activated by a checker's approval (seed steps/organization.ts).
+      users: new UserService(db, { ...identity, allowInitialPasswords: true }),
+      teams: new TeamService(db, identity),
       queues: new QueueService(db),
       providers: new ProviderService({ db, secrets, registry }),
       profiles: new ProfileService({ db, registry }),
@@ -88,6 +108,8 @@ export function createSeedContext(database: Database, config: SeedConfig, plugin
       channels: new ChannelService(db, secrets, validateChannel, (kind, publicKey) => channelRegistry.paths(kind, publicKey)),
       mcp: new McpConnectionService({ db, secrets, publicUrl: config.api.OCSO_PUBLIC_URL }),
       toolGrants: new AgentToolGrantService(db),
+      approvals,
+      approvalDecisions: new ApprovalDecisionService(db, approvalRegistry),
     },
   };
 }

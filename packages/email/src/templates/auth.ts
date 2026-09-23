@@ -23,7 +23,7 @@ export interface InviteEmailInput extends TemplateContext {
   inviterName: string;
   recipientEmail: string;
   recipientName?: string | null | undefined;
-  /** Human role name, e.g. "CS Lead". */
+  /** Human role name, e.g. "Lead". */
   roleLabel: string;
   acceptUrl: string;
   expiresAt: Date;

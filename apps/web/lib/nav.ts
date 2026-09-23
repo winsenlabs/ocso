@@ -61,6 +61,8 @@ const NAV: readonly GroupDef[] = [
       { key: 'conversations', label: 'Conversations', href: '/conversations', requires: P.CONVERSATIONS_READ_TEAM },
       { key: 'agents', label: 'Virtual agents', href: '/agents', requires: P.AGENTS_MANAGE },
       { key: 'queues', label: 'Queues', href: '/queues', requires: P.QUEUES_MANAGE },
+      // channel → router → queue → agent (PM/research/11 §5.7).
+      { key: 'routers', label: 'Routers', href: '/routers', requires: P.ROUTERS_READ },
       { key: 'customers', label: 'Customers', href: '/customers', requires: P.CUSTOMERS_READ },
       // Message templates are business content (docs/07 §3); not in the OCSONav mockup, which predates them.
       { key: 'templates', label: 'Message templates', href: '/templates', requires: P.MESSAGE_TEMPLATES_MANAGE },
@@ -85,6 +87,10 @@ const NAV: readonly GroupDef[] = [
       { key: 'alerts', label: 'Alerts', href: '/alerts', requires: P.ALERTS_BUSINESS_READ },
       { key: 'sla', label: 'SLA policies', href: '/sla', requires: P.SLA_MANAGE },
       { key: 'team', label: 'Team', href: '/team', requires: P.USERS_READ },
+      // Maker–checker queue (PM/research/11 §4).
+      { key: 'approvals', label: 'Approvals', href: '/approvals', requires: P.APPROVALS_READ },
+      // Exception report (PM/research/11 §7): live view and the weekly report a Head signs.
+      { key: 'exceptions', label: 'Exceptions', href: '/exceptions', requires: P.EXCEPTIONS_READ },
     ],
   },
   {
@@ -119,7 +125,10 @@ const NAV: readonly GroupDef[] = [
       { key: 'alerts', label: 'Alerts', href: '/alerts', requires: P.ALERTS_TECHNICAL_READ },
       { key: 'agents', label: 'Virtual agents', href: '/agents', requires: P.AGENTS_READ },
       { key: 'audit', label: 'Audit log', href: '/audit', requires: P.AUDIT_READ },
+      { key: 'routers', label: 'Routers', href: '/routers', requires: P.ROUTERS_READ },
       { key: 'team', label: 'Team & roles', href: '/team', requires: P.USERS_MANAGE },
+      { key: 'approvals', label: 'Approvals', href: '/approvals', requires: P.APPROVALS_READ },
+      { key: 'exceptions', label: 'Exceptions', href: '/exceptions', requires: P.EXCEPTIONS_READ },
     ],
   },
   {

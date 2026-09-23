@@ -21,7 +21,7 @@ export const at = (d: Date): SQL => sql`${d.toISOString()}::timestamptz`;
 
 /**
  * Restrict a raw `agent_id` column to one agent, to a scope subquery of agent
- * ids (a CS Lead's teams' agents, ADR-026), or to all virtual agents (keeps
+ * ids (a Lead's teams' agents, ADR-026), or to all virtual agents (keeps
  * the (agent_id, …) indexes usable).
  */
 export const agentClause = (column: SQL, agentId: string | null, scope: SQL | null = null): SQL =>

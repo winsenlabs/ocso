@@ -27,3 +27,7 @@ export const EMAIL_SENDER = Symbol('EMAIL_SENDER');
 export const EMAIL_STATUS = Symbol('EMAIL_STATUS');
 /** Resolved email config incl. credentials — infrastructure-internal, never exported. */
 export const EMAIL_CONFIG = Symbol('EMAIL_CONFIG');
+/** The audit store (`AuditStore` from @ocso/audit-store), selected by AUDIT_DRIVER (ADR-032). */
+export const AUDIT_STORE = Symbol('AUDIT_STORE');
+/** The Ed25519 audit signing key (`AuditSigner`): checkpoints and exports. */
+export const AUDIT_SIGNER = Symbol('AUDIT_SIGNER');

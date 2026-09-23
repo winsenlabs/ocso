@@ -4,10 +4,10 @@ import { useMemo, useState } from 'react';
 import { AlertBanner } from '@/components/ui/alert-banner';
 import { RiskBadge } from '@/components/ui/risk-badge';
 import { StatusChip } from '@/components/ui/status-chip';
-import { setToolGrantsAction } from '@/lib/actions/agents';
+import { useApprovalRequest } from '@/components/approvals/use-approval-request';
+import { setToolGrantsAction } from '@/lib/actions/agent-config';
 import type { AgentTool, ArgumentRule } from '../data/agent-schemas';
 import { toolRisk } from '../lib/labels';
-import { useAgentAction } from '../shared/use-action';
 import { ArgumentRulesDialog } from './argument-rules-dialog';
 
 type Grant = { enabled: boolean; alwaysConfirm: boolean; argumentRules: ArgumentRule[] };
@@ -17,16 +17,29 @@ const initialGrants = (tools: AgentTool[]): Grants => Object.fromEntries(tools.f
 const TEMPLATE = 'minmax(0,1.5fr) minmax(0,1fr) 78px 82px 112px 150px';
 const canonical = (g: Grants) => JSON.stringify(Object.keys(g).sort().map((k) => [k, g[k]]));
 
+interface EditorProps {
+  agentId: string;
+  agentName: string;
+  tools: AgentTool[];
+  canEdit: boolean;
+  /** The agent (or its tools) has been approved: widening needs a checker; removals and narrowing apply at once. */
+  governed: boolean;
+  /** A widening change is waiting for its checker (another one waits until it is decided). */
+  pending: boolean;
+}
+
 /**
  * Per-agent tool grants (docs/08 §3/§6): which approved tools this agent may
  * call, whether every call needs a human confirmation, and argument rules.
- * Read-only roles see the same table without controls.
+ * Read-only roles see the same table without controls. Maker–checker
+ * (PM/research/11 §4): on an approved agent a new tool, turning one on,
+ * dropping confirmation or an argument rule goes to a checker.
  */
-export function ToolGrantsEditor({ agentId, tools, canEdit }: { agentId: string; tools: AgentTool[]; canEdit: boolean }) {
+export function ToolGrantsEditor({ agentId, agentName, tools, canEdit, governed, pending }: EditorProps) {
   const initial = useMemo(() => initialGrants(tools), [tools]);
   const [grants, setGrants] = useState<Grants>(initial);
   const [rulesFor, setRulesFor] = useState<AgentTool | null>(null);
-  const action = useAgentAction();
+  const action = useApprovalRequest();
   const dirty = canonical(grants) !== canonical(initial);
   const orphans = tools.filter((t) => !t.eligible && grants[t.toolId]);
 
@@ -38,7 +51,7 @@ export function ToolGrantsEditor({ agentId, tools, canEdit }: { agentId: string;
     const list = Object.entries(grants)
       .filter(([toolId]) => eligible.has(toolId))
       .map(([toolId, g]) => ({ toolId, ...g }));
-    action.run(() => setToolGrantsAction(agentId, list));
+    action.run({ objectKind: 'agent_tool_grant', objectId: agentId, title: `Change ${agentName}'s tools` }, (choice) => setToolGrantsAction(agentId, list, choice));
   }
 
   return (
@@ -110,9 +123,9 @@ export function ToolGrantsEditor({ agentId, tools, canEdit }: { agentId: string;
           The tool was un-approved or removed, or its connection no longer allows this agent. Saving removes these grants.
         </AlertBanner>
       ) : null}
-      {action.error ? (
-        <AlertBanner tone="error" style={{ marginTop: 14 }}>
-          {action.error}
+      {action.error || action.notice ? (
+        <AlertBanner tone={action.error ? 'error' : 'info'} style={{ marginTop: 14 }}>
+          {action.error ?? `${action.notice} Removed and narrowed tools already applied.`}
         </AlertBanner>
       ) : null}
       {canEdit ? (
@@ -124,9 +137,13 @@ export function ToolGrantsEditor({ agentId, tools, canEdit }: { agentId: string;
             Reset
           </button>
           <span className="sp" />
-          <span className="mono-sm">{dirty ? 'unsaved changes' : 'saved'} · changes invalidate the agent&apos;s cached tool catalogue</span>
+          <span className="mono-sm">
+            {dirty ? 'unsaved changes' : 'saved'} · {governed ? 'new or wider grants need a checker; removals apply at once' : 'draft agent: changes apply directly'}
+            {pending ? ' · a change is waiting for approval' : ''}
+          </span>
         </div>
       ) : null}
+      {action.modal}
 
       {rulesFor ? (
         <ArgumentRulesDialog

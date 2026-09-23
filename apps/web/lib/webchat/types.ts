@@ -50,7 +50,7 @@ const Media = z.object({ mimeType: z.string(), filename: z.string().optional(), 
 export const WebChatPart = z.discriminatedUnion('type', [
   z.object({ type: z.literal('TEXT'), text: z.string() }),
   z.object({ type: z.enum(MEDIA_KINDS), media: Media, url: z.string().optional(), caption: z.string().optional(), transcript: z.string().optional() }),
-  z.object({ type: z.literal('STRUCTURED'), schema: z.string(), fallbackText: z.string().optional() }),
+  z.object({ type: z.literal('STRUCTURED'), schema: z.string(), data: z.record(z.string(), z.unknown()).optional(), fallbackText: z.string().optional() }),
   z.object({ type: z.literal('LOCATION'), latitude: z.number(), longitude: z.number(), name: z.string().optional(), address: z.string().optional() }),
   z.object({ type: z.literal('CONTACT'), contacts: z.array(z.object({ name: z.string() })) }),
 ]);

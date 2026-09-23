@@ -1,14 +1,14 @@
 # Tools and MCP servers
 
 Tools are the one extension point that needs no OCSO code. A business system exposes its actions as an
-MCP server; a Platform Tech Admin connects it in the web app; a CS Lead grants its tools to a virtual
+MCP server; a Tech admin connects it in the web app; a Head or Lead grants its tools to a virtual
 agent. The business system stays a separate application (build rule
 [§13](../99-BUILD-RULES.md#13-mcp-servers-remain-external)). OCSO owns the connection, the
 credentials and, above all, the decision whether a call may run.
 
 `examples/mcp-bank-demo/` is a complete external MCP server used by the demo seed and the end-to-end
 tests. Operator setup is in
-[docs/operations/setup-guide.md §4](../operations/setup-guide.md#4-mcp-tool-servers-tech-admin).
+[docs/operations/setup-guide.md §4](../operations/setup-guide.md#4-mcp-tool-servers-tech).
 
 ## Connecting a server (no code)
 
@@ -43,7 +43,7 @@ matched by name:
 1. **Authorize in code.** `authorizeToolCall` (`packages/tools/src/authorizer.ts`) is deterministic and
    takes nothing from the model except the arguments. The tool must be approved and enabled, the
    connection usable, the agent granted, the conversation owned by the AI, the scopes present, and the
-   arguments valid against the tool's JSON Schema. Then the CS Lead's argument rules run (for example
+   arguments valid against the tool's JSON Schema. Then the argument rules a Head or Lead set run (for example
    "amount above 5,000 needs confirmation", or DENY), then the confirmation policy.
 2. **Persist before side effects.** A `tool_calls` row is written with sanitized arguments before
    anything runs.
@@ -160,7 +160,7 @@ intended path, not a workaround. First-party sources are for tools that act on O
 ## Limits today
 
 - Streamable HTTP only. There is no stdio transport.
-- First-party tools have no `tools` rows, so a CS Lead cannot revoke them per agent or attach argument
+- First-party tools have no `tools` rows, so a Head or Lead cannot revoke them per agent or attach argument
   rules to them; the implicit grant always applies. Persisting them as records would need a data
   migration.
 - The catalog takes its first-party tool list as a parameter (default: the built-ins); a registry with

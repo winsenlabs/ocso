@@ -24,7 +24,7 @@ export function ToolAction({ conversationId, tools, canRun }: ToolActionProps) {
 
   if (!canRun) return <p className="mono-sm">Your role cannot run tools from the workspace.</p>;
   if (tools.length === 0) {
-    return <p className="mono-sm">No tools are approved for your role. A Platform Tech Admin approves MCP tools; a CS Lead enables them.</p>;
+    return <p className="mono-sm">No tools are approved for your role. A Tech admin approves MCP tools; a Lead enables them.</p>;
   }
   if (!tool) {
     return (

@@ -1,7 +1,7 @@
 import { agentTeams, teams, uuidv7, type DbOrTx } from '@ocso/db';
 
 /**
- * Test helpers for team-scoped agent ownership (ADR-026): CS Leads reach
+ * Test helpers for team-scoped agent ownership (ADR-026): Leads reach
  * agents only through a team that owns them, so fixtures give leads a team
  * (principal.teamIds) and agents an owning team (agent_teams).
  */

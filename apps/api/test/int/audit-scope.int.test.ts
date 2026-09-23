@@ -12,7 +12,7 @@ beforeAll(async () => {
   h = await startApi();
   admin = await completeSetup(h);
   for (const k of ['a', 'b'] as const) {
-    const id = (await h.http().post('/v1/users').set(auth(admin)).send({ email: `lead-${k}@ocso.test`, name: `Lead ${k.toUpperCase()}`, role: 'CS_LEAD', password: 'a password 12345' }).expect(201)).body.id as string;
+    const id = (await h.http().post('/v1/users').set(auth(admin)).send({ email: `lead-${k}@ocso.test`, name: `Lead ${k.toUpperCase()}`, role: 'HEAD', password: 'a password 12345' }).expect(201)).body.id as string;
     tokens[k] = await h.loginAs(`lead-${k}@ocso.test`, 'a password 12345');
     const team = await createTeam(h, tokens[k], `Team ${k.toUpperCase()}`);
     await setTeams(h, admin, id, [team]);
@@ -29,7 +29,7 @@ const targets = async (token: string) => {
 };
 
 describe('audit log scope (ADR-026)', () => {
-  it("shows a CS Lead their own team's agent changes but not another team's", async () => {
+  it("shows a Lead their own team's agent changes but not another team's", async () => {
     const a = await targets(tokens.a);
     expect(a.has(agents.a)).toBe(true);
     expect(a.has(agents.b)).toBe(false);
@@ -38,7 +38,7 @@ describe('audit log scope (ADR-026)', () => {
     expect(b.has(agents.a)).toBe(false);
   });
 
-  it('shows the Tech Admin the whole log', async () => {
+  it('shows the Tech admin the whole log', async () => {
     const all = await targets(admin);
     expect(all.has(agents.a) && all.has(agents.b)).toBe(true);
   });

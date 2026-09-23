@@ -47,7 +47,7 @@ Recommended services:
 
 ## 4. Worker scaling
 
-Tech Admin controls logical settings through OCSO. Deployment adapter translates those settings into supported infrastructure/autoscaling configuration where enabled.
+Tech controls logical settings through OCSO (changes are approved settings proposals, ADR-030). Deployment adapter translates those settings into supported infrastructure/autoscaling configuration where enabled.
 
 At minimum expose:
 - min workers

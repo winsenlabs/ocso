@@ -1,13 +1,13 @@
-import { and, desc, eq, gt, ne, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { inboundStartsAiTurn, nextDeliveryStatus, type ControlState, type DeliveryStatus, type InteractionPart } from '@ocso/domain';
-import { agentChannels, channels, conversations, interactions, virtualAgents, uuidv7, type Db, type DbOrTx } from '@ocso/db';
+import { channels, conversations, interactions, virtualAgents, type Db } from '@ocso/db';
 import type { QueueAdapter } from '@ocso/queue';
+import { recordAudit } from '../audit/audit.js';
 import { emitEvent } from '../events/outbox.js';
 import { relinkIdentity, resolveCustomer, type IdentityClaim } from '../customers/identity-resolver.js';
 import { systemActor } from '../shared/context.js';
-import { applyControl } from './control.js';
 import { appendInteraction } from './interaction-writer.js';
-import { loadQueue, resolutionDueFor } from '../handoffs/routing.js';
+import { admitConversation } from '../routing/routing-admit.js';
 
 /** Channel-neutral inbound message (mirrors @ocso/channels InboundMessage). */
 export interface IngressMessage {
@@ -28,14 +28,16 @@ export interface IngressStatusUpdate {
 }
 
 export type IngressResult =
-  | { status: 'accepted'; conversationId: string; interactionId: string; seq: number; created: boolean; turnQueued: boolean }
+  | { status: 'accepted'; conversationId: string; interactionId: string; seq: number; created: boolean; turnQueued: boolean; routeQueued: boolean }
   | { status: 'duplicate'; conversationId: string; interactionId: string }
-  | { status: 'rejected'; reason: 'channel_inactive' | 'no_agent' };
+  | { status: 'rejected'; reason: 'channel_inactive' | 'no_router' };
 
 export interface IngressOptions {
   /** A RESOLVED conversation is reopened if the customer writes within this window. */
   reopenWindowHours: number;
   now?: () => Date;
+  /** Called when a message is rejected because the channel routes nowhere (log it loudly: customers are unanswered). */
+  onRejected?: ((rejection: { channelId: string; reason: 'no_router'; detail: string }) => void) | undefined;
 }
 
 /**
@@ -62,12 +64,6 @@ export class IngressService {
 
       const [channel] = await tx.select().from(channels).where(eq(channels.id, channelId));
       if (!channel || channel.status !== 'ACTIVE') return { status: 'rejected', reason: 'channel_inactive' } as const;
-      // No default agent: a channel attached to exactly one agent still routes to it.
-      const attached = channel.defaultAgentId ? [] : await tx.select({ agentId: agentChannels.agentId }).from(agentChannels).where(eq(agentChannels.channelId, channelId)).limit(2);
-      const agentId = channel.defaultAgentId ?? (attached.length === 1 ? attached[0]!.agentId : null);
-      if (!agentId) return { status: 'rejected', reason: 'no_agent' } as const;
-      const [agent] = await tx.select().from(virtualAgents).where(eq(virtualAgents.id, agentId));
-      if (!agent) return { status: 'rejected', reason: 'no_agent' } as const;
 
       const actor = systemActor(`channel:${channelId}`, correlationId, channel.name);
       const customer = await resolveCustomer(tx, {
@@ -76,13 +72,22 @@ export class IngressService {
         profileName: message.profileName,
         now,
       });
-      const { conversationId, created } = await this.openConversation(tx, {
-        customerId: customer.customerId,
-        channelId,
-        agent,
-        now,
-        correlationId,
-      });
+      // channel → router → queue → agent (PM/research/11 §5.3).
+      const admission = await admitConversation(tx, { channel, customerId: customer.customerId, now, correlationId, reopenWindowHours: this.options.reopenWindowHours });
+      if (admission.status === 'rejected') {
+        // Durable record (the exception report reads audit): who wrote, on which channel, and why nobody answers.
+        // The message text is not kept here: audit readers are not conversation readers.
+        await recordAudit(tx, actor, {
+          action: 'conversation.inbound_rejected',
+          targetType: 'channel',
+          targetId: channelId,
+          summary: `Customer message on ${channel.name} not accepted (${admission.reason}): ${admission.detail}`,
+          after: { reason: admission.reason, detail: admission.detail, customerId: customer.customerId, externalMessageId: message.externalMessageId, receivedAt: message.receivedAt.toISOString() },
+        });
+        this.options.onRejected?.({ channelId, reason: admission.reason, detail: admission.detail });
+        return { status: 'rejected', reason: admission.reason } as const;
+      }
+      const { conversationId, created } = admission;
       const appended = await appendInteraction(
         tx,
         conversationId,
@@ -98,21 +103,17 @@ export class IngressService {
         { channelId, now },
       );
       await tx.update(channels).set({ lastInboundAt: now }).where(eq(channels.id, channelId));
-      if (created) {
-        await emitEvent(tx, actor, 'conversation.created', { customerId: customer.customerId, channelId, queueId: agent.defaultQueueId }, {
-          conversationId,
-          agentId: agent.id,
-        });
-      }
       await emitEvent(tx, actor, 'interaction.received', { interactionId: appended.interactionId, seq: appended.seq, actorType: 'CUSTOMER', channelId }, {
         conversationId,
-        agentId: agent.id,
+        agentId: admission.agentId,
       });
       const [state] = await tx.select({ controlState: conversations.controlState }).from(conversations).where(eq(conversations.id, conversationId));
-      const runTurn = agent.status === 'LIVE' && inboundStartsAiTurn(state!.controlState as ControlState);
+      const [agent] = admission.agentId ? await tx.select({ status: virtualAgents.status, copilotEnabled: virtualAgents.copilotEnabled }).from(virtualAgents).where(eq(virtualAgents.id, admission.agentId)) : [];
+      const route = admission.route || state!.controlState === 'ROUTING';
+      const runTurn = !route && agent?.status === 'LIVE' && inboundStartsAiTurn(state!.controlState as ControlState);
       // A human holds the conversation: prepare a copilot draft for them (never sent automatically).
-      const suggest = agent.copilotEnabled && state!.controlState === 'HUMAN_ACTIVE';
-      return { status: 'accepted', conversationId, interactionId: appended.interactionId, seq: appended.seq, created, runTurn, suggest } as const;
+      const suggest = Boolean(agent?.copilotEnabled) && state!.controlState === 'HUMAN_ACTIVE';
+      return { status: 'accepted', conversationId, interactionId: appended.interactionId, seq: appended.seq, created, runTurn, suggest, route } as const;
     });
 
     if (outcome.status !== 'accepted') return outcome;
@@ -130,6 +131,12 @@ export class IngressService {
             dedupeKey: `turn:${outcome.conversationId}:${outcome.seq}`,
           })
         : Promise.resolve(),
+      outcome.route
+        ? this.queue.publish('conversation.route', { conversationId: outcome.conversationId }, {
+            groupKey: outcome.conversationId,
+            dedupeKey: `route:${outcome.conversationId}:${outcome.seq}`,
+          })
+        : Promise.resolve(),
       outcome.suggest
         ? this.queue.publish('copilot.suggest', { conversationId: outcome.conversationId, seq: outcome.seq }, {
             groupKey: outcome.conversationId,
@@ -137,8 +144,8 @@ export class IngressService {
           })
         : Promise.resolve(),
     ]);
-    const { runTurn, suggest: _suggest, ...rest } = outcome;
-    return { ...rest, turnQueued: runTurn };
+    const { runTurn, suggest: _suggest, route, ...rest } = outcome;
+    return { ...rest, turnQueued: runTurn, routeQueued: route };
   }
 
   /** Delivery receipts: monotonic status updates by provider message id. */
@@ -170,50 +177,5 @@ export class IngressService {
 
   async applyIdentityUpdate(kind: string, previousValue: string, currentValue: string): Promise<boolean> {
     return this.db.transaction((tx) => relinkIdentity(tx, kind, previousValue, currentValue));
-  }
-
-  private async openConversation(
-    tx: DbOrTx,
-    input: { customerId: string; channelId: string; agent: typeof virtualAgents.$inferSelect; now: Date; correlationId: string },
-  ): Promise<{ conversationId: string; created: boolean }> {
-    const scope = and(eq(conversations.customerId, input.customerId), eq(conversations.channelId, input.channelId), eq(conversations.agentId, input.agent.id));
-    const [open] = await tx.select({ id: conversations.id }).from(conversations).where(and(scope, ne(conversations.controlState, 'RESOLVED'))).limit(1);
-    if (open) return { conversationId: open.id, created: false };
-
-    const windowStart = new Date(input.now.getTime() - this.options.reopenWindowHours * 3_600_000);
-    const [recent] = await tx
-      .select({ id: conversations.id })
-      .from(conversations)
-      .where(and(scope, eq(conversations.controlState, 'RESOLVED'), gt(conversations.resolvedAt, windowStart)))
-      .orderBy(desc(conversations.resolvedAt))
-      .limit(1);
-    if (recent) {
-      await applyControl(tx, recent.id, {
-        command: 'REOPEN',
-        actor: systemActor('ingress', input.correlationId),
-        transitionActor: 'CUSTOMER',
-        reopenedBy: 'CUSTOMER',
-        description: 'customer wrote again · conversation reopened',
-        // A reopened conversation gets a fresh resolution window.
-        patch: { resolutionDueAt: await resolutionDueFor(tx, await loadQueue(tx, input.agent.defaultQueueId), input.agent.conversationType, input.now) },
-        now: input.now,
-      });
-      return { conversationId: recent.id, created: false };
-    }
-
-    const id = uuidv7();
-    await tx.insert(conversations).values({
-      id,
-      customerId: input.customerId,
-      agentId: input.agent.id,
-      channelId: input.channelId,
-      type: input.agent.conversationType,
-      controlState: 'AI_ACTIVE',
-      queueId: input.agent.defaultQueueId,
-      resolutionDueAt: await resolutionDueFor(tx, await loadQueue(tx, input.agent.defaultQueueId), input.agent.conversationType, input.now),
-      openedAt: input.now,
-      lastInteractionAt: input.now,
-    });
-    return { conversationId: id, created: true };
   }
 }

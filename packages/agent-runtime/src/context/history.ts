@@ -59,7 +59,7 @@ async function attachParts(
     humanIds.length ? (await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, humanIds))).map((u) => [u.id, u.name]) : [],
   );
   return rows
-    .filter((r) => r.actorType === 'CUSTOMER' || r.actorType === 'AGENT' || r.actorType === 'HUMAN')
+    .filter((r) => r.actorType === 'CUSTOMER' || r.actorType === 'AGENT' || r.actorType === 'HUMAN' || r.actorType === 'ROUTER')
     .map((r) => ({
       seq: r.seq,
       actorType: r.actorType as HistoryEntry['actorType'],

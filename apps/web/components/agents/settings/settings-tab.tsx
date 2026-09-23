@@ -8,7 +8,7 @@ import { BusinessHoursForm } from './business-hours-form';
 import { OwnersCard } from './owners-card';
 import { SettingsForm } from './settings-form';
 
-/** Owning teams (ADR-026): editable by the Tech Admin (any team) or a lead (their own teams), read-only otherwise. */
+/** Owning teams (ADR-026): editable by the Tech admin (any team) or a lead (their own teams), read-only otherwise. */
 function Owners({ data }: { data: AgentPageData }) {
   const { agent, options, can, session } = data;
   const mode = can.assignOwner ? 'admin' : can.manage ? 'lead' : null;

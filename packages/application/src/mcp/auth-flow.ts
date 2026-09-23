@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { forbidden } from '@ocso/domain';
-import { mcpConnections, users } from '@ocso/db';
+import { mcpConnections, type DbOrTx } from '@ocso/db';
 import {
   McpOAuthError,
   McpOAuthService,
@@ -11,6 +11,7 @@ import {
   type McpOAuthClientInformation,
 } from '@ocso/mcp';
 import { recordAudit } from '../audit/audit.js';
+import { loadPrincipal } from '../identity/sessions.js';
 import { emitEvent } from '../events/outbox.js';
 import type { ActorContext } from '../shared/context.js';
 import { assertCanOperate } from './access.js';
@@ -19,7 +20,9 @@ import { loadEgressPolicy } from './egress.js';
 import { callbackFailure, connectionDisabled } from './errors.js';
 import { BeginOAuthInput, HeaderAuthInput, OAuthCallbackInput } from './inputs.js';
 import { OAuthPendingStore } from './pending-store.js';
-import { connectionTarget, loadConnection, revokeSecrets, type ConnectionRow, type McpContext } from './records.js';
+import { assertUnlocked, approvalRequiredError } from '../approvals/guard.js';
+import { assertPlatformWrite, lockPlatformObject, platformGoverned } from '../settings/platform-approvals.js';
+import { connectionTarget, isPersonal, loadConnection, revokeSecrets, type ConnectionRow, type McpContext } from './records.js';
 
 export interface OAuthBegun {
   authorizationUrl: string;
@@ -55,12 +58,16 @@ export class ConnectionAuthFlow {
   async setHeaderAuth(actor: ActorContext, id: string, raw: HeaderAuthInput): Promise<DiscoveryOutcome> {
     const input = HeaderAuthInput.parse(raw);
     const row = await this.operable(actor, id);
+    // Maker–checker: a header credential on an approved shared connection is an UPDATE proposal (409 here).
+    const governed = !isPersonal(row);
+    if (governed) await this.ctx.db.transaction((tx) => assertPlatformWrite(tx, 'mcp_connection', id));
     const meta = await this.ctx.secrets.put({ name: `mcp ${row.name} ${input.headerName}`, kind: 'API_KEY', value: input.token, usedBy: `mcp:${row.name}` });
     await this.swapCredentials(actor, row, [meta.ref], {
       values: { authStrategy: 'HEADER', authConfig: { headerName: input.headerName }, tokenRef: meta.ref, clientInfoRef: null, grantedScopes: [] },
       action: 'mcp.connection.auth_header',
       summary: `Set ${input.headerName} header credential on ${row.name}`,
       after: { headerName: input.headerName, credentialRef: meta.ref },
+      guard: governed ? (tx) => assertPlatformWrite(tx, 'mcp_connection', row.id) : undefined,
     });
     return this.discovery.run(actor, id);
   }
@@ -69,6 +76,8 @@ export class ConnectionAuthFlow {
     const input = BeginOAuthInput.parse(raw);
     const row = await this.operable(actor, id);
     const principal = actor.principal!;
+    // A governed connection may only be re-authorized (the same OAuth server and client); anything else is an approval.
+    if (!isPersonal(row)) await this.ctx.db.transaction((tx) => assertOAuthAllowed(tx, row, null));
     const oauth = await this.oauthService(row.network);
     const existingClient = await this.existingClient(row);
     const begun = await oauth.beginAuthorization(connectionTarget(row), {
@@ -151,6 +160,7 @@ export class ConnectionAuthFlow {
       action: 'mcp.connection.oauth_complete',
       summary: `Authorized ${row.name} with ${result.issuer}`,
       after: { issuer: result.issuer, clientId: info.clientId, registration: info.registration, scopes: result.scopes, credentialRef: token.ref, clientInfoRef: client.ref },
+      guard: isPersonal(row) ? undefined : (tx, current) => assertOAuthAllowed(tx, current, { issuer: result.issuer, clientId: info.clientId, scopes: result.scopes }),
     });
   }
 
@@ -159,12 +169,21 @@ export class ConnectionAuthFlow {
     actor: ActorContext,
     row: ConnectionRow,
     newRefs: string[],
-    change: { values: Partial<typeof mcpConnections.$inferInsert>; action: string; summary: string; after: Record<string, unknown> },
+    change: {
+      values: Partial<typeof mcpConnections.$inferInsert>;
+      action: string;
+      summary: string;
+      after: Record<string, unknown>;
+      /** Maker–checker for a shared connection or template, inside the transaction (before the row lock, the order activation takes). */
+      guard?: ((tx: DbOrTx, current: ConnectionRow) => Promise<void>) | undefined;
+    },
   ): Promise<void> {
     let replaced: Array<string | null> = [];
     try {
       await this.ctx.db.transaction(async (tx) => {
+        if (change.guard) await lockPlatformObject(tx, 'mcp_connection', row.id);
         const current = await loadConnection(tx, row.id, { lock: true });
+        if (change.guard) await change.guard(tx, current);
         replaced = [current.tokenRef, current.clientInfoRef];
         if (current.status === 'DISABLED') throw connectionDisabled(row.id);
         await tx
@@ -222,9 +241,10 @@ export class ConnectionAuthFlow {
 
   /** The user who started the flow, re-checked now: they must still be active (RBAC is re-applied by `operable`). */
   private async actorFor(userId: string, correlationId: string): Promise<ActorContext> {
-    const [user] = await this.ctx.db.select().from(users).where(eq(users.id, userId));
-    if (!user || user.status !== 'ACTIVE') throw forbidden('mcp.oauth', 'the user who started this authorization is no longer active');
-    return { principal: { userId: user.id, role: user.role, displayName: user.name, teamIds: [], via: 'UI' }, correlationId };
+    // Effective permissions and teams as of now: a revoke since the flow started applies to its callback.
+    const principal = await loadPrincipal(this.ctx.db, userId, 'UI');
+    if (!principal) throw forbidden('mcp.oauth', 'the user who started this authorization is no longer active');
+    return { principal, correlationId };
   }
 
   private async auditFailure(actor: ActorContext, connectionId: string, reason: string): Promise<void> {
@@ -240,4 +260,22 @@ export class ConnectionAuthFlow {
       })
       .catch(() => undefined);
   }
+}
+
+/**
+ * OAuth on a shared connection or template (maker–checker, PM/research/11 §4). A draft authenticates freely
+ * while no proposal locks it. A governed (approved or live) one may only be re-authorized: the same OAuth
+ * server and client, scopes within those already granted — a token refresh by another name. Switching from a
+ * header credential, to another server or client, or widening the scopes changes what the connection may do
+ * and is an UPDATE proposal (409 approval_required). `grant` is null when the flow only begins.
+ */
+export async function assertOAuthAllowed(tx: DbOrTx, current: ConnectionRow, grant: { issuer: string; clientId: string; scopes: readonly string[] } | null): Promise<void> {
+  await lockPlatformObject(tx, 'mcp_connection', current.id);
+  await assertUnlocked(tx, { kind: 'mcp_connection' }, current.id);
+  if (!(await platformGoverned(tx, 'mcp_connection', current.id))) return;
+  const config = current.authConfig as { issuer?: string; clientId?: string };
+  const refresh =
+    current.authStrategy === 'OAUTH' &&
+    (!grant || (grant.issuer === config.issuer && grant.clientId === config.clientId && grant.scopes.every((s) => current.grantedScopes.includes(s))));
+  if (!refresh) throw approvalRequiredError('mcp_connection', current.id, 'UPDATE');
 }

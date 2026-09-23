@@ -10,3 +10,4 @@ export { escapeHtml, safeUrl, coarseIp, formatDateTime, formatExpiry } from './t
 export { renderLayout, type EmailBlock, type LayoutInput } from './templates/layout.js';
 export * from './templates/auth.js';
 export * from './templates/alert.js';
+export * from './templates/approval.js';

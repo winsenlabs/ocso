@@ -11,6 +11,7 @@ import { formatAge, formatNumber } from '@/lib/format';
 import { hasPermission, type Session } from '@/lib/session';
 import { connectionsHref, idParam, param } from '../url';
 import { DeliveryList } from './delivery-list';
+import { LifecycleActions } from '../lifecycle-actions';
 import { WebhookDialog } from './webhook-dialog';
 
 type Params = Record<string, string | string[] | undefined>;
@@ -25,12 +26,14 @@ interface Row {
   volume: string;
   failures: string;
   state: { tone: StatusTone; label: string };
+  /** Outbound subscriptions have a maker–checker lifecycle (enable is a proposal; disable is immediate). */
+  hook: Webhook | null;
 }
 
 function outbound(h: Webhook): Row {
   const total = h.last24h.sent + h.last24h.failed + h.last24h.pending;
   const state: Row['state'] = !h.enabled
-    ? { tone: 'muted', label: 'disabled' }
+    ? { tone: 'muted', label: h.approval?.approved ? 'disabled' : 'draft' }
     : h.last24h.failed
       ? { tone: 'danger', label: 'failing' }
       : h.last24h.pending
@@ -46,6 +49,7 @@ function outbound(h: Webhook): Row {
     volume: formatNumber(total),
     failures: formatNumber(h.last24h.failed),
     state,
+    hook: h,
   };
 }
 
@@ -64,6 +68,7 @@ function inbound(c: Channel, kinds: readonly ChannelKind[]): Row | null {
     volume: '—',
     failures: '—',
     state: live ? { tone: 'good', label: 'live' } : { tone: 'muted', label: c.status.toLowerCase() },
+    hook: null,
   };
 }
 
@@ -99,7 +104,7 @@ export async function WebhooksTab({ session, params }: { session: Session; param
       />
       <DataTable
         label="Webhooks"
-        template="minmax(0,1.2fr) minmax(0,1fr) 88px 84px 84px 90px"
+        template="minmax(0,1.2fr) minmax(0,1fr) 88px 84px 84px minmax(180px,1.1fr)"
         rows={rows}
         rowKey={(r) => r.key}
         empty={<EmptyState title="No webhook endpoints yet">Add an outbound endpoint to receive signed OCSO events; channel callbacks appear once a channel exists.</EmptyState>}
@@ -131,7 +136,26 @@ export async function WebhooksTab({ session, params }: { session: Session; param
           { key: 'dir', header: 'Direction', cell: (r) => <span className="mono-sm">{r.direction}</span> },
           { key: 'vol', header: '24h', cell: (r) => <span className="mono">{r.volume}</span> },
           { key: 'fail', header: 'Failures', cell: (r) => <span className="mono">{r.failures}</span> },
-          { key: 'state', header: 'State', cell: (r) => <StatusChip tone={r.state.tone}>{r.state.label}</StatusChip> },
+          {
+            key: 'state',
+            header: 'State',
+            cell: (r) => (
+              <span style={{ display: 'grid', gap: 4 }}>
+                <StatusChip tone={r.state.tone}>{r.state.label}</StatusChip>
+                {r.hook ? (
+                  <LifecycleActions
+                    kind="webhook_subscription"
+                    id={r.hook.id}
+                    name={r.hook.name}
+                    state={r.hook.enabled ? 'live' : r.hook.approval?.approved ? 'stopped' : 'draft'}
+                    approval={r.hook.approval}
+                    activateLabel={r.hook.approval?.approved ? 'Re-enable' : 'Enable'}
+                    canDelete={false}
+                  />
+                ) : null}
+              </span>
+            ),
+          },
         ]}
       />
       <p className="mono-sm" style={{ marginTop: 10 }}>

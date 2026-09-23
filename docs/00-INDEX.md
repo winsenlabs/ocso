@@ -14,7 +14,7 @@ OCSO is a **single-tenant, multi-user** application. One deployment belongs to o
 6. [06-MODEL-PROVIDERS.md](06-MODEL-PROVIDERS.md) — provider abstraction and supported providers
 7. [07-CHANNELS-AND-MULTIMODAL.md](07-CHANNELS-AND-MULTIMODAL.md) — WhatsApp/web/other channels and canonical interactions
 8. [08-MCP-TOOLS-AND-AUTH.md](08-MCP-TOOLS-AND-AUTH.md) — tool servers, OAuth, JWT claims and connection scopes
-9. [09-HUMAN-OPERATIONS-AND-RBAC.md](09-HUMAN-OPERATIONS-AND-RBAC.md) — Tech Admin, CS Lead, CS Exec, inbox and handoff
+9. [09-HUMAN-OPERATIONS-AND-RBAC.md](09-HUMAN-OPERATIONS-AND-RBAC.md) — presets Tech, Head, Lead, Service; per-user permissions; inbox and handoff
 10. [10-WORKERS-QUEUES-AND-SCALING.md](10-WORKERS-QUEUES-AND-SCALING.md) — warm conversations, leases, scaling and reliability
 11. [11-OBSERVABILITY-ALERTS-AND-ANALYTICS.md](11-OBSERVABILITY-ALERTS-AND-ANALYTICS.md) — role-specific observability and alerting
 12. [12-INTERNAL-OCSO-AGENT.md](12-INTERNAL-OCSO-AGENT.md) — internal platform agent

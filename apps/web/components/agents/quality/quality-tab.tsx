@@ -61,7 +61,7 @@ export async function QualityTab({ data }: { data: AgentPageData }) {
         </section>
       ) : null}
       {reviews ? <Reviews reviews={reviews} rubric={rubric} timeZone={timeZone} /> : null}
-      {!corrections && !reviews ? <EmptyState title="Quality data is not available for your role">CS Leads review conversations and manage prompt corrections.</EmptyState> : null}
+      {!corrections && !reviews ? <EmptyState title="Quality data is not available for your role">Leads review conversations and manage prompt corrections.</EmptyState> : null}
     </>
   );
 }
@@ -90,7 +90,7 @@ function Reviews({ reviews, rubric, timeZone }: { reviews: Review[]; rubric: Rub
   const criteria = rubric ? Object.entries(rubric.criteria) : [];
   return (
     <section aria-label="Reviewed conversations">
-      <SecHead title="Reviewed conversations" count={reviews.length} desc="rubric-scored by CS Leads · no opaque quality score" />
+      <SecHead title="Reviewed conversations" count={reviews.length} desc="rubric-scored by Leads · no opaque quality score" />
       <DataTable
         label="Reviewed conversations"
         rows={reviews}

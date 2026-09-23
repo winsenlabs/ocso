@@ -27,3 +27,7 @@ export const EMAIL_CONFIG = Symbol('EMAIL_CONFIG');
 export const AUTH = Symbol('AUTH');
 /** Session policy (idle/absolute lifetime, sign-in throttling) from the environment. */
 export const SESSION_POLICY = Symbol('SESSION_POLICY');
+/** The audit store (`AuditStore` from @ocso/audit-store), selected by AUDIT_DRIVER; the system of record for audit events (ADR-032). */
+export const AUDIT_STORE = Symbol('AUDIT_STORE');
+/** The Ed25519 audit signing key (`AuditSigner`): checkpoints, exports, exception reports. */
+export const AUDIT_SIGNER = Symbol('AUDIT_SIGNER');

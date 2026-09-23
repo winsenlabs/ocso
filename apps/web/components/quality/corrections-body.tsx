@@ -129,7 +129,7 @@ export async function CorrectionsBody({ searchParams }: { searchParams: SearchPa
           empty={
             <EmptyState title={status ? `No ${status.toLowerCase()} corrections` : 'No corrections yet'}>
               Record what an agent did wrong and what it should do instead — from a conversation turn or here. Staged corrections land in the agent&apos;s prompt draft; a
-              CS Lead ships them as a new version.
+              Lead ships them as a new version.
             </EmptyState>
           }
         />

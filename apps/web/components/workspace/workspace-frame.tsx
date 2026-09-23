@@ -7,7 +7,7 @@ import { InboxClient, InboxSkeletonRows } from './inbox-client';
 
 /**
  * Inbox pane of the workspace (design/01 left). Roles without conversation
- * access (Platform Tech Admin) get a clean forbidden state instead, which
+ * access (Tech admin) get a clean forbidden state instead, which
  * spans the workspace and hides the other panes (workspace.css) — the API
  * would answer 403 for every call.
  */
@@ -35,7 +35,7 @@ export function WorkspaceForbidden({ role }: { role: string }) {
       </div>
       <EmptyState title="Conversation content is not available for your role">
         {role} accounts do not see customer conversations. Technical debugging uses traces, usage and turn metadata, which never include
-        transcript text. Ask a CS Lead if you need a conversation reviewed.
+        transcript text. Ask a Lead if you need a conversation reviewed.
       </EmptyState>
     </div>
   );

@@ -8,7 +8,7 @@ const ids = { technical: uuidv7(), business: uuidv7(), leadOnly: uuidv7() };
 
 const as = (who: keyof typeof tokens) => ({ authorization: `Bearer ${tokens[who]}` });
 
-async function createUser(role: 'CS_LEAD' | 'CS_EXEC', email: string): Promise<string> {
+async function createUser(role: 'HEAD' | 'SERVICE', email: string): Promise<string> {
   await h.http().post('/v1/users').set(as('admin')).send({ email, name: role, role, password: 'correct password 1234' }).expect(201);
   return h.loginAs(email, 'correct password 1234');
 }
@@ -23,11 +23,11 @@ async function insertAlert(id: string, kind: 'TECHNICAL' | 'BUSINESS', audience:
 beforeAll(async () => {
   h = await startApi();
   tokens.admin = await completeSetup(h);
-  tokens.lead = await createUser('CS_LEAD', 'lead@ocso.test');
-  tokens.exec = await createUser('CS_EXEC', 'exec@ocso.test');
-  await insertAlert(ids.technical, 'TECHNICAL', ['PLATFORM_TECH_ADMIN'], 'Provider error rate above 5%');
-  await insertAlert(ids.business, 'BUSINESS', ['CS_LEAD', 'CS_EXEC'], 'SLA breaches · Maya');
-  await insertAlert(ids.leadOnly, 'BUSINESS', ['CS_LEAD'], 'Escalation rate above 25% · Maya');
+  tokens.lead = await createUser('HEAD', 'lead@ocso.test');
+  tokens.exec = await createUser('SERVICE', 'exec@ocso.test');
+  await insertAlert(ids.technical, 'TECHNICAL', ['TECH'], 'Provider error rate above 5%');
+  await insertAlert(ids.business, 'BUSINESS', ['HEAD', 'SERVICE'], 'SLA breaches · Maya');
+  await insertAlert(ids.leadOnly, 'BUSINESS', ['HEAD'], 'Escalation rate above 25% · Maya');
 });
 afterAll(async () => {
   await h?.close();
@@ -53,7 +53,7 @@ describe('alerts API RBAC', () => {
     expect(counts.body.byKind.TECHNICAL).toBeUndefined();
   });
 
-  it('lets CS Execs acknowledge and resolve business alerts they can see, with a note', async () => {
+  it('lets Service members acknowledge and resolve business alerts they can see, with a note', async () => {
     await h.http().post(`/v1/alerts/${ids.business}/acknowledge`).set(as('admin')).send({}).expect(404);
     const acked = await h.http().post(`/v1/alerts/${ids.business}/acknowledge`).set(as('exec')).expect(200);
     expect(acked.body).toMatchObject({ id: ids.business, status: 'ACKNOWLEDGED' });
@@ -64,15 +64,15 @@ describe('alerts API RBAC', () => {
     expect(again.body.error.code).toBe('alert_resolved');
   });
 
-  it('enforces rule management per kind: CS Exec none, CS Lead business only, Tech Admin technical only', async () => {
-    const technical = { name: 'Workers', kind: 'TECHNICAL', condition: 'workers_below_min', audienceRoles: ['PLATFORM_TECH_ADMIN'] };
-    const business = { name: 'Escalations', kind: 'BUSINESS', condition: 'escalation_rate_above', params: { thresholdPercent: 20 }, audienceRoles: ['CS_LEAD', 'CS_EXEC'] };
+  it('enforces rule management per kind: Service member none, Lead business only, Tech admin technical only', async () => {
+    const technical = { name: 'Workers', kind: 'TECHNICAL', condition: 'workers_below_min', audienceRoles: ['TECH'] };
+    const business = { name: 'Escalations', kind: 'BUSINESS', condition: 'escalation_rate_above', params: { thresholdPercent: 20 }, audienceRoles: ['HEAD', 'SERVICE'] };
     await h.http().post('/v1/alert-rules').set(as('exec')).send(business).expect(403);
     await h.http().post('/v1/alert-rules').set(as('exec')).send(technical).expect(403);
     await h.http().post('/v1/alert-rules').set(as('lead')).send(technical).expect(403);
     await h.http().post('/v1/alert-rules').set(as('admin')).send(business).expect(403);
     // A technical condition cannot be smuggled in under the business kind.
-    const smuggled = await h.http().post('/v1/alert-rules').set(as('lead')).send({ ...technical, kind: 'BUSINESS', audienceRoles: ['CS_LEAD'] }).expect(400);
+    const smuggled = await h.http().post('/v1/alert-rules').set(as('lead')).send({ ...technical, kind: 'BUSINESS', audienceRoles: ['HEAD'] }).expect(400);
     expect(smuggled.body.error.code).toBe('condition_kind_mismatch');
 
     const leadRule = await h.http().post('/v1/alert-rules').set(as('lead')).send(business).expect(201);
@@ -91,8 +91,22 @@ describe('alerts API RBAC', () => {
     const execConditions = await h.http().get('/v1/alert-rules/conditions').set(as('exec')).expect(200);
     expect(execConditions.body.every((c: { kinds: string[] }) => c.kinds.includes('BUSINESS'))).toBe(true);
 
+    // Maker–checker (PM/research/11 §4): a new rule is a disabled draft, edited directly; turning it on and deleting are proposals.
+    expect(leadRule.body).toMatchObject({ enabled: false, approvalRequired: { objectKind: 'alert_rule', action: 'ACTIVATE' } });
     await h.http().patch(`/v1/alert-rules/${leadRule.body.id}`).set(as('lead')).send({ severity: 'CRITICAL' }).expect(200);
-    await h.http().delete(`/v1/alert-rules/${adminRule.body.id}`).set(as('admin')).expect(204);
+    const on = await h.http().patch(`/v1/alert-rules/${leadRule.body.id}`).set(as('lead')).send({ enabled: true }).expect(409);
+    expect(on.body.error).toMatchObject({ code: 'approval_required', details: { objectKind: 'alert_rule', action: 'ACTIVATE' } });
+    const del = await h.http().delete(`/v1/alert-rules/${adminRule.body.id}`).set(as('admin')).expect(409);
+    expect(del.body.error).toMatchObject({ code: 'approval_required', details: { objectKind: 'alert_rule_technical', action: 'DELETE' } });
+    const headId = (await h.http().get('/v1/auth/me').set(as('lead')).expect(200)).body.id;
+    const proposed = await h.http().delete(`/v1/alert-rules/${adminRule.body.id}`).set(as('admin')).send({ approval: { checkerId: headId, reason: 'Replaced by a new rule' } }).expect(202);
+    expect(proposed.body.proposal).toMatchObject({ objectKind: 'alert_rule_technical', action: 'DELETE', status: 'SUBMITTED' });
+
+    // Create-and-submit whose submission fails (the maker named as checker) fails as a whole: no orphan draft is left.
+    const adminId = (await h.http().get('/v1/auth/me').set(as('admin')).expect(200)).body.id;
+    await h.http().post('/v1/alert-rules').set(as('admin')).send({ ...technical, name: 'Orphan check', approval: { checkerId: adminId } }).expect(400);
+    const all = await h.http().get('/v1/alert-rules').set(as('admin')).expect(200);
+    expect(all.body.map((r: { name: string }) => r.name)).not.toContain('Orphan check');
   });
 
   it('restricts notification destinations to managers and never returns secrets', async () => {
@@ -110,7 +124,19 @@ describe('alerts API RBAC', () => {
     const inApp = await h.http().post('/v1/notification-destinations').set(as('admin')).send({ name: 'In-app', kind: 'IN_APP' }).expect(201);
     const test = await h.http().post(`/v1/notification-destinations/${inApp.body.id}/test`).set(as('admin')).expect(200);
     expect(test.body).toEqual({ ok: true, retriable: false });
-    await h.http().delete(`/v1/notification-destinations/${inApp.body.id}`).set(as('admin')).expect(204);
+    // A new destination is a disabled draft; enabling and deleting are proposals a Head approves.
+    expect(inApp.body.enabled).toBe(false);
+    const headId = (await h.http().get('/v1/auth/me').set(as('lead')).expect(200)).body.id;
+    const decide = (proposal: { id: string; contentHash: string }) =>
+      h.http().post(`/v1/approvals/${proposal.id}/decision`).set(as('lead')).send({ decision: 'APPROVE', reason: 'ok', contentHash: proposal.contentHash }).expect(200);
+    await h.http().patch(`/v1/notification-destinations/${inApp.body.id}`).set(as('admin')).send({ enabled: true }).expect(409);
+    await decide((await h.http().patch(`/v1/notification-destinations/${inApp.body.id}`).set(as('admin')).send({ enabled: true, approval: { checkerId: headId, reason: 'Needed' } }).expect(202)).body.proposal);
+    expect((await h.http().get(`/v1/notification-destinations/${inApp.body.id}`).set(as('admin')).expect(200)).body).toMatchObject({ enabled: true, approval: { approved: true } });
+    await h.http().patch(`/v1/notification-destinations/${inApp.body.id}`).set(as('admin')).send({ name: 'In-app 2' }).expect(409);
+    expect((await h.http().patch(`/v1/notification-destinations/${inApp.body.id}`).set(as('admin')).send({ enabled: false }).expect(200)).body.enabled).toBe(false);
+    await h.http().delete(`/v1/notification-destinations/${inApp.body.id}`).set(as('admin')).expect(409);
+    await decide((await h.http().delete(`/v1/notification-destinations/${inApp.body.id}`).set(as('admin')).send({ approval: { checkerId: headId, reason: 'Unused' } }).expect(202)).body.proposal);
+    await h.http().get(`/v1/notification-destinations/${inApp.body.id}`).set(as('admin')).expect(404);
   });
 
   it('serves destination kinds from the delivery registry and validates kinds against it', async () => {
@@ -130,6 +156,6 @@ describe('alerts API RBAC', () => {
     expect(created.body).toMatchObject({ summary: 'region EU', config: { region: 'EU' } });
     const leadView = await h.http().get('/v1/notification-destinations').set(as('lead')).expect(200);
     expect(leadView.body.find((d: { id: string }) => d.id === created.body.id)).toMatchObject({ config: null, summary: null });
-    await h.http().delete(`/v1/notification-destinations/${created.body.id}`).set(as('admin')).expect(204);
+    await h.http().delete(`/v1/notification-destinations/${created.body.id}`).set(as('admin')).expect(409);
   });
 });

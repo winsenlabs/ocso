@@ -28,6 +28,8 @@ export type ControlPatch = Partial<
     | 'resolvedBy'
     | 'disposition'
     | 'firstHumanResponseAt'
+    | 'agentId'
+    | 'lastProcessedSeq'
   >
 >;
 
@@ -39,6 +41,8 @@ export interface ControlChange {
   description: string;
   patch?: ControlPatch | undefined;
   reopenedBy?: 'CUSTOMER' | 'HUMAN' | undefined;
+  /** ROUTE_CONTINUE: the state before routing started. */
+  restoreState?: ControlState | null | undefined;
   now: Date;
 }
 
@@ -69,6 +73,7 @@ export async function applyControl(tx: DbOrTx, conversationId: string, change: C
     actorUserId: change.actor.principal?.userId,
     assignedUserId: current.assignedUserId,
     reopenedBy: change.reopenedBy,
+    restoreState: change.restoreState,
   });
   const [updated] = await tx
     .update(conversations)
@@ -77,7 +82,8 @@ export async function applyControl(tx: DbOrTx, conversationId: string, change: C
       controlState: to,
       version: sql`${conversations.version} + 1`,
       updatedAt: change.now,
-      ...(change.command === 'REOPEN' ? { resolvedAt: null, reopenCount: sql`${conversations.reopenCount} + 1` } : {}),
+      // A returning customer's resolved conversation counts as reopened only when they choose to continue it.
+      ...(change.command === 'REOPEN' || (change.command === 'ROUTE_CONTINUE' && change.restoreState === 'RESOLVED') ? { resolvedAt: null, reopenCount: sql`${conversations.reopenCount} + 1` } : {}),
     })
     .where(eq(conversations.id, conversationId))
     .returning();
@@ -95,7 +101,7 @@ export async function applyControl(tx: DbOrTx, conversationId: string, change: C
     targetType: 'conversation',
     targetId: conversationId,
     summary: `${change.description} (${from} → ${to})`,
-    before: { controlState: from, assignedUserId: current.assignedUserId, queueId: current.queueId },
+    before: { controlState: from, assignedUserId: current.assignedUserId, queueId: current.queueId, agentId: current.agentId },
     after: { controlState: to, ...change.patch },
   });
   await emitEvent(
@@ -109,7 +115,7 @@ export async function applyControl(tx: DbOrTx, conversationId: string, change: C
       actorType: change.transitionActor,
       actorId: change.actor.principal?.userId ?? change.actor.system?.id ?? null,
     },
-    { conversationId, agentId: current.agentId },
+    { conversationId, agentId: updated!.agentId ?? current.agentId },
   );
   return { from, to, conversation: updated! };
 }

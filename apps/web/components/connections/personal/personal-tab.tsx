@@ -58,7 +58,7 @@ export async function PersonalTab({ params }: { params: Params }) {
           { key: 'sync', header: 'Synced', cell: (c) => <span className="mono-sm">{c.lastSyncAt ? `${formatAge(c.lastSyncAt)} ago` : 'never'}</span> },
         ]}
       />
-      <SecHead title="Available to connect" count={available.length} desc="published by a Platform Tech Admin" style={{ marginTop: 18 }} />
+      <SecHead title="Available to connect" count={available.length} desc="published by a Tech admin" style={{ marginTop: 18 }} />
       {available.length ? (
         <div className="g g3 conn-grid" role="list" aria-label="Available servers">
           {available.map((t) => (
@@ -79,7 +79,7 @@ export async function PersonalTab({ params }: { params: Params }) {
         </div>
       ) : (
         <EmptyState title={templates.length ? 'You are connected to every published server' : 'Nothing published for personal use yet'}>
-          {templates.length ? 'Servers an admin publishes later will appear here.' : 'A Platform Tech Admin publishes user-scoped MCP servers (for example your ticketing or calendar account); they will appear here.'}
+          {templates.length ? 'Servers an admin publishes later will appear here.' : 'A Tech admin publishes user-scoped MCP servers (for example your ticketing or calendar account); they will appear here.'}
         </EmptyState>
       )}
       {open ? <PersonalConnectionPanel key={open.id} connection={open} tools={tools} closeHref={connectionsHref({ tab: 'mine' })} /> : null}

@@ -29,7 +29,7 @@ function needsConfirmationByPolicy(tool: ToolRecord, connection: ConnectionRecor
 export function authorizeToolCall(p: ToolCallProposal, validate: SchemaValidator): AuthorizationDecision {
   const { tool, connection, actor } = p;
 
-  // 1. Tool exists and was approved by a Tech Admin.
+  // 1. Tool exists and was approved by a Tech admin.
   if (!tool) return deny('tool_not_found', 'tool does not exist');
   if (!tool.approved || !tool.enabled) return deny('tool_not_approved', `${tool.displayName} is not approved`);
 
@@ -41,7 +41,7 @@ export function authorizeToolCall(p: ToolCallProposal, validate: SchemaValidator
     }
   }
 
-  // 3. Agent allowed (connection allowlist + CS Lead grant); agents only act while AI owns the conversation.
+  // 3. Agent allowed (connection allowlist + Lead grant); agents only act while AI owns the conversation.
   if (actor.kind === 'AGENT') {
     if (!aiMaySendAutonomously(actor.conversationState)) {
       return deny('conversation_state', `agent cannot act while conversation is ${actor.conversationState}`);

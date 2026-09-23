@@ -4,12 +4,14 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { eq } from 'drizzle-orm';
 import type { INestApplication } from '@nestjs/common';
-import { createTestDatabase, type TestDatabase } from '@ocso/db/testing';
+import { createTestAuditDatabase, createTestDatabase, type TestAuditDatabase, type TestDatabase } from '@ocso/db/testing';
 import { conversations, jobs, teamMembers, teams, users, uuidv7 } from '@ocso/db';
 import type { Principal } from '@ocso/auth';
+import { routeChannel } from './routing.js';
 
 const PASSWORD = 'a password 12345';
 let db: TestDatabase;
+let auditDb: TestAuditDatabase;
 let app: INestApplication;
 const http = () => request(app.getHttpServer());
 const auth = (token: string) => ({ authorization: `Bearer ${token}` });
@@ -23,6 +25,8 @@ async function bootApi(): Promise<INestApplication> {
   const { LoggerModule } = await import('nestjs-pino');
   const { InfrastructureModule } = await import('../../src/infrastructure/infrastructure.module.js');
   const { ChannelsModule } = await import('../../src/modules/channels/channels.module.js');
+  // Channel administration is approvable (PM/research/11 §4): its controller needs the approval services.
+  const { ApprovalsModule } = await import('../../src/modules/approvals/approvals.module.js');
   const { RealtimeModule } = await import('../../src/modules/realtime/realtime.module.js');
   const { TelemetryModule } = await import('../../src/modules/telemetry/telemetry.module.js');
   const { AnalyticsModule } = await import('../../src/modules/analytics/analytics.module.js');
@@ -33,7 +37,7 @@ async function bootApi(): Promise<INestApplication> {
   // Local module (not AppModule): infrastructure + the modules under test.
   class TestApiModule {}
   Module({
-    imports: [LoggerModule.forRoot({ pinoHttp: { level: 'silent' } }), InfrastructureModule, RealtimeModule, ChannelsModule, TelemetryModule, AnalyticsModule, QualityModule],
+    imports: [LoggerModule.forRoot({ pinoHttp: { level: 'silent' } }), InfrastructureModule, ApprovalsModule, RealtimeModule, ChannelsModule, TelemetryModule, AnalyticsModule, QualityModule],
     providers: [
       { provide: APP_GUARD, useClass: AuthGuard },
       { provide: APP_FILTER, useClass: OcsoExceptionFilter },
@@ -49,9 +53,13 @@ async function bootApi(): Promise<INestApplication> {
 
 beforeAll(async () => {
   db = await createTestDatabase();
+  auditDb = await createTestAuditDatabase();
   Object.assign(process.env, {
     NODE_ENV: 'test',
     DATABASE_URL: db.url,
+    // The audit store (ADR-032) the infrastructure module requires; no signing key file = an ephemeral test key.
+    AUDIT_DRIVER: 'postgres',
+    AUDIT_DATABASE_URL: auditDb.url,
     BLOB_SIGNING_KEY: 'test-blob-signing-key-0123456789',
     OCSO_SECRETS_MASTER_KEY: randomBytes(32).toString('base64'),
     OCSO_SETUP_TOKEN: 'integration-setup-token-1',
@@ -60,13 +68,13 @@ beforeAll(async () => {
     OCSO_TRACE_URL_TEMPLATE: 'http://localhost:16686/trace/{traceId}',
   });
   app = await bootApi();
-  const { AgentService, ChannelService, IngressService, hashPassword, setPasswordCredential } = await import('@ocso/application');
+  const { AgentService, ApprovalDecisionService, ApprovalService, ChannelService, IngressService, hashPassword, setPasswordCredential } = await import('@ocso/application');
   const { AUTH } = await import('../../src/infrastructure/tokens.js');
   const auth = app.get<{ handler(r: Request): Promise<Response> }>(AUTH);
   const hash = await hashPassword(PASSWORD);
   ids.team = uuidv7();
   await db.db.insert(teams).values({ id: ids.team, name: 'Cards' });
-  for (const [key, role, name] of [['admin', 'PLATFORM_TECH_ADMIN', 'T. Shetty'], ['lead', 'CS_LEAD', 'Anjali Rao'], ['exec', 'CS_EXEC', 'Nikhil Menon']] as const) {
+  for (const [key, role, name] of [['admin', 'TECH', 'T. Shetty'], ['lead', 'HEAD', 'Anjali Rao'], ['exec', 'SERVICE', 'Nikhil Menon']] as const) {
     ids[key] = uuidv7();
     await db.db.insert(users).values({ id: ids[key]!, email: `${key}@ocso.test`, name, role, emailVerified: true, availability: 'AVAILABLE' });
     await setPasswordCredential(db.db, ids[key]!, hash);
@@ -79,10 +87,14 @@ beforeAll(async () => {
     { teamId: ids.team, userId: ids.exec! },
     { teamId: ids.team, userId: ids.lead! },
   ]);
-  const principal = (key: 'admin' | 'lead'): Principal => ({ userId: ids[key]!, role: key === 'admin' ? 'PLATFORM_TECH_ADMIN' : 'CS_LEAD', displayName: key, teamIds: key === 'lead' ? [ids.team!] : [], via: 'UI' });
+  const principal = (key: 'admin' | 'lead'): Principal => ({ userId: ids[key]!, role: key === 'admin' ? 'TECH' : 'HEAD', displayName: key, teamIds: key === 'lead' ? [ids.team!] : [], via: 'UI' });
   ids.agent = (await new AgentService(db.db).create({ principal: principal('lead'), correlationId: 't' }, { name: 'Maya', purpose: 'customer support', conversationType: 'SUPPORT', description: '', teamIds: [ids.team!] })).id;
   ids.secret = randomBytes(32).toString('hex');
-  const channel = await app.get(ChannelService).create({ principal: principal('admin'), correlationId: 't' }, { kind: 'WEBCHAT', name: 'Web chat', status: 'ACTIVE', settings: {}, secrets: { visitorTokenSecret: ids.secret }, defaultAgentId: ids.agent });
+  const channel = await app.get(ChannelService).create({ principal: principal('admin'), correlationId: 't' }, { kind: 'WEBCHAT', name: 'Web chat', status: 'DRAFT', settings: {}, secrets: { visitorTokenSecret: ids.secret } });
+  // A new channel is a draft: the lead (a Head, approvals.check.channels) approves its activation.
+  const activation = await app.get(ApprovalService).submit({ principal: principal('admin'), correlationId: 't' }, { objectKind: 'channel', objectId: channel.id, action: 'ACTIVATE', checkerId: ids.lead!, reason: 'Open web chat' });
+  await app.get(ApprovalDecisionService).decide({ principal: principal('lead'), correlationId: 't' }, activation.id, { decision: 'APPROVE', reason: 'ok', contentHash: activation.contentHash });
+  await routeChannel({ db }, channel.id, ids.agent);
   ids.channel = channel.id;
   ids.publicKey = channel.publicKey;
   const { issueVisitorToken } = await import('@ocso/channels');
@@ -97,9 +109,10 @@ beforeAll(async () => {
 afterAll(async () => {
   await app?.close();
   await db?.drop();
+  await auditDb?.drop();
 });
 
-describe('telemetry API (Tech Admin only)', () => {
+describe('telemetry API (Tech admin only)', () => {
   it('serves the control center to tech admins', async () => {
     const overview = await http().get('/v1/telemetry/overview').set(auth(tokens.admin)).expect(200);
     expect(overview.body.status.chips.map((c: { key: string }) => c.key)).toEqual(['api', 'runtime', 'database', 'queue', 'providers', 'mcp', 'channels', 'webhooks']);
@@ -136,15 +149,15 @@ describe('analytics and home API', () => {
 
   it('returns one role surface per user and never leaks content to tech admins', async () => {
     const exec = await http().get('/v1/home').set(auth(tokens.exec)).expect(200);
-    expect(exec.body.role).toBe('CS_EXEC');
+    expect(exec.body.role).toBe('SERVICE');
     expect(exec.body.admin).toBeUndefined();
     expect(exec.body.exec.tiles.assignedToMe).toBe(1);
     expect(exec.body.exec.assigned[0]).toMatchObject({ customerName: 'Priya Deshmukh', controlState: 'HUMAN_ACTIVE' });
     const lead = await http().get('/v1/home').set(auth(tokens.lead)).expect(200);
-    expect(lead.body.role).toBe('CS_LEAD');
+    expect(lead.body.role).toBe('HEAD');
     expect(lead.body.lead.agents[0]).toMatchObject({ name: 'Maya', promptVersion: 1, conversations: 1 });
     const admin = await http().get('/v1/home').set(auth(tokens.admin)).expect(200);
-    expect(admin.body.role).toBe('PLATFORM_TECH_ADMIN');
+    expect(admin.body.role).toBe('TECH');
     expect(admin.body.admin.tiles.activeConversations).toBe(1);
     const json = JSON.stringify(admin.body);
     expect(json).not.toContain('SECRET-TRANSCRIPT');

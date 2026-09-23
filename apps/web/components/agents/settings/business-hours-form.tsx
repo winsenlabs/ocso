@@ -2,6 +2,7 @@
 
 import { useState, useTransition, type FormEvent } from 'react';
 import { AlertBanner } from '@/components/ui/alert-banner';
+import { SubmitForApprovalModal } from '@/components/approvals/submit-modal';
 import { updateBusinessHoursAction } from '@/lib/actions/agents';
 import { DAY_LABELS, WEEKDAYS, localIssues, toForm, toInput, type BusinessHours, type HoursForm, type HoursIssues, type Weekday } from '../lib/business-hours';
 
@@ -16,6 +17,9 @@ export function BusinessHoursForm({ agentId, hours, timeZones }: { agentId: stri
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [pending, start] = useTransition();
+  // A live agent's hours change through a proposal (PM/research/11 §4): the API answers approval_required.
+  const [needsApproval, setNeedsApproval] = useState(false);
+  const [proposed, setProposed] = useState(false);
 
   const setDay = (day: Weekday, patch: Partial<HoursForm['days'][Weekday]>) => setForm((f) => ({ ...f, days: { ...f.days, [day]: { ...f.days[day], ...patch } } }));
 
@@ -33,6 +37,10 @@ export function BusinessHoursForm({ agentId, hours, timeZones }: { agentId: stri
           setSaved(true);
           return;
         }
+        if (result.code === 'approval_required') {
+          setNeedsApproval(true);
+          return;
+        }
         setIssues(result.fields);
         setError(result.message || (Object.keys(result.fields).length ? null : 'Could not save business hours.'));
       } catch {
@@ -47,6 +55,19 @@ export function BusinessHoursForm({ agentId, hours, timeZones }: { agentId: stri
         <legend>Business hours · when humans take handoffs</legend>
         {error ? <AlertBanner tone="error" style={{ margin: 0 }}>{error}</AlertBanner> : null}
         {saved && !pending ? <AlertBanner style={{ margin: 0 }}>Business hours saved · new handoffs follow them right away.</AlertBanner> : null}
+        {proposed ? <AlertBanner style={{ margin: 0 }}>Sent for approval · the hours change once the checker approves.</AlertBanner> : null}
+        {needsApproval ? (
+          <SubmitForApprovalModal
+            target={{ objectKind: 'agent', objectId: agentId, title: 'Change business hours', changes: 'business hours' }}
+            onClose={() => setNeedsApproval(false)}
+            submit={async (approval) => {
+              const r = await updateBusinessHoursAction(agentId, toInput(form), approval);
+              // A bootstrap approval applies at once; a named checker still has to approve.
+              if (r.ok) ('bootstrap' in approval ? setSaved(true) : setProposed(true));
+              return r.ok ? { ok: true } : { ok: false, message: r.message };
+            }}
+          />
+        ) : null}
         <p className="mono-sm" style={{ margin: 0 }}>
           The AI answers 24×7. Outside these hours a handoff still joins its queue for pickup, but auto-assign offers and the pickup SLA start at the next opening, and the
           customer is told when the team is back.

@@ -93,7 +93,7 @@ const SetupForm = z.object({
   timezone: z.string().trim().min(1, 'Choose a timezone').max(64),
 });
 
-/** First-run setup (ADR-010): creates the first Platform Tech Admin, then sends them to sign in. */
+/** First-run setup (ADR-010): creates the first Tech admin, then sends them to sign in. */
 export async function setupAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const values = {
     orgName: field(formData, 'orgName'),

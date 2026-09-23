@@ -1,14 +1,21 @@
 import { and, eq, inArray, isNotNull } from 'drizzle-orm';
 import { agentToolGrants, mcpConnections, tools } from '@ocso/db';
+import { approvalRequiredError } from '../approvals/guard.js';
 import { recordAudit } from '../audit/audit.js';
 import { emitEvent } from '../events/outbox.js';
 import type { ActorContext } from '../shared/context.js';
 import { assertCanAdminister, assertCanDelete } from './access.js';
 import type { OAuthPendingStore } from './pending-store.js';
-import { affectedAgentIds, bumpAgents, isTemplate, loadConnection, revokeSecrets, type McpContext } from './records.js';
+import { affectedAgentIds, bumpAgents, isPersonal, isTemplate, loadConnection, revokeSecrets, type McpContext } from './records.js';
 import { viewOf, type ConnectionView } from './views.js';
 
-/** Wizard step (f): disable / enable / delete. Deleting revokes every secret the connection referenced. */
+/**
+ * Wizard step (f): disable / enable / delete. Deleting revokes every secret the connection referenced.
+ * Maker–checker (PM/research/11 §4): disabling is a stop action (immediate, never gated); enabling a shared
+ * connection or template is an ACTIVATE and deleting one a DELETE, both always proposals
+ * (connection-approval.ts) — here they answer 409 approval_required. An admin revoking someone's personal
+ * connection is a stop action and stays direct.
+ */
 export class ConnectionAdmin {
   constructor(
     private readonly ctx: McpContext,
@@ -19,8 +26,9 @@ export class ConnectionAdmin {
     return this.setEnabled(actor, id, false);
   }
 
-  enable(actor: ActorContext, id: string): Promise<ConnectionView> {
-    return this.setEnabled(actor, id, true);
+  async enable(actor: ActorContext, id: string): Promise<ConnectionView> {
+    assertCanAdminister(actor, await loadConnection(this.ctx.db, id));
+    throw approvalRequiredError('mcp_connection', id, 'ACTIVATE');
   }
 
   private async setEnabled(actor: ActorContext, id: string, enabled: boolean): Promise<ConnectionView> {
@@ -54,6 +62,7 @@ export class ConnectionAdmin {
   async delete(actor: ActorContext, id: string): Promise<void> {
     const conn = await loadConnection(this.ctx.db, id);
     assertCanDelete(actor, conn);
+    if (!isPersonal(conn)) throw approvalRequiredError('mcp_connection', id, 'DELETE');
     const instances = isTemplate(conn)
       ? await this.ctx.db
           .select()

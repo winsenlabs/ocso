@@ -5,7 +5,11 @@ import { alertRules, notificationDestinations, uuidv7, type Db, type DbOrTx } fr
 import { forbidden, notFound, validation } from '@ocso/domain';
 import type { SecretStore } from '@ocso/secrets';
 import { z } from 'zod';
+import { approvalRequiredError } from '../approvals/guard.js';
 import { recordAudit } from '../audit/audit.js';
+import { assertPlatformWrite } from '../settings/platform-approvals.js';
+import { stageSecrets, unstageSecrets } from '../settings/secret-refs.js';
+import type { DestinationChange } from './destination-approval.js';
 import { emitEvent } from '../events/outbox.js';
 import type { ActorContext } from '../shared/context.js';
 import { requirePrincipal } from './audience.js';
@@ -19,7 +23,8 @@ export const DestinationInput = z.object({
   config: z.record(z.string(), z.unknown()).default({}),
   /** Plaintext secret entered once (webhook URL, routing key, SMTP password); stored in the SecretStore, never returned. */
   secret: z.string().min(1).max(4096).optional(),
-  enabled: z.boolean().default(true),
+  /** true asks for activation at once (a proposal: the API needs `approval`); a new destination is a disabled draft. */
+  enabled: z.boolean().default(false),
 });
 export type DestinationInput = z.infer<typeof DestinationInput>;
 
@@ -30,13 +35,18 @@ export const DestinationPatch = z.object({
   enabled: z.boolean().optional(),
 });
 export type DestinationPatch = z.infer<typeof DestinationPatch>;
+/** What a person edits (`enabled` moves through disable() and ACTIVATE proposals). */
+export type DestinationEdit = Omit<DestinationPatch, 'enabled'>;
 
 export interface DestinationServiceOptions {
   baseUrl?: string | null | undefined;
   now?: (() => Date) | undefined;
 }
 
-/** Pluggable alert delivery targets (docs/11 §7). Secrets live only in the SecretStore. */
+/**
+ * Pluggable alert delivery targets (docs/11 §7). Secrets live only in the SecretStore.
+ * Maker–checker (PM/research/11 §4, destination-approval.ts): a new destination is a disabled draft.
+ */
 export class NotificationDestinationService {
   constructor(
     private readonly db: Db,
@@ -74,14 +84,15 @@ export class NotificationDestinationService {
       const [row] = await this.db.transaction(async (tx) => {
         const inserted = await tx
           .insert(notificationDestinations)
-          .values({ id, name: input.name, kind: input.kind, config, secretRef, enabled: input.enabled })
+          // A draft: alert dispatch skips it until its ACTIVATE proposal is approved (destination-approval.ts).
+          .values({ id, name: input.name, kind: input.kind, config, secretRef, enabled: false })
           .returning();
         await recordAudit(tx, actor, {
           action: 'notification_destination.create',
           targetType: 'notification_destination',
           targetId: id,
           summary: `Created ${adapter.label} destination "${input.name}"`,
-          after: { name: input.name, kind: input.kind, config, hasSecret: Boolean(secretRef), enabled: input.enabled },
+          after: { name: input.name, kind: input.kind, config, hasSecret: Boolean(secretRef), enabled: false },
         });
         await emitEvent(tx, actor, 'config.changed', { area: 'notification_destinations', entityId: id });
         return inserted;
@@ -94,64 +105,99 @@ export class NotificationDestinationService {
     }
   }
 
-  async update(actor: ActorContext, id: string, patch: DestinationPatch): Promise<NotificationDestinationView> {
+  /**
+   * Name, configuration and secret of a DRAFT destination, written directly. Once approved this answers
+   * 409 approval_required (the change is an UPDATE proposal, stageChange). `enabled` is not changed here:
+   * disable() stops it; enabling is always an ACTIVATE proposal.
+   */
+  async update(actor: ActorContext, id: string, patch: DestinationEdit): Promise<NotificationDestinationView> {
     this.assertManage(actor);
     const before = await this.load(this.db, id);
+    await this.db.transaction((tx) => assertPlatformWrite(tx, 'notification_destination', id));
     const adapter = this.adapter(before.kind);
     const config = patch.config !== undefined ? checkConfig(adapter, patch.config) : before.config;
     const secret = patch.secret !== undefined ? checkSecret(adapter, config, patch.secret) : null;
     // A config that no longer takes a secret (e.g. email switched to the deployment sender) drops the stored one.
     const dropRef = before.secretRef && !requirementFor(adapter, config) ? before.secretRef : null;
-    const newRef = secret && !before.secretRef ? await this.storeSecret(adapter, patch.name ?? before.name, secret) : null;
-    if (secret && before.secretRef) await this.secrets.rotate(before.secretRef, secret);
-    const [row] = await this.db.transaction(async (tx) => {
-      const updated = await tx
-        .update(notificationDestinations)
-        .set({
-          ...(patch.name !== undefined ? { name: patch.name } : {}),
-          ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
-          ...(newRef ? { secretRef: newRef } : {}),
-          ...(dropRef ? { secretRef: null } : {}),
-          config,
-          updatedAt: new Date(),
-        })
-        .where(eq(notificationDestinations.id, id))
-        .returning();
-      await recordAudit(tx, actor, {
-        action: 'notification_destination.update',
-        targetType: 'notification_destination',
-        targetId: id,
-        summary: `Updated destination "${before.name}"${secret ? ' (secret replaced)' : ''}${dropRef ? ' (stored secret removed)' : ''}`,
-        before: { name: before.name, config: before.config, enabled: before.enabled },
-        after: { name: patch.name, config: patch.config, enabled: patch.enabled, secretReplaced: Boolean(secret) },
-      });
-      await emitEvent(tx, actor, 'config.changed', { area: 'notification_destinations', entityId: id });
-      return updated;
-    });
-    if (dropRef) await this.secrets.delete(dropRef).catch(() => undefined);
-    return this.view(row!, true);
+    const newRef = secret ? await this.storeSecret(adapter, patch.name ?? before.name, secret) : null;
+    let row: NotificationDestinationRow;
+    try {
+      [row] = (await this.db.transaction(async (tx) => {
+        await assertPlatformWrite(tx, 'notification_destination', id);
+        const updated = await tx
+          .update(notificationDestinations)
+          .set({
+            ...(patch.name !== undefined ? { name: patch.name } : {}),
+            ...(newRef ? { secretRef: newRef } : dropRef ? { secretRef: null } : {}),
+            config,
+            updatedAt: new Date(),
+          })
+          .where(eq(notificationDestinations.id, id))
+          .returning();
+        await recordAudit(tx, actor, {
+          action: 'notification_destination.update',
+          targetType: 'notification_destination',
+          targetId: id,
+          summary: `Updated destination "${before.name}"${secret ? ' (secret replaced)' : ''}${dropRef && !newRef ? ' (stored secret removed)' : ''}`,
+          before: { name: before.name, config: before.config, enabled: before.enabled },
+          after: { name: patch.name, config: patch.config, secretReplaced: Boolean(secret) },
+        });
+        await emitEvent(tx, actor, 'config.changed', { area: 'notification_destinations', entityId: id });
+        return updated;
+      })) as [NotificationDestinationRow];
+    } catch (error) {
+      if (newRef) await this.secrets.delete(newRef).catch(() => undefined);
+      throw error;
+    }
+    const released = newRef ? before.secretRef : dropRef;
+    if (released) await this.secrets.delete(released).catch(() => undefined);
+    return this.view(row, true);
   }
 
-  /** Removes the destination from every rule, then deletes its secret after commit. */
-  async delete(actor: ActorContext, id: string): Promise<void> {
+  /** Stop action: immediate, never gated, allowed while a proposal is open. Re-enabling is an ACTIVATE proposal. */
+  async disable(actor: ActorContext, id: string): Promise<NotificationDestinationView> {
+    this.assertManage(actor);
+    const row = await this.db.transaction(async (tx) => {
+      const [locked] = await tx.select().from(notificationDestinations).where(eq(notificationDestinations.id, id)).for('update');
+      if (!locked) throw notFound('notification_destination', id);
+      if (!locked.enabled) return locked;
+      const [updated] = await tx.update(notificationDestinations).set({ enabled: false, updatedAt: new Date() }).where(eq(notificationDestinations.id, id)).returning();
+      await recordAudit(tx, actor, { action: 'notification_destination.disable', targetType: 'notification_destination', targetId: id, summary: `Disabled destination "${locked.name}"`, before: { enabled: true }, after: { enabled: false } });
+      await emitEvent(tx, actor, 'config.changed', { area: 'notification_destinations', entityId: id });
+      return updated!;
+    });
+    return this.view(row, true);
+  }
+
+  /**
+   * The payload of an UPDATE proposal: the configuration is validated now, and a new secret value is stored as
+   * a NEW secret (the live destination keeps its value until approval) and travels as its ref only.
+   */
+  async stageChange(actor: ActorContext, id: string, patch: DestinationEdit): Promise<{ payload: DestinationChange; discard: () => Promise<void> }> {
     this.assertManage(actor);
     const before = await this.load(this.db, id);
-    await this.db.transaction(async (tx) => {
-      await tx
-        .update(alertRules)
-        .set({ destinationIds: sql`array_remove(${alertRules.destinationIds}, ${id}::uuid)` })
-        .where(sql`${alertRules.destinationIds} @> ARRAY[${id}]::uuid[]`);
-      await tx.delete(notificationDestinations).where(eq(notificationDestinations.id, id));
-      await recordAudit(tx, actor, {
-        action: 'notification_destination.delete',
-        targetType: 'notification_destination',
-        targetId: id,
-        summary: `Deleted destination "${before.name}"`,
-        before: { name: before.name, kind: before.kind, config: before.config },
-      });
-      await emitEvent(tx, actor, 'config.changed', { area: 'notification_destinations', entityId: id });
-    });
-    if (before.secretRef) await this.secrets.delete(before.secretRef).catch(() => undefined);
+    const adapter = this.adapter(before.kind);
+    const config = patch.config !== undefined ? checkConfig(adapter, patch.config) : before.config;
+    const secret = patch.secret !== undefined ? checkSecret(adapter, config, patch.secret) : null;
+    const owner = { kind: 'notification_destination', objectId: id, makerId: actor.principal!.userId };
+    const name = patch.name ?? before.name;
+    const staged = secret
+      ? await stageSecrets(this.db, this.secrets, owner, { name: `alert destination ${name}`, kind: () => adapter.secret?.secretKind ?? 'OTHER', usedBy: `notification_destination:${name}` }, { secret })
+      : [];
+    const credentialRef = staged[0]?.ref;
+    const payload: DestinationChange = {
+      ...(patch.name !== undefined ? { name: patch.name } : {}),
+      ...(patch.config !== undefined ? { config } : {}),
+      ...(credentialRef ? { credentialRef } : {}),
+    };
+    return { payload, discard: () => unstageSecrets(this.db, this.secrets, staged.map((c) => c.ref)) };
+  }
+
+  /** Deleting a destination is always a proposal (DELETE, destination-approval.ts): 409 approval_required here. */
+  async delete(actor: ActorContext, id: string): Promise<void> {
+    this.assertManage(actor);
+    await this.load(this.db, id);
+    throw approvalRequiredError('notification_destination', id, 'DELETE');
   }
 
   /** Send a synthetic alert through the destination now (no alert row, no queue). */

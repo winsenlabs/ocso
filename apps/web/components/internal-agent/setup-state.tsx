@@ -1,13 +1,15 @@
 'use client';
 
 import Link from 'next/link';
-import { useId, useState, useTransition } from 'react';
+import { useId, useState } from 'react';
+import { useApprovalRequest } from '@/components/approvals/use-approval-request';
+import { SETTINGS_OBJECT_ID } from '@/components/settings/lib/settings-approval';
 import { chooseAskOcsoProfile } from '../../lib/actions/internal-agent';
 import type { ProfileOption } from './types';
 
 /**
  * Ask OCSO has no model yet (deployment setting `internalAgentProfileId`).
- * A Tech Admin can choose a profile right here; everyone else is told who
+ * A Tech admin can choose a profile right here; everyone else is told who
  * can. Questions are never sent anywhere until it is configured.
  */
 export function SetupState({ canConfigure, profiles, onConfigured }: { canConfigure: boolean; profiles: ProfileOption[] | null; onConfigured: () => void }) {
@@ -16,7 +18,7 @@ export function SetupState({ canConfigure, profiles, onConfigured }: { canConfig
       <b style={{ color: 'var(--ink-2)' }}>Ask OCSO is not set up yet.</b>{' '}
       {canConfigure
         ? 'It needs a model profile to run on. Choose one below; you can change it later from here or through the deployment settings API.'
-        : 'It needs a model profile, which a Platform Tech Admin chooses (they are shown the choice when they open Ask OCSO). Until then, nothing you type is sent to a model.'}
+        : 'It needs a model profile, which a Tech admin chooses (they are shown the choice when they open Ask OCSO). Until then, nothing you type is sent to a model.'}
       {canConfigure ? <ProfilePicker profiles={profiles ?? []} onConfigured={onConfigured} /> : null}
     </div>
   );
@@ -25,8 +27,8 @@ export function SetupState({ canConfigure, profiles, onConfigured }: { canConfig
 function ProfilePicker({ profiles, onConfigured }: { profiles: ProfileOption[]; onConfigured: () => void }) {
   const id = useId();
   const [choice, setChoice] = useState(profiles[0]?.id ?? '');
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const approval = useApprovalRequest();
+  const pending = approval.pending;
 
   if (profiles.length === 0) {
     return (
@@ -37,14 +39,15 @@ function ProfilePicker({ profiles, onConfigured }: { profiles: ProfileOption[]; 
     );
   }
 
+  // A deployment setting: the change is a proposal a second person approves (the submit modal asks who).
   function save() {
-    setError(null);
-    startTransition(async () => {
-      const result = await chooseAskOcsoProfile(choice);
-      if (result.ok) onConfigured();
-      else setError(result.message);
+    approval.run({ objectKind: 'deployment_settings', objectId: SETTINGS_OBJECT_ID, title: 'Choose the model profile for Ask OCSO' }, (a) => chooseAskOcsoProfile(choice, a), {
+      onApplied: (data) => {
+        if (!data.proposed) onConfigured();
+      },
     });
   }
+  const error = approval.error;
 
   return (
     <span className="ia-setup-row">
@@ -67,9 +70,14 @@ function ProfilePicker({ profiles, onConfigured }: { profiles: ProfileOption[]; 
         <span className="ia-error" role="alert">
           {error}
         </span>
+      ) : approval.notice ? (
+        <span className="mono-sm" role="status">
+          {approval.outcome === 'bootstrapped' ? 'Approved and applied. Reopen Ask OCSO to start.' : 'Sent for approval: Ask OCSO starts on this profile once a second person approves it.'}
+        </span>
       ) : (
-        <span className="mono-sm">Recorded in the audit log. Ask OCSO answers with each user&apos;s own permissions.</span>
+        <span className="mono-sm">A second person approves the choice. Ask OCSO answers with each user&apos;s own permissions.</span>
       )}
+      {approval.modal}
     </span>
   );
 }

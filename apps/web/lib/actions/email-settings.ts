@@ -8,12 +8,12 @@ import { describeTestResult, parseTestRecipient, type EmailTestState } from '../
 import { getSession } from '../session';
 import { field } from './form-state';
 
-/** POST /v1/settings/email/test (deployment_settings.manage — Platform Tech Admin). */
+/** POST /v1/settings/email/test (deployment_settings.manage — Tech admin). */
 export async function sendTestEmailAction(_prev: EmailTestState, formData: FormData): Promise<EmailTestState> {
   const session = await getSession();
   if (!session) redirect('/login');
   if (!session.permissions.has(Permission.DEPLOYMENT_SETTINGS_MANAGE)) {
-    return { status: 'error', tone: 'error', message: 'Only a Platform Tech Admin can send test emails.' };
+    return { status: 'error', tone: 'error', message: 'Only a Tech admin can send test emails.' };
   }
   const raw = field(formData, 'to');
   const parsed = parseTestRecipient(raw);

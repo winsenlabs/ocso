@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { TemplateCategory, TemplateStatus } from '@ocso/domain';
 import { messageTemplates, type Db, type DbOrTx } from '@ocso/db';
 import { recordAudit } from '../audit/audit.js';
@@ -46,7 +46,7 @@ export async function applyTemplateStatus(db: Db, actor: ActorContext, row: Temp
 
 async function announce(tx: DbOrTx, actor: ActorContext, row: TemplateRow, status: TemplateStatus): Promise<void> {
   await emitEvent(tx, actor, 'message_template.status_changed', {
-    templateId: row.providerTemplateId,
+    templateId: row.providerTemplateId ?? row.id,
     channelId: row.channelId,
     name: row.name,
     language: row.language,
@@ -71,7 +71,7 @@ export async function pollPendingTemplates(
   const rows = await db
     .select()
     .from(messageTemplates)
-    .where(and(eq(messageTemplates.status, 'PENDING'), isNull(messageTemplates.deletedAt)))
+    .where(and(eq(messageTemplates.status, 'PENDING'), isNull(messageTemplates.deletedAt), isNotNull(messageTemplates.providerTemplateId)))
     .orderBy(sql`${messageTemplates.statusCheckedAt} ASC NULLS FIRST`, asc(messageTemplates.submittedAt))
     .limit(options.limit ?? 50);
   const actor = systemActor('template-status-poller', options.correlationId, 'Template status poller');
@@ -80,7 +80,7 @@ export async function pollPendingTemplates(
     try {
       const port = await providers(row.channelId);
       if (!port.templateStatus) continue;
-      const current = await port.templateStatus(row.providerTemplateId);
+      const current = await port.templateStatus(row.providerTemplateId!);
       result.checked++;
       const change: TemplateStatusChange = current
         ? { status: current.status, reason: current.rejectionReason, category: current.category }

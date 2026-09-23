@@ -145,7 +145,7 @@ function StatsOverview({ data }: { data: AgentPageData }) {
         <MetricTile label="waiting for a human" value={s ? formatNumber(s.waitingForHuman) : null} tone={s && s.waitingForHuman > 0 ? 'warn' : undefined} />
       </div>
       <p className="mono-sm" style={{ margin: '0 0 14px' }}>
-        Trends, escalation reasons and reviews are part of business analytics (CS Lead).
+        Trends, escalation reasons and reviews are part of business analytics (Lead).
       </p>
       <AlertsPanel data={data} />
     </>

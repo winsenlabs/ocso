@@ -5,13 +5,13 @@ import { CAPABILITY_LABELS } from '../models/meta';
 import { RoutedModal } from '../routed-modal';
 import { TargetCachingTable } from './target-caching';
 
-/** Read-only profile view for roles that can see profiles but not change them (e.g. CS Lead picking one for an agent). */
+/** Read-only profile view for roles that can see profiles but not change them (e.g. Lead picking one for an agent). */
 export function ProfileDetails({ profile, closeHref }: { profile: Profile; closeHref: string }) {
   const required = Object.entries(profile.requiredCapabilities)
     .filter(([, on]) => on)
     .map(([k]) => CAPABILITY_LABELS[k as keyof typeof CAPABILITY_LABELS] ?? k);
   return (
-    <RoutedModal title={profile.name} sub="read only · managed by the Platform Tech Admin" closeHref={closeHref} maxWidth={720}>
+    <RoutedModal title={profile.name} sub="read only · managed by the Tech admin" closeHref={closeHref} maxWidth={720}>
       {profile.description ? <p style={{ margin: 0, fontSize: 12.5 }}>{profile.description}</p> : null}
       <KeyValue
         items={[

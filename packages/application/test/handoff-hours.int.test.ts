@@ -15,7 +15,7 @@ import { createTeam } from './support/ownership.js';
 
 // The lead manages Maya through an owning team with no queue, so routing candidates are unchanged (ADR-026).
 const OWNERS = uuidv7();
-const lead: Principal = { userId: '00000000-0000-7000-8000-00000000001a', role: 'CS_LEAD', displayName: 'Anjali Rao', teamIds: [OWNERS], via: 'UI' };
+const lead: Principal = { userId: '00000000-0000-7000-8000-00000000001a', role: 'HEAD', displayName: 'Anjali Rao', teamIds: [OWNERS], via: 'UI' };
 const leadCtx: ActorContext = { principal: lead, correlationId: 'hours-test' };
 const EXEC_A = '00000000-0000-7000-8000-0000000000e1';
 const EXEC_B = '00000000-0000-7000-8000-0000000000e2';
@@ -54,9 +54,9 @@ const setHours = (businessHours: unknown) => new AgentService(t.db).update(leadC
 beforeAll(async () => {
   t = await createTestDatabase();
   await t.db.insert(users).values([
-    { id: lead.userId, email: 'lead@x.test', name: 'Anjali Rao', role: 'CS_LEAD' },
-    { id: EXEC_A, email: 'a@x.test', name: 'Nikhil', role: 'CS_EXEC', availability: 'AVAILABLE' },
-    { id: EXEC_B, email: 'b@x.test', name: 'Farah', role: 'CS_EXEC', availability: 'AVAILABLE' },
+    { id: lead.userId, email: 'lead@x.test', name: 'Anjali Rao', role: 'HEAD' },
+    { id: EXEC_A, email: 'a@x.test', name: 'Nikhil', role: 'SERVICE', availability: 'AVAILABLE' },
+    { id: EXEC_B, email: 'b@x.test', name: 'Farah', role: 'SERVICE', availability: 'AVAILABLE' },
   ]);
   const teamId = uuidv7();
   const slaId = uuidv7();

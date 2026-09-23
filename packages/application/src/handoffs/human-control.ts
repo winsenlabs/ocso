@@ -1,13 +1,14 @@
 import { and, desc, eq, isNull, max, ne, sql } from 'drizzle-orm';
 import { Permission, assertCan, can } from '@ocso/auth';
-import { conflict, forbidden, validation } from '@ocso/domain';
+import { conflict, forbidden, notFound, validation } from '@ocso/domain';
 import { assignments, conversationSummaries, conversations, handoffs, users, uuidv7, type Db, type DbOrTx } from '@ocso/db';
 import { z } from 'zod';
 import { emitEvent } from '../events/outbox.js';
 import type { ActorContext } from '../shared/context.js';
 import { applyControl, lockConversation } from '../conversations/control.js';
 import { TagListSchema, writeConversationTags } from '../conversations/tags.js';
-import { endOpenAssignment, resolutionDueFor, loadQueue } from './routing.js';
+import { endOpenAssignment, resolutionDueFor, slaDueFor } from './routing.js';
+import { moveToQueue, transferTarget } from './queue-transfer.js';
 import { offerToNextExec, openHandoff } from './request.js';
 
 export const ReturnToAiInput = z.object({
@@ -25,7 +26,7 @@ const nameOf = (actor: ActorContext) => actor.principal?.displayName ?? 'system'
 /**
  * A staff member reopens a resolved conversation and holds it (REOPEN by a
  * human → HUMAN_ACTIVE, assigned to them). Refused when the customer already
- * has a newer open conversation with the same agent on the same channel.
+ * has a newer open conversation on the same channel (one open per channel).
  * Runs in the caller's transaction (also used by reopen-and-send templates).
  */
 export async function reopenAsHuman(tx: DbOrTx, actor: ActorContext, conversationId: string, now: Date): Promise<void> {
@@ -38,13 +39,12 @@ export async function reopenAsHuman(tx: DbOrTx, actor: ActorContext, conversatio
       .where(
         and(
           eq(conversations.customerId, conv.customerId),
-          eq(conversations.agentId, conv.agentId),
           conv.channelId ? eq(conversations.channelId, conv.channelId) : isNull(conversations.channelId),
           ne(conversations.controlState, 'RESOLVED'),
         ),
       )
       .limit(1);
-    if (open) throw conflict('newer_conversation_open', 'The customer has a newer open conversation with this agent: continue there');
+    if (open) throw conflict('newer_conversation_open', 'The customer has a newer open conversation on this channel: continue there');
   }
   await applyControl(tx, conversationId, {
     command: 'REOPEN',
@@ -161,26 +161,54 @@ export class HumanControlService {
     });
   }
 
-  /** Transfer to another queue or user; the conversation waits again. */
+  /**
+   * Transfer to another queue (and that queue's agent, PM/research/11 §5.5) or
+   * user; the conversation waits again. A waiting conversation moves queue
+   * keeping its state (TRANSFER_QUEUE); a held one is released to the queue.
+   */
   async transfer(actor: ActorContext, conversationId: string, input: z.infer<typeof TransferInput>): Promise<void> {
     assertCan(actor.principal!, Permission.CONVERSATIONS_TRANSFER);
     await this.db.transaction(async (tx) => {
       const now = this.now();
       const conv = await lockConversation(tx, conversationId);
       this.assertHandler(actor, conv.assignedUserId);
+      const target = input.queueId ? await transferTarget(tx, input.queueId) : null;
+      if (input.queueId && !target) throw notFound('queue', input.queueId);
+      // Customers move only into queues a checker approved (their own queue is where they already are).
+      if (target && !target.approved && target.queue.id !== conv.queueId) throw conflict('queue_not_approved', `${target.queue.name} has not been approved for routing yet.`);
+      const agentNote = target?.agent && target.agent.id !== conv.agentId ? ` · agent ${target.agent.name}` : '';
+      const description = `transferred by ${nameOf(actor)}${target ? ` to ${target.queue.name}${agentNote}` : ''}`;
       await endOpenAssignment(tx, conversationId, 'transferred', now);
-      await applyControl(tx, conversationId, {
-        command: 'RELEASE_TO_QUEUE',
-        actor,
-        transitionActor: 'HUMAN',
-        description: `transferred by ${nameOf(actor)}`,
-        patch: {
-          assignedUserId: null,
-          waitingSince: now,
-          ...(input.queueId ? { queueId: input.queueId, resolutionDueAt: await resolutionDueFor(tx, await loadQueue(tx, input.queueId), conv.type, conv.openedAt) } : {}),
-        },
-        now,
-      });
+      if (target && conv.controlState === 'WAITING_FOR_HUMAN') {
+        await moveToQueue(tx, actor, conv, target.queue, target.agent, {
+          command: 'HUMAN',
+          description,
+          now,
+          patch: { assignedUserId: null, waitingSince: now, slaDueAt: await slaDueFor(tx, target.queue, conv.priority, now) },
+        });
+      } else {
+        const swap = target?.agent && target.agent.id !== conv.agentId ? target.agent : null;
+        await applyControl(tx, conversationId, {
+          command: 'RELEASE_TO_QUEUE',
+          actor,
+          transitionActor: 'HUMAN',
+          description,
+          patch: {
+            assignedUserId: null,
+            waitingSince: now,
+            ...(target
+              ? {
+                  queueId: target.queue.id,
+                  slaDueAt: await slaDueFor(tx, target.queue, conv.priority, now),
+                  resolutionDueAt: await resolutionDueFor(tx, target.queue, swap?.conversationType ?? conv.type, conv.openedAt),
+                  ...(swap ? { agentId: swap.id } : {}),
+                }
+              : {}),
+          },
+          now,
+        });
+        if (swap) await emitEvent(tx, actor, 'conversation.routed', { routerId: null, queueId: target!.queue.id, agentId: swap.id, outcome: 'TRANSFER', ruleIndex: null }, { conversationId, agentId: swap.id });
+      }
       const handoff = await openHandoff(tx, conversationId);
       if (handoff) await tx.update(handoffs).set({ status: 'WAITING', assignedUserId: null, ...(input.queueId ? { queueId: input.queueId } : {}) }).where(eq(handoffs.id, handoff.id));
       if (input.userId && handoff) {

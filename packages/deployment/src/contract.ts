@@ -1,5 +1,5 @@
 /**
- * Deployment adapter contract (docs/13 §4, ADR-023). The Tech Admin edits
+ * Deployment adapter contract (docs/13 §4, ADR-023). The Tech admin edits
  * logical worker settings; the adapter maps them onto what the platform can
  * enforce. Compose cannot enforce anything (replicas are operator-controlled),
  * so it answers with advice; ECS applies them through Application Auto

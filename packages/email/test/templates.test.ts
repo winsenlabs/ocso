@@ -34,7 +34,7 @@ describe('account email templates', () => {
       inviterName: `Tarun ${EVIL}`,
       recipientEmail: 'meera@meridian.test',
       recipientName: 'Meera',
-      roleLabel: `CS Exec ${EVIL}`,
+      roleLabel: `Service member ${EVIL}`,
       acceptUrl: 'https://ocso.meridian.test/invite/accept?token=abc&x=1',
       expiresAt: new Date('2026-09-29T10:00:00.000Z'),
     });
@@ -45,7 +45,7 @@ describe('account email templates', () => {
     expect(email.text).toContain('Accept invitation: https://ocso.meridian.test/invite/accept?token=abc&x=1');
     expect(email.text).toContain('This invitation expires in 7 days (29 Sep 2026, 10:00 UTC).');
     expect(email.text).toContain('Hi Meera,');
-    expect(email.text).toContain(`as CS Exec ${EVIL}.`);
+    expect(email.text).toContain(`as Service member ${EVIL}.`);
   });
 
   it('refuses dangerous links and neutralizes markup inside URLs', () => {

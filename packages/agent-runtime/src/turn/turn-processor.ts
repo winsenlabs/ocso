@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq, gt } from 'drizzle-orm';
+import { and, desc, eq, gt } from 'drizzle-orm';
 import { isDomainError, type BusinessHoursLike, type ControlState } from '@ocso/domain';
-import { channels, conversations, interactions, turns, virtualAgents, uuidv7, type Db } from '@ocso/db';
-import { applyControl, emitEvent, publishEphemeral, systemActor } from '@ocso/application';
+import { channels, conversations, interactions, queues, turns, virtualAgents, uuidv7, type Db } from '@ocso/db';
+import { applyControl, effectiveHours, emitEvent, publishEphemeral, systemActor } from '@ocso/application';
 import type { HandlerResult, QueueAdapter, QueueMessage } from '@ocso/queue';
 import type { ModelInputCapabilities } from '@ocso/prompt-compiler';
 import { ocsoMetrics, withSpan, type Logger } from '@ocso/observability';
@@ -88,7 +88,8 @@ export class TurnProcessor {
   private async runOnce(conversationId: string, leaseVersion: number, attempt: number): Promise<RunOutcome> {
     const { db } = this.deps;
     const [conv] = await db.select().from(conversations).where(eq(conversations.id, conversationId));
-    if (!conv) return 'skipped';
+    // No agent yet: a router is still deciding (ROUTING); the route consumer publishes the turn when it does.
+    if (!conv?.agentId) return 'skipped';
     const [agent] = await db.select().from(virtualAgents).where(eq(virtualAgents.id, conv.agentId));
     if (!agent || agent.status !== 'LIVE' || !agent.modelProfileId) return 'skipped';
     const pending = await db
@@ -120,6 +121,17 @@ export class TurnProcessor {
 
     await this.deps.media.materializeAll(pending.map((p) => p.id));
     const [channel] = conv.channelId ? await db.select().from(channels).where(eq(channels.id, conv.channelId)) : [];
+    const [queue] = conv.queueId ? await db.select({ businessHours: queues.businessHours }).from(queues).where(eq(queues.id, conv.queueId)) : [];
+    // Humans' hours for handoff replies: the queue's, else the agent's (PM/research/11 §5.5).
+    const hours = effectiveHours(queue, agent) ?? agent.businessHours;
+    // Another agent transferred the conversation here since this agent last answered: it gets the handover.
+    const [lastTurn] = await db
+      .select({ agentId: turns.agentId, outcome: turns.outcome })
+      .from(turns)
+      .where(and(eq(turns.conversationId, conversationId), eq(turns.status, 'COMPLETED')))
+      .orderBy(desc(turns.startedAt))
+      .limit(1);
+    const transferred = lastTurn?.outcome === 'TRANSFERRED' && lastTurn.agentId !== agent.id;
     const turnId = uuidv7();
     const ident: TurnIdentity = { conversationId, turnId, agentId: agent.id, agentName: agent.name, channelId: conv.channelId, leaseVersion, correlationId };
     await db.insert(turns).values({
@@ -131,6 +143,7 @@ export class TurnProcessor {
       seqTo: pending.at(-1)!.seq,
       promptVersionId: agent.activePromptVersionId,
       modelProfileId: agent.modelProfileId,
+      agentId: agent.id,
     });
     await publishEphemeral(db, correlationId, 'agent.turn_started', { turnId, workerId: this.deps.leases.workerId }, { conversationId, agentId: agent.id });
 
@@ -141,7 +154,7 @@ export class TurnProcessor {
     try {
       await withSpan('ocso.turn', { 'ocso.agent': agent.name, 'ocso.cache_layer': 'pending' }, async (span) => {
         const [capabilities] = await Promise.all([this.deps.capabilitiesFor(agent.modelProfileId!)]);
-        const ctx = await this.deps.context.build(conv, agent, channel ?? null, capabilities, resuming);
+        const ctx = await this.deps.context.build(conv, agent, channel ?? null, capabilities, resuming ? 'HUMAN' : transferred ? 'AGENT' : null);
         span.setAttribute('ocso.cache_layer', ctx.cacheLayer);
         const result = await runAgentLoop(
           this.deps.gateway,
@@ -171,7 +184,7 @@ export class TurnProcessor {
             onStatus: (status) => void publishEphemeral(db, correlationId, 'agent.status', { turnId, status }, { conversationId }).catch(() => {}),
           },
         );
-        await this.finish(writer, ident, ctx, result, started, turn, agent.businessHours);
+        await this.finish(writer, ident, ctx, result, started, turn, hours);
       });
       await this.maybeSummarize(conversationId);
       return 'processed';
@@ -193,7 +206,7 @@ export class TurnProcessor {
       await writer.fail(ident, 'FAILED', { category, message: (err as Error).message });
       if (attempt >= 2 && (category.startsWith('provider') || category === 'timeout' || category === 'policy_denied')) {
         // Model persistently unavailable: route to humans instead of leaving the customer waiting.
-        await this.handoffOnOutage(writer, ident, category, agent.businessHours);
+        await this.handoffOnOutage(writer, ident, category, hours);
         return 'processed';
       }
       throw err;
@@ -213,13 +226,15 @@ export class TurnProcessor {
     hours: BusinessHoursLike,
   ): Promise<void> {
     const handoff = this.handoffIntent(result);
+    // A human handoff wins over a queue transfer asked for in the same turn.
+    const transfer = handoff ? null : result.transfer;
     // Outside human business hours the handoff reply says when the team is next available.
     const text = handoff ? handoffMessage(result.finalText, hours, new Date()) : result.finalText;
     if (text) {
       turn.committed = true;
       await writer.agentMessage(ident, text);
     }
-    const kind = result.awaitingConfirmation ? 'AWAITING_CONFIRMATION' : handoff ? 'HANDOFF' : text ? 'REPLIED' : 'NO_REPLY';
+    const kind = result.awaitingConfirmation ? 'AWAITING_CONFIRMATION' : handoff ? 'HANDOFF' : transfer ? 'TRANSFERRED' : text ? 'REPLIED' : 'NO_REPLY';
     await writer.complete(
       ident,
       ctx,
@@ -232,6 +247,7 @@ export class TurnProcessor {
         model: result.last?.identity.model ?? null,
       },
       handoff,
+      transfer,
     );
   }
 

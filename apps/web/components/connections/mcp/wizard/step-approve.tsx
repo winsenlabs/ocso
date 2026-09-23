@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { KeyValue } from '@/components/ui/key-value';
+import { useApprovalRequest } from '@/components/approvals/use-approval-request';
 import { approveConnectionAction } from '@/lib/actions/mcp';
 import type { AgentLite, ConfirmationPolicy, Connection, Tool } from '@/lib/api/mcp';
 import { Input } from '../../profiles/profile-fields';
@@ -16,6 +17,13 @@ export function StepApprove({ connection, tools, agents, api }: { connection: Co
   const [policy, setPolicy] = useState<ConfirmationPolicy>(connection?.confirmationPolicy ?? 'SENSITIVE_ONLY');
   const [claims, setClaims] = useState(connection?.sendCustomerClaims ?? false);
   const [healthSeconds, setHealthSeconds] = useState(String(connection?.healthCheckSeconds ?? 60));
+  const approval = useApprovalRequest();
+  useEffect(() => {
+    if (!approval.outcome) return;
+    api.notify(approval.outcome === 'proposed' ? 'Sent for approval: the connection goes live once a second person approves it.' : 'Approved as the only eligible checker (bootstrap); the connection goes live shortly.');
+    api.go('active');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [approval.outcome]);
   if (!connection) return <form id={STEP_FORM} onSubmit={(e) => (e.preventDefault(), api.go('url'))} />;
   const template = connection.kind === 'TEMPLATE';
   const live = tools.filter((t) => !t.removedAt);
@@ -24,7 +32,7 @@ export function StepApprove({ connection, tools, agents, api }: { connection: Co
   const who = template
     ? 'no virtual agent (user-scoped connections serve only the person who connects)'
     : anyAgent
-      ? 'any agent a CS Lead enables it for'
+      ? 'any agent a Lead enables it for'
       : chosen.length
         ? agents
             .filter((a) => chosen.includes(a.id))
@@ -39,24 +47,27 @@ export function StepApprove({ connection, tools, agents, api }: { connection: Co
       api.fail('Health check interval must be a whole number of seconds between 15 and 3600.');
       return;
     }
-    api.run(async () => {
-      const r = await approveConnectionAction({
-        id,
-        allowedAgentIds: template ? [] : anyAgent ? '*' : chosen,
-        confirmationPolicy: policy,
-        sendCustomerClaims: template ? false : claims,
-        healthCheckSeconds: seconds,
-      });
-      if (!r.ok) api.fail(r.message);
-      else {
+    const body = {
+      id,
+      allowedAgentIds: template ? [] : anyAgent ? '*' : chosen,
+      confirmationPolicy: policy,
+      sendCustomerClaims: template ? false : claims,
+      healthCheckSeconds: seconds,
+    } as const;
+    // Recording the policy is a draft write; going live is a proposal a second person approves (the submit
+    // modal opens on approval_required and re-sends with the checker).
+    approval.run({ objectKind: 'mcp_connection', objectId: id, title: `Activate MCP connection ${connection?.name ?? ""}` }, (choice) => approveConnectionAction(body, choice), {
+      onApplied: () => {
         api.notify(null);
         api.go('active');
-      }
+      },
     });
   }
 
   return (
     <form id={STEP_FORM} noValidate onSubmit={(e) => (e.preventDefault(), submit())} style={{ display: 'grid', gap: 14 }}>
+      {approval.error ? <span className="err-text">{approval.error}</span> : null}
+      {approval.modal}
       <div className="fld-row">
         <div className="fld">
           <label htmlFor="ap-scope">Connection scope</label>
@@ -80,7 +91,7 @@ export function StepApprove({ connection, tools, agents, api }: { connection: Co
           <legend style={{ fontSize: 12, color: 'var(--ink-2)', fontWeight: 500, padding: 0, marginBottom: 5 }}>Agents allowed to use this connection</legend>
           <label className="toggle-row">
             <input type="checkbox" checked={anyAgent} onChange={(e) => setAnyAgent(e.target.checked)} />
-            Any agent a CS Lead enables it for (per-agent tool grants still apply)
+            Any agent a Lead enables it for (per-agent tool grants still apply)
           </label>
           {!anyAgent ? (
             agents.length ? (

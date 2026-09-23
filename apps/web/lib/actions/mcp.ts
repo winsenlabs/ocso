@@ -3,7 +3,7 @@
 import { refresh } from 'next/cache';
 import { Permission } from '@ocso/auth';
 import { z } from 'zod';
-import { describeApiError } from '../api/errors';
+import { ApiError, describeApiError } from '../api/errors';
 import {
   CONFIRMATION_POLICIES,
   HUMAN_ROLES,
@@ -55,7 +55,7 @@ async function run<I, T>(schema: z.ZodType<I>, raw: unknown, permission: (input:
     return { ok: true, data };
   } catch (err) {
     refresh(); // failures still change status / lastError on the connection
-    return { ok: false, message: describeApiError(err) };
+    return { ok: false, message: describeApiError(err), code: err instanceof ApiError ? err.code : undefined };
   }
 }
 
@@ -150,10 +150,14 @@ const ClassifyInput = z.object({
     .max(500),
 });
 
-export async function classifyToolsAction(id: string, tools: z.input<typeof ClassifyInput>['tools']): Promise<ActionResult<{ approved: number }>> {
-  return run(ClassifyInput, { id, tools }, () => Permission.MCP_MANAGE, async (i) => {
-    const saved = await classifyTools(i.id, i.tools);
-    return { approved: saved.filter((t) => t.approved && !t.removedAt).length };
+const Approval = z.union([z.object({ checkerId: Id, reason: z.string().trim().min(3).max(500) }), z.object({ bootstrap: z.literal(true), reason: z.string().trim().min(3).max(500).optional() })]);
+type ApprovalChoice = z.input<typeof Approval>;
+
+/** A draft's tool review saves directly; an approved connection's is a proposal (`data` null) once `approval` names a checker. */
+export async function classifyToolsAction(id: string, tools: z.input<typeof ClassifyInput>['tools'], approval?: ApprovalChoice): Promise<ActionResult<{ approved: number } | null>> {
+  return run(ClassifyInput.extend({ approval: Approval.optional() }), { id, tools, approval }, () => Permission.MCP_MANAGE, async (i) => {
+    const saved = await classifyTools(i.id, i.tools, i.approval);
+    return Array.isArray(saved) ? { approved: saved.filter((t) => t.approved && !t.removedAt).length } : null;
   });
 }
 
@@ -165,10 +169,14 @@ const ApproveInput = z.object({
   healthCheckSeconds: z.number().int().min(15, 'at least 15 seconds').max(3_600, 'at most 3600 seconds'),
 });
 
-export async function approveConnectionAction(input: z.input<typeof ApproveInput>): Promise<ActionResult<{ status: string }>> {
-  return run(ApproveInput, input, () => Permission.MCP_MANAGE, async ({ id, ...approval }) => {
-    const c = await approveConnection(id, approval);
-    return { status: c.status };
+/**
+ * Records the agent policy of a draft; going live is a proposal: without `approval` the API answers
+ * approval_required (the policy is kept), with it the activation is submitted (`data` null).
+ */
+export async function approveConnectionAction(input: z.input<typeof ApproveInput>, approval?: ApprovalChoice): Promise<ActionResult<{ status: string } | null>> {
+  return run(ApproveInput.extend({ approval: Approval.optional() }), { ...input, approval }, () => Permission.MCP_MANAGE, async ({ id, approval: a, ...policy }) => {
+    const c = await approveConnection(id, { ...policy, ...(a ? { approval: a } : {}) });
+    return 'proposal' in c ? null : { status: c.status };
   });
 }
 

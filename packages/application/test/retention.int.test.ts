@@ -1,28 +1,32 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { eq, sql } from 'drizzle-orm';
 import { createTestDatabase, type TestDatabase } from '@ocso/db/testing';
-import { channels, conversations, interactionParts, uuidv7, virtualAgents } from '@ocso/db';
+import { channels, conversations, interactionParts, queues, uuidv7, virtualAgents } from '@ocso/db';
 import { MemoryQueue } from '@ocso/queue';
 import type { Principal } from '@ocso/auth';
-import { AgentService, IngressService, REDACTED_TEXT, RetentionInput, RetentionService, SettingsService, effectiveRetention, recordAudit, systemActor, type ActorContext } from '../src/index.js';
+import { AgentService, IngressService, REDACTED_TEXT, RetentionInput, RetentionService, applyDeploymentSettings, effectiveRetention, recordAudit, routeChannelToAgent, systemActor, type ActorContext } from '../src/index.js';
 import { createTeam } from './support/ownership.js';
+import { makeLive } from './support/live-agent.js';
 
 let t: TestDatabase;
 let channelId: string;
 const deleted: string[] = [];
 const blobs = { delete: async (key: string) => void deleted.push(key) };
-const admin: Principal = { userId: uuidv7(), role: 'PLATFORM_TECH_ADMIN', displayName: 'Dev', teamIds: [], via: 'UI' };
+const admin: Principal = { userId: uuidv7(), role: 'TECH', displayName: 'Dev', teamIds: [], via: 'UI' };
 const ctx = (principal: Principal | null): ActorContext => ({ principal, correlationId: 'test' });
 const DAY = 24 * 3600 * 1000;
 
 beforeAll(async () => {
   t = await createTestDatabase();
-  await t.pool.query(`INSERT INTO users (id, email, name, role) VALUES ($1, 'admin@x.test', 'Dev', 'PLATFORM_TECH_ADMIN')`, [admin.userId]);
+  await t.pool.query(`INSERT INTO users (id, email, name, role) VALUES ($1, 'admin@x.test', 'Dev', 'TECH')`, [admin.userId]);
   const owners = await createTeam(t.db);
-  const agent = await new AgentService(t.db).create(ctx({ ...admin, role: 'CS_LEAD', teamIds: [owners] }), { name: 'Maya', purpose: 'support', conversationType: 'SUPPORT', description: '', teamIds: [owners] });
-  await t.db.update(virtualAgents).set({ status: 'LIVE' }).where(eq(virtualAgents.id, agent.id));
+  const agent = await new AgentService(t.db).create(ctx({ ...admin, role: 'HEAD', teamIds: [owners] }), { name: 'Maya', purpose: 'support', conversationType: 'SUPPORT', description: '', teamIds: [owners] });
+  await makeLive(t.db, agent.id);
   channelId = uuidv7();
-  await t.db.insert(channels).values({ id: channelId, kind: 'WHATSAPP', name: 'WhatsApp', status: 'ACTIVE', publicKey: 'pk-ret', defaultAgentId: agent.id });
+  await t.db.insert(channels).values({ id: channelId, kind: 'WHATSAPP', name: 'WhatsApp', status: 'ACTIVE', publicKey: 'pk-ret' });
+  const queueId = uuidv7();
+  await t.db.insert(queues).values({ id: queueId, name: 'Support' });
+  await routeChannelToAgent(t.db, ctx(admin), { channelId, agentId: agent.id, queueId });
 });
 afterAll(async () => {
   await t?.drop();
@@ -56,7 +60,8 @@ describe('retention policy (docs/15 §8)', () => {
   });
 
   it('purges content of old resolved conversations but keeps structure; leaves open and recent ones alone', async () => {
-    await new SettingsService(t.db).updateDeployment(ctx(admin), { retention: { conversationContent: 30, media: 60 } });
+    // Fixture: the retention an approved settings change leaves (settings changes are proposals).
+    await applyDeploymentSettings(t.db, ctx(admin), { retention: { conversationContent: 30, media: 60 } });
     const old = await conversationWith('+919800000001', 'My card 4111 1111 1111 4417 was charged twice', true);
     const recent = await conversationWith('+919800000002', 'recent resolved');
     const open = await conversationWith('+919800000003', 'still open, very old');

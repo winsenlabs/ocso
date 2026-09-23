@@ -9,7 +9,8 @@ import type { PromptComponents } from './components.js';
 
 export interface HistoryEntry {
   seq: number;
-  actorType: 'CUSTOMER' | 'AGENT' | 'HUMAN' | 'SYSTEM';
+  /** ROUTER: a router's automated question (rendered as an assistant turn marked "(automated menu)"). */
+  actorType: 'CUSTOMER' | 'AGENT' | 'HUMAN' | 'SYSTEM' | 'ROUTER';
   /** Display name for HUMAN entries ("Nikhil Menon"). */
   actorName?: string | undefined;
   parts: readonly InteractionPart[];
@@ -33,6 +34,15 @@ export interface HandoverContext {
   summary: string;
   notes: readonly string[];
   humanName?: string | undefined;
+  /** HUMAN (default): a colleague returns the conversation. AGENT: another AI agent transferred it to this one. */
+  from?: 'HUMAN' | 'AGENT' | undefined;
+}
+
+/** Where the conversation was routed (PM/research/11 §5.3): the queue and what the router learnt. */
+export interface RoutingContext {
+  queueName: string;
+  /** Collected attributes, e.g. { language: 'ta', product: 'sales' }. */
+  attributes: Readonly<Record<string, string>>;
 }
 
 export interface ModelInputCapabilities {
@@ -70,6 +80,8 @@ export interface CompileInput {
   customer: CustomerContext | null;
   summary: SummaryContext | null;
   handover: HandoverContext | null;
+  /** The queue this conversation is in and the routing attributes; null/absent when not routed. */
+  routing?: RoutingContext | null | undefined;
   /** Interactions already answered, oldest first (after the summary window). */
   recent: readonly HistoryEntry[];
   /** Customer interactions this turn responds to, oldest first. */

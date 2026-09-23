@@ -55,22 +55,30 @@ export async function rejectAskOcsoAction(actionId: string): Promise<ActionDecis
   }
 }
 
-export type ProfileChoice = { ok: true } | { ok: false; message: string };
+export type ProfileChoice = { ok: true; data: { proposed: boolean } } | { ok: false; message: string; code?: string | undefined };
 
-/** Tech Admin: choose the model profile Ask OCSO runs on (deployment setting, audited by the API). */
-export async function chooseAskOcsoProfile(profileId: string): Promise<ProfileChoice> {
+const SettingsApproval = z.union([z.object({ checkerId: z.uuid(), reason: z.string().trim().min(3).max(500) }), z.object({ bootstrap: z.literal(true), reason: z.string().trim().min(3).max(500).optional() })]);
+
+/**
+ * Tech admin: choose the model profile Ask OCSO runs on. It is a deployment setting, so the change is a
+ * proposal a second person approves (PM/research/11 §4): without `approval` the API answers approval_required.
+ */
+export async function chooseAskOcsoProfile(profileId: string, approval?: z.input<typeof SettingsApproval>): Promise<ProfileChoice> {
   const session = await getSession();
   if (!session) return { ok: false, message: 'Your session has ended. Sign in again.' };
   if (!session.permissions.has(Permission.DEPLOYMENT_SETTINGS_MANAGE)) {
-    return { ok: false, message: 'Only a Platform Tech Admin can choose the model for Ask OCSO.' };
+    return { ok: false, message: 'Only a Tech admin can choose the model for Ask OCSO.' };
   }
   const id = ActionId.safeParse(profileId);
   if (!id.success) return { ok: false, message: 'Choose a model profile.' };
+  const choice = approval === undefined ? undefined : SettingsApproval.safeParse(approval);
+  if (choice && !choice.success) return { ok: false, message: choice.error.issues.map((i) => i.message).join('; ') };
+  let proposed = false;
   try {
-    await setInternalAgentProfile(id.data);
+    proposed = await setInternalAgentProfile(id.data, choice?.success ? choice.data : undefined);
   } catch (err) {
-    return { ok: false, message: describeApiError(err) };
+    return { ok: false, message: describeApiError(err), code: err instanceof ApiError ? err.code : undefined };
   }
   refresh();
-  return { ok: true };
+  return { ok: true, data: { proposed } };
 }

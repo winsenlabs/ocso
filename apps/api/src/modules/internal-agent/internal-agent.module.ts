@@ -1,8 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ModelGateway } from '@ocso/agent-runtime';
+import type { AuditStore } from '@ocso/application';
 import type { Db } from '@ocso/db';
 import { InternalActionService, InternalAgentService, InternalToolRegistry } from '@ocso/internal-agent';
-import { DB } from '../../infrastructure/tokens.js';
+import { AUDIT_STORE, DB } from '../../infrastructure/tokens.js';
 import { InternalAgentController } from './internal-agent.controller.js';
 
 @Module({
@@ -12,8 +13,8 @@ import { InternalAgentController } from './internal-agent.controller.js';
     { provide: InternalActionService, inject: [DB, InternalToolRegistry], useFactory: (db: Db, r: InternalToolRegistry) => new InternalActionService(db, r) },
     {
       provide: InternalAgentService,
-      inject: [DB, ModelGateway, InternalToolRegistry, InternalActionService],
-      useFactory: (db: Db, gateway: ModelGateway, r: InternalToolRegistry, a: InternalActionService) => new InternalAgentService(db, gateway, r, a),
+      inject: [DB, ModelGateway, InternalToolRegistry, InternalActionService, AUDIT_STORE],
+      useFactory: (db: Db, gateway: ModelGateway, r: InternalToolRegistry, a: InternalActionService, audit: AuditStore) => new InternalAgentService(db, gateway, r, a, audit),
     },
   ],
 })

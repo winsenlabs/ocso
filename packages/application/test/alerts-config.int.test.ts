@@ -16,7 +16,9 @@ import {
   seedDefaultAlertRules,
   type ActorContext,
   type AlertRuleInput,
+  sweepApprovalSecrets,
 } from '../src/index.js';
+import { platformApprover, type PlatformApprover } from './support/platform-approvals.js';
 
 let t: TestDatabase;
 const queue = new MemoryQueue();
@@ -37,11 +39,12 @@ const registry = createDefaultDeliveryRegistry({ fetch: fetchFake });
 const ctx = (principal: Principal | null): ActorContext => ({ principal, correlationId: 'test' });
 // The lead's team owns Maya, so the lead may target her in agent-scoped rules (ADR-026).
 const TEAM = uuidv7();
-const principal = (role: Principal['role']): Principal => ({ userId: uuidv7(), role, displayName: role, teamIds: role === 'CS_LEAD' ? [TEAM] : [], via: 'UI' });
-const admin = principal('PLATFORM_TECH_ADMIN');
-const lead = principal('CS_LEAD');
-const exec = principal('CS_EXEC');
+const principal = (role: Principal['role']): Principal => ({ userId: uuidv7(), role, displayName: role, teamIds: role === 'HEAD' ? [TEAM] : [], via: 'UI' });
+const admin = principal('TECH');
+const lead = principal('HEAD');
+const exec = principal('SERVICE');
 let agentId: string;
+let approver: PlatformApprover;
 
 beforeAll(async () => {
   t = await createTestDatabase();
@@ -51,6 +54,7 @@ beforeAll(async () => {
   agentId = uuidv7();
   await t.db.insert(virtualAgents).values({ id: agentId, name: 'Maya', slug: 'maya', conversationType: 'SUPPORT' });
   await ownAgents(t.db, await createTeam(t.db, TEAM), agentId);
+  approver = await platformApprover(t.db, { secrets, deliveries: registry });
 });
 afterAll(async () => {
   await t?.drop();
@@ -66,7 +70,7 @@ const input = (o: Partial<AlertRuleInput>): AlertRuleInput => ({
   agentId: null,
   windowSeconds: 3600,
   severity: 'WARNING',
-  audienceRoles: ['CS_LEAD'],
+  audienceRoles: ['HEAD'],
   destinationIds: [],
   dedupeWindowSeconds: 3600,
   autoResolve: true,
@@ -76,7 +80,7 @@ const input = (o: Partial<AlertRuleInput>): AlertRuleInput => ({
 
 describe('alert rules', () => {
   it('requires the manage permission for the rule kind', async () => {
-    await expect(rules().create(ctx(lead), input({ kind: 'TECHNICAL', condition: 'workers_below_min', audienceRoles: ['PLATFORM_TECH_ADMIN'] }))).rejects.toMatchObject({
+    await expect(rules().create(ctx(lead), input({ kind: 'TECHNICAL', condition: 'workers_below_min', audienceRoles: ['TECH'] }))).rejects.toMatchObject({
       category: 'authorization',
     });
     await expect(rules().create(ctx(admin), input({}))).rejects.toMatchObject({ category: 'authorization' });
@@ -96,17 +100,17 @@ describe('alert rules', () => {
       [{ params: { unknownKey: 1 } }, 'invalid_alert_params'],
       [{ agentId: uuidv7() }, 'unknown_agent'],
       [{ destinationIds: [uuidv7()] }, 'unknown_destination'],
-      [{ audienceRoles: ['CS_LEAD', 'PLATFORM_TECH_ADMIN'] }, 'audience_cannot_read_kind'],
+      [{ audienceRoles: ['HEAD', 'TECH'] }, 'audience_cannot_read_kind'],
     ];
     for (const [patch, code] of cases) await expect(svc.create(ctx(lead), input(patch)), code).rejects.toMatchObject({ code });
     await expect(
-      svc.create(ctx(admin), input({ kind: 'TECHNICAL', condition: 'workers_below_min', agentId, audienceRoles: ['PLATFORM_TECH_ADMIN'] })),
+      svc.create(ctx(admin), input({ kind: 'TECHNICAL', condition: 'workers_below_min', agentId, audienceRoles: ['TECH'] })),
     ).rejects.toMatchObject({ code: 'condition_not_agent_scoped' });
-    await expect(svc.create(ctx(admin), input({ kind: 'TECHNICAL', condition: 'workers_below_min', audienceRoles: ['CS_EXEC'] }))).rejects.toMatchObject({
+    await expect(svc.create(ctx(admin), input({ kind: 'TECHNICAL', condition: 'workers_below_min', audienceRoles: ['SERVICE'] }))).rejects.toMatchObject({
       code: 'audience_cannot_read_kind',
     });
     // tool_failure_rate_above may be either kind.
-    expect((await svc.create(ctx(admin), input({ kind: 'TECHNICAL', condition: 'tool_failure_rate_above', audienceRoles: ['PLATFORM_TECH_ADMIN'] }))).kind).toBe('TECHNICAL');
+    expect((await svc.create(ctx(admin), input({ kind: 'TECHNICAL', condition: 'tool_failure_rate_above', audienceRoles: ['TECH'] }))).kind).toBe('TECHNICAL');
   });
 
   it('lists and describes only what the role may see; exposes each method', async () => {
@@ -122,7 +126,7 @@ describe('alert rules', () => {
     expect((await rules().list(ctx(admin))).every((r) => r.kind === 'TECHNICAL')).toBe(true);
   });
 
-  it('updates with re-validation and deletes by resolving open alerts', async () => {
+  it('updates a draft with re-validation (deleting is an approved proposal: approvals/business-alert-rules.int.test.ts)', async () => {
     const svc = rules();
     const rule = await svc.create(ctx(lead), input({ name: 'CSAT floor', condition: 'csat_below' }));
     await expect(svc.update(ctx(admin), rule.id, { enabled: false })).rejects.toMatchObject({ category: 'authorization' });
@@ -131,14 +135,11 @@ describe('alert rules', () => {
     expect(updated).toMatchObject({ severity: 'CRITICAL', params: { threshold: 3.5, minResponses: 20 } });
     // Switching condition resets params to the new condition's defaults.
     expect((await svc.update(ctx(lead), rule.id, { condition: 'sla_breaches_above' })).params).toEqual({ threshold: 0 });
-
-    const alertId = uuidv7();
-    await t.db.insert(alerts).values({ id: alertId, ruleId: rule.id, fingerprint: `f-${alertId}`, kind: 'BUSINESS', severity: 'WARNING', title: 'x', body: 'b', audienceRoles: ['CS_LEAD'], source: 's' });
-    await svc.delete(ctx(lead), rule.id);
-    const [alert] = await t.db.select().from(alerts).where(eq(alerts.id, alertId));
-    expect(alert).toMatchObject({ status: 'RESOLVED', resolution: 'Resolved: alert rule deleted', ruleId: null });
+    // A new rule is a disabled draft, whatever the input said.
+    expect(rule.enabled).toBe(false);
+    expect(await svc.objectKindOf(ctx(lead), rule.id)).toBe('alert_rule');
     const audit = await t.pool.query(`SELECT action FROM audit_events WHERE target_id = $1 ORDER BY occurred_at`, [rule.id]);
-    expect(audit.rows.map((r) => r.action)).toEqual(['alert_rule.create', 'alert_rule.update', 'alert_rule.update', 'alert_rule.delete']);
+    expect(audit.rows.map((r) => r.action)).toEqual(['alert_rule.create', 'alert_rule.update', 'alert_rule.update']);
   });
 });
 
@@ -160,8 +161,11 @@ describe('notification destinations', () => {
     expect(JSON.stringify(rows.raw(row!.secretRef!))).not.toContain(WEBHOOK_SECRET);
     expect(await secrets.resolve(row!.secretRef!)).toBe(WEBHOOK_SECRET);
 
+    // A draft's secret is replaced directly (a new secret; the old one is deleted).
     await destinations().update(ctx(admin), hook.id, { secret: 'whsec_rotated_value_4567' });
-    expect(await secrets.resolve(row!.secretRef!)).toBe('whsec_rotated_value_4567');
+    const [replaced] = await t.db.select().from(notificationDestinations).where(eq(notificationDestinations.id, hook.id));
+    expect(await secrets.resolve(replaced!.secretRef!)).toBe('whsec_rotated_value_4567');
+    expect(await secrets.describe(row!.secretRef!)).toBeNull();
     const audit = await t.pool.query(`SELECT before::text, after::text FROM audit_events WHERE target_type = 'notification_destination'`);
     expect(JSON.stringify(audit.rows)).not.toContain('whsec_');
 
@@ -184,8 +188,11 @@ describe('notification destinations', () => {
 
     const rule = await rules().create(ctx(lead), input({ name: 'With hook', destinationIds: [hook.id] }));
     const [row] = await t.db.select().from(notificationDestinations).where(eq(notificationDestinations.id, hook.id));
-    await destinations().delete(ctx(admin), hook.id);
+    await expect(destinations().delete(ctx(admin), hook.id)).rejects.toMatchObject({ code: 'approval_required' });
+    await approver.approve(ctx(admin), 'notification_destination', hook.id, 'DELETE');
     expect((await rules().get(ctx(lead), rule.id)).destinationIds).toEqual([]);
+    // Released in the approval's transaction; the leader sweep deletes it after that commits.
+    await sweepApprovalSecrets(t.db, secrets);
     expect(await secrets.describe(row!.secretRef!)).toBeNull();
   });
 });
@@ -203,8 +210,10 @@ describe('alert delivery service', () => {
 
   beforeAll(async () => {
     alertId = uuidv7();
-    await t.db.insert(alerts).values({ id: alertId, fingerprint: `f-${alertId}`, kind: 'TECHNICAL', severity: 'CRITICAL', title: 'Provider down', body: 'b', audienceRoles: ['PLATFORM_TECH_ADMIN'], source: 'Provider · X' });
+    await t.db.insert(alerts).values({ id: alertId, fingerprint: `f-${alertId}`, kind: 'TECHNICAL', severity: 'CRITICAL', title: 'Provider down', body: 'b', audienceRoles: ['TECH'], source: 'Provider · X' });
     hookId = (await destinations().create(ctx(admin), { name: 'Delivery hook', kind: 'WEBHOOK', config: { url: 'https://ops.example.com/d' }, secret: WEBHOOK_SECRET, enabled: true })).id;
+    // Created as a disabled draft; enabled by a second person's approval.
+    await approver.approve(ctx(admin), 'notification_destination', hookId, 'ACTIVATE');
   });
 
   it('retries transient failures via a typed retriable error, then marks SENT', async () => {
@@ -235,6 +244,9 @@ describe('alert delivery service', () => {
 
   it('handles disabled destinations, in-app no-ops and missing rows', async () => {
     const inApp = await destinations().create(ctx(admin), { name: 'In-app', kind: 'IN_APP', config: {}, enabled: true });
+    // A draft (never approved) is inert: nothing is delivered through it.
+    expect(await svc().deliver(await delivery(inApp.id))).toMatchObject({ status: 'FAILED', error: 'destination removed or disabled' });
+    await approver.approve(ctx(admin), 'notification_destination', inApp.id, 'ACTIVATE');
     expect(await svc().deliver(await delivery(inApp.id))).toEqual({ status: 'SENT', attempts: 1 });
     const off = await destinations().create(ctx(admin), { name: 'Off', kind: 'IN_APP', config: {}, enabled: false });
     expect(await svc().deliver(await delivery(off.id))).toMatchObject({ status: 'FAILED', error: 'destination removed or disabled' });

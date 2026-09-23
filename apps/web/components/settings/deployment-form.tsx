@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
+import { SettingsApprovalFields } from '@/components/settings/approval-fields';
 import { SelectField, TextField } from '@/components/forms/field';
 import { AlertBanner } from '@/components/ui/alert-banner';
 import { IDLE } from '@/lib/actions/form-state';
@@ -18,12 +19,12 @@ export interface DeploymentFormValues {
 }
 
 const TOGGLES: Array<{ name: keyof DeploymentFormValues; label: string }> = [
-  { name: 'execsCanViewAiActive', label: 'CS Execs can view AI-active conversations' },
+  { name: 'execsCanViewAiActive', label: 'Service members can view AI-active conversations' },
   { name: 'allowCrossProviderFallback', label: 'Allow fallback to a different model provider' },
   { name: 'allowCrossRegionFallback', label: 'Allow fallback to a different region' },
 ];
 
-/** Deployment settings form for the Platform Tech Admin → PATCH /v1/settings/deployment. */
+/** Deployment settings form for the Tech admin → PATCH /v1/settings/deployment. */
 export function DeploymentForm({ initial, timezones }: { initial: DeploymentFormValues; timezones: string[] }) {
   const [state, action, pending] = useActionState(updateDeploymentAction, IDLE);
   const errors = state.fieldErrors ?? {};
@@ -55,9 +56,10 @@ export function DeploymentForm({ initial, timezones }: { initial: DeploymentForm
           </label>
         ))}
       </fieldset>
+      <SettingsApprovalFields idPrefix="deployment" errors={state.fieldErrors} />
       <div className="rowsplit">
         <button type="submit" className="btn accent" disabled={pending}>
-          {pending ? 'Saving…' : 'Save changes'}
+          {pending ? 'Submitting…' : 'Submit for approval'}
         </button>
         <span className="sp" />
         <span className="mono-sm">changes are audited and attributed to you</span>

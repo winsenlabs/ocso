@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
+import { SettingsApprovalFields } from '@/components/settings/approval-fields';
 import { AlertBanner } from '@/components/ui/alert-banner';
 import { IDLE } from '@/lib/actions/form-state';
 import { updateWorkerSettingsAction } from '@/lib/actions/system';
@@ -66,9 +67,10 @@ export function WorkerConfigForm({ initial }: { initial: WorkerValues }) {
         <input key={`auto-${String(autoscaling)}`} type="checkbox" name="autoscalingEnabled" defaultChecked={autoscaling} />
         Autoscaling enabled — the deployment adapter moves capacity between min and max
       </label>
+      <SettingsApprovalFields idPrefix="workers" errors={errors} />
       <div className="rowsplit">
         <button type="submit" className="btn accent" disabled={pending}>
-          {pending ? 'Saving…' : 'Save configuration'}
+          {pending ? 'Submitting…' : 'Submit for approval'}
         </button>
         <span className="sp" />
         <span className="mono-sm">bounds are enforced by the API · changes are audited and attributed to you</span>

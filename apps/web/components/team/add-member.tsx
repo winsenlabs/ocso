@@ -12,8 +12,8 @@ import { useTeamScope } from './scope-context';
 const SHOWN = 8;
 
 /**
- * Searchable list of people the viewer may add (Tech Admin: anyone active;
- * CS Lead: CS Execs). Each result has its own Add button.
+ * Searchable list of people the viewer may add (Tech admin: anyone active;
+ * Lead: Service members). Each result has its own Add button.
  */
 export function AddMember({ teamId, teamName, memberIds }: { teamId: string; teamName: string; memberIds: string[] }) {
   const scope = useTeamScope();
@@ -65,10 +65,10 @@ export function AddMember({ teamId, teamName, memberIds }: { teamId: string; tea
           ))}
         </ul>
       ) : (
-        <p className="mono-sm">{all.length ? 'Nobody matches that search.' : leadOnly ? 'Every CS Exec is already in this team.' : 'Everyone active is already in this team.'}</p>
+        <p className="mono-sm">{all.length ? 'Nobody matches that search.' : leadOnly ? 'Every Service member is already in this team.' : 'Everyone active is already in this team.'}</p>
       )}
       {matches.length > SHOWN ? <p className="mono-sm">{matches.length - SHOWN} more · refine the search</p> : null}
-      {leadOnly ? <p className="mono-sm">CS Leads add CS Execs. A Platform Tech Admin adds other leads.</p> : null}
+      {leadOnly ? <p className="mono-sm">Leads add Service members. A Tech admin adds other leads.</p> : null}
     </div>
   );
 }

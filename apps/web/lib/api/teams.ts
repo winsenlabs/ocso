@@ -18,7 +18,7 @@ export const TeamMemberSchema = z.object({
   name: z.string(),
   email: z.string(),
   role: z.enum(ROLES),
-  status: z.enum(['ACTIVE', 'DISABLED']),
+  status: z.enum(['ACTIVE', 'DISABLED', 'PENDING_APPROVAL']),
   availability: z.enum(['AVAILABLE', 'AWAY', 'OFFLINE']),
   addedAt: z.string(),
 });
@@ -40,12 +40,12 @@ export function getTeam(id: string): Promise<TeamDetail> {
   return api.get(teamPath(id), TeamDetailSchema);
 }
 
-/** PATCH /v1/teams/:id — CS Leads, on teams they belong to. */
+/** PATCH /v1/teams/:id — Leads, on teams they belong to. */
 export function updateTeam(id: string, input: { name: string; description: string | null }): Promise<void> {
   return api.command('PATCH', teamPath(id), input);
 }
 
-/** Tech Admin: anyone. CS Lead: CS Execs and themselves, on teams they belong to (the API enforces it). */
+/** Tech admin: anyone. Lead: Service members and themselves, on teams they belong to (the API enforces it). */
 export function addTeamMember(teamId: string, userId: string): Promise<void> {
   return api.command('POST', `${teamPath(teamId)}/members`, { userId });
 }

@@ -6,13 +6,13 @@ import {
   loadConversationTools,
   loadCopilotLatest,
   loadCustomer,
-  loadQueueOptions,
   loadTimeline,
   loadTransferUsers,
   type CopilotState,
   type Option,
 } from '@/lib/api/conversations';
 import { loadChannelKinds } from '@/lib/api/channels';
+import { loadTransferQueues, type TransferQueue } from '@/lib/api/queues';
 import { ApiError } from '@/lib/api/errors';
 import { hasPermission, requireSession } from '@/lib/session';
 import { ConversationClient, type ChannelInfo } from './conversation-client';
@@ -44,7 +44,8 @@ export async function ConversationView({ params }: { params: Promise<{ id: strin
     can(Permission.COPILOT_USE) && COPILOT_STATES.has(detail.controlState)
       ? loadCopilotLatest(id).catch((): CopilotState => ({ status: 'unavailable' }))
       : Promise.resolve<CopilotState>({ status: 'unavailable' }),
-    can(Permission.CONVERSATIONS_TRANSFER) && can(Permission.QUEUES_READ) ? loadQueueOptions().catch(() => [] as Option[]) : none<Option>(),
+    // Each target with its AI agent: the transfer dialog names who takes the conversation over.
+    can(Permission.CONVERSATIONS_TRANSFER) && can(Permission.QUEUES_READ) ? loadTransferQueues().catch(() => [] as TransferQueue[]) : none<TransferQueue>(),
     can(Permission.CONVERSATIONS_ASSIGN) && can(Permission.USERS_READ) ? loadTransferUsers().catch(() => [] as Option[]) : none<Option>(),
     loadChannelKinds(),
   ]);

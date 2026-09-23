@@ -8,7 +8,7 @@ Channel adapters for OCSO (docs/07, ADR-007). An adapter handles transport only:
 | `WhatsAppChannelAdapter` | `createWhatsAppAdapter({ fetch, now })` | WhatsApp Cloud API, called directly (Graph API version comes from config) |
 | `WebChatChannelAdapter` | `createWebChatAdapter({ now, generateId? })` | OCSO's own widget: JSON in, realtime stream out |
 
-`fetch` is the only way an adapter reaches the network. The composition root (`packages/bootstrap`) passes the SSRF-guarded channel egress: public https hosts, plus hosts the Tech Admin allowlisted (deployment settings). A factory called without `fetch` gets `NO_NETWORK`, which rejects every call; tests pass a stub.
+`fetch` is the only way an adapter reaches the network. The composition root (`packages/bootstrap`) passes the SSRF-guarded channel egress: public https hosts, plus hosts a Tech admin allowlisted (deployment settings). A factory called without `fetch` gets `NO_NETWORK`, which rejects every call; tests pass a stub.
 
 Register adapters with `ChannelRegistry`. Kinds are open strings, validated by the registry; callers look adapters up by `kind` and never switch on it. Each adapter describes itself (`describe()`: form, label, mark, setup steps, identifying setting, webhook events, template terms — see `src/contract/descriptor.ts` and docs/plugins/channels.md); the registry checks the descriptor at registration, maps its `webhookSegment` to the kind (`/channels/<segment>/<publicKey>/webhook`), and gives each channel its public paths (`webhookPath`, and `embedPath` = `/chat/<publicKey>` for embeddable kinds).
 
@@ -212,7 +212,7 @@ OCSO's first-party widget uses AI SDK UI `useChat` with an OCSO transport. It po
   - errors carry redacted, length-bounded provider text;
   - `validateConfig` never echoes secret values;
   - the access token is sent only in the `Authorization` header, and only to Graph or allowlisted Meta CDN hosts;
-  - every request goes through the injected, SSRF-guarded `fetch`, so a base-URL setting cannot reach the internal network unless the Tech Admin allowlisted that host.
+  - every request goes through the injected, SSRF-guarded `fetch`, so a base-URL setting cannot reach the internal network unless a Tech admin allowlisted that host.
 - **Graph URL construction.** Ids are checked before they are used in a Graph URL, so values like `../me/accounts` are refused. Graph API requests use `redirect: 'error'`.
 - **Customer-facing output.** Only customer-safe parts ever reach a channel. `TOOL_RESULT` parts are dropped in three places: the policy, the capability filter and the renderer.
 - **Web chat tokens:**

@@ -6,7 +6,8 @@ import { auditEvents, modelProviders, outboxEvents, uuidv7 } from '@ocso/db';
 import { createTestDatabase, type TestDatabase } from '@ocso/db/testing';
 import { createDefaultRegistry } from '@ocso/model-providers';
 import { InMemorySecretRows, LocalSecretStore, parseMasterKey } from '@ocso/secrets';
-import { ProviderService, type ActorContext } from '../src/index.js';
+import { ProviderService, sweepApprovalSecrets, type ActorContext } from '../src/index.js';
+import { platformApprover, type PlatformApprover } from './support/platform-approvals.js';
 
 const SECRET = 'sk-ant-test-VERY-SECRET-0123456789';
 const ROTATED = 'sk-ant-test-ROTATED-SECRET-987654';
@@ -15,14 +16,15 @@ let t: TestDatabase;
 let rows: InMemorySecretRows;
 let secrets: LocalSecretStore;
 let providers: ProviderService;
+let approver: PlatformApprover;
 
 const as = (role: Principal['role']): ActorContext => ({
   principal: { userId: uuidv7(), role, displayName: role, teamIds: [], via: 'UI' },
   correlationId: `test-${role}`,
 });
-const admin = as('PLATFORM_TECH_ADMIN');
-const lead = as('CS_LEAD');
-const exec = as('CS_EXEC');
+const admin = as('TECH');
+const lead = as('HEAD');
+const exec = as('SERVICE');
 const dev = (name: string, settings: Record<string, unknown> = {}) =>
   ({ kind: 'DEV_SCRIPTED', name, region: 'ap-south-1', residencyZone: 'IN', settings: { latencyMs: 0, chunkDelayMs: 0, ...settings }, credentials: {}, enabled: true, maxConcurrency: 5 }) as const;
 
@@ -30,7 +32,9 @@ beforeAll(async () => {
   t = await createTestDatabase();
   rows = new InMemorySecretRows();
   secrets = new LocalSecretStore(rows, parseMasterKey('k1', randomBytes(32).toString('base64')));
-  providers = new ProviderService({ db: t.db, secrets, registry: createDefaultRegistry({ enableDevProviders: true }) });
+  const registry = createDefaultRegistry({ enableDevProviders: true });
+  providers = new ProviderService({ db: t.db, secrets, registry });
+  approver = await platformApprover(t.db, { secrets, providers: registry });
 });
 afterAll(async () => {
   await t?.drop();
@@ -109,13 +113,16 @@ describe('credentials live only in the SecretStore', () => {
     expect(events.map((e) => e.payload)).toContainEqual({ area: 'model_provider', entityId: id });
   });
 
-  it('rotates an existing credential in place and never echoes it', async () => {
+  it('replaces an existing credential with a new secret (never rotated in place) and never echoes it', async () => {
     const before = (await t.db.select().from(modelProviders).where(eq(modelProviders.id, id)))[0]!;
     const view = await providers.update(admin, id, { credentials: { apiKey: ROTATED } });
-    expect(view.secretRefs).toEqual({ apiKey: ref });
+    const old = ref;
+    ref = view.secretRefs['apiKey']!;
+    expect(ref).not.toBe(old);
     expect(JSON.stringify(view)).not.toMatch(new RegExp(`${SECRET}|${ROTATED}`));
     expect(await secrets.resolve(ref)).toBe(ROTATED);
-    expect((await secrets.describe(ref))!.version).toBe(2);
+    // The replaced value is deleted once the write commits.
+    expect(rows.raw(old)).toBeUndefined();
     expect(new Date(view.updatedAt).getTime()).toBeGreaterThanOrEqual(before.updatedAt.getTime());
     const audits = await t.db.select().from(auditEvents).where(eq(auditEvents.targetId, id));
     expect(audits.map((a) => a.summary)).toContain('Updated provider Anthropic prod (credentials changed: apiKey)');
@@ -131,8 +138,13 @@ describe('credentials live only in the SecretStore', () => {
     await expect(providers.create(admin, { ...dev('ANTHROPIC PROD') })).rejects.toMatchObject({ code: 'model_provider_name_taken' });
   });
 
-  it('deletes an unused provider together with its secrets', async () => {
-    await providers.delete(admin, id);
+  it('deletes an unused provider together with its secrets — always through an approval', async () => {
+    await expect(providers.delete(admin, id)).rejects.toMatchObject({ code: 'approval_required', details: { action: 'DELETE' } });
+    expect(rows.raw(ref)).toBeDefined();
+    expect((await approver.approve(admin, 'model_provider', id, 'DELETE')).status).toBe('APPROVED');
+    // Released in the approval's transaction; the leader sweep deletes it after that commits.
+    expect(rows.raw(ref)).toBeDefined();
+    expect((await sweepApprovalSecrets(t.db, secrets)).released).toBe(1);
     expect(rows.raw(ref)).toBeUndefined();
     await expect(providers.get(admin, id)).rejects.toMatchObject({ category: 'not_found' });
   });
@@ -176,9 +188,21 @@ describe('test connection (DEV_SCRIPTED)', () => {
     await expect(providers.test(lead, any!.id)).rejects.toMatchObject({ category: 'authorization' });
   });
 
-  it('disables and re-enables a provider', async () => {
+  it('starts disabled; enabling is approved, disabling is immediate, re-enabling is approved again', async () => {
     const created = await providers.create(admin, dev('Scripted toggle'));
+    expect(created.enabled).toBe(false);
+    await expect(providers.setEnabled(admin, created.id, true)).rejects.toMatchObject({ code: 'approval_required', details: { action: 'ACTIVATE' } });
+    await approver.approve(admin, 'model_provider', created.id, 'ACTIVATE');
+    expect((await providers.get(admin, created.id)).enabled).toBe(true);
+    // Approved: a change is a proposal now, and the object is locked while it is open — but disabling is not.
+    await expect(providers.update(admin, created.id, { maxConcurrency: 7 })).rejects.toMatchObject({ code: 'approval_required' });
+    const open = await approver.submit(admin, 'model_provider', created.id, 'UPDATE', { maxConcurrency: 7 });
     expect((await providers.setEnabled(admin, created.id, false)).enabled).toBe(false);
-    expect((await providers.setEnabled(admin, created.id, true)).enabled).toBe(true);
+    // The stop did not void the open proposal (`enabled` is outside its content hash).
+    expect((await approver.decide(open)).status).toBe('APPROVED');
+    expect((await providers.get(admin, created.id)).maxConcurrency).toBe(7);
+    await expect(providers.setEnabled(admin, created.id, true)).rejects.toMatchObject({ code: 'approval_required' });
+    await approver.approve(admin, 'model_provider', created.id, 'ACTIVATE');
+    expect((await providers.get(admin, created.id)).enabled).toBe(true);
   });
 });

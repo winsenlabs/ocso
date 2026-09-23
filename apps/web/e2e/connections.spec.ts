@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { ACCOUNTS } from './config';
-import { DEMO_PORT, DEMO_TOKEN, FAKE_KEY, USERS, seedConnectionsStack } from './connections-setup';
+import { DEMO_PORT, DEMO_TOKEN, FAKE_KEY, USERS, approveAsLead, seedConnectionsStack, submitForApproval } from './connections-setup';
 import { login, logout, settled } from './helpers';
 
 /**
@@ -16,7 +16,7 @@ seedConnectionsStack({ mcpDemo: true });
 
 const card = (page: Page, name: string) => page.getByRole('list', { name: 'Model providers' }).getByRole('listitem', { name, exact: true });
 
-test('Tech Admin configures providers: every kind is listed, credentials stay write-only, tests report cleanly', async ({ page }) => {
+test('Tech admin configures providers: every kind is listed, credentials stay write-only, tests report cleanly', async ({ page }) => {
   await login(page, ACCOUNTS.admin);
   await page.goto('/connections?tab=providers');
   await settled(page);
@@ -39,8 +39,15 @@ test('Tech Admin configures providers: every kind is listed, credentials stay wr
   await expect(dialog).toContainText('This provider needs no credentials.');
   await dialog.getByRole('button', { name: 'Add provider' }).click();
   await expect(dialog).toBeHidden();
-  await expect(card(page, 'Scripted')).toContainText('untested');
+  // A new provider is a disabled draft: enabling it is a second person's approval (PM/research/11 §4).
+  await expect(card(page, 'Scripted')).toContainText('disabled');
   await expect(card(page, 'Scripted')).toContainText('development only');
+  await card(page, 'Scripted').getByRole('button', { name: 'Enable Scripted' }).click();
+  await submitForApproval(page, 'E2E: the scripted provider');
+  await expect(card(page, 'Scripted')).toContainText(`Pending approval · awaiting ${USERS.lead.name}`);
+  await approveAsLead('model_provider', 'Enable model provider Scripted');
+  await page.reload();
+  await expect(card(page, 'Scripted')).toContainText('untested');
 
   await card(page, 'Scripted').getByRole('button', { name: 'Test' }).click();
   await expect(card(page, 'Scripted').getByRole('status')).toContainText('test passed');
@@ -68,14 +75,20 @@ test('Tech Admin configures providers: every kind is listed, credentials stay wr
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(dialog).toBeHidden();
 
+  // A draft can be tested before anyone approves it (it stays disabled: nothing calls it meanwhile).
   await card(page, 'OpenAI').getByRole('button', { name: 'Test' }).click();
   await expect(card(page, 'OpenAI').getByRole('status')).toContainText('test failed', { timeout: 30_000 });
+  await expect(card(page, 'OpenAI')).toContainText('disabled');
+  await card(page, 'OpenAI').getByRole('button', { name: 'Enable OpenAI' }).click();
+  await submitForApproval(page, 'E2E: OpenAI as a fallback');
+  await approveAsLead('model_provider', 'Enable model provider OpenAI');
+  await page.reload();
   await expect(card(page, 'OpenAI')).toContainText('down');
   await expect(card(page, 'OpenAI')).toContainText('last error');
   expect(await page.content()).not.toContain(FAKE_KEY);
 });
 
-test('Tech Admin creates a profile with a fallback after the policy check, and sees caching per target', async ({ page }) => {
+test('Tech admin creates a profile with a fallback after the policy check, and sees caching per target', async ({ page }) => {
   await login(page, ACCOUNTS.admin);
   await page.goto('/connections?tab=providers');
   await page.getByRole('link', { name: 'New model profile' }).click();
@@ -118,7 +131,7 @@ test('Tech Admin creates a profile with a fallback after the policy check, and s
   await expect(card(page, 'OpenAI')).toContainText('fallback for support-primary');
 });
 
-test('Tech Admin adds a model price and overrides a catalog price', async ({ page }) => {
+test('Tech admin adds a model price and overrides a catalog price', async ({ page }) => {
   await login(page, ACCOUNTS.admin);
   await page.goto('/connections?tab=providers');
   const table = page.getByRole('table', { name: 'Model pricing' });
@@ -139,18 +152,26 @@ test('Tech Admin adds a model price and overrides a catalog price', async ({ pag
   await expect(table.getByRole('row', { name: /gpt-private-ft/ })).toContainText('1.25 USD');
   await expect(table.getByRole('row', { name: /gpt-private-ft/ })).toContainText('0.125 USD');
   await expect(table.getByRole('row', { name: /gpt-private-ft/ })).toContainText('manual');
+  // A price a person enters is a draft that prices nothing until a second person approves it.
+  await expect(table.getByRole('row', { name: /gpt-private-ft/ }).getByRole('button', { name: /^Apply price/ })).toBeVisible();
 
+  // The catalog price is live: editing it is a proposal (the modal asks for the checker).
   await table.getByRole('link', { name: 'gpt-5.5' }).click();
   dialog = page.getByRole('dialog', { name: 'Edit price · gpt-5.5' });
   await expect(dialog).toContainText('Saving an edit makes it a manual price');
   await dialog.getByLabel('Output per 1M tokens').fill('12');
   await dialog.getByRole('button', { name: 'Save price' }).click();
-  await expect(dialog).toBeHidden();
+  await submitForApproval(page, 'E2E: negotiated price');
+  await expect(dialog).toContainText('Sent for approval');
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(table.getByRole('row', { name: /gpt-5\.5/ })).toContainText(`Pending approval · awaiting ${USERS.lead.name}`);
+  await approveAsLead('model_pricing', 'gpt-5.5');
+  await page.reload();
   await expect(table.getByRole('row', { name: /gpt-5\.5/ })).toContainText('12.00 USD');
   await expect(table.getByRole('row', { name: /gpt-5\.5/ })).toContainText('manual');
 });
 
-test('Tech Admin adds the example MCP server: discover → authenticate → classify → approve → healthy', async ({ page }) => {
+test('Tech admin adds the example MCP server: discover → authenticate → classify → approve → healthy', async ({ page }) => {
   await login(page, ACCOUNTS.admin);
   await page.goto('/connections?tab=mcp');
   await page.getByRole('link', { name: 'Add MCP server' }).first().click();
@@ -173,13 +194,23 @@ test('Tech Admin adds the example MCP server: discover → authenticate → clas
   for (const box of await wizard.getByRole('checkbox', { name: /^Approve / }).all()) await box.check();
   await wizard.getByRole('button', { name: 'Review approval' }).click();
 
-  await expect(wizard).toContainText('This grants any agent a CS Lead enables it for access to 7 meridian-core tools.');
+  await expect(wizard).toContainText('This grants any agent a Lead enables it for access to 7 meridian-core tools.');
+  // Taking it live is a second person's approval; the worker then re-contacts the server before it goes live.
   await wizard.getByRole('button', { name: 'Approve and connect' }).click();
-  await expect(wizard.getByRole('heading', { name: 'meridian-core is active' })).toBeVisible();
-  await wizard.getByRole('button', { name: 'Run health check now' }).click();
-  await expect(wizard).toContainText('healthy ·');
+  await submitForApproval(page, 'E2E: core banking for agents');
+  await expect(wizard.getByRole('heading', { name: 'meridian-core is not approved yet' })).toBeVisible();
   await wizard.getByRole('button', { name: 'Done' }).click();
   await expect(wizard).toBeHidden();
+  await approveAsLead('mcp_connection', 'Activate MCP connection meridian-core');
+  await expect(async () => {
+    await page.reload();
+    await expect(page.getByRole('table', { name: 'MCP connections' }).getByRole('row', { name: /meridian-core/ })).toContainText(/healthy|active/, { timeout: 1_000 });
+  }).toPass({ timeout: 30_000 });
+  await page.getByRole('link', { name: 'Open meridian-core' }).click();
+  const opened = page.getByRole('dialog', { name: 'meridian-core' });
+  await opened.getByRole('button', { name: 'Check health' }).click();
+  await expect(opened.getByRole('status').first()).toContainText('Health: healthy');
+  await page.goto('/connections?tab=mcp');
 
   const row = page.getByRole('table', { name: 'MCP connections' }).getByRole('row', { name: /meridian-core/ });
   await expect(row).toContainText('7/7');
@@ -206,8 +237,14 @@ test('connection details: health history, disable/enable with confirmation, OAut
   await confirm.getByRole('button', { name: 'Disable connection' }).click();
   await expect(confirm).toBeHidden();
   await expect(drawer).toContainText('disabled');
-  await drawer.getByRole('button', { name: 'Enable' }).click();
-  await expect(drawer.getByRole('status').first()).toContainText('Enabled');
+  // Re-enabling is a proposal (disabling was immediate); the worker re-contacts the server, then it is live.
+  await drawer.getByRole('button', { name: 'Re-enable meridian-core' }).click();
+  await submitForApproval(page, 'E2E: back on');
+  await approveAsLead('mcp_connection', 'Re-enable MCP connection meridian-core');
+  await expect(async () => {
+    await page.reload();
+    await expect(page.getByRole('dialog', { name: 'meridian-core' })).not.toContainText('disabled', { timeout: 1_000 });
+  }).toPass({ timeout: 30_000 });
 
   const id = new URL(page.url()).searchParams.get('connection');
   expect(id).toBeTruthy();
@@ -219,7 +256,7 @@ test('connection details: health history, disable/enable with confirmation, OAut
   await expect(page.getByRole('status').filter({ hasText: 'Authorization complete for meridian-core.' })).toBeVisible();
 });
 
-test('CS Exec sees only My connections; CS Lead reads providers and MCP without admin controls', async ({ page }) => {
+test('Service member sees only My connections; Lead reads providers and MCP without admin controls', async ({ page }) => {
   await login(page, USERS.exec);
   await page.goto('/connections?tab=providers');
   await settled(page);
@@ -250,20 +287,19 @@ test('CS Exec sees only My connections; CS Lead reads providers and MCP without 
   await expect(page.getByRole('link', { name: 'Add MCP server' })).toHaveCount(0);
 });
 
-test('Tech Admin deletes the MCP connection after typing its name', async ({ page }) => {
+test('Tech admin deletes the MCP connection through an approval', async ({ page }) => {
   await login(page, ACCOUNTS.admin);
   await page.goto('/connections?tab=mcp');
   await page.getByRole('link', { name: 'Open meridian-core' }).click();
-  await page.getByRole('dialog', { name: 'meridian-core' }).getByRole('button', { name: 'Delete' }).click();
-  const confirm = page.getByRole('dialog', { name: 'Delete meridian-core' });
-  await expect(confirm.getByRole('button', { name: 'Delete connection' })).toBeDisabled();
-  await confirm.getByLabel('Type meridian-core to confirm').fill('meridian-core');
-  await confirm.getByRole('button', { name: 'Delete connection' }).click();
+  await page.getByRole('dialog', { name: 'meridian-core' }).getByRole('button', { name: 'Delete meridian-core' }).click();
+  await submitForApproval(page, 'E2E: retire the connection');
+  await approveAsLead('mcp_connection', 'Delete MCP connection meridian-core');
+  await page.goto('/connections?tab=mcp');
   await expect(page.getByRole('table', { name: 'MCP connections' })).toHaveCount(0);
   await expect(page.getByText('No MCP servers connected yet')).toBeVisible();
 });
 
-test('Tech Admin adds a webhook (secret shown once) and sees every credential by reference only', async ({ page }) => {
+test('Tech admin adds a webhook (secret shown once) and sees every credential by reference only', async ({ page }) => {
   await login(page, ACCOUNTS.admin);
   await page.goto('/connections?tab=webhooks');
   await page.getByRole('link', { name: 'Add endpoint' }).click();
@@ -281,6 +317,9 @@ test('Tech Admin adds a webhook (secret shown once) and sees every credential by
 
   const table = page.getByRole('table', { name: 'Webhooks' });
   await expect(table.getByRole('row', { name: /crm-events/ })).toContainText('conversation.*');
+  // A new subscription is a disabled draft until a second person approves enabling it.
+  await expect(table.getByRole('row', { name: /crm-events/ })).toContainText('draft');
+  await expect(table.getByRole('row', { name: /crm-events/ }).getByRole('button', { name: 'Enable crm-events' })).toBeVisible();
   await table.getByRole('link', { name: /127\.0\.0\.1:9\/ocso-events/ }).click();
   dialog = page.getByRole('dialog', { name: 'Webhook · crm-events' });
   await dialog.getByRole('button', { name: 'Send test' }).click();

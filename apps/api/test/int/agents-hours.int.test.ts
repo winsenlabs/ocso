@@ -16,8 +16,8 @@ beforeAll(async () => {
   h = await startApi();
   const admin = await completeSetup(h);
   const mk = (email: string, role: string) => h.http().post('/v1/users').set(auth(admin)).send({ email, name: email.split('@')[0], role, password: 'a password 12345' }).expect(201);
-  const leadId = (await mk('lead@ocso.test', 'CS_LEAD')).body.id;
-  const execId = (await mk('exec@ocso.test', 'CS_EXEC')).body.id;
+  const leadId = (await mk('lead@ocso.test', 'HEAD')).body.id;
+  const execId = (await mk('exec@ocso.test', 'SERVICE')).body.id;
   lead = await h.loginAs('lead@ocso.test', 'a password 12345');
   exec = await h.loginAs('exec@ocso.test', 'a password 12345');
   // Lead and exec share the team that owns the agents (ADR-026).

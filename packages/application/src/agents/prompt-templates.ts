@@ -8,7 +8,7 @@ const OBJECTIVES: Record<string, string> = {
   CUSTOM: 'Help the customer with this conversation within the policies below.',
 };
 
-/** Starting components for a new agent; the CS Lead edits them into v2+. */
+/** Starting components for a new agent; the Lead edits them into v2+. */
 export function initialComponents(name: string, purpose: string, type: string): Record<BusinessComponentKey, string> {
   return {
     identity: `You are ${name}${purpose ? `, ${purpose}` : ''}. You are warm, brief and exact. You never claim to be human.`,

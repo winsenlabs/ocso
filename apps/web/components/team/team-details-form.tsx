@@ -6,7 +6,7 @@ import { AlertBanner } from '@/components/ui/alert-banner';
 import { IDLE } from '@/lib/actions/form-state';
 import { updateTeamAction } from '@/lib/actions/team-membership';
 
-/** Rename / describe a team (PATCH /v1/teams/:id): CS Leads, on teams they belong to. */
+/** Rename / describe a team (PATCH /v1/teams/:id): Leads, on teams they belong to. */
 export function TeamDetailsForm({ id, name, description }: { id: string; name: string; description: string | null }) {
   const [editing, setEditing] = useState(false);
   const [state, action, pending] = useActionState(updateTeamAction, IDLE);

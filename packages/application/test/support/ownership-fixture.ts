@@ -5,10 +5,10 @@ import { AgentService, EscalationRuleInput, EscalationRuleService, type ActorCon
 import { createTeam } from './ownership.js';
 
 /**
- * Two teams, two CS Leads, one exec per team and a Tech Admin (ADR-026):
+ * Two teams, two Leads, one exec per team and a Tech admin (ADR-026):
  * - maya:   owned by Cards only; default queue Cards; one escalation rule targets the Loans queue.
  * - arjun:  owned by Loans only; default queue Loans.
- * - shared: owned by Cards and Loans (the Tech Admin assigned Loans as a second owner).
+ * - shared: owned by Cards and Loans (the Tech admin assigned Loans as a second owner).
  * - orphan: no owning team (what the migration leaves for agents without a default-queue team).
  * Conversations: c1 maya/no queue (AI), c2 maya routed to the Loans queue, c3 arjun in the Loans queue.
  */
@@ -32,11 +32,11 @@ export async function createOwnershipFixture(): Promise<OwnershipFixture> {
   await createTeam(t.db, team.loans, 'Loans');
   const person = (role: Principal['role'], name: string, teamIds: string[]): Principal => ({ userId: uuidv7(), role, displayName: name, teamIds, via: 'UI' });
   const p = {
-    leadA: person('CS_LEAD', 'Anjali Rao', [team.cards]),
-    leadB: person('CS_LEAD', 'Rohan Kapoor', [team.loans]),
-    execA: person('CS_EXEC', 'Nikhil Menon', [team.cards]),
-    execB: person('CS_EXEC', 'Meera Pillai', [team.loans]),
-    admin: person('PLATFORM_TECH_ADMIN', 'Tarun Shetty', []),
+    leadA: person('HEAD', 'Anjali Rao', [team.cards]),
+    leadB: person('HEAD', 'Rohan Kapoor', [team.loans]),
+    execA: person('SERVICE', 'Nikhil Menon', [team.cards]),
+    execB: person('SERVICE', 'Meera Pillai', [team.loans]),
+    admin: person('TECH', 'Tarun Shetty', []),
   };
   for (const who of Object.values(p)) {
     await t.db.insert(users).values({ id: who.userId, email: `${who.userId}@x.test`, name: who.displayName, role: who.role });

@@ -21,10 +21,10 @@ const sha256 = (value: string) => createHash('sha256').update(value).digest('hex
 const authError = (code: string, message: string) => new DomainError('authentication', code, message);
 
 /**
- * Break-glass recovery (ADR-025) for a deployment whose Tech Admins are locked
+ * Break-glass recovery (ADR-025) for a deployment whose Tech admins are locked
  * out (lost authenticator and backup codes, broken IdP, no email delivery).
  * Bootstrap-only: works only while the operator sets OCSO_RECOVERY_TOKEN, and
- * each token value works once. It resets one active Platform Tech Admin's
+ * each token value works once. It resets one active Tech admin's
  * password, removes their authenticator (they re-enroll at next sign-in when
  * MFA is required) and ends their sessions. Audited.
  */
@@ -54,9 +54,9 @@ export class RecoveryService {
       const [admin] = await tx
         .select({ id: users.id, email: users.email })
         .from(users)
-        .where(and(sql`lower(${users.email}) = lower(${input.email})`, eq(users.role, 'PLATFORM_TECH_ADMIN'), eq(users.status, 'ACTIVE')))
+        .where(and(sql`lower(${users.email}) = lower(${input.email})`, eq(users.role, 'TECH'), eq(users.status, 'ACTIVE')))
         .limit(1);
-      if (!admin) throw authError('invalid_recovery_target', 'No active Platform Tech Admin has this email');
+      if (!admin) throw authError('invalid_recovery_target', 'No active Tech admin has this email');
       await setPasswordCredential(tx, admin.id, hash);
       await tx.delete(authTwoFactors).where(eq(authTwoFactors.userId, admin.id));
       await tx.update(users).set({ twoFactorEnabled: false, emailVerified: true, updatedAt: new Date() }).where(eq(users.id, admin.id));

@@ -31,6 +31,11 @@ export async function seedRouting(ctx: SeedContext, lead: ActorContext, teamIds:
       preferAccountOwner: true,
       slaPolicyId: slaIds[queue.sla],
       teamIds: queue.teams.map((t) => teamIds[t]),
+      // The agent, attributes and transfer targets are set once the agents exist (seed steps/routers.ts).
+      agentId: null,
+      attributes: {},
+      businessHours: null,
+      transferTargetIds: [],
     });
     ctx.log(`created queue ${queue.name} (${queue.mode})`);
   }

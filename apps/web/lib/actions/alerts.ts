@@ -4,25 +4,19 @@ import { refresh } from 'next/cache';
 import { Permission } from '@ocso/auth';
 import { z } from 'zod';
 import {
-  ALERT_KINDS,
-  ALERT_SEVERITIES,
-  AUDIENCE_ROLES,
   acknowledgeAlert,
-  createAlertRule,
   createDestination,
-  deleteAlertRule,
   deleteDestination,
   resolveAlert,
   testDestination,
-  updateAlertRule,
   updateDestination,
   type DestinationTestResult,
 } from '../api/alerts';
-import { describeApiError } from '../api/errors';
+import { ApiError, describeApiError } from '../api/errors';
 import { getSession } from '../session';
 
 /** Result of an alerts-screen server action (called from client components). */
-export type AlertActionResult<T = null> = { ok: true; data: T } | { ok: false; message: string };
+export type AlertActionResult<T = null> = { ok: true; data: T } | { ok: false; message: string; code?: string | undefined };
 
 const Id = z.uuid();
 
@@ -42,7 +36,7 @@ async function run<I, T>(schema: z.ZodType<I>, raw: unknown, call: (input: I) =>
     refresh();
     return { ok: true, data };
   } catch (err) {
-    return { ok: false, message: describeApiError(err) };
+    return { ok: false, message: describeApiError(err), code: err instanceof ApiError ? err.code : undefined };
   }
 }
 
@@ -72,70 +66,35 @@ export async function resolveAlertAction(id: string, note: string): Promise<Aler
   );
 }
 
-const RuleInput = z.object({
-  name: z.string().trim().min(1, 'Enter a rule name').max(160),
-  kind: z.enum(ALERT_KINDS),
-  condition: z.string().trim().min(1, 'Choose a condition').max(64),
-  params: z.record(z.string(), z.unknown()),
-  windowSeconds: z.number().int(),
-  severity: z.enum(ALERT_SEVERITIES),
-  audienceRoles: z.array(z.enum(AUDIENCE_ROLES)).min(1, 'Choose at least one audience role'),
-  destinationIds: z.array(Id),
-  dedupeWindowSeconds: z.number().int(),
-  autoResolve: z.boolean(),
-  enabled: z.boolean(),
-});
-export type RuleFormInput = z.infer<typeof RuleInput>;
-
-export async function createAlertRuleAction(input: RuleFormInput): Promise<AlertActionResult<{ id: string }>> {
-  return run(RuleInput, input, async (i) => ({ id: (await createAlertRule(i)).id }));
-}
-
-export async function updateAlertRuleAction(id: string, input: RuleFormInput): Promise<AlertActionResult> {
-  return run(z.object({ id: Id, body: RuleInput }), { id, body: input }, async (i) => {
-    await updateAlertRule(i.id, i.body);
-    return null;
-  });
-}
-
-export async function setAlertRuleEnabledAction(id: string, enabled: boolean): Promise<AlertActionResult> {
-  return run(z.object({ id: Id, enabled: z.boolean() }), { id, enabled }, async (i) => {
-    await updateAlertRule(i.id, { enabled: i.enabled });
-    return null;
-  });
-}
-
-export async function deleteAlertRuleAction(id: string): Promise<AlertActionResult> {
-  return run(Id, id, async (ruleId) => {
-    await deleteAlertRule(ruleId);
-    return null;
-  });
-}
+// Alert rules (maker–checker): lib/actions/alert-rules.ts.
 
 const DestinationBody = z.object({
   name: z.string().trim().min(1, 'Enter a name').max(120),
   config: z.record(z.string(), z.unknown()),
   secret: z.string().max(4096).optional(),
-  enabled: z.boolean(),
+  /** Ignored: a new destination is a disabled draft; enabling is a proposal (Activate on its row). */
+  enabled: z.boolean().optional(),
 });
+const DestinationApproval = z.union([z.object({ checkerId: Id, reason: z.string().trim().min(3).max(500) }), z.object({ bootstrap: z.literal(true), reason: z.string().trim().min(3).max(500).optional() })]);
 
 export async function createDestinationAction(input: z.input<typeof DestinationBody> & { kind: string }): Promise<AlertActionResult<{ id: string }>> {
   return run(
     // Kinds are open; the API checks the kind against the delivery registry.
     DestinationBody.extend({ kind: z.string().trim().min(1, 'Choose a type').max(40) }),
     input,
-    async (i) => ({ id: (await createDestination({ name: i.name, kind: i.kind, config: i.config, enabled: i.enabled, ...(i.secret ? { secret: i.secret } : {}) })).id }),
+    async (i) => ({ id: (await createDestination({ name: i.name, kind: i.kind, config: i.config, enabled: false, ...(i.secret ? { secret: i.secret } : {}) })).id }),
     Permission.NOTIFICATION_DESTINATIONS_MANAGE,
   );
 }
 
-export async function updateDestinationAction(id: string, input: z.input<typeof DestinationBody>): Promise<AlertActionResult> {
+/** A draft changes directly; an approved destination needs `approval` (then it is a proposal; the secret travels as a ref). */
+export async function updateDestinationAction(id: string, input: z.input<typeof DestinationBody>, approval?: z.input<typeof DestinationApproval>): Promise<AlertActionResult> {
   return run(
-    z.object({ id: Id, body: DestinationBody }),
-    { id, body: input },
-    async ({ id: destinationId, body }) => {
-      const { secret, ...rest } = body;
-      await updateDestination(destinationId, secret ? { ...rest, secret } : rest);
+    z.object({ id: Id, body: DestinationBody, approval: DestinationApproval.optional() }),
+    { id, body: input, approval },
+    async ({ id: destinationId, body, approval: a }) => {
+      const { secret, enabled: _enabled, ...rest } = body;
+      await updateDestination(destinationId, { ...rest, ...(secret ? { secret } : {}), ...(a ? { approval: a } : {}) });
       return null;
     },
     Permission.NOTIFICATION_DESTINATIONS_MANAGE,

@@ -3,10 +3,11 @@
 import { refresh } from 'next/cache';
 import { Permission } from '@ocso/auth';
 import { z } from 'zod';
-import { COMPONENT_KEYS, CONVERSATION_TYPES, ESCALATION_TRIGGERS, PRIORITIES, RULE_OPS } from '@/components/agents/data/agent-schemas';
+import { COMPONENT_KEYS, CONVERSATION_TYPES } from '@/components/agents/data/agent-schemas';
 import { hoursIssues, type BusinessHours, type HoursIssues } from '@/components/agents/lib/business-hours';
 import { api } from '../api/client';
-import { describeApiError } from '../api/errors';
+import { ApiError, describeApiError } from '../api/errors';
+import { ProposedSchema } from '@/components/approvals/lib/schemas';
 import { getSession } from '../session';
 
 /**
@@ -16,9 +17,17 @@ import { getSession } from '../session';
  * enforcement point; every change is audited there.
  */
 
-export type ActionResult<T = null> = { ok: true; data: T } | { ok: false; message: string };
-
 const Id = z.uuid();
+/** `code` carries the API's error code, e.g. `approval_required` (the screen then asks for a checker). */
+export type ActionResult<T = null> = { ok: true; data: T } | { ok: false; message: string; code?: string | undefined };
+
+/** A write that became a proposal (202): what the screen tells the maker. */
+export type Proposed = { proposalId: string; title: string; status: string };
+const ProposedBody = ProposedSchema.transform((b): Proposed => ({ proposalId: b.proposal.id, title: b.proposal.title, status: b.proposal.status }));
+/** The maker's choice from the submit-for-approval modal (PM/research/11 §4.1). */
+const Approval = z.union([z.object({ checkerId: Id, reason: z.string().trim().min(3).max(500) }), z.object({ bootstrap: z.literal(true), reason: z.string().trim().min(3).max(500).optional() })]);
+export type ApprovalChoice = z.input<typeof Approval>;
+
 const enc = encodeURIComponent;
 const agentPath = (id: string) => `/v1/agents/${enc(id)}`;
 
@@ -33,7 +42,7 @@ async function run<I, T>(permission: Permission, what: string, schema: z.ZodType
     refresh();
     return { ok: true, data };
   } catch (err) {
-    return { ok: false, message: describeApiError(err) };
+    return { ok: false, message: describeApiError(err), code: err instanceof ApiError ? err.code : undefined };
   }
 }
 
@@ -71,10 +80,11 @@ export async function createAgentAction(input: NewAgentInput): Promise<ActionRes
   });
 }
 
-export async function updateAgentAction(id: string, patch: Partial<AgentFieldsInput>): Promise<ActionResult> {
-  return run(Permission.AGENTS_MANAGE, 'change virtual agents', z.object({ id: Id, patch: AgentFields.partial() }), { id, patch }, async (i) => {
-    await api.patch(agentPath(i.id), i.patch, z.object({ id: z.string() }));
-    return null;
+/** A draft agent changes directly; a live one answers `approval_required` until `approval` names a checker (then it is a proposal). */
+export async function updateAgentAction(id: string, patch: Partial<AgentFieldsInput>, approval?: ApprovalChoice): Promise<ActionResult<Proposed | null>> {
+  return run(Permission.AGENTS_MANAGE, 'change virtual agents', z.object({ id: Id, patch: AgentFields.partial(), approval: Approval.optional() }), { id, patch, approval }, async (i) => {
+    const res = await api.patch(agentPath(i.id), { ...i.patch, ...(i.approval ? { approval: i.approval } : {}) }, z.union([ProposedBody, z.object({ id: z.string() })]));
+    return 'proposalId' in res ? res : null;
   });
 }
 
@@ -83,22 +93,23 @@ const HoursBody = z.object({
   timezone: z.string().trim().min(1, 'Choose a time zone').max(64),
   humanHours: z.record(z.string().max(3), z.tuple([z.string().max(5), z.string().max(5)])),
 });
-export type HoursActionResult = { ok: true; data: null } | { ok: false; message: string; fields: HoursIssues };
+export type HoursActionResult = { ok: true; data: null } | { ok: false; message: string; fields: HoursIssues; code?: string | undefined };
 
 /** Agent business hours: when humans take handoffs (`humanHours: {}` = humans 24×7; the AI answers 24×7). */
-export async function updateBusinessHoursAction(id: string, hours: BusinessHours): Promise<HoursActionResult> {
-  const result = await run(Permission.AGENTS_MANAGE, 'change business hours', z.object({ id: Id, hours: HoursBody }), { id, hours }, async (i) => {
-    await api.patch(agentPath(i.id), { businessHours: i.hours }, z.object({ id: z.string() }));
+export async function updateBusinessHoursAction(id: string, hours: BusinessHours, approval?: ApprovalChoice): Promise<HoursActionResult> {
+  const result = await run(Permission.AGENTS_MANAGE, 'change business hours', z.object({ id: Id, hours: HoursBody, approval: Approval.optional() }), { id, hours, approval }, async (i) => {
+    await api.patch(agentPath(i.id), { businessHours: i.hours, ...(i.approval ? { approval: i.approval } : {}) }, z.union([ProposedBody, z.object({ id: z.string() })]));
     return null;
   });
+  if (!result.ok && result.code === 'approval_required') return { ok: false, message: result.message, fields: {}, code: result.code };
   if (result.ok) return result;
   const { fields, other } = hoursIssues(result.message.replace(/(^|; )hours\./g, '$1businessHours.'));
   return { ok: false, message: other.join('; '), fields };
 }
 
 /**
- * Replace an agent's owning teams (PUT /v1/agents/:id/owners). A CS Lead may
- * change only teams they belong to; the Tech Admin (agents.assign_owner) may
+ * Replace an agent's owning teams (PUT /v1/agents/:id/owners). A Lead may
+ * change only teams they belong to; the Tech admin (agents.assign_owner) may
  * reassign any team. The API enforces the rules and audits the change.
  */
 export async function setAgentOwnersAction(id: string, teamIds: string[]): Promise<ActionResult> {
@@ -110,10 +121,19 @@ export async function setAgentOwnersAction(id: string, teamIds: string[]): Promi
   });
 }
 
-export async function setAgentStatusAction(id: string, status: 'LIVE' | 'PAUSED'): Promise<ActionResult> {
-  return run(Permission.AGENTS_MANAGE, 'pause or start virtual agents', z.object({ id: Id, status: z.enum(['LIVE', 'PAUSED']) }), { id, status }, async (i) => {
-    await api.post(`${agentPath(i.id)}/status`, { status: i.status }, z.object({ id: z.string() }));
-    return null;
+/** Pausing is immediate (agents.pause). Going live or resuming is always a proposal: pass `approval`. */
+export async function setAgentStatusAction(id: string, status: 'LIVE' | 'PAUSED', approval?: ApprovalChoice): Promise<ActionResult<Proposed | null>> {
+  const permission = status === 'PAUSED' ? Permission.AGENTS_PAUSE : Permission.AGENTS_MANAGE;
+  return run(permission, status === 'PAUSED' ? 'pause virtual agents' : 'take virtual agents live', z.object({ id: Id, status: z.enum(['LIVE', 'PAUSED']), approval: Approval.optional() }), { id, status, approval }, async (i) => {
+    const res = await api.post(`${agentPath(i.id)}/status`, { status: i.status, ...(i.approval ? { approval: i.approval } : {}) }, z.union([ProposedBody, z.object({ id: z.string() })]));
+    return 'proposalId' in res ? res : null;
+  });
+}
+
+/** Deleting an agent (agents.delete, Head) is always a proposal. */
+export async function deleteAgentAction(id: string, approval?: ApprovalChoice): Promise<ActionResult<Proposed | null>> {
+  return run(Permission.AGENTS_DELETE, 'delete virtual agents', z.object({ id: Id, approval: Approval.optional() }), { id, approval }, async (i) => {
+    return api.delete(agentPath(i.id), i.approval ? { approval: i.approval } : {}, ProposedBody);
   });
 }
 
@@ -149,66 +169,15 @@ export async function createVersionAction(agentId: string, reason: string, corre
 }
 
 /** Activation and rollback are the same call: make this version the live one. */
-export async function activateVersionAction(agentId: string, versionId: string): Promise<ActionResult> {
-  return run(Permission.PROMPTS_ACTIVATE, 'activate prompt versions', z.object({ agentId: Id, versionId: Id }), { agentId, versionId }, async (i) => {
-    await api.command('POST', `${agentPath(i.agentId)}/prompt/versions/${enc(i.versionId)}/activate`);
-    return null;
+/** A draft agent's prompt activates directly; once the agent is approved it is a prompt_version proposal. */
+export async function activateVersionAction(agentId: string, versionId: string, approval?: ApprovalChoice): Promise<ActionResult<Proposed | null>> {
+  return run(Permission.PROMPTS_ACTIVATE, 'activate prompt versions', z.object({ agentId: Id, versionId: Id, approval: Approval.optional() }), { agentId, versionId, approval }, async (i) => {
+    const res = await api.post(`${agentPath(i.agentId)}/prompt/versions/${enc(i.versionId)}/activate`, i.approval ? { approval: i.approval } : {}, z.union([ProposedBody, z.undefined()]));
+    return res ?? null;
   });
 }
 
-// ─────────── Escalation rules ───────────
-
-const RuleInput = z.object({
-  name: z.string().trim().min(1, 'Enter a name').max(120),
-  trigger: z.enum(ESCALATION_TRIGGERS),
-  condition: z.object({
-    keywords: z.array(z.string().trim().min(2).max(80)).max(50).optional(),
-    consecutiveToolFailures: z.number().int().min(1).max(10).optional(),
-    customerRequestsHuman: z.boolean().optional(),
-    amountAbove: z.number().positive().optional(),
-  }),
-  mode: z.enum(['AUTO_ASSIGN', 'OPEN_PICKUP']),
-  targetQueueId: Id.nullable(),
-  priority: z.enum(PRIORITIES),
-  enabled: z.boolean(),
-});
-export type RuleInputT = z.input<typeof RuleInput>;
-
-export async function saveRuleAction(agentId: string, ruleId: string | null, input: Partial<RuleInputT>): Promise<ActionResult> {
-  const schema = z.object({ agentId: Id, ruleId: Id.nullable(), body: ruleId ? RuleInput.partial() : RuleInput });
-  return run(Permission.ESCALATION_MANAGE, 'manage escalation rules', schema, { agentId, ruleId, body: input }, async (i) => {
-    const base = `${agentPath(i.agentId)}/escalation-rules`;
-    if (i.ruleId) await api.put(`${base}/${enc(i.ruleId)}`, i.body, z.object({ id: z.string() }));
-    else await api.post(base, i.body, z.object({ id: z.string() }));
-    return null;
-  });
-}
-
-export async function deleteRuleAction(agentId: string, ruleId: string): Promise<ActionResult> {
-  return run(Permission.ESCALATION_MANAGE, 'manage escalation rules', z.object({ agentId: Id, ruleId: Id }), { agentId, ruleId }, async (i) => {
-    await api.command('DELETE', `${agentPath(i.agentId)}/escalation-rules/${enc(i.ruleId)}`);
-    return null;
-  });
-}
-
-// ─────────── Tool grants ───────────
-
-const Grant = z.object({
-  toolId: Id,
-  enabled: z.boolean(),
-  alwaysConfirm: z.boolean(),
-  argumentRules: z
-    .array(z.object({ path: z.string().min(1), op: z.enum(RULE_OPS), value: z.unknown().optional(), effect: z.enum(['REQUIRE_CONFIRMATION', 'DENY']), message: z.string().trim().min(1).max(300) }))
-    .max(20, 'At most 20 argument rules per tool'),
-});
-export type GrantInput = z.input<typeof Grant>;
-
-export async function setToolGrantsAction(agentId: string, grants: GrantInput[]): Promise<ActionResult> {
-  return run(Permission.AGENT_TOOLS_MANAGE, 'change agent tools', z.object({ agentId: Id, grants: z.array(Grant).max(500) }), { agentId, grants }, async (i) => {
-    await api.put(`${agentPath(i.agentId)}/tools`, { grants: i.grants }, z.object({ agentId: z.string() }));
-    return null;
-  });
-}
+// Escalation rules and tool grants (maker–checker): lib/actions/agent-config.ts.
 
 // ─────────── Corrections (docs/09 §7) ───────────
 

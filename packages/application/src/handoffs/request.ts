@@ -4,7 +4,7 @@ import { assignments, conversations, customers, escalationRules, handoffs, users
 import { emitEvent } from '../events/outbox.js';
 import type { ActorContext } from '../shared/context.js';
 import { applyControl } from '../conversations/control.js';
-import { humanAvailability } from './business-hours.js';
+import { effectiveHours, humanAvailability } from './business-hours.js';
 import { loadQueue, pickAssignee, slaDueFor, resolutionDueFor } from './routing.js';
 
 export interface HandoffRequest {
@@ -31,7 +31,7 @@ export interface HandoffOutcome {
  * → WAITING_FOR_HUMAN in one transaction, then an immediate auto-assign offer
  * when the queue (or rule) says AUTO_ASSIGN. Caller owns the transaction.
  *
- * Outside the agent's human business hours the conversation still routes to
+ * Outside the queue's (else the agent's) human business hours the conversation still routes to
  * its queue (visible for pickup), but the pickup SLA clock and auto-assign
  * offers start at the next opening.
  */
@@ -47,13 +47,15 @@ export async function requestHandoff(tx: DbOrTx, actor: ActorContext, conversati
   if (open || !['AI_ACTIVE', 'AI_RESUMING'].includes(conv.controlState)) {
     return { handoffId: open?.id ?? '', queueId: conv.queueId, mode: open?.mode ?? 'OPEN_PICKUP', offeredTo: conv.assignedUserId, alreadyOpen: true };
   }
-  const [agent] = await tx.select().from(virtualAgents).where(eq(virtualAgents.id, conv.agentId));
+  const [agent] = conv.agentId ? await tx.select().from(virtualAgents).where(eq(virtualAgents.id, conv.agentId)) : [];
   const rule = req.ruleId ? (await tx.select().from(escalationRules).where(eq(escalationRules.id, req.ruleId)))[0] : undefined;
-  const queue = await loadQueue(tx, rule?.targetQueueId ?? agent?.defaultQueueId ?? conv.queueId);
+  // The conversation's queue is its service unit (PM/research/11 §5.5): its humans take the handoff.
+  const queue = await loadQueue(tx, rule?.targetQueueId ?? conv.queueId ?? agent?.defaultQueueId ?? null);
   const mode: HandoffMode = rule?.mode ?? queue?.mode ?? 'OPEN_PICKUP';
   const priority = raisePriority(conv.priority, req.priority ?? rule?.priority ?? conv.priority);
   const transitionActor = req.requestedBy.type === 'CUSTOMER' ? 'SYSTEM' : req.requestedBy.type;
-  const humans = humanAvailability(agent?.businessHours, now);
+  const hours = effectiveHours(queue, agent);
+  const humans = humanAvailability(hours, now);
 
   await applyControl(tx, conversationId, {
     command: 'REQUEST_ESCALATION',
@@ -95,7 +97,7 @@ export async function requestHandoff(tx: DbOrTx, actor: ActorContext, conversati
     command: 'ROUTE_TO_QUEUE',
     actor,
     transitionActor: 'SYSTEM',
-    description: `routed to queue “${queue?.name ?? 'unassigned'}” · mode ${mode}${humans.open ? '' : ` · outside human hours, team available ${formatOpening(humans.opensAt, agent!.businessHours.timezone)}`}`,
+    description: `routed to queue “${queue?.name ?? 'unassigned'}” · mode ${mode}${humans.open ? '' : ` · outside human hours, team available ${formatOpening(humans.opensAt, hours?.timezone ?? 'UTC')}`}`,
     patch: { queueId: queue?.id ?? null, waitingSince: now, slaDueAt, resolutionDueAt: resolutionDue },
     now,
   });
@@ -130,7 +132,7 @@ export async function offerToNextExec(
     .leftJoin(virtualAgents, eq(virtualAgents.id, conversations.agentId))
     .where(eq(conversations.id, conversationId));
   if (!conv || conv.c.controlState !== 'WAITING_FOR_HUMAN') return null;
-  const humans = humanAvailability(conv.hours, now);
+  const humans = humanAvailability(effectiveHours(queue, conv.hours ? { businessHours: conv.hours } : null), now);
   if (!humans.open) {
     await tx
       .update(handoffs)

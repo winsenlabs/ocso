@@ -2,13 +2,16 @@ import { randomBytes } from 'node:crypto';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 import { ACCOUNTS, E2E, apiUrl } from './config';
 import { login, logout, primaryNav, settled } from './helpers';
+import { routeChannelToAgent } from './routing';
+import { goLiveApproved } from './approval-setup';
+import { approvedChannel, approvedProfile, approvedProvider } from './platform-setup';
 
 /**
- * CS Lead operations pages against the real API + worker. Seeded through the
+ * Lead operations pages against the real API + worker. Seeded through the
  * API (setup → lead/exec/team → scripted model → agent → web chat); the lead
  * then creates an SLA policy and a queue, reads analytics before and after a
  * web-chat customer escalates, records / stages / rejects prompt corrections,
- * reviews the resolved conversation and edits the customer. The CS Exec must
+ * reviews the resolved conversation and edits the customer. The Service member must
  * not see lead-only controls.
  */
 test.describe.configure({ mode: 'serial' });
@@ -22,11 +25,11 @@ const AGENT = 'Mira Ops';
 
 let api: APIRequestContext;
 const tok = { admin: '', lead: '' };
-const ids = { team: '', seedQueue: '', agent: '', webchatKey: '', conversation: '' };
+const ids = { team: '', seedQueue: '', agent: '', webchatKey: '', channel: '', conversation: '' };
 
 async function call<T = Record<string, unknown>>(method: 'GET' | 'POST' | 'PATCH', path: string, token: string | null, body?: unknown): Promise<T> {
   const res = await api.fetch(path, { method, headers: token ? { authorization: `Bearer ${token}` } : {}, ...(body !== undefined ? { data: body } : {}) });
-  if (![200, 201, 204].includes(res.status())) throw new Error(`${method} ${path} → ${res.status()} ${await res.text()}`);
+  if (![200, 201, 202, 204].includes(res.status())) throw new Error(`${method} ${path} → ${res.status()} ${await res.text()}`);
   return (res.status() === 204 ? {} : await res.json()) as T;
 }
 
@@ -41,22 +44,27 @@ test.beforeAll(async ({ playwright }) => {
     await call('POST', '/v1/setup', null, { setupToken: E2E.setupToken, orgName: 'E2E Bank', adminName: ACCOUNTS.admin.name, adminEmail: ACCOUNTS.admin.email, adminPassword: ACCOUNTS.admin.password, timezone: 'Asia/Kolkata' });
   }
   tok.admin = await loginApi(ACCOUNTS.admin.email, ACCOUNTS.admin.password);
-  const lead = await call<{ id: string }>('POST', '/v1/users', tok.admin, { name: LEAD.name, email: LEAD.email, role: 'CS_LEAD', password: LEAD.password, teamIds: [], languages: [], maxConcurrent: 5 });
+  const lead = await call<{ id: string }>('POST', '/v1/users', tok.admin, { name: LEAD.name, email: LEAD.email, role: 'HEAD', password: LEAD.password, teamIds: [], languages: [], maxConcurrent: 5 });
   tok.lead = await loginApi(LEAD.email, LEAD.password);
   ids.team = (await call<{ id: string }>('POST', '/v1/teams', tok.lead, { name: TEAM })).id;
   // The lead manages the agent through an owning team of their own, outside the queue's team (ADR-026).
   const owners = (await call<{ id: string }>('POST', '/v1/teams', tok.lead, { name: 'OPS Agent owners' })).id;
   await call('PATCH', `/v1/users/${lead.id}`, tok.admin, { teamIds: [owners] });
-  // The exec's team is not one of the lead's, so the Tech Admin creates them (a lead creates execs only into their own teams).
-  await call('POST', '/v1/users', tok.admin, { name: EXEC.name, email: EXEC.email, role: 'CS_EXEC', password: EXEC.password, teamIds: [ids.team], languages: [], maxConcurrent: 5 });
+  // The exec's team is not one of the lead's, so the Tech admin creates them (a lead creates execs only into their own teams).
+  await call('POST', '/v1/users', tok.admin, { name: EXEC.name, email: EXEC.email, role: 'SERVICE', password: EXEC.password, teamIds: [ids.team], languages: [], maxConcurrent: 5 });
   ids.seedQueue = (await call<{ id: string }>('POST', '/v1/queues', tok.lead, { name: 'OPS Seed queue', teamIds: [ids.team] })).id;
 
-  const provider = await call<{ id: string }>('POST', '/v1/model-providers', tok.admin, { kind: 'DEV_SCRIPTED', name: 'OPS Scripted', settings: { latencyMs: 50, chunkDelayMs: 15 } });
-  const profile = await call<{ id: string }>('POST', '/v1/model-profiles', tok.admin, { name: 'ops-support', providerId: provider.id, model: 'scripted-1', retries: 0 });
+  // Platform objects start as drafts: a Head approves enabling the provider and activating the channel (PM/research/11 §4).
+  const provider = { id: await approvedProvider(api, tok.admin, { id: lead.id, token: tok.lead }, { kind: 'DEV_SCRIPTED', name: 'OPS Scripted', settings: { latencyMs: 50, chunkDelayMs: 15 } }) };
+  const profile = { id: await approvedProfile(api, tok.admin, { id: lead.id, token: tok.lead }, { name: 'ops-support', providerId: provider.id, model: 'scripted-1', retries: 0 }) };
   ids.agent = (await call<{ id: string }>('POST', '/v1/agents', tok.lead, { name: AGENT, slug: 'mira-ops', purpose: 'customer support', conversationType: 'SUPPORT', modelProfileId: profile.id, defaultQueueId: ids.seedQueue, teamIds: [owners] })).id;
-  await call('POST', `/v1/agents/${ids.agent}/status`, tok.lead, { status: 'LIVE' });
-  const channel = await call<{ publicKey: string }>('POST', '/v1/channels', tok.admin, { kind: 'WEBCHAT', name: 'OPS Web chat', status: 'ACTIVE', defaultAgentId: ids.agent, secrets: { visitorTokenSecret: randomBytes(32).toString('hex') } });
+  // Going live is a maker–checker approval (PM/research/11 §4): a second Head of the owning team checks it.
+  await goLiveApproved(api, { adminToken: tok.admin, makerToken: tok.lead, agentId: ids.agent, ownerTeamId: owners, checker: { name: 'OPS Checker', email: 'ops.checker@e2e.ocso.test', password: 'correct-horse-battery-opschecker' } });
+  const channel = await approvedChannel<{ id: string; publicKey: string }>(api, tok.admin, { id: lead.id, token: tok.lead }, { kind: 'WEBCHAT', name: 'OPS Web chat', secrets: { visitorTokenSecret: randomBytes(32).toString('hex') } });
   ids.webchatKey = channel.publicKey;
+  ids.channel = channel.id;
+  // channel → pass-through router → the agent's queue (PM/research/11 §5).
+  routeChannelToAgent({ channelId: channel.id, agentId: ids.agent, queueId: ids.seedQueue, name: 'OPS Web chat' });
 });
 
 test.afterAll(async () => {
@@ -122,7 +130,7 @@ test('the lead creates an SLA policy and a queue that uses it', async ({ page })
 
   await row.getByRole('button', { name: `Edit ${QUEUE}` }).click();
   const edit = page.getByRole('dialog', { name: `Edit ${QUEUE}` });
-  await edit.getByLabel('Routing mode').selectOption('AUTO_ASSIGN');
+  await edit.getByLabel('Pickup mode').selectOption('AUTO_ASSIGN');
   await edit.getByLabel('Accept within (seconds)').fill('90');
   await edit.getByRole('button', { name: 'Save queue' }).click();
   await expect(edit).toBeHidden();
@@ -131,7 +139,7 @@ test('the lead creates an SLA policy and a queue that uses it', async ({ page })
 
   // Back to open pickup so the escalation below waits in the queue with a pickup clock.
   await row.getByRole('button', { name: `Edit ${QUEUE}` }).click();
-  await edit.getByLabel('Routing mode').selectOption('OPEN_PICKUP');
+  await edit.getByLabel('Pickup mode').selectOption('OPEN_PICKUP');
   await edit.getByRole('button', { name: 'Save queue' }).click();
   await expect(edit).toBeHidden();
   await expect(row).toContainText('Open pickup');
@@ -146,7 +154,9 @@ test('a web-chat customer escalates into the new queue; analytics, reasons and S
   const queues = await call<Array<{ id: string; name: string }>>('GET', '/v1/queues', tok.lead);
   const queueId = queues.find((q) => q.name === QUEUE)?.id;
   expect(queueId).toBeTruthy();
-  await call('PATCH', `/v1/agents/${ids.agent}`, tok.lead, { defaultQueueId: queueId });
+  // The queue is the service unit (PM/research/11 §5): the web chat now routes to the new queue, which Mira serves;
+  // a handoff goes to the humans of the conversation's queue.
+  routeChannelToAgent({ channelId: ids.channel, agentId: ids.agent, queueId: queueId!, name: 'OPS Web chat → new queue' });
 
   const visitor = (await call<{ token: string }>('POST', `/public/webchat/${ids.webchatKey}/session`, null, {})).token;
   const say = async (text: string) => (await call<{ conversationId: string }>('POST', `/public/webchat/${ids.webchatKey}/messages`, visitor, { clientMessageId: `c-${randomBytes(6).toString('hex')}`, text })).conversationId;
@@ -286,7 +296,7 @@ test('the lead finds the web-chat customer, sees identities and conversations, a
   await logout(page);
 });
 
-test('the CS Exec gets the pickup view and none of the lead-only controls', async ({ page }) => {
+test('the Service member gets the pickup view and none of the lead-only controls', async ({ page }) => {
   await login(page, EXEC);
   const nav = primaryNav(page);
   await expect(nav.getByRole('link', { name: 'Pickup queue' })).toBeVisible();

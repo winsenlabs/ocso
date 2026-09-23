@@ -44,7 +44,14 @@ export interface HandoffRequest {
  * The runtime honours effects from first-party providers only, so an external
  * server can never change who owns a conversation.
  */
-export type ToolEffect = { type: 'handoff'; request: HandoffRequest };
+export type ToolEffect = { type: 'handoff'; request: HandoffRequest } | { type: 'transfer'; request: QueueTransferRequest };
+
+/** A move to another queue and its AI agent (PM/research/11 §5.5); the runtime performs it when the turn ends. */
+export interface QueueTransferRequest {
+  queueId: string;
+  reason: string;
+  summary: string;
+}
 
 export type ToolOutcome =
   | {

@@ -1,10 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { deleteRuleAction, saveRuleAction } from '@/lib/actions/agents';
+import { ApprovableButton } from '@/components/approvals/approvable-button';
+import { PendingBadge } from '@/components/approvals/pending-badge';
+import { deleteRuleAction, setRuleEnabledAction } from '@/lib/actions/agent-config';
 import type { EscalationRule } from '../data/agent-schemas';
 import type { Option } from '../data/options';
-import { ConfirmButton } from '../shared/confirm-button';
 import { useAgentAction } from '../shared/use-action';
 import { RuleDialog } from './rule-dialog';
 
@@ -20,31 +21,57 @@ export function AddRuleButton({ agentId, queues }: { agentId: string; queues: Op
   );
 }
 
-/** Edit, switch on/off and delete one agent-scoped rule. */
+/**
+ * One agent-scoped rule (PM/research/11 §4): turning it on and deleting it are
+ * always proposals (a checker approves); turning it off is immediate, even while
+ * a proposal waits; editing is direct for a draft and a proposal once approved.
+ */
 export function RuleActions({ agentId, rule, queues }: { agentId: string; rule: EscalationRule; queues: Option[] | null }) {
   const [editing, setEditing] = useState(false);
-  const toggle = useAgentAction();
+  const off = useAgentAction();
+  const pending = rule.approval.pending;
   return (
-    <span className="vacts" style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-      <button type="button" className="btn tiny ghost" onClick={() => setEditing(true)} aria-label={`Edit ${rule.name}`}>
+    <span className="vacts" style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', flexWrap: 'wrap', alignItems: 'center' }}>
+      {pending ? <PendingBadge state={{ approved: rule.approval.approved, pending, updateNeedsApproval: true, checkPermission: 'approvals.check.agents' }} /> : null}
+      <button type="button" className="btn tiny ghost" onClick={() => setEditing(true)} aria-label={`Edit ${rule.name}`} disabled={Boolean(pending)} title={pending ? 'A change is waiting for approval' : undefined}>
         Edit
       </button>
-      <button
-        type="button"
-        className="btn tiny ghost"
-        disabled={toggle.pending}
-        onClick={() => toggle.run(() => saveRuleAction(agentId, rule.id, { enabled: !rule.enabled }))}
-        aria-label={`${rule.enabled ? 'Turn off' : 'Turn on'} ${rule.name}`}
-        title={toggle.error ?? undefined}
+      {rule.enabled ? (
+        <button type="button" className="btn tiny ghost" disabled={off.pending} onClick={() => off.run(() => setRuleEnabledAction(agentId, rule.id, false))} aria-label={`Turn off ${rule.name}`}>
+          Turn off
+        </button>
+      ) : (
+        <ApprovableButton
+          always
+          label="Turn on"
+          ariaLabel={`Turn on ${rule.name}`}
+          buttonClass="btn tiny ghost"
+          title={`Turn on ${rule.name}`}
+          confirmLabel="Turn on"
+          disabled={Boolean(pending)}
+          target={{ objectKind: 'escalation_rule', objectId: rule.id, title: `Turn on escalation rule "${rule.name}"` }}
+          write={(approval) => setRuleEnabledAction(agentId, rule.id, true, approval)}
+        >
+          The rule starts triggering handoffs once a checker approves it.
+        </ApprovableButton>
+      )}
+      <ApprovableButton
+        always
+        label="Delete"
+        ariaLabel={`Delete ${rule.name}`}
+        buttonClass="btn tiny ghost"
+        tone="danger"
+        title={`Delete "${rule.name}"`}
+        confirmLabel="Delete rule"
+        disabled={Boolean(pending)}
+        target={{ objectKind: 'escalation_rule', objectId: rule.id, title: `Delete escalation rule "${rule.name}"` }}
+        write={(approval) => deleteRuleAction(agentId, rule.id, approval)}
       >
-        {rule.enabled ? 'Turn off' : 'Turn on'}
-      </button>
-      <ConfirmButton label="Delete" ariaLabel={`Delete ${rule.name}`} buttonClass="btn tiny ghost" title={`Delete "${rule.name}"`} confirmLabel="Delete rule" tone="danger" run={() => deleteRuleAction(agentId, rule.id)}>
-        The rule stops triggering handoffs for this agent. The deletion is recorded in the audit log; recreate it to bring it back.
-      </ConfirmButton>
-      {toggle.error ? (
+        The rule stops triggering handoffs for this agent once a checker approves the deletion.
+      </ApprovableButton>
+      {off.error ? (
         <span className="err-text" role="alert">
-          {toggle.error}
+          {off.error}
         </span>
       ) : null}
       {editing ? <RuleDialog agentId={agentId} rule={rule} queues={queues} onClose={() => setEditing(false)} /> : null}

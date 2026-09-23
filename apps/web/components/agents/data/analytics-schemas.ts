@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * CS Lead analytics contracts (GET /v1/analytics/agents/:id and
+ * Lead analytics contracts (GET /v1/analytics/agents/:id and
  * /v1/analytics/agents, packages/application/src/analytics). Every metric
  * carries its formula as `definition`; the UI surfaces it next to the number.
  */

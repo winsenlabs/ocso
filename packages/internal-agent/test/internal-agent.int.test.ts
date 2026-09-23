@@ -34,7 +34,7 @@ const sink = () => {
 
 beforeAll(async () => {
   t = await createTestDatabase();
-  for (const p of [(admin = person('PLATFORM_TECH_ADMIN')), (lead = person('CS_LEAD')), (exec = person('CS_EXEC'))]) {
+  for (const p of [(admin = person('TECH')), (lead = person('HEAD')), (exec = person('SERVICE'))]) {
     await t.pool.query(`INSERT INTO users (id, email, name, role) VALUES ($1, $2, $3, $4)`, [p.userId, `${p.role}@x.test`, p.displayName, p.role]);
   }
   const providerId = uuidv7();
@@ -69,14 +69,14 @@ describe('internal OCSO agent permissions (docs/12 §3)', () => {
   });
 
   it('refuses a tool the user lacks even when the model calls it anyway', async () => {
-    adapter.script = [{ toolCalls: [{ toolName: 'latency_breakdown', input: { minutes: 60 } }] }, { text: 'That needs the Platform Tech Admin.' }];
+    adapter.script = [{ toolCalls: [{ toolName: 'latency_breakdown', input: { minutes: 60 } }] }, { text: 'That needs the Tech admin.' }];
     const { s, out } = sink();
     await agent.ask(lead, null, 'Why did latency spike?', s, 'c1');
     expect(out.denied).toHaveLength(1);
     expect(JSON.stringify(adapter.requests[1]!.messages.at(-1))).toContain('Not permitted');
   });
 
-  it('never executes a high-risk write without explicit confirmation, then audits it', async () => {
+  it('never executes a high-risk write without explicit confirmation, and never around maker-checker', async () => {
     adapter.script = [{ toolCalls: [{ toolName: 'update_worker_settings', input: { minWarmWorkers: 4 } }] }, { text: 'Confirm to apply.' }];
     const { s, out } = sink();
     await agent.ask(admin, null, 'Increase minimum warm workers from 2 to 4', s, 'c2');
@@ -85,15 +85,12 @@ describe('internal OCSO agent permissions (docs/12 §3)', () => {
     expect(before!.minWarmWorkers).toBe(2);
 
     await expect(actions.confirm(exec, out.actions[0]!.id, 'c3')).rejects.toMatchObject({ category: 'not_found' });
-    await actions.confirm(admin, out.actions[0]!.id, 'c4');
+    // Worker settings are approved configuration (PM/research/11 §4): confirming in Ask OCSO does not bypass the checker.
+    await expect(actions.confirm(admin, out.actions[0]!.id, 'c4')).rejects.toMatchObject({ code: 'approval_required' });
     const [after] = await t.db.select().from(workerSettings);
-    expect(after!.minWarmWorkers).toBe(4);
-    const { rows } = await t.pool.query(`SELECT action, via, actor_id FROM audit_events WHERE action IN ('workers.config_update', 'internal_agent.action_confirmed') ORDER BY occurred_at`);
-    expect(rows).toEqual([
-      { action: 'workers.config_update', via: 'INTERNAL_AGENT', actor_id: admin.userId },
-      { action: 'internal_agent.action_confirmed', via: 'INTERNAL_AGENT', actor_id: admin.userId },
-    ]);
-    await expect(actions.confirm(admin, out.actions[0]!.id, 'c5')).rejects.toMatchObject({ code: 'action_not_pending' });
+    expect(after!.minWarmWorkers).toBe(2);
+    const { rows } = await t.pool.query(`SELECT count(*)::int AS n FROM audit_events WHERE action = 'workers.config_update'`);
+    expect(rows[0].n).toBe(0);
   });
 
   it('re-checks permissions at confirmation time', async () => {

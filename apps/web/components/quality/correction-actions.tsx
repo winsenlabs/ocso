@@ -6,7 +6,7 @@ import { rejectCorrectionAction, stageCorrectionAction, type QualityResult } fro
 
 /**
  * Stage into the agent's prompt draft (APPEND adds a line, REPLACE swaps the
- * component) or reject. Nothing touches the live prompt: a CS Lead creates a
+ * component) or reject. Nothing touches the live prompt: a Lead creates a
  * version from the draft on the agent's Prompt tab.
  */
 export function CorrectionActions({ id, proposedText, desired, canStage, status }: { id: string; proposedText: string | null; desired: string; canStage: boolean; status: 'OPEN' | 'STAGED' }) {

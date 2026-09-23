@@ -1,6 +1,7 @@
 import 'server-only';
 import { cache } from 'react';
 import { z } from 'zod';
+import { ObjectApprovalStateSchema, ProposedSchema } from '@/components/approvals/lib/schemas';
 import { ChannelMarkSchema } from '../channels';
 import { api } from './client';
 
@@ -15,11 +16,15 @@ export const ChannelSchema = z.object({
   /** Names of configured secrets → references; never values. */
   secretRefs: z.record(z.string(), z.string()),
   defaultAgentId: z.string().nullable(),
+  /** The router its customers go through (PM/research/11 §5); null = new messages are rejected. */
+  router: z.object({ id: z.string(), name: z.string(), status: z.string() }).nullable().default(null),
   lastInboundAt: z.string().nullable(),
   /** Provider webhook (`/channels/<segment>/<publicKey>/webhook`), for webhook kinds. */
   webhookPath: z.string().nullable(),
   /** Widget page (`/chat/<publicKey>`), for embeddable kinds. */
   embedPath: z.string().nullable().default(null),
+  /** Maker–checker state (PM/research/11 §4): approved, the open proposal, whether an edit needs a checker. */
+  approval: ObjectApprovalStateSchema.nullable().catch(null).default(null),
 });
 export type Channel = z.infer<typeof ChannelSchema>;
 
@@ -84,11 +89,16 @@ export interface ChannelCreate {
   name: string;
   settings: Record<string, unknown>;
   secrets: Record<string, string>;
-  defaultAgentId: string | null;
-  status: ChannelStatus;
+  /** Deprecated: routers decide who answers. */
+  defaultAgentId?: string | null | undefined;
+  /** Always created as a DRAFT (activation is a proposal). */
+  status?: ChannelStatus | undefined;
 }
-/** Settings replace the stored object; only the secrets listed are rotated (others are kept). */
-export type ChannelUpdate = Omit<ChannelCreate, 'kind'>;
+/**
+ * Settings replace the stored object; only the secrets listed are rotated (others are kept). A draft changes
+ * directly; an approved channel answers 409 approval_required until `approval` names a checker (then 202).
+ */
+export type ChannelUpdate = Omit<ChannelCreate, 'kind' | 'status' | 'defaultAgentId'> & { approval?: { checkerId: string; reason: string } | { bootstrap: true; reason?: string | undefined } | undefined };
 
 export const listChannels = () => api.get('/v1/channels', z.array(ChannelSchema));
 export const listChannelKinds = () => api.get('/v1/channels/kinds', z.array(ChannelKindSchema));
@@ -99,6 +109,7 @@ export const listChannelKinds = () => api.get('/v1/channels/kinds', z.array(Chan
  * UI then shows channel names without marks.
  */
 export const loadChannelKinds = cache((): Promise<ChannelKind[]> => listChannelKinds().catch((): ChannelKind[] => []));
-export const createChannel = (input: ChannelCreate) => api.post('/v1/channels', input, ChannelSchema);
-export const updateChannel = (id: string, input: ChannelUpdate) => api.patch(`/v1/channels/${id}`, input, ChannelSchema);
+/** A new channel is always a draft (its activation is a proposal). */
+export const createChannel = (input: ChannelCreate) => api.post('/v1/channels', { ...input, status: 'DRAFT' }, ChannelSchema);
+export const updateChannel = (id: string, input: ChannelUpdate) => api.patch(`/v1/channels/${id}`, input, z.union([ChannelSchema, ProposedSchema]));
 export const testChannel = (id: string) => api.post(`/v1/channels/${id}/test`, undefined, ChannelTestSchema, { timeoutMs: 30_000 });

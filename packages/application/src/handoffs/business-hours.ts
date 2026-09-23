@@ -17,3 +17,14 @@ export function humanAvailability(hours: BusinessHoursLike | null | undefined, n
   if (!opensAt || opensAt.getTime() <= now.getTime()) return { open: true, opensAt: now };
   return { open: false, opensAt };
 }
+
+/**
+ * Whose hours say when humans take handoffs (PM/research/11 §5.5): the
+ * queue's when it has its own, else the agent's.
+ */
+export function effectiveHours(
+  queue: { businessHours: BusinessHoursLike | null } | null | undefined,
+  agent: { businessHours: BusinessHoursLike } | null | undefined,
+): BusinessHoursLike | null {
+  return queue?.businessHours ?? agent?.businessHours ?? null;
+}

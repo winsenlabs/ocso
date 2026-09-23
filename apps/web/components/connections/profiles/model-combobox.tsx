@@ -13,7 +13,7 @@ interface Props {
   providerLabel: string;
   value: string;
   onChange: (value: string) => void;
-  /** Tech Admins (providers.manage) may bypass the ten-minute listing cache. */
+  /** Tech admins (providers.manage) may bypass the ten-minute listing cache. */
   canRefresh: boolean;
   error?: string | undefined;
 }

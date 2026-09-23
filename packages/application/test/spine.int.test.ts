@@ -13,9 +13,11 @@ import {
   applyControl,
   loadConversationDetail,
   loadTimeline,
+  routeChannelToAgent,
   type ActorContext,
   type IngressMessage,
 } from '../src/index.js';
+import { makeLive } from './support/live-agent.js';
 
 let t: TestDatabase;
 const queue = new MemoryQueue();
@@ -24,7 +26,7 @@ let queueId: string;
 let teamId: string;
 // The lead belongs to Cards, which owns Maya and serves her queue (ADR-026).
 const CARDS = uuidv7();
-const lead: Principal = { userId: '00000000-0000-7000-8000-00000000000a', role: 'CS_LEAD', displayName: 'Anjali Rao', teamIds: [CARDS], via: 'UI' };
+const lead: Principal = { userId: '00000000-0000-7000-8000-00000000000a', role: 'HEAD', displayName: 'Anjali Rao', teamIds: [CARDS], via: 'UI' };
 const ctx = (principal: Principal | null): ActorContext => ({ principal, correlationId: 'test' });
 const msg = (id: string, text: string, phone = '+919812341208'): IngressMessage => ({
   externalMessageId: id,
@@ -38,16 +40,18 @@ const msg = (id: string, text: string, phone = '+919812341208'): IngressMessage 
 
 beforeAll(async () => {
   t = await createTestDatabase();
-  await t.pool.query(`INSERT INTO users (id, email, name, role) VALUES ($1, 'lead@x.test', 'Anjali Rao', 'CS_LEAD')`, [lead.userId]);
+  await t.pool.query(`INSERT INTO users (id, email, name, role) VALUES ($1, 'lead@x.test', 'Anjali Rao', 'HEAD')`, [lead.userId]);
   teamId = CARDS;
   queueId = uuidv7();
   await t.db.insert(teams).values({ id: teamId, name: 'Cards' });
   await t.db.insert(queues).values({ id: queueId, name: 'Cards & EMI · Tier 2' });
   await t.db.insert(queueTeams).values({ queueId, teamId });
   const agent = await new AgentService(t.db).create(ctx(lead), { name: 'Maya', purpose: 'customer support', conversationType: 'SUPPORT', description: '', defaultQueueId: queueId, teamIds: [teamId] });
-  await t.db.update(virtualAgents).set({ status: 'LIVE' }).where(eq(virtualAgents.id, agent.id));
+  await makeLive(t.db, agent.id);
   channelId = uuidv7();
-  await t.db.insert(channels).values({ id: channelId, kind: 'WHATSAPP', name: 'WhatsApp', status: 'ACTIVE', publicKey: 'pk1', defaultAgentId: agent.id });
+  await t.db.insert(channels).values({ id: channelId, kind: 'WHATSAPP', name: 'WhatsApp', status: 'ACTIVE', publicKey: 'pk1' });
+  // channel → pass-through router → Maya's queue (PM/research/11 §5).
+  await routeChannelToAgent(t.db, ctx(lead), { channelId, agentId: agent.id, queueId });
 });
 afterAll(async () => {
   await t?.drop();
@@ -96,12 +100,12 @@ describe('control, visibility, timeline', () => {
     const all = await inbox.list(lead, policy, { view: 'all', limit: 50 });
     expect(all.items.length).toBe(2);
     expect(all.items[0]!.customer.identity).toMatch(/•••/);
-    const execInTeam: Principal = { userId: uuidv7(), role: 'CS_EXEC', displayName: 'E', teamIds: [teamId], via: 'UI' };
+    const execInTeam: Principal = { userId: uuidv7(), role: 'SERVICE', displayName: 'E', teamIds: [teamId], via: 'UI' };
     const execElsewhere: Principal = { ...execInTeam, userId: uuidv7(), teamIds: [uuidv7()] };
     expect((await inbox.list(execInTeam, policy, { view: 'all', limit: 50 })).items.length).toBe(2);
     expect((await inbox.list(execElsewhere, policy, { view: 'all', limit: 50 })).items.length).toBe(0);
     expect((await inbox.list(execInTeam, { execsCanViewAiActive: false }, { view: 'all', limit: 50 })).items.length).toBe(0);
-    const admin: Principal = { ...execInTeam, role: 'PLATFORM_TECH_ADMIN' };
+    const admin: Principal = { ...execInTeam, role: 'TECH' };
     expect((await inbox.list(admin, policy, { view: 'all', limit: 50 })).items.length).toBe(0);
     expect(all.counts.ai).toBe(2);
   });
@@ -116,7 +120,7 @@ describe('control, visibility, timeline', () => {
       `INSERT INTO conversations (id, customer_id, agent_id, channel_id, type, queue_id, last_preview, control_state, resolved_at) SELECT $1, customer_id, agent_id, channel_id, type, $2, 'private matter', 'RESOLVED', now() FROM conversations WHERE id = $3`,
       [hidden, otherQueue, visible!.id],
     );
-    const execInTeam: Principal = { userId: uuidv7(), role: 'CS_EXEC', displayName: 'E', teamIds: [teamId], via: 'UI' };
+    const execInTeam: Principal = { userId: uuidv7(), role: 'SERVICE', displayName: 'E', teamIds: [teamId], via: 'UI' };
     const svc = new CustomerService(t.db);
     const asExec = await svc.get(execInTeam, policy, visible!.customerId);
     expect(asExec.conversations.map((c) => c.id)).not.toContain(hidden);

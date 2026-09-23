@@ -1,7 +1,7 @@
 # Model providers
 
 A model provider plugin teaches OCSO to call one model API. Agents never name a provider. They use a
-logical model profile (`support-primary`, `summarizer`, …) that a Platform Tech Admin maps to a
+logical model profile (`support-primary`, `summarizer`, …) that a Tech admin maps to a
 provider, a model and ordered fallbacks. The provider plugin is what turns that target into an API
 call, with the provider's own prompt-caching controls.
 
@@ -21,7 +21,7 @@ The reasoning behind each choice is in ADR-006
 ([PM/ARCHITECTURE-DECISIONS.md](../../PM/ARCHITECTURE-DECISIONS.md)); the package README
 ([packages/model-providers/README.md](../../packages/model-providers/README.md)) covers the shared core's
 invariants and error mapping. Operator settings per provider are in
-[docs/operations/setup-guide.md §2](../operations/setup-guide.md#2-model-providers-and-profiles-tech-admin).
+[docs/operations/setup-guide.md §2](../operations/setup-guide.md#2-model-providers-and-profiles-tech).
 
 ## The contract
 
@@ -43,7 +43,7 @@ export interface ProviderDefinition<S = unknown, C = unknown> {
   readonly cachingSummary: string;
   /** Registered only when explicitly enabled (ADR-015); usage never priced. */
   readonly devOnly: boolean;
-  /** Non-secret settings the Tech Admin enters (validated at save time and on create). */
+  /** Non-secret settings the Tech admin enters (validated at save time and on create). */
   readonly settingsSchema: z.ZodType<S>;
   /** Secret fields, resolved from SecretStore by trusted code only. */
   readonly credentialsSchema: z.ZodType<C>;

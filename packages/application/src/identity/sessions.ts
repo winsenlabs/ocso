@@ -1,6 +1,7 @@
 import { and, eq, gt } from 'drizzle-orm';
-import type { Principal } from '@ocso/auth';
-import { authSessions, teamMembers, users, type DbOrTx } from '@ocso/db';
+import { computeEffectivePermissions, isPermission, type Permission, type PermissionOverride, type Principal } from '@ocso/auth';
+import { authSessions, users, type DbOrTx } from '@ocso/db';
+import { ACTIVE_OVERRIDES_JSON, TEAM_IDS_ARRAY } from './permissions/state.js';
 
 /**
  * Session policy (ADR-025). Better Auth owns the session rows; OCSO adds the
@@ -32,25 +33,42 @@ export const MFA_METHODS: ReadonlySet<string> = new Set<AuthMethod>(['mfa', 'pas
 /** Idle expiry is refreshed at most this often, so reads stay cheap. */
 export const ACTIVITY_WRITE_INTERVAL_MS = 60_000;
 
-/** Build the authorization principal for a user (role + team memberships). */
+/**
+ * Build the authorization principal: preset ∪ active grants − active revokes
+ * (PM/research/11 §3.3) and team memberships, in one round trip. Grant changes
+ * take effect on the next request; nothing is cached.
+ */
 export async function loadPrincipal(db: DbOrTx, userId: string, via: Principal['via'], sessionId?: string): Promise<Principal | null> {
-  const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  const [user] = await db
+    .select({ id: users.id, role: users.role, name: users.name, status: users.status, teamIds: TEAM_IDS_ARRAY, overrides: ACTIVE_OVERRIDES_JSON })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
   if (!user || user.status !== 'ACTIVE') return null;
-  const teamRows = await db.select({ teamId: teamMembers.teamId }).from(teamMembers).where(eq(teamMembers.userId, userId));
+  const overrides = toOverrides(user.overrides);
   return {
     userId: user.id,
     role: user.role,
     displayName: user.name,
-    teamIds: teamRows.map((t) => t.teamId),
+    teamIds: user.teamIds,
     via,
     sessionId,
+    permissions: computeEffectivePermissions(user.role, overrides),
   };
+}
+
+/** Active overrides as ACTIVE_OVERRIDES_JSON returns them. Expiry is already applied in SQL (the database clock); unknown permission names grant nothing. */
+function toOverrides(rows: ReadonlyArray<{ p: string; e: 'GRANT' | 'REVOKE' }>): PermissionOverride[] {
+  return rows.flatMap((o) => (isPermission(o.p) ? [{ permission: o.p, effect: o.e, expiresAt: null }] : []));
 }
 
 export interface LiveSession {
   sessionId: string;
   userId: string;
   role: Principal['role'];
+  /** Effective permissions now (preset ∪ active grants − active revokes). */
+  permissions: ReadonlySet<Permission>;
+  teamIds: string[];
   authMethod: string;
   twoFactorEnabled: boolean;
   lastActiveAt: Date;
@@ -72,14 +90,16 @@ export async function findLiveSession(db: DbOrTx, where: { token: string } | { s
       role: users.role,
       status: users.status,
       twoFactorEnabled: users.twoFactorEnabled,
+      teamIds: TEAM_IDS_ARRAY,
+      overrides: ACTIVE_OVERRIDES_JSON,
     })
     .from(authSessions)
     .innerJoin(users, eq(users.id, authSessions.userId))
     .where(and('token' in where ? eq(authSessions.token, where.token) : eq(authSessions.id, where.sessionId), gt(authSessions.expiresAt, now)))
     .limit(1);
   if (!row || row.status !== 'ACTIVE') return null;
-  const { status: _status, ...live } = row;
-  return live;
+  const { status: _status, overrides, ...live } = row;
+  return { ...live, permissions: computeEffectivePermissions(live.role, toOverrides(overrides)) };
 }
 
 export function isIdleExpired(session: Pick<LiveSession, 'lastActiveAt'>, policy: Pick<SessionPolicy, 'idleMinutes'>, now = new Date()): boolean {

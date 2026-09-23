@@ -28,6 +28,12 @@ export interface ChannelCapabilities {
   sessionWindowHours: number | null;
   /** Identity kinds this channel can address, most preferred first; delivery picks the customer's identity by it. */
   identityKinds?: readonly string[] | undefined;
+  /**
+   * Native choice questions (PM/research/11 §5.4): up to `buttons` options as tappable buttons, up to `list`
+   * as a list picker. Absent = the CHOICES part is sent as numbered text (`renderChoicesAsText`).
+   * Taps come back as STRUCTURED replies whose `data.id` is the option id.
+   */
+  choices?: { buttons: number; list: number } | undefined;
 }
 
 /** Transport-neutral HTTP request as received by the API (raw body kept for signatures). */
@@ -181,7 +187,7 @@ export interface ConnectionCheckResult {
 /**
  * What an adapter gets from the composition root. `fetch` is the only way an
  * adapter reaches the network: the composition root passes the SSRF-guarded
- * egress fetch (public https hosts plus the Tech Admin's internal allowlist);
+ * egress fetch (public https hosts plus the Tech admin's internal allowlist);
  * tests pass a stub. Adapters never call the global fetch.
  */
 export interface ChannelAdapterDeps {

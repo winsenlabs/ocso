@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { api } from './client';
 
 /**
- * CS Lead business analytics (apps/api analytics.controller.ts, packages/
+ * Lead business analytics (apps/api analytics.controller.ts, packages/
  * application/src/analytics/*). Every metric carries its formula in
  * `definition(s)`; the UI shows it next to the number (docs/11 §3).
  */

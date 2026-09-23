@@ -7,6 +7,7 @@ import { McpToolProviderFactory } from '@ocso/bootstrap';
 import { uuidv7 } from '@ocso/db';
 import { createTestDatabase, type TestDatabase } from '@ocso/db/testing';
 import { InMemorySecretRows, LocalSecretStore, parseMasterKey } from '@ocso/secrets';
+import { approveInDb } from './platform.js';
 
 /** The demo MCP server lives with @ocso/mcp's tests (outside this tsconfig's rootDir): load it at runtime. */
 interface DemoServer {
@@ -21,7 +22,7 @@ async function startDemo(auth: Record<string, unknown>): Promise<DemoServer> {
 }
 
 const TOKEN = 'runtime-factory-bearer-token-42';
-const admin: Principal = { userId: uuidv7(), role: 'PLATFORM_TECH_ADMIN', displayName: 'Admin', teamIds: [], via: 'UI' };
+const admin: Principal = { userId: uuidv7(), role: 'TECH', displayName: 'Admin', teamIds: [], via: 'UI' };
 const actor: ActorContext = { principal: admin, correlationId: 'test-factory' };
 const call = (claims?: string) => ({ toolCallId: uuidv7(), toolName: 'crm.get_customer', args: { cif: '88214' }, timeoutMs: 5_000, ...(claims ? { customerClaims: claims } : {}) });
 
@@ -35,7 +36,7 @@ const seenClaims: Array<string | undefined> = [];
 
 beforeAll(async () => {
   t = await createTestDatabase();
-  await t.pool.query(`INSERT INTO users (id, email, name, role) VALUES ($1, 'admin@x.test', 'Admin', 'PLATFORM_TECH_ADMIN')`, [admin.userId]);
+  await t.pool.query(`INSERT INTO users (id, email, name, role) VALUES ($1, 'admin@x.test', 'Admin', 'TECH')`, [admin.userId]);
   await t.pool.query(`UPDATE deployment_settings SET egress_allowed_internal_hosts = ARRAY['127.0.0.1']`);
   secrets = new LocalSecretStore(new InMemorySecretRows(), parseMasterKey('k1', randomBytes(32).toString('base64')));
   svc = new McpConnectionService({ db: t.db, secrets, publicUrl: 'http://localhost:3000' });
@@ -54,6 +55,8 @@ beforeAll(async () => {
   const tool = (await svc.listTools(actor, connectionId)).find((x) => x.name === 'crm.get_customer')!;
   await svc.classifyTools(actor, connectionId, { tools: [{ toolId: tool.id, riskClass: 'READ', approved: true }] });
   await svc.approve(actor, connectionId, { allowedAgentIds: '*', sendCustomerClaims: true });
+  // Going live is a second person's approval (deferred: the server is contacted again first).
+  await approveInDb(t.db, actor, { objectKind: 'mcp_connection', objectId: connectionId, action: 'ACTIVATE' }, { secrets });
   factory = new McpToolProviderFactory(t.db, secrets, new SettingsService(t.db), { settingsTtlMs: 0, closeGraceMs: 10 });
 });
 afterAll(async () => {
@@ -74,7 +77,8 @@ describe('McpToolProviderFactory', () => {
 
   it('rebuilds the provider when the connection changes (updatedAt) and drops claims for untrusted connections', async () => {
     const before = await factory.forConnection(connectionId);
-    await svc.approve(actor, connectionId, { allowedAgentIds: '*', sendCustomerClaims: false });
+    // A policy change of a live connection is an UPDATE proposal.
+    await approveInDb(t.db, actor, { objectKind: 'mcp_connection', objectId: connectionId, action: 'UPDATE', payload: { policy: { allowedAgentIds: '*', sendCustomerClaims: false } } }, { secrets });
     const after = await factory.forConnection(connectionId);
     expect(after).not.toBe(before);
     expect(await factory.forConnection(connectionId)).toBe(after);

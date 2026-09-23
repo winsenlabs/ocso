@@ -28,19 +28,19 @@ export async function EscalationTab({ data }: { data: AgentPageData }) {
       <SecHead
         title="Escalation rules"
         count={`${active} active`}
-        desc="evaluated in code on every turn · the prompt's Escalation component covers judgement calls"
+        desc="evaluated in code on every turn · new rules start as drafts; turning one on needs a checker's approval"
         actions={can.escalation ? <AddRuleButton agentId={agent.id} queues={options.queues} /> : null}
       />
       <DataTable
         label="Escalation rules"
         rows={rules}
         rowKey={(r) => r.id}
-        template={can.escalation ? 'minmax(0,1.6fr) 96px minmax(0,1fr) 64px 110px 60px 190px' : 'minmax(0,1.6fr) 96px minmax(0,1fr) 64px 110px 60px'}
+        template={can.escalation ? 'minmax(0,1.5fr) 96px minmax(0,1fr) 64px 100px 60px minmax(220px,1.2fr)' : 'minmax(0,1.6fr) 96px minmax(0,1fr) 64px 110px 60px'}
         empty={
           <EmptyState title="No escalation rules">
             {can.escalation
               ? 'Add a rule for handoffs that must always happen — a refund above an amount, hardship language, repeated tool failures.'
-              : 'A CS Lead adds rules for handoffs that must always happen.'}
+              : 'A Lead adds rules for handoffs that must always happen.'}
           </EmptyState>
         }
         columns={[
@@ -61,7 +61,7 @@ export async function EscalationTab({ data }: { data: AgentPageData }) {
           { key: 'target', header: 'Target', cell: (r) => <span className="mono-sm">{target(r)}</span> },
           { key: 'priority', header: 'Priority', cell: (r) => <StatusChip tone={priorityTone(r.priority)}>{r.priority}</StatusChip> },
           { key: 'scope', header: 'Scope', cell: (r) => <span className="mono-sm">{r.agentId ? 'this agent' : 'platform-wide'}</span> },
-          { key: 'state', header: 'State', cell: (r) => <StatusChip tone={r.enabled ? 'good' : 'muted'}>{r.enabled ? 'on' : 'off'}</StatusChip> },
+          { key: 'state', header: 'State', cell: (r) => <StatusChip tone={r.enabled ? 'good' : 'muted'}>{r.enabled ? 'on' : r.approval.approved ? 'off' : 'draft'}</StatusChip> },
           ...(can.escalation
             ? [
                 {

@@ -17,6 +17,9 @@ import { bumpGeneration } from '../cache/generations.js';
 import { emitEvent } from '../events/outbox.js';
 import type { ActorContext } from '../shared/context.js';
 import { markCorrectionsApplied } from '../quality/corrections-applied.js';
+import { assertChangeAllowed } from '../approvals/guard.js';
+import { promptVersionApproval } from './prompt-approval.js';
+import { lockAgentConfig } from './approval-lock.js';
 import { assertAgentManageable, assertAgentReadable } from './access.js';
 
 export const ComponentsInput = z.object(
@@ -81,6 +84,13 @@ export class PromptService {
     await assertAgentManageable(this.db, actor.principal!, agentId);
   }
 
+  /** 404 unless the caller may activate this agent's prompts and the version is the agent's. */
+  async assertVersionOf(actor: ActorContext, agentId: string, versionId: string): Promise<void> {
+    await this.canEdit(actor, Permission.PROMPTS_ACTIVATE, agentId);
+    const [version] = await this.db.select({ id: promptVersions.id }).from(promptVersions).where(and(eq(promptVersions.id, versionId), eq(promptVersions.agentId, agentId)));
+    if (!version) throw notFound('prompt_version', versionId);
+  }
+
   async versions(principal: Principal, agentId: string): Promise<PromptVersionRow[]> {
     await assertAgentReadable(this.db, principal, agentId);
     return this.db.select().from(promptVersions).where(eq(promptVersions.agentId, agentId)).orderBy(desc(promptVersions.version));
@@ -135,26 +145,21 @@ export class PromptService {
     await this.db.delete(promptDrafts).where(eq(promptDrafts.agentId, agentId));
   }
 
-  /** Activation (or rollback to an older version). Invalidates the agent's derived caches. */
+  /**
+   * Activation (or rollback to an older version). Invalidates the agent's derived caches.
+   * Once the agent has been approved, activating a prompt version is a proposal
+   * (kind prompt_version): this throws 409 approval_required and the controller submits it.
+   */
   async activate(actor: ActorContext, agentId: string, versionId: string): Promise<void> {
     await this.canEdit(actor, Permission.PROMPTS_ACTIVATE, agentId);
     await this.db.transaction(async (tx) => {
-      const [version] = await tx.select().from(promptVersions).where(and(eq(promptVersions.id, versionId), eq(promptVersions.agentId, agentId)));
+      const [version] = await tx.select({ id: promptVersions.id }).from(promptVersions).where(and(eq(promptVersions.id, versionId), eq(promptVersions.agentId, agentId)));
       if (!version) throw notFound('prompt_version', versionId);
-      const [agent] = await tx.select().from(virtualAgents).where(eq(virtualAgents.id, agentId)).for('update');
-      const previous = agent?.activePromptVersionId ?? null;
-      await tx.update(virtualAgents).set({ activePromptVersionId: versionId, updatedAt: new Date() }).where(eq(virtualAgents.id, agentId));
-      if (!version.firstActivatedAt) await tx.update(promptVersions).set({ firstActivatedAt: new Date() }).where(eq(promptVersions.id, versionId));
-      await recordAudit(tx, actor, {
-        action: 'prompt.activate',
-        targetType: 'agent',
-        targetId: agentId,
-        summary: `Activated prompt v${version.version} (${version.promptHash})`,
-        before: { activePromptVersionId: previous },
-        after: { activePromptVersionId: versionId },
-      });
-      await bumpGeneration(tx, actor.correlationId, `agent:${agentId}`, 'prompt_activated');
-      await emitEvent(tx, actor, 'config.changed', { area: 'prompt', entityId: versionId }, { agentId });
+      // The agent's configuration lock (shared with its proposals), then: no open proposal on the agent or any of
+      // its versions, and — once the agent is approved — a proposal is required.
+      await lockAgentConfig(tx, agentId);
+      await assertChangeAllowed(tx, promptVersionApproval, versionId, 'ACTIVATE');
+      await applyPromptActivation(tx, actor, agentId, versionId);
     });
   }
 
@@ -167,4 +172,24 @@ export class PromptService {
     const b = to.components as PromptComponents;
     return changedComponents(a, b).map((key) => ({ key, before: a[key] ?? '', after: b[key] ?? '' }));
   }
+}
+
+/** Make a version the agent's active prompt (direct for a draft agent, or the activation of an approved proposal). */
+export async function applyPromptActivation(tx: DbOrTx, actor: ActorContext, agentId: string, versionId: string): Promise<void> {
+  const [version] = await tx.select().from(promptVersions).where(and(eq(promptVersions.id, versionId), eq(promptVersions.agentId, agentId)));
+  if (!version) throw notFound('prompt_version', versionId);
+  const [agent] = await tx.select().from(virtualAgents).where(eq(virtualAgents.id, agentId)).for('update');
+  const previous = agent?.activePromptVersionId ?? null;
+  await tx.update(virtualAgents).set({ activePromptVersionId: versionId, updatedAt: new Date() }).where(eq(virtualAgents.id, agentId));
+  if (!version.firstActivatedAt) await tx.update(promptVersions).set({ firstActivatedAt: new Date() }).where(eq(promptVersions.id, versionId));
+  await recordAudit(tx, actor, {
+    action: 'prompt.activate',
+    targetType: 'agent',
+    targetId: agentId,
+    summary: `Activated prompt v${version.version} (${version.promptHash})`,
+    before: { activePromptVersionId: previous },
+    after: { activePromptVersionId: versionId },
+  });
+  await bumpGeneration(tx, actor.correlationId, `agent:${agentId}`, 'prompt_activated');
+  await emitEvent(tx, actor, 'config.changed', { area: 'prompt', entityId: versionId }, { agentId });
 }

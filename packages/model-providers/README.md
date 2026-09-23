@@ -72,7 +72,7 @@ const health = await adapter.health(model); // never throws
 | schema-invalid structured output | `provider_unavailable` / `model_structured_output_invalid` |
 | missing capability (image to a text model…) | `validation` / `model_capability_missing`, raised before any provider call |
 
-## Provider setup (what the Tech Admin enters)
+## Provider setup (what the Tech admin enters)
 
 Every provider also accepts two optional settings:
 

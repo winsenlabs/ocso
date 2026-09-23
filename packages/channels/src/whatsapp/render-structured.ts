@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import type { InteractionPart } from '@ocso/domain';
+import { choicesOf, type ChoicesData, type InteractionPart } from '@ocso/domain';
+import { renderChoicesAsText } from '../contract/choices.js';
 import { chunkText } from '../common/chunk.js';
 import { truncateWithEllipsis } from '../common/text.js';
 import {
@@ -8,6 +9,9 @@ import {
   WHATSAPP_INTERACTIVE_BODY_LIMIT,
   WHATSAPP_INTERACTIVE_FOOTER_LIMIT,
   WHATSAPP_INTERACTIVE_HEADER_LIMIT,
+  WHATSAPP_LIST_ROW_ID_LIMIT,
+  WHATSAPP_LIST_ROW_TITLE_LIMIT,
+  WHATSAPP_MAX_LIST_ROWS,
   WHATSAPP_MAX_REPLY_BUTTONS,
   WHATSAPP_TEXT_LIMIT,
 } from './capabilities.js';
@@ -77,7 +81,37 @@ function numberedList(data: ButtonsData): string {
   return [data.body, '', ...data.buttons.map((b, i) => `${i + 1}. ${b.title}`)].join('\n');
 }
 
+/** Opening button of a list message (Meta requires one; ≤ 20 characters). */
+export const LIST_BUTTON_TEXT = 'Choose';
+
+const distinct = (values: readonly string[]) => new Set(values.map((v) => v.toLowerCase())).size === values.length;
+
+/**
+ * CHOICES (PM/research/11 §5.4): ≤ 3 options → reply buttons, ≤ 10 → a list
+ * message, else numbered text. Titles are cut to Meta's limits; when cutting
+ * makes two titles equal, or an option id is too long, the numbered text is
+ * sent instead (the customer answers with a number or the label).
+ */
+function renderChoices(data: ChoicesData): WhatsAppOutboundPayload[] {
+  const body = plain(data.text, WHATSAPP_INTERACTIVE_BODY_LIMIT) ?? '…';
+  if (data.options.length <= WHATSAPP_MAX_REPLY_BUTTONS) {
+    const titles = data.options.map((o) => truncateWithEllipsis(o.label.trim(), WHATSAPP_BUTTON_TITLE_LIMIT));
+    if (distinct(titles) && data.options.every((o) => o.id.length <= WHATSAPP_BUTTON_ID_LIMIT)) {
+      return [{ type: 'interactive', interactive: { type: 'button', body: { text: body }, action: { buttons: data.options.map((o, i) => ({ type: 'reply' as const, reply: { id: o.id, title: titles[i]! } })) } } }];
+    }
+  }
+  if (data.options.length <= WHATSAPP_MAX_LIST_ROWS) {
+    const titles = data.options.map((o) => truncateWithEllipsis(o.label.trim(), WHATSAPP_LIST_ROW_TITLE_LIMIT));
+    if (distinct(titles) && data.options.every((o) => o.id.length <= WHATSAPP_LIST_ROW_ID_LIMIT)) {
+      return [{ type: 'interactive', interactive: { type: 'list', body: { text: body }, action: { button: LIST_BUTTON_TEXT, sections: [{ rows: data.options.map((o, i) => ({ id: o.id, title: titles[i]! })) }] } } }];
+    }
+  }
+  return textPayloads(renderChoicesAsText(data));
+}
+
 export function renderStructured(part: StructuredPart): WhatsAppOutboundPayload[] {
+  const choices = choicesOf(part);
+  if (choices) return renderChoices(choices);
   const buttons = part.schema === OUTBOUND_BUTTONS_SCHEMA ? ButtonsData.safeParse(part.data) : null;
   if (buttons?.success && canBeInteractive(buttons.data)) return [interactivePayload(buttons.data)];
   if (part.fallbackText?.trim()) return textPayloads(part.fallbackText);

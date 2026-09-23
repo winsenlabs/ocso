@@ -94,8 +94,8 @@ export function previewOf(template: MessageTemplate, values: Readonly<Record<str
 
 /** Error text for the picker when the list could not be used. */
 export function listProblemText(problem: { code: string; message: string }): string {
-  if (problem.code === 'templates_not_configured') return `${problem.message}. A Platform Tech Admin adds it under Connections → Channels.`;
-  if (problem.code === 'templates_auth_failed') return `${problem.message}. A Platform Tech Admin can check the credentials with Test on the channel.`;
+  if (problem.code === 'templates_not_configured') return `${problem.message}. A Tech admin adds it under Connections → Channels.`;
+  if (problem.code === 'templates_auth_failed') return `${problem.message}. A Tech admin can check the credentials with Test on the channel.`;
   return problem.message;
 }
 

@@ -8,7 +8,7 @@ import { jsonError } from './forward';
 /**
  * GET /api/internal-agent — what the Ask OCSO drawer needs when it opens:
  * whether a model profile is configured (deployment setting
- * `internalAgentProfileId`), the user's threads, and — for a Tech Admin when
+ * `internalAgentProfileId`), the user's threads, and — for a Tech admin when
  * nothing is configured yet — the profiles they can choose from.
  */
 export async function GET(): Promise<Response> {

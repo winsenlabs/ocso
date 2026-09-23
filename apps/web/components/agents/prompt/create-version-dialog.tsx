@@ -6,6 +6,7 @@ import { AlertBanner } from '@/components/ui/alert-banner';
 import { Modal } from '@/components/ui/modal';
 import { activateVersionAction, createVersionAction } from '@/lib/actions/agents';
 import { agentHref } from '../lib/tabs';
+import { useApprovalRequest } from '@/components/approvals/use-approval-request';
 import { useAgentAction } from '../shared/use-action';
 
 export interface StagedCorrection {
@@ -35,7 +36,10 @@ export function CreateVersionDialog({ agentId, nextVersion, changed, liveVersion
   const [picked, setPicked] = useState<string[]>(corrections.map((c) => c.id));
   const [created, setCreated] = useState<{ id: string; version: number } | null>(null);
   const [activated, setActivated] = useState(false);
-  const close = () => !action.pending && onClose();
+  // Once the agent is live configuration, activating is a prompt_version proposal (PM/research/11 §4).
+  const approval = useApprovalRequest();
+  const live = activated || approval.outcome === 'bootstrapped';
+  const close = () => !action.pending && !approval.pending && onClose();
 
   if (created) {
     return (
@@ -51,19 +55,30 @@ export function CreateVersionDialog({ agentId, nextVersion, changed, liveVersion
             </Link>
             <span className="sp" />
             <button type="button" className="btn" onClick={close} disabled={action.pending}>
-              {activated ? 'Close' : 'Later'}
+              {live ? 'Close' : 'Later'}
             </button>
-            {canActivate && !activated ? (
-              <button type="button" className="btn accent" disabled={action.pending} onClick={() => action.run(() => activateVersionAction(agentId, created.id), () => setActivated(true))}>
-                {action.pending ? 'Activating…' : `Activate v${created.version} now`}
+            {canActivate && !live ? (
+              <button
+                type="button"
+                className="btn accent"
+                disabled={approval.pending || Boolean(approval.notice)}
+                onClick={() =>
+                  approval.run({ objectKind: 'prompt_version', objectId: created.id, title: `Activate prompt v${created.version}` }, (choice) => activateVersionAction(agentId, created.id, choice), {
+                    onApplied: (proposed) => setActivated(proposed === null),
+                  })
+                }
+              >
+                {approval.pending ? 'Activating…' : `Activate v${created.version} now`}
               </button>
             ) : null}
           </>
         }
       >
-        {action.error ? <AlertBanner tone="error" style={{ margin: 0 }}>{action.error}</AlertBanner> : null}
-        <AlertBanner tone={activated ? 'info' : 'warn'} title={activated ? `v${created.version} is live` : 'Not live yet'} style={{ margin: 0 }}>
-          {activated
+        {action.error || approval.error ? <AlertBanner tone="error" style={{ margin: 0 }}>{action.error ?? approval.error}</AlertBanner> : null}
+        {approval.notice ? <AlertBanner style={{ margin: 0 }}>{approval.notice}</AlertBanner> : null}
+        {approval.modal}
+        <AlertBanner tone={live ? 'info' : 'warn'} title={live ? `v${created.version} is live` : 'Not live yet'} style={{ margin: 0 }}>
+          {live
             ? 'New conversations and turns use it now. You can roll back from Versions at any time.'
             : 'The live version is unchanged until someone with activation rights activates this one.'}
         </AlertBanner>

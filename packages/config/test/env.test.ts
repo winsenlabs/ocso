@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ApiEnv, WorkerEnv, assertDriverConfig, loadEnv, parseQueueUrls } from '../src/index.js';
+import { ApiEnv, WorkerEnv, assertAuthConfig, assertDriverConfig, loadEnv, parseQueueUrls } from '../src/index.js';
 
 const base = {
   DATABASE_URL: 'postgres://u:supersecretpw@db:5432/ocso',
@@ -40,6 +40,26 @@ describe('configuration', () => {
   it('refuses dev providers in production unless explicitly overridden', () => {
     const env = loadEnv(ApiEnv, { ...base, NODE_ENV: 'production', OCSO_ENABLE_DEV_PROVIDERS: 'true' });
     expect(() => assertDriverConfig(env)).toThrow(/OCSO_ENABLE_DEV_PROVIDERS/);
+  });
+
+  it('refuses skipping access approval in production; development may skip it', () => {
+    const secret = { BETTER_AUTH_SECRET: 's'.repeat(40) };
+    const prod = loadEnv(ApiEnv, { ...base, ...secret, NODE_ENV: 'production', OCSO_DEV_SKIP_ACCESS_APPROVAL: 'true' });
+    expect(() => assertAuthConfig(prod)).toThrow(/OCSO_DEV_SKIP_ACCESS_APPROVAL/);
+    expect(loadEnv(ApiEnv, base).OCSO_DEV_SKIP_ACCESS_APPROVAL).toBeUndefined();
+    expect(() => assertAuthConfig(loadEnv(ApiEnv, { ...base, NODE_ENV: 'test', OCSO_DEV_SKIP_ACCESS_APPROVAL: 'true' }))).not.toThrow();
+  });
+
+  it('accepts skipping access approval only when NODE_ENV is set explicitly (it defaults to development)', () => {
+    const saved = process.env['NODE_ENV'];
+    delete process.env['NODE_ENV'];
+    try {
+      const env = loadEnv(ApiEnv, { ...base, OCSO_DEV_SKIP_ACCESS_APPROVAL: 'true' });
+      expect(env.NODE_ENV).toBe('development');
+      expect(() => assertAuthConfig(env)).toThrow(/NODE_ENV set explicitly/);
+    } finally {
+      process.env['NODE_ENV'] = saved;
+    }
   });
 
   it('parses SQS topic URL pairs', () => {

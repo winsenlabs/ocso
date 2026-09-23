@@ -29,7 +29,7 @@ and keep external implementations behind adapters ([§4](../99-BUILD-RULES.md#4-
   and alert destination kinds are strings, and API input is validated against the registry, never
   against a hard-coded list. The `kind` columns are `text`, so a new kind needs no migration.
   Infrastructure drivers are registries too: `EMAIL_DRIVER`, `BLOB_DRIVER`, `SECRETS_DRIVER`,
-  `QUEUE_DRIVER` and `DEPLOYMENT_DRIVER` name a registered driver, and an unknown name fails start-up
+  `QUEUE_DRIVER`, `DEPLOYMENT_DRIVER` and `AUDIT_DRIVER` name a registered driver, and an unknown name fails start-up
   with the list of registered ones.
 - **Per-kind knowledge lives in the plugin.** Labels, marks, setup steps, form schemas, caching wording,
   catalog mapping, public paths and capabilities are part of the adapter, descriptor or definition.
@@ -37,7 +37,7 @@ and keep external implementations behind adapters ([§4](../99-BUILD-RULES.md#4-
   `GET /v1/model-providers/kinds`, `GET /v1/notification-destinations/kinds`) and renders a kind it has
   never seen with generic defaults.
 - **Kinds are code, instances are configuration.** A kind (say, WhatsApp via Twilio) is compiled in.
-  An instance of it (your WhatsApp number, with its credentials) is created by a Platform Tech Admin
+  An instance of it (your WhatsApp number, with its credentials) is created by a Tech admin
   in the web app, stored in PostgreSQL, and its secrets go to the SecretStore.
 - **Two extension points need no code at all.** Any MCP server can be connected at runtime from the
   web app ([tools-and-mcp.md](tools-and-mcp.md)), and OIDC or SAML identity providers are added the
@@ -82,7 +82,7 @@ built from the same plugins. Plugin names must be unique, and a registry refuses
 | [Tools (built-in and MCP)](tools-and-mcp.md) | `ToolProviderSource`, `ToolProvider` (`packages/tools/src/registry.ts`, `provider.ts`); any MCP server over Streamable HTTP | Built-in OCSO tools (`@ocso/agent-runtime`), `McpToolProvider` connections (`@ocso/mcp`, added in the web app) | One authorization and `tool_calls` audit path for every call, discovery, OAuth 2.1 or static-header auth, risk classification and approval, human confirmation, SSRF-guarded egress, health checks |
 | [Alert destinations](alerts.md#delivery-destinations) | `AlertDeliveryAdapter` (`packages/alerts/src/contract.ts`) | In-app, email, Slack, Microsoft Teams, signed webhook, PagerDuty | Dispatch per lifecycle event, retries with backoff, encrypted secrets, test button, form from the adapter's schema |
 | [Email drivers](email.md) | `EmailDriverDefinition`, `EmailSender` (`packages/email/src/contract.ts`) | Resend, SMTP, log (development) | Typed templates, start-up validation, secret files, Settings → Email status and test button |
-| [Infrastructure drivers](infrastructure-drivers.md) | `BlobDriverDefinition`, `SecretStoreDriverDefinition`, `QueueDriverDefinition`, `DeploymentDriverDefinition` | Local volume or S3; local (AES-256-GCM) or AWS Secrets Manager; PostgreSQL or SQS; Compose or ECS | Selection by one environment variable each, start-up check listing every problem; no product code branches on the driver |
+| [Infrastructure drivers](infrastructure-drivers.md) | `BlobDriverDefinition`, `SecretStoreDriverDefinition`, `QueueDriverDefinition`, `DeploymentDriverDefinition`, `AuditStoreDriverDefinition` | Local volume or S3; local (AES-256-GCM) or AWS Secrets Manager; PostgreSQL or SQS; Compose or ECS; audit store on PostgreSQL or ClickHouse | Selection by one environment variable each, start-up check listing every problem; no product code branches on the driver |
 | [Alert conditions](alerts.md#rule-conditions-evaluators) | `EvaluatorDefinition` (`packages/application/src/alerts/evaluators/contract.ts`) | Technical and business conditions: worker floor, queue age, provider errors, latency, token and cost spikes, SLA breaches, escalation rate, CSAT and more | Scheduling, fingerprint dedupe, open/acknowledged/resolved lifecycle, params validation, rule form from JSON Schema |
 | [Scheduled tasks](scheduled-tasks.md) | `ScheduledTask` (`apps/worker/src/scheduler/scheduler.service.ts`) | Lease recovery, SLA and offer expiry, auto-assign, alert evaluation, MCP health, retention and more | Leader election across workers, per-task interval, error isolation |
 | [Ask OCSO tools](internal-agent-tools.md) | `InternalTool` (`packages/internal-agent/src/contract.ts`) | 12 read and write tools | Per-user tool filtering by permission, re-authorization on every call, confirmation cards for writes, audit |
@@ -183,7 +183,7 @@ above. To propose one, open a "New plugin proposal" issue.
 - [tools-and-mcp.md](tools-and-mcp.md): built-in tools, MCP tool servers and the tool authorization path
 - [alerts.md](alerts.md): alert delivery destinations and rule conditions
 - [email.md](email.md): email drivers
-- [infrastructure-drivers.md](infrastructure-drivers.md): blob storage, secret store, queue, deployment
+- [infrastructure-drivers.md](infrastructure-drivers.md): blob storage, secret store, queue, deployment, audit store
 - [scheduled-tasks.md](scheduled-tasks.md): leader-only periodic work in the worker
 - [internal-agent-tools.md](internal-agent-tools.md): tools for Ask OCSO
 - [sign-in-and-sso.md](sign-in-and-sso.md): Better Auth sign-in methods and identity providers

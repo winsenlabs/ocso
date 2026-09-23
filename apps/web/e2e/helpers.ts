@@ -16,7 +16,7 @@ export async function login(page: Page, account: Account, landing = '/'): Promis
 }
 
 export async function logout(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Sign out' }).click();
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await page.waitForURL((url) => url.pathname === '/login');
   // The URL changes before the sign-in page replaces the previous one.
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();

@@ -41,7 +41,7 @@ afterAll(async () => {
 async function rule(condition: string, params: Record<string, unknown> = {}, extra: Partial<AlertRuleRow> = {}): Promise<AlertRuleRow> {
   const [row] = await t.db
     .insert(alertRules)
-    .values({ id: uuidv7(), name: condition, kind: 'TECHNICAL', condition, params, audienceRoles: ['PLATFORM_TECH_ADMIN'], windowSeconds: 300, ...extra })
+    .values({ id: uuidv7(), name: condition, kind: 'TECHNICAL', condition, params, audienceRoles: ['TECH'], windowSeconds: 300, ...extra })
     .returning();
   return row!;
 }

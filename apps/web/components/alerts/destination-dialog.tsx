@@ -4,11 +4,12 @@ import { useRouter } from 'next/navigation';
 import { useMemo, useState, useTransition } from 'react';
 import { AlertBanner } from '@/components/ui/alert-banner';
 import { Modal } from '@/components/ui/modal';
-import { createDestinationAction, deleteDestinationAction, updateDestinationAction } from '@/lib/actions/alerts';
+import { useApprovalRequest } from '@/components/approvals/use-approval-request';
+import { DeleteByApproval } from '@/components/connections/lifecycle-actions';
+import { createDestinationAction, updateDestinationAction } from '@/lib/actions/alerts';
 import type { DestinationKindInfo, NotificationDestination } from '@/lib/api/alerts';
 import { SettingsFields } from '../connections/channels/settings-fields';
 import type { FormValues } from '../workspace/lib/schema-form';
-import { ConfirmButton } from './confirm-button';
 import { activeVariant, buildDestinationConfig, configForm, initialConfigValues, receivesText, secretApplies } from './destination-form';
 
 interface Props {
@@ -32,9 +33,9 @@ export function DestinationDialog({ destination, kinds, closeHref }: Props) {
   const [values, setValues] = useState<FormValues>(() => initialConfigValues(form, destination?.config ?? null));
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [secret, setSecret] = useState('');
-  const [enabled, setEnabled] = useState(destination?.enabled ?? true);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const approval = useApprovalRequest();
   const variant = activeVariant(form, values);
   const hasFields = variant.group.fields.length > 0 || variant.group.groups.length > 0;
   const showSecret = secretApplies(info?.secret ?? null, values);
@@ -45,9 +46,16 @@ export function DestinationDialog({ destination, kinds, closeHref }: Props) {
     const built = buildDestinationConfig(form, values);
     setFieldErrors(built.errors);
     if (Object.keys(built.errors).length) return;
-    const body = { name, config: built.config, enabled, ...(secret && showSecret ? { secret } : {}) };
+    const body = { name, config: built.config, ...(secret && showSecret ? { secret } : {}) };
+    if (destination) {
+      // A draft saves directly; an approved destination asks for a checker (a new secret travels as a ref).
+      approval.run({ objectKind: 'notification_destination', objectId: destination.id, title: `Change destination ${destination.name}` }, (choice) => updateDestinationAction(destination.id, body, choice), {
+        onApplied: () => close(),
+      });
+      return;
+    }
     start(async () => {
-      const r = destination ? await updateDestinationAction(destination.id, body) : await createDestinationAction({ ...body, kind });
+      const r = await createDestinationAction({ ...body, kind });
       if (r.ok) close();
       else setError(r.message);
     });
@@ -62,9 +70,13 @@ export function DestinationDialog({ destination, kinds, closeHref }: Props) {
       footer={
         <>
           {destination ? (
-            <ConfirmButton label="Delete destination" confirmLabel="Delete" run={() => deleteDestinationAction(destination.id)} onDone={close}>
-              Rules stop delivering here and its stored secret is deleted.
-            </ConfirmButton>
+            <DeleteByApproval
+              kind="notification_destination"
+              id={destination.id}
+              name={destination.name}
+              buttonClass="btn danger"
+              detail="Once a second person approves, rules stop delivering here and its stored secret is deleted."
+            />
           ) : null}
           <span className="sp" />
           <button type="button" className="btn" onClick={close}>
@@ -151,10 +163,9 @@ export function DestinationDialog({ destination, kinds, closeHref }: Props) {
             </span>
           </div>
         ) : null}
-        <label className="toggle-row">
-          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
-          Enabled — disabled destinations receive nothing
-        </label>
+        {destination ? null : <span className="hint">A new destination is a disabled draft: enable it from its row once saved (a second person approves).</span>}
+        {approval.error || approval.notice ? <span className={approval.error ? 'err-text' : 'mono-sm'}>{approval.error ?? approval.notice}</span> : null}
+        {approval.modal}
       </form>
     </Modal>
   );

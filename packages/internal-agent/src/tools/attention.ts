@@ -42,7 +42,7 @@ async function conversationItems(ctx: ToolContext) {
     ...waiting.items.map((c) => ({
       kind: 'waiting_for_human',
       title: `${c.customer.name ?? 'Customer'} waiting for a human`,
-      detail: `${c.agent.name} · ${c.queue?.name ?? 'no queue'}${breached(c.slaDueAt) ? ' · SLA breached' : ''}`,
+      detail: `${c.agent?.name ?? 'routing'} · ${c.queue?.name ?? 'no queue'}${breached(c.slaDueAt) ? ' · SLA breached' : ''}`,
       urgency: breached(c.slaDueAt) ? 100 : c.priority === 'P1' ? 80 : 60,
       link: { label: `${c.customer.name ?? 'Customer'} · ${c.displayId}`, detail: c.lastPreview ?? undefined, href: `/conversations/${c.id}`, status: breached(c.slaDueAt) ? ('danger' as const) : ('warn' as const) },
     })),
@@ -51,7 +51,7 @@ async function conversationItems(ctx: ToolContext) {
       .map((c) => ({
         kind: 'assigned_to_me',
         title: `${c.customer.name ?? 'Customer'} is yours`,
-        detail: `${c.agent.name}${c.slaDueAt ? ` · SLA due ${c.slaDueAt}` : ''}`,
+        detail: `${c.agent?.name ?? 'routing'}${c.slaDueAt ? ` · SLA due ${c.slaDueAt}` : ''}`,
         urgency: breached(c.slaDueAt) ? 90 : 40,
         link: { label: `${c.customer.name ?? 'Customer'} · ${c.displayId}`, href: `/conversations/${c.id}` },
       })),
@@ -59,7 +59,7 @@ async function conversationItems(ctx: ToolContext) {
 }
 
 async function businessItems(ctx: ToolContext) {
-  // Agents in the user's scope only (a CS Lead: their teams' agents, ADR-026).
+  // Agents in the user's scope only (a Lead: their teams' agents, ADR-026).
   const [stats, agents, queues] = await Promise.all([agentSummaries(ctx.db, 7), new AgentService(ctx.db).list(ctx.principal), new QueueService(ctx.db).list()]);
   const out = [];
   for (const a of agents) {

@@ -7,7 +7,7 @@ export { checkProfileTargets, modelFacts, type ModelFacts, type ProfilePolicyChe
 export { modelUsageStats, type ModelUsageStats } from './usage-stats.js';
 export type { ProfileAgentRef, ProviderProfileRef } from './references.js';
 export type { ProfileFallbackView, ProfileRow, ProfileTargetView, ProfileView, ProviderKindView, ProviderPolicyView, ProviderView } from './views.js';
-export { ProviderService, type ModelAdminDeps } from './provider-service.js';
+export { ProviderService, type ModelAdminDeps, type ProviderEdit } from './provider-service.js';
 export { ProfileService, type ProfileSaveResult, type ProfileServiceDeps } from './profile-service.js';
 export { PricingService, findPrice, loadPricing, type PricingRow, type PricingServiceDeps } from './pricing-service.js';
 export { ModelListService, type AdapterLookup, type ConfiguredPrice, type ModelListServiceDeps, type ModelListView, type ModelOption } from './model-list-service.js';
@@ -30,3 +30,6 @@ export {
   type CatalogPriceSync,
   type PriceCheck,
 } from './catalog/catalog-prices.js';
+export { ProviderChange, providerApproval, type ProviderApprovalDeps } from './provider-approval.js';
+export { profileApproval, profilesInUse } from './profile-approval.js';
+export { pricingApproval, pricingGoverned } from './pricing-approval.js';

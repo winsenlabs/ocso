@@ -124,7 +124,7 @@ export function queueAgeAlarmPlan(args: {
     warnings: [],
     input: {
       AlarmName: name,
-      AlarmDescription: 'Oldest waiting conversation turn is older than the Tech Admin queue-age threshold: step-scale workers out. Managed by the OCSO worker deployment adapter (ADR-023).',
+      AlarmDescription: 'Oldest waiting conversation turn is older than the Tech admin queue-age threshold: step-scale workers out. Managed by the OCSO worker deployment adapter (ADR-023).',
       Namespace: args.metrics.namespace,
       MetricName: METRIC.OLDEST_QUEUE_AGE,
       Dimensions: [{ Name: METRIC_DIMENSION_NAME, Value: args.metrics.dimensionValue }],

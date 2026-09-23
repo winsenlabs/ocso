@@ -13,8 +13,8 @@ export type AgentOwnersInput = z.infer<typeof AgentOwnersInput>;
 
 /**
  * Who may set which owning teams (ADR-026):
- * - agents.assign_owner (Platform Tech Admin, governance): any existing teams.
- * - agents.manage (CS Lead who is a member of an owning team): may add or
+ * - agents.assign_owner (Tech admin, governance): any existing teams.
+ * - agents.manage (Lead who is a member of an owning team): may add or
  *   remove only teams they belong to; owning teams they are not in stay as
  *   they are. Handing an agent off (removing every team of theirs) is allowed
  *   only while another team still owns it — they lose access afterwards.
@@ -82,7 +82,7 @@ export async function replaceOwners(
     action: 'agent.owners_change',
     targetType: 'agent',
     targetId: agent.id,
-    summary: `Owning teams of ${agent.name}: ${label(before)} → ${label(after)}${authority === 'ASSIGN_ANY' ? ' (reassigned by Tech Admin)' : ''}`,
+    summary: `Owning teams of ${agent.name}: ${label(before)} → ${label(after)}${authority === 'ASSIGN_ANY' ? ' (reassigned by Tech admin)' : ''}`,
     before: { teamIds: before },
     after: { teamIds: after },
   });

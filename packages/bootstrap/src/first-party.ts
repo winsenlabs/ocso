@@ -1,5 +1,6 @@
 import { createBuiltinToolSource } from '@ocso/agent-runtime';
 import { createEmailAdapter, createInAppAdapter, createPagerDutyAdapter, createSlackAdapter, createTeamsAdapter, createWebhookAdapter } from '@ocso/alerts';
+import { AUDIT_STORE_DRIVERS } from '@ocso/audit-store';
 import { createTwilioWhatsAppAdapter, createWebChatAdapter, createWhatsAppAdapter } from '@ocso/channels';
 import { EMAIL_DRIVERS } from '@ocso/email';
 import { FIRST_PARTY_PROVIDERS } from '@ocso/model-providers';
@@ -42,4 +43,5 @@ export const FIRST_PARTY_PLUGINS: readonly OcsoPlugin[] = [
   { name: '@ocso/secrets', secretsDrivers: [localSecretsDriver, awsSecretsDriver] },
   { name: '@ocso/queue', queueDrivers: [postgresQueueDriver, sqsQueueDriver] },
   { name: '@ocso/deployment', deploymentDrivers: [composeDeploymentDriver, ecsDeploymentDriver] },
+  { name: '@ocso/audit-store', auditStoreDrivers: AUDIT_STORE_DRIVERS },
 ];

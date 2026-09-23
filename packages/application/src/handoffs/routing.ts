@@ -1,6 +1,8 @@
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { pickupDueAt, resolutionDueAt, selectAssignee, type ConversationType, type ExecCandidate, type Priority, type SlaPolicy } from '@ocso/domain';
+import { Permission } from '@ocso/auth';
 import { assignments, conversations, queueTeams, queues, slaPolicies, teamMembers, users, type DbOrTx } from '@ocso/db';
+import { holdsPermissionSql } from '../identity/permissions/state.js';
 
 export type QueueRow = typeof queues.$inferSelect;
 
@@ -35,7 +37,7 @@ export async function resolutionDueFor(tx: DbOrTx, queue: QueueRow | null, type:
 }
 
 /**
- * Eligible CS Exec candidates for a queue with live workload counts
+ * Eligible Service member candidates for a queue with live workload counts
  * (docs/09 §3). Workload = open conversations currently assigned.
  */
 export async function queueCandidates(tx: DbOrTx, queueId: string): Promise<ExecCandidate[]> {
@@ -55,7 +57,8 @@ export async function queueCandidates(tx: DbOrTx, queueId: string): Promise<Exec
     })
     .from(users)
     .innerJoin(teamMembers, eq(teamMembers.userId, users.id))
-    .where(and(inArray(teamMembers.teamId, teamIds), eq(users.status, 'ACTIVE'), inArray(users.role, ['CS_EXEC', 'CS_LEAD'])))
+    // Effective permissions, not presets: a revoke of conversations.read / reply stops new assignments at once.
+    .where(and(inArray(teamMembers.teamId, teamIds), eq(users.status, 'ACTIVE'), holdsPermissionSql(Permission.CONVERSATIONS_READ), holdsPermissionSql(Permission.CONVERSATIONS_REPLY)))
     .groupBy(users.id);
   return rows.map((r) => ({
     userId: r.id,

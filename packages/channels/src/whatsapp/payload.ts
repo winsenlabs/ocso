@@ -6,6 +6,9 @@ import {
   WHATSAPP_INTERACTIVE_BODY_LIMIT,
   WHATSAPP_INTERACTIVE_FOOTER_LIMIT,
   WHATSAPP_INTERACTIVE_HEADER_LIMIT,
+  WHATSAPP_LIST_ROW_ID_LIMIT,
+  WHATSAPP_LIST_ROW_TITLE_LIMIT,
+  WHATSAPP_MAX_LIST_ROWS,
   WHATSAPP_MAX_REPLY_BUTTONS,
   WHATSAPP_TEXT_LIMIT,
 } from './capabilities.js';
@@ -61,6 +64,25 @@ const ReplyButtons = z.object({
   }),
 });
 
+/** Interactive list message (one section of rows) — CHOICES with 4–10 options. */
+const ListMessage = z.object({
+  type: z.literal('list'),
+  body: z.object({ text: z.string().min(1).max(WHATSAPP_INTERACTIVE_BODY_LIMIT) }),
+  action: z.object({
+    button: z.string().min(1).max(WHATSAPP_BUTTON_TITLE_LIMIT),
+    sections: z
+      .array(
+        z.object({
+          rows: z
+            .array(z.object({ id: z.string().min(1).max(WHATSAPP_LIST_ROW_ID_LIMIT), title: z.string().min(1).max(WHATSAPP_LIST_ROW_TITLE_LIMIT) }))
+            .min(1)
+            .max(WHATSAPP_MAX_LIST_ROWS),
+        }),
+      )
+      .length(1),
+  }),
+});
+
 export const WhatsAppOutboundPayload = z.discriminatedUnion('type', [
   z.object({ type: z.literal('text'), body: z.string().min(1).max(WHATSAPP_TEXT_LIMIT), previewUrl: z.boolean() }),
   z.object({
@@ -79,7 +101,7 @@ export const WhatsAppOutboundPayload = z.discriminatedUnion('type', [
     address: z.string().max(1_000).optional(),
   }),
   z.object({ type: z.literal('contacts'), contacts: z.array(MetaContact).min(1).max(20) }),
-  z.object({ type: z.literal('interactive'), interactive: ReplyButtons }),
+  z.object({ type: z.literal('interactive'), interactive: z.discriminatedUnion('type', [ReplyButtons, ListMessage]) }),
   z.object({ type: z.literal('template'), template: WhatsAppTemplate }),
 ]);
 export type WhatsAppOutboundPayload = z.infer<typeof WhatsAppOutboundPayload>;

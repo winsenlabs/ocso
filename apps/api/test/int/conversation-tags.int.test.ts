@@ -33,15 +33,15 @@ beforeAll(async () => {
   admin = await completeSetup(h);
   const mk = async (email: string, role: string, extra: Record<string, unknown> = {}) =>
     (await h.http().post('/v1/users').set(auth(admin)).send({ email, name: email.split('@')[0], role, password: PASSWORD, ...extra }).expect(201)).body.id as string;
-  ids.lead = await mk('lead@ocso.test', 'CS_LEAD');
+  ids.lead = await mk('lead@ocso.test', 'HEAD');
   lead = await h.loginAs('lead@ocso.test', PASSWORD);
   ids.team = (await h.http().post('/v1/teams').set(auth(lead)).send({ name: 'Cards' }).expect(201)).body.id;
   ids.otherTeam = (await h.http().post('/v1/teams').set(auth(lead)).send({ name: 'Loans' }).expect(201)).body.id;
   // The lead joins Cards, the team that owns Maya (ADR-026).
   await setTeams(h, admin, ids.lead!, [ids.team!]);
-  ids.exec = await mk('exec@ocso.test', 'CS_EXEC', { teamIds: [ids.team] });
+  ids.exec = await mk('exec@ocso.test', 'SERVICE', { teamIds: [ids.team] });
   exec = await h.loginAs('exec@ocso.test', PASSWORD);
-  await mk('outsider@ocso.test', 'CS_EXEC', { teamIds: [ids.otherTeam] });
+  await mk('outsider@ocso.test', 'SERVICE', { teamIds: [ids.otherTeam] });
   outsider = await h.loginAs('outsider@ocso.test', PASSWORD);
   ids.queue = (await h.http().post('/v1/queues').set(auth(lead)).send({ name: 'Cards · Tier 2', teamIds: [ids.team] }).expect(201)).body.id;
   ids.provider = uuidv7();
@@ -110,7 +110,7 @@ describe('PUT /v1/conversations/:id/tags', () => {
     expect(again).toHaveLength(audits.length);
   });
 
-  it('denies an exec without access to the conversation, and the Tech Admin', async () => {
+  it('denies an exec without access to the conversation, and the Tech admin', async () => {
     await h.http().put(`/v1/conversations/${ids.mine}/tags`).set(auth(outsider)).send({ tags: ['spam'] }).expect(403);
     await h.http().put(`/v1/conversations/${ids.hidden}/tags`).set(auth(exec)).send({ tags: ['spam'] }).expect(403);
     await h.http().put(`/v1/conversations/${ids.mine}/tags`).set(auth(admin)).send({ tags: ['spam'] }).expect(403);

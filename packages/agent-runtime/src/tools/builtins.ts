@@ -3,6 +3,7 @@ import type { ToolResultOutput, ToolSpec } from '@ocso/domain';
 import { conversations, interactions, type DbOrTx } from '@ocso/db';
 import { ToolProviderRegistry, type FirstPartyTool, type HandoffRequest, type ToolInvocation, type ToolOutcome, type ToolProvider, type ToolProviderSource } from '@ocso/tools';
 import { z } from 'zod';
+import { TRANSFER_TOOL, TRANSFER_TOOL_DEFINITION, runTransferTool } from './transfer-tool.js';
 
 export const HANDOFF_TOOL = 'ocso_request_handoff';
 export const SEARCH_HISTORY_TOOL = 'ocso_search_history';
@@ -55,6 +56,8 @@ export const BUILTIN_TOOLS: readonly FirstPartyTool[] = [
       additionalProperties: false,
     },
   },
+  // Added to a conversation's catalog only when its queue has transfer targets (context builder).
+  TRANSFER_TOOL_DEFINITION,
 ];
 
 /** Model-facing definitions of the built-ins. */
@@ -79,6 +82,7 @@ export function createBuiltinToolSource(db: DbOrTx): ToolProviderSource {
         output: { type: 'json', value: { status: 'handoff_requested', instruction: 'Tell the customer a colleague will continue here shortly. Do not promise a time.' } },
       };
     },
+    [TRANSFER_TOOL]: (call) => runTransferTool(db, call),
     [SEARCH_HISTORY_TOOL]: async (call) => {
       if (!call.scope) return { status: 'FAILED', errorCategory: 'internal', message: 'History search needs a conversation' };
       const output = await searchHistory(db, call.scope.customerId, { conversationId: call.scope.conversationId, seq: call.scope.historyWindowStartSeq }, call.args);

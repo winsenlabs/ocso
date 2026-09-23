@@ -6,6 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { expect, test, type APIRequestContext } from '@playwright/test';
 import { ACCOUNTS, E2E, apiUrl } from './config';
 import { login, logout } from './helpers';
+import { routeChannelToAgent } from './routing';
+import { goLiveApproved } from './approval-setup';
+import { approveOver, approvedChannel, approvedProfile, approvedProvider } from './platform-setup';
 
 /**
  * CS workspace (design/01) end to end against the real API + worker:
@@ -23,6 +26,7 @@ const EXEC = { name: 'Esha Exec', email: 'ws.exec@e2e.ocso.test', password: 'cor
 const MCP_PORT = E2E.apiPort + 2;
 
 let api: APIRequestContext;
+let checker: { checkerId: string; checkerToken: string };
 let mcp: ChildProcess | null = null;
 const tok: Record<'admin' | 'lead' | 'exec', string> = { admin: '', lead: '', exec: '' };
 const ids = { team: '', queue: '', provider: '', profile: '', agent: '', webchatKey: '', visitor: '', conversation: '' };
@@ -64,30 +68,32 @@ test.beforeAll(async ({ playwright }) => {
     await call('POST', '/v1/setup', null, { setupToken: E2E.setupToken, orgName: 'E2E Bank', adminName: ACCOUNTS.admin.name, adminEmail: ACCOUNTS.admin.email, adminPassword: ACCOUNTS.admin.password, timezone: 'Asia/Kolkata' });
   }
   tok.admin = await loginApi(ACCOUNTS.admin.email, ACCOUNTS.admin.password);
-  const lead = await call<{ id: string }>('POST', '/v1/users', tok.admin, { name: LEAD.name, email: LEAD.email, role: 'CS_LEAD', password: LEAD.password, teamIds: [], languages: [], maxConcurrent: 5 });
+  const lead = await call<{ id: string }>('POST', '/v1/users', tok.admin, { name: LEAD.name, email: LEAD.email, role: 'HEAD', password: LEAD.password, teamIds: [], languages: [], maxConcurrent: 5 });
   tok.lead = await loginApi(LEAD.email, LEAD.password);
   ids.team = (await call<{ id: string }>('POST', '/v1/teams', tok.lead, { name: 'WS Cards & EMI' })).id;
   // The lead manages the agent through an owning team of their own, outside the queue's team (ADR-026).
   const owners = (await call<{ id: string }>('POST', '/v1/teams', tok.lead, { name: 'WS Agent owners' })).id;
   await call('PATCH', `/v1/users/${lead.id}`, tok.admin, { teamIds: [owners] });
-  // The exec's team is not one of the lead's, so the Tech Admin creates them (a lead creates execs only into their own teams).
-  await call('POST', '/v1/users', tok.admin, { name: EXEC.name, email: EXEC.email, role: 'CS_EXEC', password: EXEC.password, teamIds: [ids.team], languages: [], maxConcurrent: 5 });
+  // The exec's team is not one of the lead's, so the Tech admin creates them (a lead creates execs only into their own teams).
+  await call('POST', '/v1/users', tok.admin, { name: EXEC.name, email: EXEC.email, role: 'SERVICE', password: EXEC.password, teamIds: [ids.team], languages: [], maxConcurrent: 5 });
   tok.exec = await loginApi(EXEC.email, EXEC.password);
   ids.queue = (await call<{ id: string }>('POST', '/v1/queues', tok.lead, { name: 'WS Cards & EMI · Tier 2', teamIds: [ids.team] })).id;
 
   // Deterministic development model (ADR-015) behind a real provider/profile.
-  ids.provider = (await call<{ id: string }>('POST', '/v1/model-providers', tok.admin, { kind: 'DEV_SCRIPTED', name: 'WS Scripted', settings: { latencyMs: 50, chunkDelayMs: 15 } })).id;
-  ids.profile = (await call<{ id: string }>('POST', '/v1/model-profiles', tok.admin, { name: 'ws-support', providerId: ids.provider, model: 'scripted-1', retries: 0 })).id;
+  // Platform objects start as drafts: a Head approves enabling the provider and activating the channel (PM/research/11 §4).
+  ids.provider = await approvedProvider(api, tok.admin, { id: lead.id, token: tok.lead }, { kind: 'DEV_SCRIPTED', name: 'WS Scripted', settings: { latencyMs: 50, chunkDelayMs: 15 } });
+  ids.profile = await approvedProfile(api, tok.admin, { id: lead.id, token: tok.lead }, { name: 'ws-support', providerId: ids.provider, model: 'scripted-1', retries: 0 });
   ids.agent = (await call<{ id: string }>('POST', '/v1/agents', tok.lead, { name: 'Maya', slug: 'maya-ws', purpose: 'customer support', conversationType: 'SUPPORT', modelProfileId: ids.profile, defaultQueueId: ids.queue, teamIds: [owners] })).id;
-  await call('POST', `/v1/agents/${ids.agent}/status`, tok.lead, { status: 'LIVE' });
-  const channel = await call<{ publicKey: string }>('POST', '/v1/channels', tok.admin, {
+  // Going live is a maker–checker approval (PM/research/11 §4): a second Head of the owning team checks it.
+  checker = await goLiveApproved(api, { adminToken: tok.admin, makerToken: tok.lead, agentId: ids.agent, ownerTeamId: owners, checker: { name: 'WS Checker', email: 'ws.checker@e2e.ocso.test', password: 'correct-horse-battery-wschecker' } });
+  const channel = await approvedChannel<{ id: string; publicKey: string }>(api, tok.admin, { id: lead.id, token: tok.lead }, {
     kind: 'WEBCHAT',
     name: 'WS Web chat',
-    status: 'ACTIVE',
-    defaultAgentId: ids.agent,
     secrets: { visitorTokenSecret: randomBytes(32).toString('hex') },
   });
   ids.webchatKey = channel.publicKey;
+  // channel → pass-through router → Maya's queue (PM/research/11 §5).
+  routeChannelToAgent({ channelId: channel.id, agentId: ids.agent, queueId: ids.queue, name: 'WS Web chat' });
 });
 
 test.afterAll(async () => {
@@ -104,7 +110,7 @@ test('a web-chat customer reaches the AI, then asks for a human', async () => {
   await waitForState(ids.conversation, 'WAITING_FOR_HUMAN');
 });
 
-test('Tech Admin gets a clean forbidden state instead of conversation content', async ({ page }) => {
+test('Tech admin gets a clean forbidden state instead of conversation content', async ({ page }) => {
   await login(page, ACCOUNTS.admin);
   await page.goto(`/conversations/${ids.conversation}`);
   await expect(page.getByRole('heading', { name: 'Conversations' })).toBeVisible();
@@ -282,16 +288,25 @@ test('a sensitive action the AI proposed is confirmed from the timeline', async 
   mcp = startMeridianDemo();
   await expect.poll(async () => (await fetch(`http://127.0.0.1:${MCP_PORT}/healthz`).then((r) => r.status).catch(() => 0)), { timeout: 20_000 }).toBe(200);
 
-  // Tech Admin connects the external MCP server and classifies the policy search as sensitive.
-  await call('PATCH', '/v1/settings/deployment', tok.admin, { egressAllowedInternalHosts: ['127.0.0.1'] });
+  // Tech admin connects the external MCP server and classifies the policy search as sensitive.
+  // Settings and MCP connections change through approvals (PM/research/11 §4): the second Head checks them.
+  const platformChecker = { id: checker.checkerId, token: checker.checkerToken };
+  const current = await call<{ egressAllowedInternalHosts: string[] }>('GET', '/v1/settings/deployment', tok.admin);
+  if (!current.egressAllowedInternalHosts.includes('127.0.0.1')) {
+    await approveOver(api, tok.admin, platformChecker, { method: 'PATCH', path: '/v1/settings/deployment', body: { egressAllowedInternalHosts: [...current.egressAllowedInternalHosts, '127.0.0.1'] } });
+  }
   const conn = await call<{ id: string }>('POST', '/v1/mcp/connections', tok.admin, { name: 'refund-desk', url: `http://127.0.0.1:${MCP_PORT}/mcp`, network: 'INTERNAL' });
   await call('POST', `/v1/mcp/connections/${conn.id}/discover`, tok.admin);
   const tools = await call<Array<{ id: string; name: string }>>('GET', `/v1/mcp/connections/${conn.id}/tools`, tok.admin);
   const search = tools.find((t) => t.name === 'knowledge.search_policy');
   expect(search, 'demo server exposes knowledge.search_policy').toBeTruthy();
   await call('PUT', `/v1/mcp/connections/${conn.id}/tools`, tok.admin, { tools: [{ toolId: search!.id, riskClass: 'SENSITIVE', approved: true }] });
-  await call('POST', `/v1/mcp/connections/${conn.id}/approve`, tok.admin, { allowedAgentIds: [ids.agent] });
-  await call('PUT', `/v1/agents/${ids.agent}/tools`, tok.lead, { grants: [{ toolId: search!.id }] });
+  await approveOver(api, tok.admin, platformChecker, { method: 'POST', path: `/v1/mcp/connections/${conn.id}/approve`, body: { allowedAgentIds: [ids.agent] } });
+  // Activation is deferred: the worker re-contacts the server, then the connection is live.
+  await expect.poll(async () => (await call<{ status: string }>('GET', `/v1/mcp/connections/${conn.id}`, tok.admin)).status, { timeout: 30_000 }).toBe('ACTIVE');
+  // Maya is live: granting her a tool is an agent_tool_grant proposal the second Head approves (PM/research/11 §4).
+  const grant = await call<{ proposal: { id: string; contentHash: string } }>('PUT', `/v1/agents/${ids.agent}/tools`, tok.lead, { grants: [{ toolId: search!.id }], approval: { checkerId: checker.checkerId, reason: 'E2E: the refund desk policy search' } }, [202]);
+  await call('POST', `/v1/approvals/${grant.proposal.id}/decision`, checker.checkerToken, { decision: 'APPROVE', reason: 'E2E: reviewed', contentHash: grant.proposal.contentHash });
 
   // The scripted model calls the tool on "refund"; policy holds it for a human and escalates.
   const customer = await visitor();

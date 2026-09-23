@@ -96,7 +96,7 @@ export async function ReviewsBody({ searchParams }: { searchParams: SearchParams
               />
             </>
           ) : (
-            <EmptyState title="Review queue needs team conversation access">Only CS Leads get the queue of resolved conversations of their teams' agents to review.</EmptyState>
+            <EmptyState title="Review queue needs team conversation access">Only Leads get the queue of resolved conversations of their teams' agents to review.</EmptyState>
           )}
         </div>
         <div className="rail">

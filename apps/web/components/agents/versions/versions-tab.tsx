@@ -115,7 +115,7 @@ function VersionItem({ v, data, parent, labels }: { v: PromptVersion; data: Agen
             Diff
           </Link>
         ) : null}
-        {can.activate && !isLive ? <ActivateButton agentId={agent.id} versionId={v.id} version={v.version} liveVersion={live?.version ?? null} /> : null}
+        {can.activate && !isLive ? <ActivateButton agentId={agent.id} agentName={agent.name} versionId={v.id} version={v.version} liveVersion={live?.version ?? null} /> : null}
       </span>
     </div>
   );

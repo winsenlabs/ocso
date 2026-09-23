@@ -34,7 +34,7 @@ export interface AdminHome {
 }
 
 /**
- * Tech Admin home (design/06 admin). Platform health only: counts, timings,
+ * Tech admin home (design/06 admin). Platform health only: counts, timings,
  * technical alerts and privileged configuration changes — no conversation
  * content, customer names or previews.
  */

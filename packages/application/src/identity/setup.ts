@@ -4,6 +4,7 @@ import { DomainError, validation } from '@ocso/domain';
 import { deploymentSettings, users, uuidv7, type Db } from '@ocso/db';
 import { z } from 'zod';
 import { seedDefaultAlertRules } from '../alerts/seed.js';
+import { recordInstalledApproval } from '../approvals/installed.js';
 import { recordAudit } from '../audit/audit.js';
 import { setPasswordCredential } from './credentials.js';
 import { hashPassword, passwordProblems } from './password.js';
@@ -20,7 +21,7 @@ export type SetupInput = z.infer<typeof SetupInput>;
 
 /**
  * First-run setup (ADR-010, ADR-025): while no user exists, the web /setup page
- * creates the first Platform Tech Admin (a Better Auth user with a credential
+ * creates the first Tech admin (a Better Auth user with a credential
  * account), guarded by a one-time setup token. No CLI.
  */
 export class SetupService {
@@ -50,8 +51,10 @@ export class SetupService {
       const [row] = await tx.select({ n: sql<number>`count(*)::int` }).from(users);
       if ((row?.n ?? 0) > 0) throw new DomainError('conflict', 'setup_already_completed', 'Setup has already been completed');
       // Better Auth user + credential account (ADR-025); the address is the one the operator just typed.
-      await tx.insert(users).values({ id: userId, email: input.adminEmail.toLowerCase(), name: input.adminName, role: 'PLATFORM_TECH_ADMIN', emailVerified: true });
+      await tx.insert(users).values({ id: userId, email: input.adminEmail.toLowerCase(), name: input.adminName, role: 'TECH', emailVerified: true });
       await setPasswordCredential(tx, userId, passwordHash);
+      // Nobody could check the first admin: recorded as installed configuration, like the grandfather migration (PM/research/11 §4).
+      await recordInstalledApproval(tx, { kind: 'user', id: userId, title: `First Tech admin ${input.adminName}` }, 'First Tech admin created by setup, before anyone could check it');
       await tx
         .update(deploymentSettings)
         .set({ orgName: input.orgName, timezone: input.timezone, setupCompletedAt: new Date(), updatedBy: userId })
@@ -59,7 +62,7 @@ export class SetupService {
       await recordAudit(tx, { principal: null, system: { kind: 'SYSTEM', id: 'setup' }, correlationId }, {
         action: 'deployment.setup',
         targetType: 'deployment',
-        summary: `First-run setup completed for ${input.orgName}; first Tech Admin ${input.adminEmail}`,
+        summary: `First-run setup completed for ${input.orgName}; first Tech admin ${input.adminEmail}`,
       });
     });
     // Default alert rules ship with every deployment (docs/11 §6); admins disable rather than delete them.

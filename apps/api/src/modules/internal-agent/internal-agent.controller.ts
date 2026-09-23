@@ -49,10 +49,10 @@ export class InternalAgentController {
     const text = body.message.parts.flatMap((p) => (p.type === 'text' && p.text ? [p.text] : [])).join('\n').trim();
     const correlationId = req.correlationId ?? randomUUID();
     // Before streaming, so the drawer gets a typed 400 it can turn into its setup state.
-    if (!(await this.agent.configured())) throw validation('internal_agent_not_configured', 'A Tech Admin must choose a model profile for Ask OCSO');
+    if (!(await this.agent.configured())) throw validation('internal_agent_not_configured', 'A Tech admin must choose a model profile for Ask OCSO');
     const abort = new AbortController();
     // Long answers re-check the session like every stream (ADR-025): revocation stops the model call.
-    const stopWatching = abortWhenSessionEnds(this.liveness, req.authSession?.id, this.env.SESSION_STREAM_RECHECK_SECONDS * 1000, abort);
+    const stopWatching = abortWhenSessionEnds(this.liveness, req.authSession?.id, this.env.SESSION_STREAM_RECHECK_SECONDS * 1000, abort, principal);
     res.on('close', () => {
       stopWatching();
       abort.abort();

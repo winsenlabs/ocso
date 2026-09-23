@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 import { ACCOUNTS, E2E, apiUrl, databaseUrl } from './config';
 import { login, logout, settled } from './helpers';
+import { approvedProfile, approvedProvider, userIdOf } from './platform-setup';
 
 /**
  * Ask OCSO (design/05, docs/12) on the real stack with the DEV_SCRIPTED model
@@ -75,7 +76,7 @@ test.beforeAll(async ({ playwright }) => {
     expect((await api.post('/v1/setup', { data: setup })).status()).toBe(201);
   }
   await signIn('admin');
-  for (const [who, role] of [['lead', 'CS_LEAD'], ['exec', 'CS_EXEC']] as const) {
+  for (const [who, role] of [['lead', 'HEAD'], ['exec', 'SERVICE']] as const) {
     const res = await api.post('/v1/users', { headers: auth('admin'), data: { email: ACCOUNTS[who].email, name: ACCOUNTS[who].name, role, password: ACCOUNTS[who].password } });
     expect([201, 409], `create ${who}`).toContain(res.status());
     await signIn(who);
@@ -83,11 +84,10 @@ test.beforeAll(async ({ playwright }) => {
   const kinds = await (await api.get('/v1/model-providers/kinds', { headers: auth('admin') })).json();
   expect(kinds.map((k: { kind: string }) => k.kind), 'start the API with OCSO_ENABLE_DEV_PROVIDERS=true').toContain('DEV_SCRIPTED');
   // Slow enough that streaming is observable: ~45 words × 80 ms.
-  const provider = await api.post('/v1/model-providers', { headers: auth('admin'), data: { kind: 'DEV_SCRIPTED', name: 'Scripted (e2e)', settings: { latencyMs: 150, chunkDelayMs: 80 } } });
-  expect(provider.status()).toBe(201);
-  const profile = await api.post('/v1/model-profiles', { headers: auth('admin'), data: { name: PROFILE, providerId: (await provider.json()).id, model: 'scripted-1', retries: 0 } });
-  expect(profile.status()).toBe(201);
-  ids.profile = (await profile.json()).id;
+  // A provider is a disabled draft until a Head approves enabling it (PM/research/11 §4).
+  const providerId = await approvedProvider(api, tokens.admin, { id: await userIdOf(api, tokens.lead), token: tokens.lead }, { kind: 'DEV_SCRIPTED', name: 'Scripted (e2e)', settings: { latencyMs: 150, chunkDelayMs: 80 } });
+  // The internal agent uses only a model profile a platform checker approved.
+  ids.profile = await approvedProfile(api, tokens.admin, { id: await userIdOf(api, tokens.lead), token: tokens.lead }, { name: PROFILE, providerId, model: 'scripted-1', retries: 0 });
   // Agents belong to teams (ADR-026): the lead joins a team that owns Maya.
   const teams: Array<{ id: string; name: string }> = await (await api.get('/v1/teams', { headers: auth('lead') })).json();
   const teamId = teams.find((t) => t.name === 'IA Owners')?.id ?? (await (await api.post('/v1/teams', { headers: auth('lead'), data: { name: 'IA Owners' } })).json()).id;
@@ -101,11 +101,11 @@ test.afterAll(async () => {
   await api?.dispose();
 });
 
-test('without a model profile nothing is sent, and only a Tech Admin can choose one', async ({ page }) => {
+test('without a model profile nothing is sent, and only a Tech admin can choose one', async ({ page }) => {
   await login(page, ACCOUNTS.exec);
   await openDrawer(page);
   await expect(drawer(page)).toContainText('Ask OCSO is not set up yet.');
-  await expect(drawer(page)).toContainText('a Platform Tech Admin chooses');
+  await expect(drawer(page)).toContainText('a Tech admin chooses');
   await expect(drawer(page).getByLabel('Model profile for Ask OCSO')).toHaveCount(0);
   await expect(drawer(page).getByLabel('Ask about this deployment')).toBeDisabled();
   // The API refuses before streaming, with a code the drawer turns into this state.
@@ -120,19 +120,32 @@ test('without a model profile nothing is sent, and only a Tech Admin can choose 
   const picker = drawer(page).getByLabel('Model profile for Ask OCSO');
   await expect(picker.locator('option')).toContainText([`${PROFILE} · scripted-1 · Scripted (e2e)`]);
   await picker.selectOption({ label: `${PROFILE} · scripted-1 · Scripted (e2e)` });
+  // A deployment setting: choosing it is a proposal a second person (the lead, a Head) approves (PM/research/11 §4).
   await drawer(page).getByRole('button', { name: 'Use this profile' }).click();
-  await expect(drawer(page).getByText('Ask OCSO is not set up yet.')).toBeHidden();
-  await expect(drawer(page).getByLabel('Ask about this deployment')).toBeEnabled();
+  const modal = page.getByRole('dialog', { name: 'Submit for approval' });
+  await expect(modal).toBeVisible();
+  await modal.getByLabel('checker').selectOption({ label: ACCOUNTS.lead.name });
+  await modal.getByLabel('reason').fill('Ask OCSO for everyone');
+  await modal.getByRole('button', { name: 'Submit for approval' }).click();
+  await expect(drawer(page).getByText(/Sent for approval/)).toBeVisible();
+  expect((await (await api.get('/v1/settings/deployment', { headers: auth('admin') })).json()).internalAgentProfileId).toBeNull();
+  const open = (await (await api.get('/v1/approvals?box=AWAITING_ME', { headers: auth('lead') })).json()) as { rows: Array<{ id: string; objectKind: string; contentHash: string }> };
+  const proposal = open.rows.find((r) => r.objectKind === 'deployment_settings')!;
+  expect((await api.post(`/v1/approvals/${proposal.id}/decision`, { headers: auth('lead'), data: { decision: 'APPROVE', reason: 'ok', contentHash: proposal.contentHash } })).ok()).toBe(true);
   const settings = await (await api.get('/v1/settings/deployment', { headers: auth('admin') })).json();
   expect(settings.internalAgentProfileId).toBe(ids.profile);
+  await page.reload();
+  await openDrawer(page);
+  await expect(drawer(page).getByText('Ask OCSO is not set up yet.')).toBeHidden();
+  await expect(drawer(page).getByLabel('Ask about this deployment')).toBeEnabled();
 });
 
-test('CS Lead gets a streamed answer, can stop one, and the thread is kept', async ({ page }) => {
+test('Lead gets a streamed answer, can stop one, and the thread is kept', async ({ page }) => {
   await login(page, ACCOUNTS.lead);
   await settled(page);
   await page.getByRole('button', { name: /Ask OCSO/ }).first().click();
   await expect(drawer(page)).toContainText("scope · your teams' virtual agents and business operations");
-  await expect(drawer(page)).toContainText('role: cs lead');
+  await expect(drawer(page)).toContainText('role: head');
   await expect(drawer(page)).toContainText('context · home');
 
   const input = drawer(page).getByLabel('Ask about this deployment');
@@ -179,7 +192,7 @@ test('CS Lead gets a streamed answer, can stop one, and the thread is kept', asy
   await expect(log(page)).toContainText('You said: "And which agent needs attention?"');
 });
 
-test('CS Lead confirms a proposed change: applied through the API, audited, never offered again', async ({ page }) => {
+test('Lead confirms a proposed change: applied through the API, audited, never offered again', async ({ page }) => {
   const title = 'Pause Maya for now';
   const { actionId } = seedProposal(ids.lead!, title, {
     tool: 'set_agent_status',
@@ -217,7 +230,7 @@ test('CS Lead confirms a proposed change: applied through the API, audited, neve
   await expect(drawer(page).getByRole('button', { name: 'Confirm change' })).toHaveCount(0);
 });
 
-test('CS Exec cannot confirm a lead-only change: the API re-checks the role and nothing changes', async ({ page }) => {
+test('Service member cannot confirm a lead-only change: the API re-checks the role and nothing changes', async ({ page }) => {
   const title = 'Put Maya live';
   seedProposal(
     ids.exec!,

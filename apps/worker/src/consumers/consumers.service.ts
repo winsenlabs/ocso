@@ -1,17 +1,18 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { ConversationInsightsService, CopilotService, DeliveryService, EvaluationService, MediaMaterializer, SummaryService, TurnProcessor } from '@ocso/agent-runtime';
+import { ConversationInsightsService, CopilotService, DeliveryService, EvaluationService, MediaMaterializer, RouteProcessor, SummaryService, TurnProcessor } from '@ocso/agent-runtime';
 import { AlertDeliveryService, WebhookDeliveryService, isAlertDeliveryRetryable, isWebhookRetryable, type AlertDeliverJob, type WorkerSettings } from '@ocso/application';
 import type { Logger } from '@ocso/observability';
 import { ocsoMetrics } from '@ocso/observability';
 import { backoffSeconds, type HandlerResult, type QueueAdapter, type QueueSubscription } from '@ocso/queue';
 import type { TaskProtection } from '@ocso/deployment';
 import { ALERT_DELIVERY_ATTEMPTS, WEBHOOK_DELIVERY_ATTEMPTS } from '../alerts/alerts.module.js';
+import { ApprovalsWorker } from '../approvals/approvals.module.js';
 import { LOGGER, QUEUE } from '../infrastructure/tokens.js';
 import { TASK_PROTECTION } from '../scaling/scaling.module.js';
 
 /**
  * Queue consumers owned by this worker. Turn concurrency = conversations per
- * worker (docs/10 §5); resubscribed when the Tech Admin changes it.
+ * worker (docs/10 §5); resubscribed when the Tech admin changes it.
  */
 @Injectable()
 export class ConsumersService {
@@ -33,6 +34,8 @@ export class ConsumersService {
     @Inject(EvaluationService) private readonly evaluations: EvaluationService,
     @Inject(LOGGER) private readonly logger: Logger,
     @Inject(TASK_PROTECTION) private readonly protection: TaskProtection,
+    @Inject(ApprovalsWorker) private readonly approvals: ApprovalsWorker,
+    @Inject(RouteProcessor) private readonly routes: RouteProcessor,
   ) {}
 
   start(settings: WorkerSettings): void {
@@ -82,6 +85,14 @@ export class ConsumersService {
           throw err;
         }
       }), { concurrency: 4, visibilityTimeoutSeconds: 60, maxAttempts: ALERT_DELIVERY_ATTEMPTS + 1 }),
+      // Maker–checker: approval emails and deferred activations (PM/research/11b).
+      ...this.approvals.consume(this.queue),
+      // Routers (PM/research/11 §5.3): ask, classify, decide; the agent's turn is published on completion.
+      this.queue.consume<{ conversationId: string }>('conversation.route', async (m) => this.measure('conversation.route', () => this.routes.handle(m)), {
+        concurrency: 8,
+        visibilityTimeoutSeconds: 120,
+        maxAttempts: 5,
+      }),
     );
   }
 

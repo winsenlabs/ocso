@@ -1,4 +1,5 @@
 import type { AlertDeliveryAdapter, DeliveryAdapterDeps } from '@ocso/alerts';
+import type { AuditStoreDriverDefinition } from '@ocso/audit-store';
 import type { SettingsService } from '@ocso/application';
 import type { BlobDriverDefinition } from '@ocso/blob';
 import type { ChannelAdapter, ChannelAdapterDeps } from '@ocso/channels';
@@ -33,12 +34,14 @@ export interface OcsoPlugin {
   readonly alertDestinations?: readonly AlertDestinationFactory[] | undefined;
   /** Tool provider sources (ToolProviderRegistry, keyed by kind): built-in tools, MCP connections. */
   readonly toolProviders?: readonly ToolProviderSourceFactory[] | undefined;
-  /** Drivers selected by EMAIL_DRIVER, BLOB_DRIVER, SECRETS_DRIVER, QUEUE_DRIVER and DEPLOYMENT_DRIVER. */
+  /** Drivers selected by EMAIL_DRIVER, BLOB_DRIVER, SECRETS_DRIVER, QUEUE_DRIVER, DEPLOYMENT_DRIVER (and AUDIT_DRIVER below). */
   readonly emailDrivers?: readonly EmailDriverDefinition[] | undefined;
   readonly blobDrivers?: readonly BlobDriverDefinition<DriverEnv>[] | undefined;
   readonly secretsDrivers?: readonly SecretStoreDriverDefinition<DriverEnv>[] | undefined;
   readonly queueDrivers?: readonly QueueDriverDefinition<DriverEnv>[] | undefined;
   readonly deploymentDrivers?: readonly DeploymentDriverDefinition<WorkerEnv>[] | undefined;
+  /** Audit store drivers selected by AUDIT_DRIVER (ADR-032): the separate system of record for audit events. */
+  readonly auditStoreDrivers?: readonly AuditStoreDriverDefinition<DriverEnv, never>[] | undefined;
 }
 
 /** The parsed environment drivers read (api and worker share the driver settings). */

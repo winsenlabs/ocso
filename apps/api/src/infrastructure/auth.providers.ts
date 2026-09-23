@@ -68,6 +68,7 @@ export const AUTH_PROVIDERS: Provider[] = [
           trustedOrigins: trustedOrigins(env),
           session,
           rateLimit: env.OCSO_AUTH_RATE_LIMIT ?? true,
+          skipAccessApproval: env.NODE_ENV !== 'production' && env.OCSO_DEV_SKIP_ACCESS_APPROVAL === true,
         },
         { db, mailer, authPolicy, log: authLog(logger) },
       );

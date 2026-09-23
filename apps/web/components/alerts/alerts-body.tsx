@@ -12,7 +12,7 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 /**
  * Alerts (docs/11 §6–7): the role-scoped inbox, rule management per kind
- * (technical for the Tech Admin, business for the CS Lead) and, for the Tech
+ * (technical for the Tech admin, business for the Lead) and, for the Tech
  * Admin, notification destinations. Tab, filters and the open drawer live in the URL.
  */
 export async function AlertsBody({ searchParams }: { searchParams: SearchParams }) {

@@ -34,8 +34,14 @@ export interface RealtimePayloads {
   'alert.updated': { alertId: string; status: 'OPEN' | 'ACKNOWLEDGED' | 'RESOLVED' };
   'alert.resolved': { alertId: string };
   'config.changed': { area: string; entityId: string | null };
-  /** A message template's review result changed (sent to the submitter and Tech Admins). */
+  /** A message template's review result changed (sent to the submitter and Tech admins). */
   'message_template.status_changed': { templateId: string; channelId: string; name: string; language: string; status: string; previousStatus: string; submittedBy: string | null };
+  /** Maker–checker (sent to the maker, the named checker and approvals.reassign_any holders). */
+  'approval.requested': { proposalId: string; objectKind: string; objectId: string; action: string; makerId: string; checkerId: string };
+  'approval.decided': { proposalId: string; objectKind: string; objectId: string; decision: 'APPROVED' | 'REJECTED' | 'WITHDRAWN' | 'BLOCKED' | 'VOID'; checkerId: string | null; makerId: string | null };
+  'approval.checker_invalid': { proposalId: string; objectKind: string; checkerId: string; reason: 'DISABLED' | 'LOST_RIGHTS'; makerId: string };
+  /** A weekly or ad-hoc exception report is ready to sign (exceptions.read holders). */
+  'exception_report.ready': { reportId: string; kind: 'WEEKLY' | 'ADHOC'; periodStart: string; periodEnd: string };
 }
 
 export type RealtimeEventType = keyof RealtimePayloads;
@@ -83,6 +89,10 @@ export const REALTIME_EVENT_TYPES = [
   'alert.resolved',
   'config.changed',
   'message_template.status_changed',
+  'approval.requested',
+  'approval.decided',
+  'approval.checker_invalid',
+  'exception_report.ready',
 ] as const satisfies readonly RealtimeEventType[];
 
 const KNOWN: ReadonlySet<string> = new Set(REALTIME_EVENT_TYPES);

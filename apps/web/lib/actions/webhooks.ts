@@ -3,7 +3,7 @@
 import { refresh } from 'next/cache';
 import { Permission } from '@ocso/auth';
 import { z } from 'zod';
-import { describeApiError } from '../api/errors';
+import { ApiError, describeApiError } from '../api/errors';
 import { createWebhook, deleteWebhook, retryDelivery, rotateWebhookSecret, testWebhook, updateWebhook, type WebhookTestResult } from '../api/webhooks';
 import { getSession } from '../session';
 import type { ActionResult } from './models';
@@ -26,18 +26,20 @@ async function run<I, T>(schema: z.ZodType<I>, raw: unknown, call: (input: I) =>
     if (reload) refresh();
     return { ok: true, data };
   } catch (err) {
-    return { ok: false, message: describeApiError(err) };
+    return { ok: false, message: describeApiError(err), code: err instanceof ApiError ? err.code : undefined };
   }
 }
+const Approval = z.union([z.object({ checkerId: Id, reason: z.string().trim().min(3).max(500) }), z.object({ bootstrap: z.literal(true), reason: z.string().trim().min(3).max(500).optional() })]);
 
 /** Creates the subscription; the signing secret comes back once and is never readable again. */
 export async function createWebhookAction(input: z.input<typeof Input>): Promise<ActionResult<{ id: string; signingSecret: string }>> {
   return run(Input, input, createWebhook, false);
 }
 
-export async function updateWebhookAction(id: string, input: z.input<typeof Input> & { enabled: boolean }): Promise<ActionResult> {
-  return run(z.object({ id: Id, body: Input.extend({ enabled: z.boolean() }) }), { id, body: input }, async (i) => {
-    await updateWebhook(i.id, i.body);
+/** A draft changes directly; an approved subscription needs `approval` (then it is a proposal). Enabling is a separate proposal. */
+export async function updateWebhookAction(id: string, input: z.input<typeof Input>, approval?: z.input<typeof Approval>): Promise<ActionResult> {
+  return run(z.object({ id: Id, body: Input, approval: Approval.optional() }), { id, body: input, approval }, async (i) => {
+    await updateWebhook(i.id, { ...i.body, ...(i.approval ? { approval: i.approval } : {}) });
     return null;
   });
 }

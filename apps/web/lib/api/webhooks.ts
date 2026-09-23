@@ -1,5 +1,6 @@
 import 'server-only';
 import { z } from 'zod';
+import { ObjectApprovalStateSchema, ProposedSchema } from '@/components/approvals/lib/schemas';
 import { api } from './client';
 
 /**
@@ -15,6 +16,8 @@ export const WebhookSchema = z.object({
   createdAt: z.string(),
   last24h: z.object({ sent: z.number(), failed: z.number(), pending: z.number() }),
   lastDeliveryAt: z.string().nullable(),
+  /** Maker–checker state (PM/research/11 §4). */
+  approval: ObjectApprovalStateSchema.nullable().catch(null).default(null),
 });
 export type Webhook = z.infer<typeof WebhookSchema>;
 
@@ -44,7 +47,9 @@ export interface WebhookInput {
 export const listWebhooks = () => api.get('/v1/webhooks', z.array(WebhookSchema));
 export const listWebhookEventTypes = () => api.get('/v1/webhooks/event-types', z.array(z.string()));
 export const createWebhook = (input: WebhookInput) => api.post('/v1/webhooks', input, SecretOnce.extend({ id: z.string() }));
-export const updateWebhook = (id: string, patch: Partial<WebhookInput> & { enabled?: boolean }) => api.command('PATCH', `/v1/webhooks/${id}`, patch);
+/** A draft changes directly (204); an approved subscription answers 409 approval_required until `approval` names a checker (202). */
+export const updateWebhook = (id: string, patch: Partial<WebhookInput> & { approval?: { checkerId: string; reason: string } | { bootstrap: true; reason?: string | undefined } | undefined }) =>
+  api.patch(`/v1/webhooks/${id}`, patch, z.union([ProposedSchema, z.unknown()]));
 export const rotateWebhookSecret = (id: string) => api.post(`/v1/webhooks/${id}/rotate-secret`, undefined, SecretOnce);
 export const deleteWebhook = (id: string) => api.command('DELETE', `/v1/webhooks/${id}`);
 /** Sends a signed `webhook.test` event to the receiver (network call; allow for its timeout). */

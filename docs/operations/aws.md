@@ -15,8 +15,14 @@ and the same application code as Docker Compose. Only configuration changes: `QU
                     │ api ×N   worker ×(autoscaled)   migrate (one-off task)  │◄┘
                     │   │  SQS (10 topic queues + DLQs)  S3 media (SSE-KMS)    │
                     │   └─► RDS PostgreSQL (Multi-AZ, TLS, CMK)  ── NAT ──► providers, MCP servers
+                    │   └─► RDS PostgreSQL for the audit store (own instance) │
                     └─────────────────────────────────────────────────────────┘
 ```
+
+> **Not validated.** The audit store additions in this release (`audit.tf`, `variables-audit.tf`, the
+> new bootstrap keys and task secrets) have not been run through `terraform validate`, let alone
+> `plan` or `apply`. Treat everything below about the audit store as the intended shape, derived from
+> the Terraform source, until a staging apply confirms it.
 
 Browsers only ever talk to `web`. The API's `/v1/*` control plane is not routed by the ALB (ADR-020).
 Better Auth's `/api/auth/*` (ADR-025) must stay on the **web** target group (the default rule, no
@@ -34,9 +40,10 @@ straight to the api target group would let browsers choose that address themselv
 | `service` (×3) | Task definition and service for **api**, **web** and **worker**: awslogs, `initProcessEnabled`, circuit breaker with rollback, optional OTel collector sidecar |
 | `migrate-task` | Task definition only; you run it with `aws ecs run-task` |
 | `rds` | PostgreSQL `18` (major pinned, RDS picks the minor), gp3, CMK encryption, `rds.force_ssl=1`, PITR backups, Performance Insights, deletion protection |
+| `audit_rds` (`audit.tf`) | The audit store's own RDS instance (ADR-032), same module, sized by `audit_store` (default `db.t4g.small`, Multi-AZ, 35-day backups). Its master user `ocso_audit` owns the audit database, and only the migrate task receives it. `audit_store.separate_instance = false` puts the audit database on the main instance instead, which a `check` block warns about on every plan: the api and worker then hold credentials that can alter it |
 | `sqs` | One Standard queue and one DLQ per topic in `packages/queue/src/contract.ts`, redrive, TLS-only policy, DLQ-not-empty alarms |
 | `s3` | Media bucket: CMK default encryption with a bucket key, Block Public Access, ACLs disabled, TLS-only, versioning, CORS for the public origin, TEMP and multipart-upload lifecycle rules |
-| `secrets` | `ocso/<env>/bootstrap` (CMK) and the IAM policy documents for the runtime prefix `ocso/<env>/app/*` |
+| `secrets` | `ocso/<env>/bootstrap` (CMK) and the IAM policy documents for the runtime prefix `ocso/<env>/app/*`. The audit signing key is a separate secret you create (§6) |
 | `iam` | Execution roles (app, web) and task roles (api, worker, web, migrate). Scaling permissions belong to the worker role only |
 | `ecr` | `ocso-api`, `ocso-worker`, `ocso-web`, `ocso-migrate`: immutable tags, scan on push, lifecycle rules |
 | `autoscaling` | Worker scalable target, target tracking on OCSO demand metrics, step scaling on SQS queue age |
@@ -70,6 +77,14 @@ Requires Terraform ≥ 1.11 (write-only attributes), AWS provider 6.x (locked at
   ```
   Uncomment the `backend "s3"` block in `versions.tf` (`use_lockfile = true`: no DynamoDB table needed).
   The state holds no secret values (see §6), but it does describe your infrastructure, so keep it private.
+- **The audit signing key** (required; created outside Terraform, so it never follows bootstrap
+  rotations and never enters state):
+  ```bash
+  openssl genpkey -algorithm ed25519 -out audit_signing_key.pem
+  aws secretsmanager create-secret --name ocso/prod/audit-signing-key --secret-string file://audit_signing_key.pem
+  ```
+  Put its ARN in `audit_signing_key_secret_arn` (and `audit_signing_key_kms_key_arn` if you encrypt it
+  with your own CMK). Keep a copy of the PEM with your backups.
 - `cp terraform.tfvars.example terraform.tfvars` and edit it. `*.tfvars` files are git-ignored.
 
 ## 3. First deployment (apply order)
@@ -117,13 +132,20 @@ terraform apply -var image_tag=$TAG -var deploy_services=true
    aws secretsmanager get-secret-value --secret-id "$(terraform output -raw bootstrap_secret_arn)" \
      --query SecretString --output text | jq -r .OCSO_SETUP_TOKEN
    ```
-   Open `https://<public_hostname>/setup` and create the first Tech Admin. The token stops working once
-   setup is complete.
+   Open `https://<public_hostname>/setup` and create the first Tech admin. The token stops working once
+   setup is complete. Configuration changes then need a second person's approval (ADR-030). While that
+   admin is the only one who can check, they approve their own platform changes and new users as
+   recorded bootstrap approvals ([setup guide](setup-guide.md)).
 
 ## 4. Migrations (every deploy)
 
 Migrations are an explicit step and never run on api or worker boot (docs/13 §5, ADR-004). Terraform only
-registers the task definition.
+registers the task definition. The migrate image runs two steps: the main migrations
+(`dist/bin/migrate.js`), then `audit-migrate` (`audit-store/dist/bin/audit-migrate.js`). The second step
+creates the audit database if it is missing, applies its schema, creates the `ocso_audit_writer` and
+`ocso_audit_reader` roles and sets the minimum retention (`AUDIT_MIN_RETENTION_DAYS`, from
+`audit_store.min_retention_days`, at least 365). Only the migrate task receives
+`AUDIT_DATABASE_OWNER_URL`.
 
 ```bash
 cd infra/aws/terraform
@@ -152,15 +174,56 @@ terraform apply -var image_tag=$TAG
 - **Expand/contract rule.** While a deploy rolls, tasks of version N-1 and N run side by side against the
   new schema. Migrations must therefore be additive: add nullable columns and tables, backfill in the
   application, and drop or rename only in a *later* release. This is also what makes image rollback safe.
-- **Rollback.** Apply the previous `image_tag`. Schema rollbacks are forward fixes (a new migration), never
-  down-migrations.
+  **The governance and routing release breaks this rule** (below): migration 0021 renames the stored roles,
+  and the previous image fails on every authenticated request once it has run.
+- **Rollback.** Within releases that follow the rule, apply the previous `image_tag`. Schema rollbacks are
+  forward fixes (a new migration), never down-migrations. Rolling back past the governance and routing
+  release is different: restore the pre-upgrade RDS snapshot; the previous `image_tag` alone does not work.
+
+### Upgrading an existing deployment to the governance and routing release
+
+Not tested on AWS; the steps follow from the Terraform source.
+
+This release is one-way. Rolling back past it means restoring the snapshot from step 1 to the main
+instance (the audit RDS instance is new and can be deleted), which discards everything since the
+upgrade. Redeploying the previous `image_tag` against the migrated database locks out every signed-in
+user, because the previous release does not know the renamed roles (migration 0021).
+
+1. **Back up first (required).** Take a manual RDS snapshot of the main instance
+   (`aws rds create-db-snapshot`). It is the only way back: there are no down-migrations and the previous
+   image does not run against the migrated schema.
+2. **Create the audit signing key secret** (§2) and set `audit_signing_key_secret_arn`.
+3. **Bump `bootstrap_secret_version`.** The bootstrap JSON gains `AUDIT_DATABASE_URL`, `AUDIT_READER_URL`
+   and `AUDIT_DATABASE_OWNER_URL`, but Terraform writes the secret only when the version changes. The
+   bump also rotates the main database password and the setup token (§6 rotation), so do it in a quiet
+   window.
+4. `terraform apply -var image_tag=$TAG` creates the audit RDS instance and rewrites the bootstrap secret.
+   Before running the migrate task, scale api, worker and web to zero
+   (`aws ecs update-service --desired-count 0`), or accept that tasks of the old release return errors
+   to signed-in users from the moment 0021 applies until the new tasks replace them.
+   Then run the migrate task as above. It applies migrations 0021–0031, then `audit-migrate`
+   provisions the audit store. Only then roll the api and worker (`--force-new-deployment` if the image
+   tag did not change), because tasks started before the bump hold the old database password.
+5. Watch **System → Audit store** until the backlog of historic audit events has shipped. Then verify
+   the chain (below).
+
+Roles are mapped automatically: Platform Tech Admin → Tech, CS Lead → Head, CS Exec → Service
+(migration 0021). Everything already live is recorded as approved (migration 0031), so it keeps
+running. Its next change is a proposal.
+
+**Verifying the audit chain.** Use the System screen (**Verify recent entries**, `audit.verify`) or
+`POST /v1/audit/verify`. The offline `audit-verify` bin ships in the migrate image
+(`node audit-store/dist/bin/audit-verify.js --from 1 --public-key <file>`). It needs `AUDIT_DATABASE_URL`
+(the reader URL is enough) and a public key you pinned yourself (`GET /v1/audit/keys`). The migrate task
+definition carries neither the signing key nor a pinned key file, so run the bin from a host inside
+the VPC with those settings. There is no ready-made ECS task for it.
 
 ## 5. Routine operations
 
 | Task | How |
 |---|---|
 | Deploy a release | Build and push the 4 images with a new tag → section 4 |
-| Roll back | `terraform apply -var image_tag=<previous>` (the ECR lifecycle keeps the last 30 tags) |
+| Roll back | `terraform apply -var image_tag=<previous>` (the ECR lifecycle keeps the last 30 tags). Not past the governance and routing release: restore the pre-upgrade snapshot instead (section 4) |
 | Restart a service | `aws ecs update-service --cluster <c> --service api --force-new-deployment` |
 | Shell into a task (break glass) | `enable_execute_command = true`, apply, then `aws ecs execute-command --cluster <c> --task <id> --container api --interactive --command sh` |
 | API/web capacity | `aws ecs update-service --desired-count N`. Terraform ignores `desired_count` after creation |
@@ -174,8 +237,15 @@ terraform apply -var image_tag=$TAG
 |---|---|---|
 | `DATABASE_URL` | api, worker, migrate | `postgres://ocso:<pw>@<rds-endpoint>:5432/ocso`, used with `DATABASE_SSL=true` |
 | `OCSO_SETUP_TOKEN` | api | Must be identical across API tasks |
+| `AUDIT_DATABASE_URL` | worker (as `AUDIT_DATABASE_URL`), migrate | The audit store writer `ocso_audit_writer` (INSERT/SELECT only) |
+| `AUDIT_READER_URL` | api (injected as `AUDIT_DATABASE_URL`), migrate | The audit store reader `ocso_audit_reader` (SELECT only) |
+| `AUDIT_DATABASE_OWNER_URL` | migrate only | The audit database owner (`ocso_audit` on the separate instance), used by `audit-migrate` |
 | `BETTER_AUTH_SECRET` | api | **Needed before the next AWS rollout (ADR-025; Terraform not yet updated).** ≥ 32 random characters, identical across API tasks; signs session cookies and encrypts authenticator secrets. The api refuses to start in production without it |
 
+- **Audit signing key.** Its own secret (`audit_signing_key_secret_arn`, created by you, §2), injected
+  as `AUDIT_SIGNING_KEY` into the api (it signs exception reports) and the worker (checkpoints and
+  exports). The app execution role gets `GetSecretValue` on that one ARN. Retired public keys go in
+  `audit_trusted_public_keys` (plain environment, not secret).
 - **Injection.** ECS injects these keys at task start (`valueFrom: <arn>:<key>::`) through the **app
   execution role**. That role may only `GetSecretValue` this one secret and decrypt with its CMK via
   Secrets Manager. The web execution role cannot read it.
@@ -191,12 +261,13 @@ terraform apply -var image_tag=$TAG
   connections survive, but every *new* connection would fail until a redeploy. Rotation here is a
   deliberate, coordinated step instead.
 
-**Rotation** (DB password and setup token rotate together; customer-claims signing keys are managed and
+**Rotation** (DB password, setup token and the audit writer, reader and owner passwords rotate together; customer-claims signing keys are managed and
 rotated inside OCSO — Settings API `POST /v1/security/signing-keys/rotate`):
 
 1. Set `bootstrap_secret_version` to the next number, then `terraform apply`. RDS gets the new password
    and the secret gets the new JSON in the same run.
-2. Immediately `aws ecs update-service --force-new-deployment` for **api** and **worker**.
+2. Run the migrate task (§4): `audit-migrate` sets the audit writer and reader roles to their new
+   passwords. Then immediately `aws ecs update-service --force-new-deployment` for **api** and **worker**.
    - Until they roll, existing pooled connections keep working but new connections from old tasks fail.
    - Do this in a quiet window.
 3. **Bump the version whenever the DB instance is replaced.** This applies to a new identifier and to a
@@ -236,7 +307,7 @@ Min/max, the policy configurations and the alarm threshold carry `lifecycle.igno
 `terraform apply` never reverts runtime changes. The `worker_scaling` output lists the exact names.
 
 **Who owns runtime scaling.** OCSO's ECS deployment adapter runs in the **worker leader** (ADR-018
-advisory-lock leadership, ADR-023). It publishes the scaling metrics and maps the Tech Admin worker
+advisory-lock leadership, ADR-023). It publishes the scaling metrics and maps the Tech worker
 settings onto the target, the policies (updated by name, since `PutScalingPolicy` is an upsert) and the
 step-scaling alarm. The **worker** task role therefore has, and the api task role does **not**:
 
@@ -319,6 +390,9 @@ requires them when the driver is `ecs`, but its role cannot act on them.
 | Runtime secrets | Secrets Manager; app recovery window | `restore-secret`. The DB holds the ARNs |
 | Queues | Messages are wake-ups, and the work is in PostgreSQL | Lost messages are recovered by the lease-recovery sweep. DLQ: fix the cause, then `aws sqs start-message-move-task --source-arn <dlq-arn>` to redrive |
 | Conversations after task loss | Leases expire (default 45 s) and another worker resumes from persisted interactions, prompt version and tool-call records (docs/10 §9) | Automatic. No sticky routing is needed |
+| Audit store (RDS) | Its own instance: Multi-AZ, PITR (`audit_store.backup_retention_days`, default 35) | Restore the audit instance like the main one, promptly: events shipped after the restore point are re-shipped only while they are inside the local window (`audit_local_window_days`). Then run `audit-verify` (compose.md §5 describes the chain after a store restore) |
+| Audit signing key | Your own Secrets Manager secret | Keep the PEM with your backups. A lost key opens `SIGNING_KEY_CHANGED`; restore it rather than trusting a new one |
+| Signed audit exports | `audit-exports/` in the media bucket (versioned) | **Not write-once:** Terraform does not enable S3 Object Lock and OCSO does not check it. Configure Object Lock yourself if exports must be an independent copy |
 | Terraform state | Versioned S3 bucket | Restore a prior object version |
 
 Out of scope today: cross-region disaster recovery. Add cross-region snapshot copy and S3 replication if the
@@ -356,3 +430,10 @@ organization needs a regional RTO.
      `EMAIL_DRIVER=smtp` with `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER` and `SMTP_PASSWORD` as a secret
      (SES SMTP credentials work);
    - egress: HTTPS to `api.resend.com` (already allowed through NAT), or the SMTP port for `smtp`.
+10. **The audit store Terraform is not validated** (not even `terraform validate`): `audit.tf`,
+    `variables-audit.tf`, the three new bootstrap keys, the signing-key IAM policy and the task secrets
+    need a staging apply. The upgrade path (§4) has not been run.
+11. **S3 Object Lock is not enforced** on `audit-exports/`. Exports are signed and verifiable, but they
+    are only an independent copy once you enable write-once storage yourself.
+12. With `audit_store.separate_instance = false` the append-only guarantee does not hold against a
+    compromised api or worker (they hold the main master credentials). Use a separate instance for a bank.

@@ -11,6 +11,7 @@ const ORIGIN = 'http://localhost:3000';
 
 let h: ApiHarness;
 let admin: string;
+let leadId: string;
 const bearer = (token: string) => ({ authorization: `Bearer ${token}` });
 const tokenOf = (res: { headers: Record<string, unknown> }) => res.headers['set-auth-token'] as string;
 const cookiesOf = (res: { headers: Record<string, unknown> }) => ([] as string[]).concat((res.headers['set-cookie'] as string[] | undefined) ?? []).map((c) => c.split(';')[0]!);
@@ -20,7 +21,7 @@ beforeAll(async () => {
   process.env['OCSO_RECOVERY_TOKEN'] = RECOVERY_TOKEN;
   h = await startApi();
   admin = await completeSetup(h);
-  await h.http().post('/v1/users').set(bearer(admin)).send({ email: LEAD.email, name: 'Lead', role: 'CS_LEAD', password: LEAD.password }).expect(201);
+  leadId = (await h.http().post('/v1/users').set(bearer(admin)).send({ email: LEAD.email, name: 'Lead', role: 'HEAD', password: LEAD.password }).expect(201)).body.id;
 });
 afterAll(async () => {
   delete process.env['OCSO_RECOVERY_TOKEN'];
@@ -31,11 +32,17 @@ describe('require MFA for roles + TOTP', () => {
   let totpUri = '';
   let backupCodes: string[] = [];
 
-  it('only the Tech Admin sets the policy', async () => {
+  it('only the Tech admin sets the policy', async () => {
     const lead = tokenOf(await signIn(LEAD.email, LEAD.password).expect(200));
     await h.http().put('/v1/settings/auth-policy').set(bearer(lead)).send({ requireMfaRoles: [] }).expect(403);
-    const res = await h.http().put('/v1/settings/auth-policy').set(bearer(admin)).send({ requireMfaRoles: ['CS_LEAD'] }).expect(200);
-    expect(res.body.requireMfaRoles).toEqual(['CS_LEAD']);
+    // Part of the deployment settings: a proposal a second person approves (PM/research/11 §4).
+    await h.http().put('/v1/settings/auth-policy').set(bearer(admin)).send({ requireMfaRoles: ['HEAD'] }).expect(409);
+    const proposed = await h.http().put('/v1/settings/auth-policy').set(bearer(admin)).send({ requireMfaRoles: ['HEAD'], approval: { checkerId: leadId, reason: 'Heads approve changes' } }).expect(202);
+    expect((await h.http().get('/v1/settings/auth-policy').set(bearer(admin)).expect(200)).body.requireMfaRoles).toEqual([]);
+    const { proposal } = proposed.body;
+    await h.http().post(`/v1/approvals/${proposal.id}/decision`).set(bearer(lead)).send({ decision: 'APPROVE', reason: 'ok', contentHash: proposal.contentHash }).expect(200);
+    const res = await h.http().get('/v1/settings/auth-policy').set(bearer(admin)).expect(200);
+    expect(res.body.requireMfaRoles).toEqual(['HEAD']);
   });
 
   it('a password-only session of a role that requires MFA can only enrol', async () => {
@@ -89,18 +96,18 @@ describe('require MFA for roles + TOTP', () => {
 });
 
 describe('break-glass', () => {
-  it('refuses to demote or disable the last active Tech Admin who can sign in with a password', async () => {
-    const created = await h.http().post('/v1/users').set(bearer(admin)).send({ email: 'admin2@ocso.test', name: 'Admin Two', role: 'PLATFORM_TECH_ADMIN', password: 'admin two password 1' }).expect(201);
+  it('refuses to demote or disable the last active Tech admin who can sign in with a password', async () => {
+    const created = await h.http().post('/v1/users').set(bearer(admin)).send({ email: 'admin2@ocso.test', name: 'Admin Two', role: 'TECH', password: 'admin two password 1' }).expect(201);
     const second = tokenOf(await signIn('admin2@ocso.test', 'admin two password 1').expect(200));
     const [first] = await h.db.db.select().from(users).where(eq(users.email, ADMIN.email));
     // Admin Two becomes SSO-only (no password): the first admin is now the last password admin.
     await h.db.db.delete(authAccounts).where(eq(authAccounts.userId, created.body.id));
     const res = await h.http().patch(`/v1/users/${first!.id}`).set(bearer(second)).send({ status: 'DISABLED' }).expect(409);
     expect(res.body.error.code).toBe('last_password_admin');
-    await h.http().patch(`/v1/users/${first!.id}`).set(bearer(second)).send({ role: 'CS_LEAD' }).expect(409);
+    await h.http().patch(`/v1/users/${first!.id}`).set(bearer(second)).send({ role: 'HEAD' }).expect(409);
   });
 
-  it('recovery token: resets a Tech Admin password once, removes their authenticator and ends their sessions', async () => {
+  it('recovery token: resets a Tech admin password once, removes their authenticator and ends their sessions', async () => {
     const before = tokenOf(await signIn(ADMIN.email, ADMIN.password).expect(200));
     expect((await h.http().get('/v1/setup/status').expect(200)).body.recovery).toBe(true);
     await h.http().post('/v1/setup/recover').send({ recoveryToken: 'x'.repeat(40), email: ADMIN.email, newPassword: 'recovered password 1' }).expect(401);

@@ -1,18 +1,23 @@
-import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Inject, Param, Post, Put, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { and, asc, sql } from 'drizzle-orm';
 import { Permission, type Principal } from '@ocso/auth';
-import { MessageTemplateService, manageableChannelsSql, type ActorContext } from '@ocso/application';
+import { ApprovalService, MessageTemplateService, TEMPLATE_KIND, WithApproval, manageableChannelsSql, requestApproval, submitOrDiscard, type ActorContext } from '@ocso/application';
 import type { ChannelRegistry } from '@ocso/channels';
 import { channels, type Db } from '@ocso/db';
 import { TemplateDraftSchema, type TemplateDraft } from '@ocso/domain';
 import { z } from 'zod';
 import { Actor, CurrentPrincipal, RequireAnyPermission, RequirePermission } from '../../common/decorators.js';
 import { CHANNEL_REGISTRY, DB } from '../../infrastructure/tokens.js';
+import { approvalResponse } from '../approvals/approval-response.js';
 
 const Id = z.uuid();
 const TemplateId = z.string().trim().regex(/^[A-Za-z0-9_.:-]{1,200}$/, 'invalid template id');
 const ListQuery = z.object({ refresh: z.enum(['true', 'false']).optional() });
 type ListQuery = z.infer<typeof ListQuery>;
+const DraftBody = TemplateDraftSchema.extend(WithApproval.shape);
+type DraftBody = z.input<typeof DraftBody>;
+type ApprovalBody = z.infer<typeof WithApproval>;
 
 /**
  * Message templates of a channel (docs/07 §3), for kinds whose adapter
@@ -23,7 +28,10 @@ type ListQuery = z.infer<typeof ListQuery>;
  */
 @Controller('v1/channels/:id/templates')
 export class ChannelTemplatesController {
-  constructor(@Inject(MessageTemplateService) private readonly templates: MessageTemplateService) {}
+  constructor(
+    @Inject(MessageTemplateService) private readonly templates: MessageTemplateService,
+    @Inject(ApprovalService) private readonly approvals: ApprovalService,
+  ) {}
 
   /** Provider list (cached ~5 min; `?refresh=true` refetches) merged with templates submitted from OCSO. */
   @Get()
@@ -39,18 +47,63 @@ export class ChannelTemplatesController {
     return this.templates.get(actor, id, templateId);
   }
 
-  /** Create at the provider and submit for review; returns the template (PENDING) and advisory warnings. */
+  /**
+   * Save a draft (201): the provider never sees it until a checker approves its submission. With `approval`,
+   * the submission is proposed in the same call (202 `{ template, problems, warnings, proposal }`).
+   */
   @Post()
   @RequirePermission(Permission.MESSAGE_TEMPLATES_MANAGE)
-  create(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Body({ schema: TemplateDraftSchema }) body: TemplateDraft) {
-    return this.templates.create(actor, id, body);
+  async create(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Body({ schema: DraftBody }) body: DraftBody, @Res({ passthrough: true }) res: Response) {
+    const { approval, ...draft } = body;
+    const created = await this.templates.createDraft(actor, id, draft);
+    const recordId = created.template.submission!.recordId;
+    if (!approval) return { ...created, approvalRequired: { objectKind: TEMPLATE_KIND, objectId: recordId, action: 'CREATE' } };
+    // A submission that fails (a problem in the draft, no eligible checker) fails the whole request: the draft goes too,
+    // so a retry is not refused as template_exists.
+    const outcome = await submitOrDiscard(
+      () => requestApproval(this.approvals, actor, { objectKind: TEMPLATE_KIND, objectId: recordId, action: 'CREATE' }, approval, null),
+      () => this.templates.discardFailedCreate(actor, id, recordId),
+    );
+    res.status(202);
+    return { ...created, proposal: outcome.kind === 'proposed' ? outcome.proposal : null };
   }
 
-  @Delete(':templateId')
-  @HttpCode(204)
+  /** Edit a draft the provider has never seen (409 template_submitted once it is at the provider; approval_open while its submission waits). */
+  @Put('drafts/:recordId')
   @RequirePermission(Permission.MESSAGE_TEMPLATES_MANAGE)
-  async remove(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Param('templateId', { schema: TemplateId }) templateId: string) {
-    await this.templates.remove(actor, id, templateId);
+  updateDraft(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Param('recordId', { schema: Id }) recordId: string, @Body({ schema: TemplateDraftSchema }) body: TemplateDraft) {
+    return this.templates.updateDraft(actor, id, recordId, body);
+  }
+
+  /** Submit a draft to the provider: always a proposal — 202 `{proposal}` with `approval`, else 409 approval_required. */
+  @Post('drafts/:recordId/submit')
+  @RequirePermission(Permission.MESSAGE_TEMPLATES_MANAGE)
+  async submit(
+    @Actor() actor: ActorContext,
+    @Param('id', { schema: Id }) id: string,
+    @Param('recordId', { schema: Id }) recordId: string,
+    @Body({ schema: WithApproval.optional() }) body: ApprovalBody | undefined,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const objectId = await this.templates.draftId(actor, id, recordId);
+    return approvalResponse(res, requestApproval(this.approvals, actor, { objectKind: TEMPLATE_KIND, objectId, action: 'CREATE' }, body?.approval, null));
+  }
+
+  /**
+   * Deleting (message_templates.delete, Head) is always a proposal: 202 `{proposal}` with `approval`, else 409
+   * approval_required. A template made in the provider's console is recorded first so the proposal has an object.
+   */
+  @Delete(':templateId')
+  @RequirePermission(Permission.MESSAGE_TEMPLATES_DELETE)
+  async remove(
+    @Actor() actor: ActorContext,
+    @Param('id', { schema: Id }) id: string,
+    @Param('templateId', { schema: TemplateId }) templateId: string,
+    @Body({ schema: WithApproval.optional() }) body: ApprovalBody | undefined,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const objectId = await this.templates.deletionTarget(actor, id, templateId);
+    return approvalResponse(res, requestApproval(this.approvals, actor, { objectKind: TEMPLATE_KIND, objectId, action: 'DELETE' }, body?.approval, null));
   }
 }
 

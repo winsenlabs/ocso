@@ -7,13 +7,14 @@ import { outboxEvents, uuidv7, webhookDeliveries } from '@ocso/db';
 import { MemoryQueue } from '@ocso/queue';
 import { InMemorySecretRows, LocalSecretStore, parseMasterKey } from '@ocso/secrets';
 import type { Principal } from '@ocso/auth';
-import { WebhookDeliveryService, WebhookService, emitEvent, isWebhookRetryable, relayOutboxToWebhooks, type ActorContext } from '../src/index.js';
+import { WebhookDeliveryService, WebhookService, emitEvent, isWebhookRetryable, relayOutboxToWebhooks, sweepApprovalSecrets, type ActorContext } from '../src/index.js';
+import { platformApprover, type PlatformApprover } from './support/platform-approvals.js';
 
 let t: TestDatabase;
 let secrets: LocalSecretStore;
 const queue = new MemoryQueue();
 const as = (role: Principal['role']): ActorContext => ({ principal: { userId: uuidv7(), role, displayName: role, teamIds: [], via: 'UI' }, correlationId: 'c' });
-const admin = as('PLATFORM_TECH_ADMIN');
+const admin = as('TECH');
 let service: WebhookService;
 const sent: Array<{ url: string; headers: Record<string, string>; body: string }> = [];
 let respond: () => Response = () => new Response('ok', { status: 200 });
@@ -22,12 +23,14 @@ const fakeFetch = async (url: string | URL, init?: RequestInit) => {
   return respond();
 };
 let delivery: WebhookDeliveryService;
+let approver: PlatformApprover;
 
 beforeAll(async () => {
   t = await createTestDatabase();
   secrets = new LocalSecretStore(new InMemorySecretRows(), parseMasterKey('k1', randomBytes(32).toString('base64')));
   service = new WebhookService(t.db, secrets, queue);
   delivery = new WebhookDeliveryService({ db: t.db, secrets, fetch: fakeFetch, maxAttempts: 3 });
+  approver = await platformApprover(t.db, { secrets });
 });
 afterAll(async () => {
   await t?.drop();
@@ -42,7 +45,7 @@ const emit = (type: 'alert.opened' | 'config.changed' | 'tool.failed'): Promise<
 
 describe('outbound event webhooks (E8.10)', () => {
   it('validates subscriptions and returns the signing secret exactly once', async () => {
-    await expect(service.create(as('CS_LEAD'), { name: 'crm', url: 'https://crm.example.com/hook', events: ['alert.*'] })).rejects.toMatchObject({ category: 'authorization' });
+    await expect(service.create(as('HEAD'), { name: 'crm', url: 'https://crm.example.com/hook', events: ['alert.*'] })).rejects.toMatchObject({ category: 'authorization' });
     const { WebhookInput } = await import('../src/index.js');
     expect(WebhookInput.safeParse({ name: 'x', url: 'http://plain.example.com', events: ['alert.*'] }).success).toBe(false);
     expect(WebhookInput.safeParse({ name: 'x', url: 'https://a.example.com', events: ['config.changed'] }).success).toBe(false);
@@ -53,6 +56,10 @@ describe('outbound event webhooks (E8.10)', () => {
     await emit('alert.opened'); // before the subscription exists
     const { id, signingSecret } = await service.create(admin, { name: 'pager', url: 'https://alerts.example.com/ocso', events: ['alert.*'] });
     expect(signingSecret).toMatch(/^whsec_/);
+    // A new subscription is a disabled draft; a second person's approval enables it.
+    expect((await service.get(id)).enabled).toBe(false);
+    await approver.approve(admin, 'webhook_subscription', id, 'ACTIVATE');
+    expect((await service.get(id)).enabled).toBe(true);
     await emit('alert.opened');
     await emit('config.changed');
     await emit('tool.failed');
@@ -75,6 +82,7 @@ describe('outbound event webhooks (E8.10)', () => {
 
   it('retries transient failures, fails permanently on client errors, and supports manual retry', async () => {
     const { id } = await service.create(admin, { name: 'ops', url: 'https://ops.example.com/events', events: ['tool.failed'] });
+    await approver.approve(admin, 'webhook_subscription', id, 'ACTIVATE');
     await emit('tool.failed');
     await relayOutboxToWebhooks(t.db, queue);
     const [row] = await t.db.select().from(webhookDeliveries).where(eq(webhookDeliveries.subscriptionId, id));
@@ -101,13 +109,20 @@ describe('outbound event webhooks (E8.10)', () => {
 
   it('rotates the secret and stops delivering for disabled subscriptions', async () => {
     const { id, signingSecret } = await service.create(admin, { name: 'dwh', url: 'https://dwh.example.com/usage', events: ['*'] });
+    await approver.approve(admin, 'webhook_subscription', id, 'ACTIVATE');
+    // Rotating (a revocation) and disabling are immediate, even on an approved subscription.
     const { signingSecret: next } = await service.rotateSecret(admin, id);
     expect(next).not.toBe(signingSecret);
-    await service.update(admin, id, { enabled: false });
+    await expect(service.update(admin, id, { url: 'https://dwh.example.com/v2' })).rejects.toMatchObject({ code: 'approval_required' });
+    await service.disable(admin, id);
     await emit('alert.opened');
     await relayOutboxToWebhooks(t.db, queue);
     expect(await t.db.select().from(webhookDeliveries).where(eq(webhookDeliveries.subscriptionId, id))).toHaveLength(0);
-    await service.remove(admin, id);
+    const ref = (await service.get(id)).signingSecretRef;
+    await approver.approve(admin, 'webhook_subscription', id, 'DELETE');
+    await expect(service.get(id)).rejects.toMatchObject({ category: 'not_found' });
+    await sweepApprovalSecrets(t.db, secrets);
+    expect(await secrets.describe(ref)).toBeNull();
     const events = await t.db.select({ n: sql<number>`count(*)::int` }).from(outboxEvents);
     expect(events[0]!.n).toBeGreaterThan(0);
   });

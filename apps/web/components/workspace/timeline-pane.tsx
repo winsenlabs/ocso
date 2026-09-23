@@ -91,9 +91,19 @@ export function TimelinePane({ items, detail, meId, timeZone, now, canConfirm, s
                   </TimelineEvent>
                 );
               }
-              if (item.actorType === 'AGENT') {
+              if (item.actorType === 'ROUTER') {
                 return (
-                  <TimelineEvent key={item.id} {...common} kind="ai" who={initials(agent)} author={agent} role={`virtual agent · ${detail.agent.conversationType.toLowerCase()}`}>
+                  <TimelineEvent key={item.id} {...common} kind="ai" who="RT" author="Router" role="automated menu">
+                    <MessageParts parts={item.parts} />
+                    {delivery}
+                  </TimelineEvent>
+                );
+              }
+              if (item.actorType === 'AGENT') {
+                // A conversation can change agent on a queue transfer: each message shows its own agent.
+                const author = item.actorName ?? agent;
+                return (
+                  <TimelineEvent key={item.id} {...common} kind="ai" who={initials(author)} author={author} role={`virtual agent · ${detail.agent.conversationType.toLowerCase()}`}>
                     <MessageParts parts={item.parts} />
                     {delivery}
                   </TimelineEvent>

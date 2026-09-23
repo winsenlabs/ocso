@@ -70,7 +70,7 @@ export function rubricScore(rubric: Record<RubricCriterion, number>): number {
 }
 
 /**
- * Conversation reviews by CS Leads (design/02 "Latest reviewed conversations").
+ * Conversation reviews by Leads (design/02 "Latest reviewed conversations").
  * A lead reviews and reads reviews of the agents their teams own (ADR-026);
  * other conversations and agents are not found.
  */
@@ -90,12 +90,13 @@ export class ReviewService {
         .select({ agentId: conversations.agentId })
         .from(conversations)
         .where(and(eq(conversations.id, input.conversationId), sql`${conversations.agentId} IN (${manageableAgentsSql(principal)})`));
-      if (!conv) throw notFound('conversation', input.conversationId);
+      if (!conv?.agentId) throw notFound('conversation', input.conversationId);
+      const agentId = conv.agentId;
       const score = rubricScore(input.rubric);
       await tx.insert(conversationReviews).values({
         id,
         conversationId: input.conversationId,
-        agentId: conv.agentId,
+        agentId,
         reviewerId: principal.userId,
         outcomeTag: input.outcomeTag,
         score,

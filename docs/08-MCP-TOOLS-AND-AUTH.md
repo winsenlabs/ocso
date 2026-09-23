@@ -17,7 +17,7 @@ These systems connect through MCP or an approved tool adapter.
 
 ## 2. MCP connection manager
 
-Tech Admin can add an MCP server and authenticate it without writing application code.
+A Tech admin can add an MCP server and authenticate it without writing application code.
 
 The platform should support:
 - server URL/config
@@ -106,3 +106,4 @@ Do not log secrets.
 - Connection names are slugs because they prefix model-facing tool names; plain `http://` only for allowlisted internal hosts; a changed tool definition (schema, description, annotations) is un-approved until reviewed.
 - Customer identity claims (§4): ES256 JWT, 120 s lifetime, claims `iss sub aud iat nbf exp jti cid agt scope` only, `sub` = the business customer reference when known; public keys at `/.well-known/jwks.json`; rotation keeps the previous key published for 24 h. Sent only to connections marked trusted, on both the agent path and human-confirmed calls.
 - Sensitive-action confirmation executes exactly the arguments shown (held server-side, hash-checked, cleared on decision/expiry) and is attributed to the confirming human.
+- Agent tool grants under maker–checker (PM/research/11 §4; kind `agent_tool_grant`, object = the agent, checked with `approvals.check.agents`). A draft agent's grant set is written whole (its go-live approval shows the tools). Once the agent (or its set) is approved, `PUT /v1/agents/:id/tools` splits the change: removals and narrowing (a tool turned off, confirmation turned on, argument rules only added) apply at once, never locked by an open proposal; anything that widens access (a new tool, turning one on, dropping confirmation or an argument rule) becomes one UPDATE proposal carrying only those grants — 202 `{proposal, applied}` with `approval`, else 409 `approval_required` saying what already applied. Approval re-checks that every proposed tool is still grantable.

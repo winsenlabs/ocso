@@ -4,16 +4,16 @@ import { acceptInvite, createUser, expectNavLinksResolve, login, logout, navMode
 import { totp } from './totp';
 
 /**
- * One serial story on a fresh database: first-run setup → Tech Admin →
- * invites a CS Lead → CS Lead invites a CS Exec, asserting the role-specific
+ * One serial story on a fresh database: first-run setup → Tech admin →
+ * invites a Lead → Lead invites a Service member, asserting the role-specific
  * navigation of design/OCSONav.dc.html at each step; then MFA enrolment when
- * the Tech Admin requires it, and a forgotten password (ADR-025).
+ * the Tech admin requires it, and a forgotten password (ADR-025).
  */
 test.describe.configure({ mode: 'serial' });
 
 const TEAM = 'Cards & EMI · Tier 2';
 
-test('first-run setup creates the Platform Tech Admin', async ({ page }) => {
+test('first-run setup creates the Tech admin', async ({ page }) => {
   await page.goto('/login');
   await page.waitForURL('**/setup'); // no users yet → login forwards to setup
   await expect(page.getByRole('heading', { name: 'Set up OCSO' })).toBeVisible();
@@ -54,7 +54,7 @@ test('sign-in shows API errors, then the admin sees Platform navigation and not 
     'Home', 'Search',
     'System', 'Workers', 'Queues & leases', 'Telemetry',
     'Models', 'Connections', 'Channels', 'Message templates', 'Secrets', 'Webhooks',
-    'Alerts', 'Virtual agents', 'Audit log', 'Team & roles',
+    'Alerts', 'Virtual agents', 'Audit log', 'Routers', 'Team & roles', 'Approvals', 'Exceptions',
     'My connections',
     'Settings',
   ]);
@@ -70,29 +70,29 @@ test('sign-in shows API errors, then the admin sees Platform navigation and not 
   await expectNavLinksResolve(page);
 });
 
-test('admin creates a CS Lead from Team & roles', async ({ page }) => {
+test('admin creates a Head (the lead account) from Team & roles', async ({ page }) => {
   await login(page, ACCOUNTS.admin);
   await page.goto('/team');
   await expect(page.getByRole('heading', { name: 'Team & roles' })).toBeVisible();
   await page.getByRole('button', { name: 'New user' }).click();
   const roles = await page.getByRole('dialog', { name: 'New user' }).getByLabel('Role').locator('option').allTextContents();
-  expect(roles).toEqual(['Platform Tech Admin', 'CS Lead', 'CS Exec']);
+  expect(roles).toEqual(['Tech', 'Head', 'Lead', 'Service']);
   await page.getByRole('button', { name: 'Cancel' }).click();
 
-  await createUser(page, { ...ACCOUNTS.lead, role: 'CS_LEAD' });
-  await expect(page.getByRole('status').filter({ hasText: `Invited ${ACCOUNTS.lead.name} · CS Lead` })).toBeVisible();
+  await createUser(page, { ...ACCOUNTS.lead, role: 'HEAD' });
+  await expect(page.getByRole('status').filter({ hasText: `Invited ${ACCOUNTS.lead.name} · Head` })).toBeVisible();
   await logout(page);
 });
 
-test('CS Lead sees Operations / Quality / Governance and can create only CS Execs', async ({ page }) => {
+test('the Head sees Operations / Quality / Governance and creates only presets within their own rights', async ({ page }) => {
   await login(page, ACCOUNTS.lead);
   const nav = await navModel(page);
   expect(nav.groups).toEqual(['Operations', 'Quality', 'Governance']);
   expect(nav.items).toEqual([
     'Home', 'Search',
-    'Conversations', 'Virtual agents', 'Queues', 'Customers', 'Message templates',
+    'Conversations', 'Virtual agents', 'Queues', 'Routers', 'Customers', 'Message templates',
     'Analytics', 'Reviews', 'Prompt corrections', 'Escalation reasons',
-    'Alerts', 'SLA policies', 'Team',
+    'Alerts', 'SLA policies', 'Team', 'Approvals', 'Exceptions',
     'My connections',
     'Settings',
   ]);
@@ -106,14 +106,15 @@ test('CS Lead sees Operations / Quality / Governance and can create only CS Exec
 
   await page.getByRole('button', { name: 'New user' }).click();
   const roles = await page.getByRole('dialog', { name: 'New user' }).getByLabel('Role').locator('option').allTextContents();
-  expect(roles).toEqual(['CS Exec']);
+  // Containment (PM/research/11 §3.4): presets whose rights fit inside the Head's own.
+  expect(roles).toEqual(['Head', 'Lead', 'Service']);
   await page.getByRole('button', { name: 'Cancel' }).click();
 
-  await createUser(page, { ...ACCOUNTS.exec, team: TEAM });
+  await createUser(page, { ...ACCOUNTS.exec, role: 'SERVICE', team: TEAM });
   await logout(page);
 });
 
-test('CS Exec sees My work only, cannot open Team, and returns to the requested page after sign-in', async ({ page }) => {
+test('Service member sees My work only, cannot open Team, and returns to the requested page after sign-in', async ({ page }) => {
   await page.goto('/settings');
   await page.waitForURL('**/login?next=%2Fsettings');
   await login(page, ACCOUNTS.exec, '/settings');
@@ -129,7 +130,7 @@ test('CS Exec sees My work only, cannot open Team, and returns to the requested 
 
   await page.goto('/settings');
   await expect(page.getByRole('region', { name: 'Deployment settings' })).toContainText('E2E Bank');
-  await expect(page.getByRole('button', { name: 'Save changes' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Submit for approval' })).toHaveCount(0);
 });
 
 test('Ask OCSO opens with Ctrl+J and says it is not set up yet', async ({ page }) => {
@@ -139,7 +140,7 @@ test('Ask OCSO opens with Ctrl+J and says it is not set up yet', async ({ page }
   const drawer = page.getByRole('dialog', { name: 'Ask OCSO' });
   await expect(drawer).toBeVisible();
   await expect(drawer).toContainText('scope · my conversations');
-  await expect(drawer).toContainText('role: cs exec');
+  await expect(drawer).toContainText('role: service');
 
   // No model profile chosen for the internal agent yet (full flow: internal-agent.spec.ts).
   await expect(drawer.getByText('Ask OCSO is not set up yet.')).toBeVisible();
@@ -150,12 +151,18 @@ test('Ask OCSO opens with Ctrl+J and says it is not set up yet', async ({ page }
   await expect(drawer).toBeVisible();
 });
 
-test('Tech Admin saves deployment settings', async ({ page }) => {
+test('Tech admin saves deployment settings', async ({ page }) => {
   await login(page, ACCOUNTS.admin);
   await page.goto('/settings');
   await page.getByLabel('Region label').fill('ap-south-1');
-  await page.getByRole('button', { name: 'Save changes' }).click();
-  await expect(page.getByText('Deployment settings saved')).toBeVisible();
+  // Settings are always live, so the change is a proposal a Head approves (PM/research/11 §4).
+  const form = page.getByRole('form', { name: 'Deployment settings' });
+  await form.getByLabel('Checker').selectOption({ label: ACCOUNTS.lead.name });
+  await form.getByLabel('Reason').fill('E2E: name the region');
+  await form.getByRole('button', { name: 'Submit for approval' }).click();
+  await expect(page.getByText(`Sent for approval to ${ACCOUNTS.lead.name}`)).toBeVisible();
+  await approveSettingsAs(ACCOUNTS.lead);
+  await page.reload();
   await expect(page.locator('.sb-brand .region')).toHaveText('ap-south-1');
 });
 
@@ -181,13 +188,42 @@ async function enrolAuthenticator(page: Page, password: string): Promise<string>
   return secret;
 }
 
-test('Tech Admin requires MFA for CS Leads: the lead enrols at sign-in, then signs in with a code', async ({ page }) => {
+/**
+ * Settings change through approvals (PM/research/11 §4). The checker is a second Tech: Heads hold the platform
+ * check permission too, but once MFA is required for Heads a password-only Head could not approve lifting it.
+ */
+const MFA_CHECKER = { name: 'Mona Tech', email: 'mona.tech@e2e.ocso.test', password: 'correct-horse-battery-monatech' };
+async function apiFetch(method: string, path: string, body?: unknown, token?: string): Promise<Response> {
+  return fetch(`${apiUrl}${path}`, { method, headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+}
+async function apiToken(email: string, password: string): Promise<string> {
+  return ((await (await apiFetch('POST', '/v1/auth/login', { email, password })).json()) as { token: string }).token;
+}
+async function ensureMfaChecker(): Promise<void> {
+  const admin = await apiToken(ACCOUNTS.admin.email, ACCOUNTS.admin.password);
+  const res = await apiFetch('POST', '/v1/users', { name: MFA_CHECKER.name, email: MFA_CHECKER.email, role: 'TECH', password: MFA_CHECKER.password }, admin);
+  expect([201, 409]).toContain(res.status);
+}
+async function approveSettingsAs(who: { email: string; password: string }): Promise<void> {
+  const token = await apiToken(who.email, who.password);
+  const rows = ((await (await apiFetch('GET', '/v1/approvals?box=AWAITING_ME&objectKind=deployment_settings', undefined, token)).json()) as { rows: Array<{ id: string; contentHash: string }> }).rows;
+  expect(rows.length).toBeGreaterThan(0);
+  const res = await apiFetch('POST', `/v1/approvals/${rows[0]!.id}/decision`, { decision: 'APPROVE', reason: 'E2E: reviewed', contentHash: rows[0]!.contentHash }, token);
+  expect(res.status).toBe(200);
+}
+
+test('Tech admin requires MFA for Heads: the lead (a Head) enrols at sign-in, then signs in with a code', async ({ page }) => {
+  await ensureMfaChecker();
   await login(page, ACCOUNTS.admin);
   await page.goto('/settings');
   const policy = page.getByRole('form', { name: 'Require MFA for roles' });
-  await policy.getByLabel('CS Lead').check();
-  await policy.getByRole('button', { name: 'Save MFA policy' }).click();
-  await expect(page.getByText('MFA is now required for the selected roles')).toBeVisible();
+  await policy.getByLabel('Head', { exact: true }).check();
+  // A settings change is a proposal (PM/research/11 §4): another Head approves it before it applies.
+  await policy.getByLabel('Checker').selectOption({ label: MFA_CHECKER.name });
+  await policy.getByLabel('Reason').fill('E2E: Heads use a second factor');
+  await policy.getByRole('button', { name: 'Submit MFA policy for approval' }).click();
+  await expect(page.getByText(`Sent for approval to ${MFA_CHECKER.name}`)).toBeVisible();
+  await approveSettingsAs(MFA_CHECKER);
   await logout(page);
 
   // Password alone lands on forced enrolment; nothing else is reachable.
@@ -221,12 +257,16 @@ test('Tech Admin requires MFA for CS Leads: the lead enrols at sign-in, then sig
   // Other specs sign leads in with a password only: lift the requirement again.
   await login(page, ACCOUNTS.admin);
   await page.goto('/settings');
-  await page.getByRole('form', { name: 'Require MFA for roles' }).getByLabel('CS Lead').uncheck();
-  await page.getByRole('form', { name: 'Require MFA for roles' }).getByRole('button', { name: 'Save MFA policy' }).click();
-  await expect(page.getByText('MFA is no longer required for any role.')).toBeVisible();
+  const lift = page.getByRole('form', { name: 'Require MFA for roles' });
+  await lift.getByLabel('Head', { exact: true }).uncheck();
+  await lift.getByLabel('Checker').selectOption({ label: MFA_CHECKER.name });
+  await lift.getByLabel('Reason').fill('E2E: back to passwords');
+  await lift.getByRole('button', { name: 'Submit MFA policy for approval' }).click();
+  await expect(page.getByText(`Sent for approval to ${MFA_CHECKER.name}`)).toBeVisible();
+  await approveSettingsAs(MFA_CHECKER);
 });
 
-test('a CS Exec who forgot their password resets it from the emailed link', async ({ page, request }) => {
+test('a Service member who forgot their password resets it from the emailed link', async ({ page, request }) => {
   await page.goto('/login');
   await page.getByRole('link', { name: 'Forgot password?' }).click();
   await expect(page.getByRole('heading', { name: 'Forgot your password?' })).toBeVisible();

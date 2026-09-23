@@ -1,5 +1,6 @@
 import 'server-only';
 import { z } from 'zod';
+import { ObjectApprovalStateSchema, ProposedSchema } from '@/components/approvals/lib/schemas';
 import { api } from './client';
 
 /** GET /v1/settings/deployment (deployment_settings singleton). */
@@ -50,8 +51,14 @@ export function getDeploymentSettings(): Promise<DeploymentSettings> {
   return api.get('/v1/settings/deployment', DeploymentSettingsSchema);
 }
 
-export function updateDeploymentSettings(patch: DeploymentSettingsPatch): Promise<DeploymentSettings> {
-  return api.patch('/v1/settings/deployment', patch, DeploymentSettingsSchema);
+/** Settings are always live: the change is a proposal (202) — `approval` names the checker (PM/research/11 §4). */
+export function updateDeploymentSettings(patch: DeploymentSettingsPatch & { approval: { checkerId: string; reason: string } | { bootstrap: true; reason: string } }): Promise<unknown> {
+  return api.patch('/v1/settings/deployment', patch, z.union([ProposedSchema, DeploymentSettingsSchema]));
+}
+
+/** The open (or activating) settings proposal, for the Settings screens' pending badge; null when none or not permitted. */
+export function getSettingsApproval() {
+  return api.get('/v1/settings/approval', ObjectApprovalStateSchema).catch(() => null);
 }
 
 export function getWorkerSettings(): Promise<WorkerSettings> {

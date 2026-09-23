@@ -2,6 +2,7 @@ import 'server-only';
 import { z } from 'zod';
 import { MiniTableSchema, ObjectLinkSchema, ProfileOptionSchema, ThreadSummarySchema, type ProfileOption, type ThreadSummary } from '@/components/internal-agent/types';
 import type { StoredMessage } from '@/components/internal-agent/history';
+import { ProposedSchema } from '@/components/approvals/lib/schemas';
 import { api } from './client';
 
 /**
@@ -56,7 +57,8 @@ export async function listProfileOptions(): Promise<ProfileOption[]> {
   return rows.map((p) => ({ id: p.id, name: p.name, model: p.model, providerName: p.providerName }));
 }
 
-/** PATCH /v1/settings/deployment { internalAgentProfileId } (deployment_settings.manage). */
-export async function setInternalAgentProfile(profileId: string): Promise<void> {
-  await api.patch('/v1/settings/deployment', { internalAgentProfileId: profileId }, z.object({ internalAgentProfileId: z.string().nullable() }).loose());
+/** PATCH /v1/settings/deployment { internalAgentProfileId, approval } (deployment_settings.manage): a proposal (202) — true when proposed. */
+export async function setInternalAgentProfile(profileId: string, approval?: { checkerId: string; reason: string } | { bootstrap: true; reason?: string | undefined }): Promise<boolean> {
+  const res = await api.patch('/v1/settings/deployment', { internalAgentProfileId: profileId, ...(approval ? { approval } : {}) }, z.union([ProposedSchema, z.object({ internalAgentProfileId: z.string().nullable() }).loose()]));
+  return 'proposal' in res && (res as { proposal: { status: string } }).proposal.status === 'SUBMITTED';
 }
