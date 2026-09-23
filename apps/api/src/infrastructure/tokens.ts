@@ -1,8 +1,9 @@
 /** Injection tokens for infrastructure adapters (interfaces, so they need explicit tokens). */
 /**
- * The plugins this process runs (`OcsoPlugin[]`, the composition root's
- * FIRST_PARTY_PLUGINS today). Every registry and driver is built from it; a
- * plugin loader would provide the extended list here and nowhere else.
+ * The plugins this process runs (`OcsoPlugin[]`): the composition root's
+ * FIRST_PARTY_PLUGINS followed by the installed plugins OCSO_PLUGINS pins
+ * (`loadPlugins`, async). Every registry and driver is built from it; the api,
+ * the worker and the seed load the same list.
  */
 export const PLUGINS = Symbol('PLUGINS');
 /** Infrastructure driver registries (`DriverRegistries`) built from PLUGINS; `*_DRIVER` selects from them. */

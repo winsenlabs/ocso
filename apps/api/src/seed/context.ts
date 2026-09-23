@@ -27,6 +27,8 @@ import {
   createDriverRegistries,
   createProviderRegistry,
   createSecretStore,
+  loadPlugins,
+  pluginSummary,
   type OcsoPlugin,
 } from '@ocso/bootstrap';
 import type { Database, Db } from '@ocso/db';
@@ -66,6 +68,21 @@ export interface SeedContext {
   services: SeedServices;
   correlationId: string;
   log: (line: string) => void;
+}
+
+/**
+ * The seed's plugins: FIRST_PARTY_PLUGINS plus OCSO_PLUGINS (raw environment),
+ * the same list as the api and worker, so seeded channels and providers exist
+ * there. A bad list rejects (the seed fails); the loaded list is logged like
+ * the api and worker log it.
+ */
+export async function loadSeedPlugins(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+  log: (line: string) => void = (line) => console.log(`seed: ${line}`),
+): Promise<OcsoPlugin[]> {
+  const plugins = await loadPlugins({ env });
+  log(pluginSummary(plugins, env['APP_VERSION'] ?? 'dev'));
+  return plugins;
 }
 
 /** Registries come from the same composition root (plugins) as the api and worker. */

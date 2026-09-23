@@ -1,11 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, or } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { ChannelRuntime } from '@ocso/agent-runtime';
 import type { ChannelAdapter, ChannelRegistry, ChannelRuntimeConfig, EmbeddedChat, EmbedVisitor } from '@ocso/channels';
+import type { ApiEnv } from '@ocso/config';
 import { notFound } from '@ocso/domain';
-import { channels, conversations, customerIdentities, virtualAgents, type Db } from '@ocso/db';
-import { passThroughAgentOf } from '@ocso/application';
-import { CHANNEL_REGISTRY, DB } from '../../infrastructure/tokens.js';
+import { channels, conversations, virtualAgents, type Db } from '@ocso/db';
+import { lookupCustomer, passThroughAgentOf } from '@ocso/application';
+import { CHANNEL_REGISTRY, DB, ENV } from '../../infrastructure/tokens.js';
+import { assertOriginAllowed } from './webchat-access.js';
 
 export interface VisitorConversation {
   id: string;
@@ -29,13 +31,62 @@ export interface WebChatContext {
  * conversation. Any kind whose descriptor is `embeddable` is served by the
  * public widget API; the adapter's `embed` hooks do the kind-specific part.
  */
+/** One channel load per HTTP request (the CORS middleware and the handler share it; secrets are resolved once). */
+const perRequest = new WeakMap<object, { publicKey: string; ctx: Promise<WebChatContext> }>();
+
 @Injectable()
 export class WebChatIdentityService {
+  private readonly publicOrigin: string;
+
   constructor(
     @Inject(DB) private readonly db: Db,
     @Inject(ChannelRuntime) private readonly runtime: ChannelRuntime,
     @Inject(CHANNEL_REGISTRY) private readonly registry: ChannelRegistry,
-  ) {}
+    @Inject(ENV) env: ApiEnv,
+  ) {
+    this.publicOrigin = new URL(env.OCSO_PUBLIC_URL).origin;
+  }
+
+  /** `channel()` memoized for one request object. */
+  channelForRequest(req: object, publicKey: string): Promise<WebChatContext> {
+    const hit = perRequest.get(req);
+    if (hit && hit.publicKey === publicKey) return hit.ctx;
+    const ctx = this.channel(publicKey);
+    perRequest.set(req, { publicKey, ctx });
+    // A failed load is not cached beyond this request's own retry.
+    ctx.catch(() => perRequest.delete(req));
+    return ctx;
+  }
+
+  /**
+   * The channel behind a public call, with the caller admitted: browser calls from OCSO itself or an allowed
+   * site; calls without an Origin only when native apps are allowed or the auth mode needs a pass or user.
+   */
+  async access(req: object, publicKey: string, origin: string | undefined): Promise<WebChatContext> {
+    const ctx = await this.channelForRequest(req, publicKey);
+    const effective = origin ?? this.sameOriginFallback(req);
+    assertOriginAllowed(effective, this.publicOrigin, ctx.embed.widgetConfig(ctx.config));
+    return ctx;
+  }
+
+  /**
+   * Browsers send no Origin on same-origin GETs (the widget iframe's history and stream). Most send
+   * Sec-Fetch-Site; Safari before 16.4 does not, so without it the Referer (the widget page on OCSO's own
+   * origin) decides. A non-browser can forge any of these headers, as it can forge Origin: this rule steers
+   * browsers and honest apps, the tokens are the security boundary.
+   */
+  private sameOriginFallback(req: object): string | undefined {
+    const headers = (req as { headers?: Record<string, string | string[] | undefined> }).headers ?? {};
+    const fetchSite = headers['sec-fetch-site'];
+    if (fetchSite !== undefined) return fetchSite === 'same-origin' ? this.publicOrigin : undefined;
+    const referer = headers['referer'];
+    if (typeof referer !== 'string') return undefined;
+    try {
+      return new URL(referer).origin === this.publicOrigin ? this.publicOrigin : undefined;
+    } catch {
+      return undefined;
+    }
+  }
 
   async channel(publicKey: string): Promise<WebChatContext> {
     const [row] = await this.db.select({ id: channels.id, kind: channels.kind, status: channels.status }).from(channels).where(eq(channels.publicKey, publicKey));
@@ -56,7 +107,7 @@ export class WebChatIdentityService {
     return row?.name ?? null;
   }
 
-  identify(ctx: WebChatContext, authorization: string | undefined): EmbedVisitor {
+  identify(ctx: WebChatContext, authorization: string | undefined): Promise<EmbedVisitor> {
     return ctx.embed.identify(ctx.config, /^Bearer\s+(\S+)$/i.exec(authorization ?? '')?.[1]);
   }
 
@@ -81,19 +132,16 @@ export class WebChatIdentityService {
   }
 
   /**
-   * The customer this caller maps to, with the same precedence as inbound
-   * resolution (packages/application identity-resolver): the primary identity's
-   * customer, else an alternate's — so a guest who is then identified by the
-   * host site keeps seeing the conversation their next message will join.
+   * The customer this caller maps to, with the same rules as inbound resolution (packages/application
+   * identity-resolver `lookupCustomer`): the primary identity's customer, else an alternate's — so a guest who
+   * is then identified by the host site keeps seeing the conversation their next message will join. A verified
+   * user never falls back to an alternate that belongs to a different verified user (a shared browser).
    */
-  async customerIdFor(identity: EmbedVisitor): Promise<string | null> {
-    const claims = [{ kind: identity.identityKind, value: identity.identityValue }, ...identity.alternateIdentities];
-    const rows = await this.db
-      .select({ kind: customerIdentities.kind, value: customerIdentities.value, customerId: customerIdentities.customerId })
-      .from(customerIdentities)
-      .where(or(...claims.map((c) => and(eq(customerIdentities.kind, c.kind), eq(customerIdentities.value, c.value)))));
-    const primary = rows.find((r) => r.kind === identity.identityKind && r.value === identity.identityValue);
-    const alternate = identity.alternateIdentities.map((a) => rows.find((r) => r.kind === a.kind && r.value === a.value)).find(Boolean);
-    return primary?.customerId ?? alternate?.customerId ?? null;
+  customerIdFor(identity: EmbedVisitor): Promise<string | null> {
+    return lookupCustomer(this.db, {
+      primary: { kind: identity.identityKind, value: identity.identityValue },
+      alternates: identity.alternateIdentities,
+      primaryVerified: identity.verified,
+    });
   }
 }

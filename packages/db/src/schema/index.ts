@@ -20,3 +20,4 @@ export * from './permission-grants.js';
 export * from './routers.js';
 export * from './exceptions.js';
 export * from './approval-secrets.js';
+export * from './webchat.js';

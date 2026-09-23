@@ -44,6 +44,7 @@ export interface ConnectionView {
   confirmationPolicy: ConnectionRow['confirmationPolicy'];
   allowedAgentIds: '*' | string[];
   sendCustomerClaims: boolean;
+  forwardUserToken: boolean;
   healthCheckSeconds: number;
   health: { status: string | null; latencyMs: number | null; checkedAt: string | null };
   lastSyncAt: string | null;
@@ -115,6 +116,7 @@ export function toConnectionView(row: ConnectionRow, counts: ToolCounts = { tota
     confirmationPolicy: row.confirmationPolicy,
     allowedAgentIds: row.allowedAgentIds.includes('*') ? '*' : row.allowedAgentIds,
     sendCustomerClaims: row.sendCustomerClaims,
+    forwardUserToken: row.forwardUserToken,
     healthCheckSeconds: row.healthCheckSeconds,
     health: { status: row.lastHealthStatus, latencyMs: row.lastHealthLatencyMs, checkedAt: iso(row.lastHealthAt) },
     lastSyncAt: iso(row.lastSyncAt),

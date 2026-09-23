@@ -46,6 +46,8 @@ export class OcsoExceptionFilter implements ExceptionFilter {
     const status = exception instanceof HttpException && !isDomainError(exception) ? exception.getStatus() : STATUS[body.error.category];
     if (status >= 500) this.logger.error({ err: exception, correlationId: req.correlationId }, 'request failed');
     if (res.headersSent) return;
+    const retryAfter = body.error.details?.['retryAfterSeconds'];
+    if (status === 429 && typeof retryAfter === 'number') res.setHeader('Retry-After', String(retryAfter));
     res.status(status).json(body);
   }
 

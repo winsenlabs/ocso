@@ -109,6 +109,7 @@ export class McpToolProviderFactory implements ToolProviderFactory {
       target: connectionTarget(row),
       deps: { credentials: port, egress: egressPolicyFor(hosts, row.network), resolver: this.options.resolver, limits: this.options.limits },
       trusted: row.sendCustomerClaims,
+      forwardUserToken: row.forwardUserToken,
       approvedTool: (name) => definitions.get(name),
       connectTimeoutMs: this.options.connectTimeoutMs,
       onAuthFailure: (id) => void this.onAuthFailure(id, holder.entry),

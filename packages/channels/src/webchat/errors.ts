@@ -12,7 +12,11 @@ export type WebChatAuthReason =
   | 'wrong_channel'
   | 'wrong_issuer'
   | 'wrong_audience'
-  | 'host_jwt_not_enabled';
+  | 'host_jwt_not_enabled'
+  /** Auth mode `client`: the visitor token was not opened with a session pass. */
+  | 'session_pass_required'
+  /** Auth mode `user`: the visitor token carries no verified user. */
+  | 'user_required';
 
 /** Missing/expired tokens are 401 (the widget should refresh); forged or misbound ones 403. */
 const STATUS: Readonly<Record<WebChatAuthReason, 401 | 403>> = {
@@ -26,6 +30,8 @@ const STATUS: Readonly<Record<WebChatAuthReason, 401 | 403>> = {
   wrong_issuer: 403,
   wrong_audience: 403,
   host_jwt_not_enabled: 403,
+  session_pass_required: 401,
+  user_required: 401,
 };
 
 export class WebChatAuthError extends DomainError {

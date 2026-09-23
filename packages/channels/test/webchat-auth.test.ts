@@ -74,7 +74,9 @@ describe('host-app JWTs', () => {
     expect(verifyHostJwt(hostJwt(claims), HOST_SECRET, { now: NOW })).toEqual({
       customerRef: 'cust_88213',
       name: 'Priya Raman',
+      email: undefined,
       expiresAt: new Date((unix(NOW) + 900) * 1000),
+      raw: claims,
     });
   });
 
@@ -136,12 +138,12 @@ describe('web chat verifyRequest and identity', () => {
     const linked = adapter.issueVisitorToken(config, { visitorId: 'v_anon_visitor', externalCustomerRef: 'cust_88213' });
     expect(adapter.identify(widgetRequest(linked.token), config)).toMatchObject({
       identityKind: 'webchat_customer_ref',
-      identityValue: 'cust_88213',
+      identityValue: `${CHANNEL_ID}:cust_88213`,
       alternateIdentities: [{ kind: 'webchat_visitor', value: 'v_anon_visitor' }],
     });
     expect(adapter.identify(widgetRequest(hostJwt({ sub: 'cust_42', name: 'Asha', exp: unix(NOW, 60) })), config)).toMatchObject({
       identityKind: 'webchat_customer_ref',
-      identityValue: 'cust_42',
+      identityValue: `${CHANNEL_ID}:cust_42`,
       profileName: 'Asha',
     });
   });

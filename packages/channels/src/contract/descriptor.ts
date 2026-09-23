@@ -23,6 +23,13 @@ export interface ChannelSecretField {
   hint: string;
   /** `server`: OCSO generates it when omitted (nobody needs to see it). `client`: the form may offer a generator, since the admin must copy it elsewhere. */
   generate?: 'server' | 'client' | undefined;
+  /** Prefix of generated values (e.g. `sk_`), so keys are recognisable wherever they are pasted. */
+  prefix?: string | undefined;
+  /**
+   * `once`: the admin needs the value elsewhere (e.g. a backend key): a server-generated value is returned once
+   * in the create response, and the edit form offers a rotate action that generates a new one client-side.
+   */
+  reveal?: 'once' | undefined;
 }
 
 /**

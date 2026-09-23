@@ -47,6 +47,7 @@ export const ConnectionSchema = z.object({
   confirmationPolicy: z.enum(CONFIRMATION_POLICIES),
   allowedAgentIds: z.union([z.literal('*'), z.array(z.string())]),
   sendCustomerClaims: z.boolean(),
+  forwardUserToken: z.boolean().default(false),
   healthCheckSeconds: z.number(),
   health: z.object({ status: text, latencyMs: z.number().nullable(), checkedAt: text }),
   lastSyncAt: text,
@@ -145,6 +146,7 @@ export interface Approval {
   allowedAgentIds: '*' | string[];
   confirmationPolicy: ConfirmationPolicy;
   sendCustomerClaims: boolean;
+  forwardUserToken?: boolean | undefined;
   healthCheckSeconds: number;
 }
 

@@ -105,13 +105,21 @@ Be clear about what "plugin" means today: plugins are **compiled in and live in 
 channel, model provider, alert destination or driver is one module behind its contract plus one registration
 line; `FIRST_PARTY_PLUGINS` (`packages/bootstrap`) assembles every plugin for the api and the worker. Kinds are
 open strings validated by the registries, so nothing in core, the database or the web app changes, and
-`pnpm lint` fails if core code ever names a specific kind (ADR-028). There is no runtime loader for
-third-party npm packages yet. Two extension points need no code at all: MCP tool servers and SSO identity providers are
-added in the web app.
+`pnpm lint` fails if core code ever names a specific kind (ADR-028). Two extension points need no code at all: MCP
+tool servers and SSO identity providers are added in the web app.
 
-**Next: a plugin SDK.** The next piece after this documentation is `@winsendotai/ocso-plugin-sdk`: a
-stable, versioned package exporting the plugin contracts, plus a loader that registers plugin packages
-named in configuration. It does not exist yet.
+**Third-party plugins.** [`@winsendotai/ocso-plugin-sdk`](packages/ocso-plugin-sdk/README.md) exports the public
+contracts (channels, model providers, alert destinations, email drivers) and a `checkPlugin` test kit. An operator
+installs a plugin package into the image and lists it with its exact version in `OCSO_PLUGINS`; OCSO refuses to start on
+a version mismatch, an incompatible API version or an invalid contribution, and the System page lists what is installed
+([installing plugins](docs/plugins/installing.md)). Plugins run in-process with full trust: install only code you trust.
+
+**Chat SDK.** [`@winsendotai/ocso-chat`](packages/ocso-chat/README.md) (headless client for browsers and React Native)
+and [`@winsendotai/ocso-chat-react`](packages/ocso-chat-react/README.md) (hooks, themeable web components, a `/native`
+entry) build your own web chat on OCSO. The web chat channel supports three modes: anonymous, an authorised client
+(your backend mints a short-lived session pass with the channel's secret key) and a signed-in user (your login token,
+verified against your JWKS or a shared HS256 secret), plus host context the agent sees and optional pass-through of the
+user's token to your tools.
 
 Start at [docs/plugins/](docs/plugins/README.md). It has one page per extension point, a worked example
 ([add a channel in seven steps](docs/plugins/add-a-channel.md)), and an honest list of places where the

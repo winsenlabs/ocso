@@ -120,6 +120,7 @@ export class ChannelService {
         .returning();
       await recordAudit(tx, actor, {
         action: 'channel.create',
+        redaction: 'settings',
         targetType: 'channel',
         targetId: id,
         summary: `Created ${input.kind} channel ${input.name} (draft)`,
@@ -161,6 +162,7 @@ export class ChannelService {
           .returning();
         await recordAudit(tx, actor, {
           action: 'channel.update',
+          redaction: 'settings',
           targetType: 'channel',
           targetId: id,
           summary: `Updated channel ${locked!.name}`,

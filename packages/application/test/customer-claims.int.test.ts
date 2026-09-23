@@ -1,7 +1,7 @@
 import { createPublicKey, randomBytes, verify } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { customers, signingKeys, uuidv7 } from '@ocso/db';
+import { channels, conversations, customerIdentities, customers, signingKeys, uuidv7 } from '@ocso/db';
 import { createTestDatabase, type TestDatabase } from '@ocso/db/testing';
 import { InMemorySecretRows, LocalSecretStore, parseMasterKey } from '@ocso/secrets';
 import { CustomerClaimsIssuer, systemActor, type PublicJwk } from '../src/index.js';
@@ -59,6 +59,40 @@ describe('customer identity claims (docs/08 §4, E5.6)', () => {
     await t.db.insert(customers).values({ id: anonymous, displayName: null });
     const { payload } = decode(await issuer().issue({ ...input, customerId: anonymous }));
     expect(payload.sub).toBe(`ocso:customer:${anonymous}`);
+  });
+
+  it('presents a user id a channel verified only on that channel’s conversations, naming the channel', async () => {
+    const [siteA, siteB] = [uuidv7(), uuidv7()];
+    await t.db.insert(channels).values([
+      { id: siteA, kind: 'WEBCHAT', name: 'Site A', status: 'ACTIVE', publicKey: `pk_${siteA}` },
+      { id: siteB, kind: 'WEBCHAT', name: 'Site B', status: 'ACTIVE', publicKey: `pk_${siteB}` },
+    ]);
+    const customerId = uuidv7();
+    await t.db.insert(customers).values({ id: customerId, displayName: null });
+    // Staff linked the same person across both sites; site B's user was seen last.
+    await t.db.insert(customerIdentities).values([
+      { id: uuidv7(), customerId, kind: 'webchat_customer_ref', value: `${siteA}:user-42`, verified: true, lastSeenAt: new Date('2026-09-01T00:00:00Z') },
+      { id: uuidv7(), customerId, kind: 'webchat_customer_ref', value: `${siteB}:u-9`, verified: true, lastSeenAt: new Date('2026-09-02T00:00:00Z') },
+      { id: uuidv7(), customerId, kind: 'webchat_visitor', value: 'v_unverified_1', verified: false, lastSeenAt: new Date('2026-09-03T00:00:00Z') },
+    ]);
+    const conversationOn = async (channelId: string | null) => {
+      const id = uuidv7();
+      await t.db.insert(conversations).values({ id, customerId, channelId, type: 'SUPPORT', controlState: 'ROUTING', openedAt: clock });
+      return id;
+    };
+    const claims = async (conversationId: string) => decode(await issuer().issue({ ...input, customerId, conversationId })).payload;
+    const onA = await conversationOn(siteA);
+    expect(await claims(onA)).toMatchObject({ sub: 'user-42', ocso_channel: siteA });
+    expect(await claims(await conversationOn(siteB))).toMatchObject({ sub: 'u-9', ocso_channel: siteB });
+    // Another channel (or none) vouched for nothing here: an opaque subject and no channel claim.
+    const elsewhere = await claims(await conversationOn(null));
+    expect(elsewhere.sub).toBe(`ocso:customer:${customerId}`);
+    expect(elsewhere).not.toHaveProperty('ocso_channel');
+    // A staff-set business reference still wins, with no channel claim.
+    await t.db.update(customers).set({ externalRef: 'CIF-1' }).where(eq(customers.id, customerId));
+    const staff = await claims(onA);
+    expect(staff.sub).toBe('CIF-1');
+    expect(staff).not.toHaveProperty('ocso_channel');
   });
 
   it('creates exactly one active key when instances race on first use', async () => {

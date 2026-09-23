@@ -60,7 +60,7 @@ test.beforeAll(async ({ playwright }) => {
   ids.agent = (await call<{ id: string }>('POST', '/v1/agents', tok.lead, { name: AGENT, slug: 'mira-ops', purpose: 'customer support', conversationType: 'SUPPORT', modelProfileId: profile.id, defaultQueueId: ids.seedQueue, teamIds: [owners] })).id;
   // Going live is a maker–checker approval (PM/research/11 §4): a second Head of the owning team checks it.
   await goLiveApproved(api, { adminToken: tok.admin, makerToken: tok.lead, agentId: ids.agent, ownerTeamId: owners, checker: { name: 'OPS Checker', email: 'ops.checker@e2e.ocso.test', password: 'correct-horse-battery-opschecker' } });
-  const channel = await approvedChannel<{ id: string; publicKey: string }>(api, tok.admin, { id: lead.id, token: tok.lead }, { kind: 'WEBCHAT', name: 'OPS Web chat', secrets: { visitorTokenSecret: randomBytes(32).toString('hex') } });
+  const channel = await approvedChannel<{ id: string; publicKey: string }>(api, tok.admin, { id: lead.id, token: tok.lead }, { kind: 'WEBCHAT', name: 'OPS Web chat', settings: { auth: { allowNativeApps: true } }, secrets: { visitorTokenSecret: randomBytes(32).toString('hex') } });
   ids.webchatKey = channel.publicKey;
   ids.channel = channel.id;
   // channel → pass-through router → the agent's queue (PM/research/11 §5).

@@ -31,6 +31,8 @@ export const mcpConnections = pgTable(
     allowedAgentIds: text().array().notNull().default(sql`'{}'::text[]`),
     grantedScopes: text().array().notNull().default(sql`'{}'::text[]`),
     sendCustomerClaims: boolean().notNull().default(false),
+    /** Agent tool calls carry the customer's verified web chat user token (0032; channels with passthrough tool identity). */
+    forwardUserToken: boolean().notNull().default(false),
     healthCheckSeconds: integer().notNull().default(60),
     lastSyncAt: ts('last_sync_at'),
     lastHealthAt: ts('last_health_at'),

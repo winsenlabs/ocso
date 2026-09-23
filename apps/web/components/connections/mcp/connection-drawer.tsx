@@ -114,6 +114,7 @@ export function ConnectionDrawer({ connection: c, tools, agents, canManage, clos
           { k: 'agents', v: agentsText(c, agents) },
           { k: 'confirmation', v: CONFIRMATION_LABEL[c.confirmationPolicy] },
           { k: 'claims', v: c.sendCustomerClaims ? 'signed customer claims sent' : 'not sent' },
+          { k: 'user token', v: c.forwardUserToken ? 'verified web chat user token forwarded' : 'not forwarded' },
           { k: 'health', v: c.health.checkedAt ? `${c.health.status?.toLowerCase() ?? '—'} · ${formatLatency(c.health.latencyMs)} · ${formatAge(c.health.checkedAt)} ago · every ${c.healthCheckSeconds}s` : `every ${c.healthCheckSeconds}s · no check yet` },
           { k: 'last sync', v: c.lastSyncAt ? `${formatAge(c.lastSyncAt)} ago` : 'never' },
           { k: 'credential', v: c.auth.strategy === 'NONE' ? 'none' : `stored by reference${c.auth.scopes.length ? ` · scopes ${c.auth.scopes.join(' ')}` : ''}` },

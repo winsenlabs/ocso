@@ -3,11 +3,12 @@ import { eq } from 'drizzle-orm';
 import type { ControlState, ToolResultOutput } from '@ocso/domain';
 import { toolCalls, uuidv7, type Db } from '@ocso/db';
 import { canonicalJson } from '@ocso/prompt-compiler';
-import { emitEvent } from '@ocso/application';
+import { agentActor, emitEvent, recordAudit } from '@ocso/application';
 import { currentTraceId, ocsoMetrics } from '@ocso/observability';
 import { authorizeToolCall, sanitizeForAudit, type ConnectionToolProviders, type HandoffRequest, type QueueTransferRequest, type SchemaValidator, type ToolOutcome, type ToolProviderRegistry } from '@ocso/tools';
 import type { ToolCallRequest } from '@ocso/model-providers';
 import type { AgentToolCatalog, CatalogEntry } from './catalog.js';
+import type { UserTokenSource } from './user-tokens.js';
 
 /** Per-connection MCP provider factory; registered through `connectionToolSource` in a ToolProviderRegistry. */
 export type ToolProviderFactory = ConnectionToolProviders;
@@ -54,6 +55,8 @@ export class ToolRunner {
     private readonly validate: SchemaValidator,
     private readonly claims: ClaimsIssuer | null,
     private readonly timeoutMs = 20_000,
+    /** Held end-user tokens (web chat passthrough), forwarded to connections that opted in. */
+    private readonly userTokens: UserTokenSource | null = null,
   ) {}
 
   async run(call: ToolCallRequest, ctx: ToolRunContext): Promise<ToolRunOutcome> {
@@ -130,6 +133,20 @@ export class ToolRunner {
     return this.execute(id, call, entry!, ctx);
   }
 
+  /** The conversation's held user token for an opted-in connection; audited (never the value). */
+  private async userTokenFor(toolCallId: string, connectionId: string, ctx: ToolRunContext): Promise<string | undefined> {
+    const token = await this.userTokens?.forConversation(ctx.conversationId);
+    if (!token) return undefined;
+    await recordAudit(this.db, agentActor(ctx.agentId, ctx.correlationId), {
+      action: 'tool.user_token_forwarded',
+      targetType: 'tool_call',
+      targetId: toolCallId,
+      summary: 'The customer’s verified user token was forwarded to the tool connection',
+      after: { connectionId, conversationId: ctx.conversationId },
+    });
+    return token;
+  }
+
   private async execute(id: string, call: ToolCallRequest, entry: CatalogEntry, ctx: ToolRunContext): Promise<ToolRunOutcome> {
     const connectionId = entry.connection?.id ?? null;
     // Registered first-party tools read OCSO state for the conversation and may request a handoff.
@@ -142,12 +159,14 @@ export class ToolRunner {
         connectionId && this.claims && entry.sendCustomerClaims
           ? await this.claims.issue({ customerId: ctx.customerId, conversationId: ctx.conversationId, agentId: ctx.agentId, connectionId, scopes: entry.tool.requiredScopes })
           : undefined;
+      const userToken = connectionId && entry.forwardUserToken ? await this.userTokenFor(id, connectionId, ctx) : undefined;
       outcome = await provider.invoke({
         toolCallId: id,
         toolName: entry.serverName,
         args: call.input,
         timeoutMs: this.timeoutMs,
         customerClaims: claims,
+        userToken,
         idempotencyKey: entry.tool.riskClass === 'READ' ? undefined : `tool:${ctx.turnId}:${call.toolCallId}`,
         ...(firstParty
           ? { scope: { conversationId: ctx.conversationId, customerId: ctx.customerId, agentId: ctx.agentId, historyWindowStartSeq: ctx.historyWindowStartSeq } }

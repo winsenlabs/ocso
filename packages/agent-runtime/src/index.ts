@@ -5,6 +5,7 @@ export * from './model/usage-recorder.js';
 export * from './tools/catalog.js';
 export * from './tools/builtins.js';
 export * from './tools/runner.js';
+export * from './tools/user-tokens.js';
 export * from './context/turn-cache.js';
 export * from './context/history.js';
 export * from './context/context-builder.js';

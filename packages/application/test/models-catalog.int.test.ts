@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { createTestDatabase, type TestDatabase } from '@ocso/db/testing';
 import { auditEvents, modelCatalogSnapshots, modelPricing, uuidv7 } from '@ocso/db';
-import { CATALOG_URLS } from '@ocso/model-providers';
+import { CATALOG_URLS, FIRST_PARTY_PROVIDERS, type ProviderDefinition } from '@ocso/model-providers';
 import { allowlistedFetch, ModelCatalogService, systemActor, type ActorContext } from '../src/index.js';
 
 /**
@@ -123,6 +123,29 @@ describe('model catalog service', () => {
     expect(rows.find((r) => r.source === 'models.dev')).toMatchObject({ entryCount: 62, lastError: expect.stringMatching(/^catalog_too_small/) });
     const status = await down.status({ principal: { userId: uuidv7(), role: 'TECH', displayName: 'Admin', teamIds: [], via: 'UI' }, correlationId: 'status' });
     expect(status.sources[0]).toMatchObject({ source: 'models.dev', origin: 'database', entries: 62, lastError: expect.stringMatching(/^catalog_too_small/) });
+  });
+
+  it("an installed provider's catalog mapping survives a refresh (snapshots keep the registered definitions' providers)", async () => {
+    const t2 = await createTestDatabase();
+    try {
+      const mistral = {
+        ...FIRST_PARTY_PROVIDERS[0]!,
+        kind: 'MISTRAL',
+        catalog: { providers: { 'models.dev': ['mistral'] }, candidates: (id: string) => [{ source: 'models.dev' as const, provider: 'mistral', id }] },
+      } as unknown as ProviderDefinition;
+      const doc = { ...modelsDev(0.75), mistral: { models: { 'mistral-large': { cost: { input: 2, output: 6 } } } } };
+      const without = new ModelCatalogService({ db: t2.db, fetch: catalogFetch({ 'models.dev': doc, litellm }).fetch, now: () => NOW });
+      await without.refreshIfStale(actor);
+      expect((await without.catalog()).describe(mistral.catalog, 'mistral-large').price).toBeNull();
+
+      const later = new Date(NOW.getTime() + 25 * 3_600_000);
+      const service = new ModelCatalogService({ db: t2.db, fetch: catalogFetch({ 'models.dev': doc, litellm }).fetch, now: () => later, providers: [...FIRST_PARTY_PROVIDERS, mistral] });
+      const run = await service.refreshIfStale(actor);
+      expect(run?.sources[0]).toMatchObject({ source: 'models.dev', ok: true, changed: true, entries: 63 });
+      expect((await service.catalog()).describe(mistral.catalog, 'mistral-large').price).toMatchObject({ entry: { provider: 'mistral' }, price: { input: 2, output: 6 } });
+    } finally {
+      await t2.drop();
+    }
   });
 
   it('the allowlist blocks other hosts, also on redirects', async () => {

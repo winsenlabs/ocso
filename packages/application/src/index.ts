@@ -22,6 +22,7 @@ export * from './channels/message-templates-status.js';
 export * from './channels/message-templates-view.js';
 export { manageableChannelsSql } from './channels/message-templates-access.js';
 export * from './channels/egress.js';
+export * from './channels/embed-sessions.js';
 export * from './agents/agents.js';
 export * from './agents/access.js';
 export * from './agents/owners.js';

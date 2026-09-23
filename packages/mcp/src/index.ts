@@ -45,6 +45,7 @@ export { McpHealthService, type HealthOptions, type McpHealthResult, type McpHea
 
 export {
   CUSTOMER_CLAIMS_HEADER,
+  USER_TOKEN_HEADER,
   IDEMPOTENCY_KEY_HEADER,
   McpToolProvider,
   type ApprovedToolDefinition,

@@ -13,3 +13,5 @@ export * from './adapters.js';
 export * from './audit.js';
 export * from './deployment.js';
 export * from './pg-notifier.js';
+// Installed plugins (OCSO_PLUGINS): the loader, SDK error translation, plugin descriptions.
+export * from './plugins/index.js';

@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { Principal } from '@ocso/auth';
 import { approvalDecisions, approvalProposals, approvalSecretRefs, auditEvents, channels, conversations, customers, users, uuidv7 } from '@ocso/db';
 import { createTestDatabase, type TestDatabase } from '@ocso/db/testing';
@@ -73,6 +73,21 @@ describe('channel drafts and activation', () => {
     await expect(svc.update(admin, ch.id, { name: 'renamed' })).rejects.toMatchObject({ code: 'approval_required', details: { objectKind: 'channel', action: 'UPDATE' } });
     const [audit] = await t.db.select().from(auditEvents).where(eq(auditEvents.action, 'channel.activate'));
     expect(audit).toMatchObject({ targetId: ch.id, actorId: approver.checker.userId });
+  });
+
+  it('channel create/update audit rows keep auth settings (configuration), but still redact a raw token under auth', async () => {
+    const auth = { mode: 'user', allowNativeApps: false, userToken: { verify: 'jwks', jwksUrl: 'https://idp.test/jwks' } };
+    const ch = await create('WA auth settings', { settings: { accountSid: 'AC1', auth } });
+    await svc.update(admin, ch.id, { settings: { accountSid: 'AC1', auth: { ...auth, allowNativeApps: true } } });
+    const [created] = await t.db.select().from(auditEvents).where(and(eq(auditEvents.targetId, ch.id), eq(auditEvents.action, 'channel.create')));
+    expect((created!.after as { settings: unknown }).settings).toEqual({ accountSid: 'AC1', auth });
+    expect(JSON.stringify(created!.after)).not.toContain(TOKEN);
+    const [updated] = await t.db.select().from(auditEvents).where(and(eq(auditEvents.targetId, ch.id), eq(auditEvents.action, 'channel.update')));
+    expect((updated!.after as { settings: unknown }).settings).toEqual({ accountSid: 'AC1', auth: { ...auth, allowNativeApps: true } });
+    expect((updated!.before as { settings: unknown }).settings).toEqual({ accountSid: 'AC1', auth });
+    const raw = await create('WA raw auth', { settings: { accountSid: 'AC1', auth: 'Bearer raw-secret' } });
+    const [rawRow] = await t.db.select().from(auditEvents).where(eq(auditEvents.targetId, raw.id));
+    expect((rawRow!.after as { settings: unknown }).settings).toEqual({ accountSid: 'AC1', auth: '[REDACTED]' });
   });
 
   it('the maker cannot approve their own channel, nor bootstrap it while anyone holds approvals.check.channels', async () => {

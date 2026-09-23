@@ -109,3 +109,13 @@ export function catalogProvidersOf(definitions: readonly ProviderDefinition[], s
 
 /** Catalog providers of every first-party provider (independent of the dev flag, so every process keeps the same snapshot). */
 export const firstPartyCatalogProviders = (source: CatalogSource): string[] => catalogProvidersOf(FIRST_PARTY_PROVIDERS, source);
+
+/**
+ * Catalog providers a catalog snapshot keeps for one source: every first-party
+ * mapping (whatever the dev flag, so every process keeps the same snapshot)
+ * plus those of the definitions this deployment registered, installed
+ * plugins included (`registry.list()`).
+ */
+export function snapshotCatalogProviders(source: CatalogSource, definitions: readonly ProviderDefinition[] = []): string[] {
+  return [...new Set([...firstPartyCatalogProviders(source), ...catalogProvidersOf(definitions, source)])];
+}

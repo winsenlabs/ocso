@@ -55,7 +55,8 @@ module "api" {
   memory           = var.api.memory
   cpu_architecture = var.cpu_architecture
 
-  environment = merge(local.app_env, { PORT = "4000", TRUST_PROXY = "true" })
+  # One hop: the ALB appends the client address to X-Forwarded-For (per-address limits on /public/webchat).
+  environment = merge(local.app_env, { PORT = "4000", TRUST_PROXY = "1" })
   secrets     = local.api_secrets
 
   container_port = 4000

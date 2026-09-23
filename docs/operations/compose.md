@@ -518,6 +518,27 @@ The `audit-db` service is then unused. ClickHouse cannot refuse writes by trigge
 tamper-evident (verification reports a second copy of a record or a second chain row), not
 append-only, and the purge user can delete — treat it like owner credentials.
 
+## 10a. Web chat: client addresses and rate limits
+
+The public web chat routes are rate-limited per client address and per visitor (sessions 30/min per address,
+messages 60/min per visitor, wrong secret keys on session-pass minting 30/min per channel and address;
+`429 rate_limited` with `Retry-After`). Minting session passes with the right secret key is not limited: the
+caller proved it holds the key, and a client- or user-mode site mints one per page view. The client address comes from `X-Forwarded-For` as allowed by `TRUST_PROXY` on the api:
+
+- `TRUST_PROXY=true` (the Compose default) takes the left-most entry. With the Caddy overlay that entry is the real
+  client: Caddy ignores any `X-Forwarded-For` a client sends and writes the connecting address itself, and the
+  web app's rewrite passes it on. Per-address limits are reliable.
+- Many visitors behind one address (an office or campus NAT) share the per-address session limit. Raise it with
+  `OCSO_WEBCHAT_RATE_LIMITS=session=300` in `.env` (keys `sessionPassFailures`, `session`, `messages`, `attachments`,
+  `stream`; requests per minute per api instance; `0` turns a limit off).
+- Without a proxy that overwrites the header (the web port exposed directly), a client can put anything in
+  `X-Forwarded-For`, so per-address limits are advisory; the per-channel and per-visitor limits still hold. Put a
+  proxy in front, or set `TRUST_PROXY` to the number of proxy hops you do run (`1` behind one load balancer:
+  the address that proxy appended), or `false` to use the socket peer.
+
+Server-side callers of the public web chat API that send no `Origin` header (React Native apps, backends) need
+the channel's auth mode `client`/`user` or "Allow native apps"; see `packages/ocso-chat/README.md`.
+
 ## 11. Troubleshooting
 
 | Symptom | Check |

@@ -9,7 +9,10 @@ import { getSession } from '../session';
 import type { ActionResult } from './models';
 
 /** What the "next steps" panel needs after a save (never secret values). */
-export type SavedChannel = Pick<Channel, 'id' | 'kind' | 'name' | 'publicKey' | 'webhookPath' | 'status'>;
+export type SavedChannel = Pick<Channel, 'id' | 'kind' | 'name' | 'publicKey' | 'webhookPath' | 'status'> & {
+  /** Keys OCSO generated that the admin must copy now (e.g. the web chat secret key); returned once on create. */
+  revealedSecrets?: Record<string, string> | undefined;
+};
 
 const Fields = z.object({
   name: z.string().trim().min(1, 'Enter a name').max(120),
@@ -24,7 +27,11 @@ export type ChannelApprovalChoice = z.input<typeof Approval>;
 /** Any kind the API's registry knows (open; the API refuses unregistered kinds). */
 const Create = Fields.extend({ kind: z.string().regex(/^[A-Z][A-Z0-9_]{1,39}$/) });
 
-async function run<I>(schema: z.ZodType<I>, raw: unknown, call: (input: I) => Promise<Channel | { proposal: unknown }>): Promise<ActionResult<SavedChannel | null>> {
+async function run<I>(
+  schema: z.ZodType<I>,
+  raw: unknown,
+  call: (input: I) => Promise<(Channel & { revealedSecrets?: Record<string, string> | undefined }) | { proposal: unknown }>,
+): Promise<ActionResult<SavedChannel | null>> {
   const parsed = schema.safeParse(raw);
   if (!parsed.success) return { ok: false, message: parsed.error.issues.map((i) => `${i.path.join('.') || 'input'}: ${i.message}`).join('; ') };
   const session = await getSession();
@@ -35,7 +42,8 @@ async function run<I>(schema: z.ZodType<I>, raw: unknown, call: (input: I) => Pr
     refresh();
     // 202: the change became a proposal (nothing changed yet).
     if ('proposal' in c) return { ok: true, data: null };
-    return { ok: true, data: { id: c.id, kind: c.kind, name: c.name, publicKey: c.publicKey, webhookPath: c.webhookPath, status: c.status } };
+    const revealed = c.revealedSecrets && Object.keys(c.revealedSecrets).length ? { revealedSecrets: c.revealedSecrets } : {};
+    return { ok: true, data: { id: c.id, kind: c.kind, name: c.name, publicKey: c.publicKey, webhookPath: c.webhookPath, status: c.status, ...revealed } };
   } catch (err) {
     return { ok: false, message: describeApiError(err), code: err instanceof ApiError ? err.code : undefined };
   }

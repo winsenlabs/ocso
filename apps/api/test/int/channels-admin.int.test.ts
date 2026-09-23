@@ -3,6 +3,9 @@ import { maskIdentity } from '@ocso/application';
 import { completeSetup, startApi, type ApiHarness } from './harness.js';
 import { approveProposal, liveChannel, platformChecker, type Checker } from './platform.js';
 
+/** Widget calls come from OCSO's own origin (the iframe); calls without an Origin need native apps or a pass. */
+const WIDGET_ORIGIN = 'http://localhost:3000';
+
 let h: ApiHarness;
 let admin: string;
 let checker: Checker;
@@ -61,7 +64,7 @@ describe('channel administration (design/04 Channels)', () => {
     const created = await liveChannel<{ id: string; publicKey: string; secretRefs: Record<string, string> }>(h, admin, checker, { kind: 'WEBCHAT', name: 'Website chat', settings: { allowedOrigins: ['https://www.meridian.example'] } });
     expect(Object.keys(created.secretRefs)).toContain('visitorTokenSecret');
     expect(JSON.stringify(created)).not.toMatch(/"visitorTokenSecret":"[A-Za-z0-9_-]{40,}"/);
-    const session = await h.http().post(`/public/webchat/${created.publicKey}/session`).send({}).expect(200);
+    const session = await h.http().post(`/public/webchat/${created.publicKey}/session`).set('origin', WIDGET_ORIGIN).send({}).expect(200);
     expect(session.body.token).toEqual(expect.any(String));
   });
 
@@ -86,7 +89,7 @@ describe('channel administration (design/04 Channels)', () => {
     expect(rotation.text).not.toContain(SECRET);
     const detail = await h.http().get(`/v1/approvals/${rotation.body.proposal.id}`).set(auth(checker.token)).expect(200);
     expect(detail.text).not.toContain(SECRET);
-    expect(detail.body.after.credentials).toEqual({ visitorTokenSecret: 'new value (proposed)' });
+    expect(detail.body.after.credentials).toEqual({ visitorTokenSecret: 'new value (proposed)', secretKey: 'stored' });
     const disabled = await h.http().patch(`/v1/channels/${created.body.id}`).set(auth(admin)).send({ status: 'DISABLED' }).expect(200);
     expect(disabled.body.status).toBe('DISABLED');
     await approveProposal(h, checker, rotation.body.proposal);

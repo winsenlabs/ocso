@@ -14,23 +14,50 @@ import { WebChatAuthError } from './errors.js';
 
 export const VISITOR_TOKEN_PREFIX = 'wcv1';
 export const CLOCK_SKEW_SECONDS = 60;
-const MAX_TOKEN_LENGTH = 2_048;
+/** Room for up to 4 KiB of context (base64url of JSON) besides the ids. */
+export const MAX_VISITOR_TOKEN_LENGTH = 12_288;
+const MAX_TOKEN_LENGTH = MAX_VISITOR_TOKEN_LENGTH;
 
 export const VisitorId = z.string().regex(/^[A-Za-z0-9_-]{8,128}$/, 'invalid visitor id');
 export const CustomerRef = z.string().min(1).max(256);
+
+/**
+ * How the session was proven: `p` a session pass from the site's backend,
+ * `u` a verified end-user token (also implies the backend or IdP vouched).
+ */
+export type VisitorProof = 'p' | 'u';
+
+const TokenContext = z.object({
+  s: z.enum(['h', 'c']),
+  v: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
+  at: z.number().int().nonnegative(),
+});
 
 const Claims = z.object({
   vid: VisitorId,
   cid: z.string().min(1).max(128),
   ref: CustomerRef.optional(),
+  am: z.enum(['p', 'u']).optional(),
+  nm: z.string().max(500).optional(),
+  cx: TokenContext.optional(),
   iat: z.number().int().nonnegative(),
   exp: z.number().int().positive(),
 });
+
+/** Context carried by a visitor token: who vouched for it and the allowlisted values. */
+export interface VisitorTokenContext {
+  source: 'host' | 'client';
+  values: Record<string, string | number | boolean>;
+  at: Date;
+}
 
 export interface VisitorTokenClaims {
   visitorId: string;
   channelId: string;
   externalCustomerRef?: string | undefined;
+  proof?: VisitorProof | undefined;
+  name?: string | undefined;
+  context?: VisitorTokenContext | undefined;
   issuedAt: Date;
   expiresAt: Date;
 }
@@ -41,6 +68,11 @@ export interface IssueVisitorTokenInput {
   visitorId?: string | undefined;
   /** Only after the host app authenticated the customer (see verifyHostJwt). */
   externalCustomerRef?: string | undefined;
+  /** How the session was proven (client / user auth modes require it). */
+  proof?: VisitorProof | undefined;
+  /** Display name a verified token carried. */
+  name?: string | undefined;
+  context?: VisitorTokenContext | undefined;
   ttlSeconds: number;
 }
 
@@ -70,7 +102,19 @@ export function issueVisitorToken(input: IssueVisitorTokenInput, secret: string,
   if (!input.channelId || input.channelId.length > 128) throw validation('invalid_channel_id', 'invalid channel id');
   const iat = seconds(now);
   const exp = iat + Math.max(1, Math.floor(input.ttlSeconds));
-  const claims = { vid: visitorId, cid: input.channelId, ...(ref ? { ref } : {}), iat, exp };
+  const cx = input.context && Object.keys(input.context.values).length
+    ? { s: input.context.source === 'host' ? ('h' as const) : ('c' as const), v: input.context.values, at: seconds(input.context.at) }
+    : undefined;
+  const claims = {
+    vid: visitorId,
+    cid: input.channelId,
+    ...(ref ? { ref } : {}),
+    ...(input.proof ? { am: input.proof } : {}),
+    ...(input.name ? { nm: input.name.slice(0, 500) } : {}),
+    ...(cx ? { cx } : {}),
+    iat,
+    exp,
+  };
   const signingInput = `${VISITOR_TOKEN_PREFIX}.${base64UrlEncode(JSON.stringify(claims))}`;
   return { token: `${signingInput}.${sign(signingInput, secret)}`, visitorId, expiresAt: new Date(exp * 1000) };
 }
@@ -114,6 +158,9 @@ export function verifyVisitorToken(
     visitorId: claims.vid,
     channelId: claims.cid,
     externalCustomerRef: claims.ref,
+    proof: claims.am,
+    name: claims.nm,
+    context: claims.cx ? { source: claims.cx.s === 'h' ? 'host' : 'client', values: claims.cx.v, at: new Date(claims.cx.at * 1000) } : undefined,
     issuedAt: new Date(claims.iat * 1000),
     expiresAt: new Date(claims.exp * 1000),
   };

@@ -53,13 +53,18 @@ export function SecretFields({ fields, values, generated, errors, stored, onChan
                 style={{ flex: 1 }}
               />
               {f.generate === 'client' ? (
-                <button type="button" className="btn tiny" onClick={() => onChange(f.key, randomSecret(), true)} aria-label={`Generate ${f.label}`}>
+                <button type="button" className="btn tiny" onClick={() => onChange(f.key, `${f.prefix ?? ''}${randomSecret()}`, true)} aria-label={`Generate ${f.label}`}>
                   Generate
+                </button>
+              ) : f.reveal === 'once' && stored ? (
+                <button type="button" className="btn tiny" onClick={() => onChange(f.key, `${f.prefix ?? ''}${randomSecret()}`, true)} style={{ whiteSpace: 'nowrap' }}>
+                  {isSet ? 'Rotate' : 'Generate'} {f.label.toLowerCase()}
                 </button>
               ) : null}
             </div>
             <span id={`${id}-hint`} className="hint">
-              {f.hint ? `${f.hint} · ` : ''}write-only · stored by reference
+              {f.hint ? `${f.hint} · ` : ''}
+              {f.reveal === 'once' ? 'shown once when generated · ' : ''}write-only · stored by reference
             </span>
             {shown && values[f.key] === shown ? (
               <div className="generated-secret" role="status">
@@ -67,7 +72,9 @@ export function SecretFields({ fields, values, generated, errors, stored, onChan
                   {shown}
                 </code>
                 <CopyButton value={shown} what={f.label} />
-                <span className="mono-sm">copy it now · after saving OCSO never shows it again</span>
+                <span className="mono-sm">
+                  copy it now · after saving OCSO never shows it again{f.reveal === 'once' && isSet ? ' · it replaces the current key once this change is saved (or approved)' : ''}
+                </span>
               </div>
             ) : null}
             {error ? (

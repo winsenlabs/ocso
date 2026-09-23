@@ -38,6 +38,8 @@ export { devScriptedProvider, type DevScriptedSettings } from './providers/dev-s
 export {
   ProviderRegistry,
   catalogProvidersOf,
+  firstPartyCatalogProviders,
+  snapshotCatalogProviders,
   createDefaultRegistry,
   createRegistry,
   FIRST_PARTY_PROVIDERS,

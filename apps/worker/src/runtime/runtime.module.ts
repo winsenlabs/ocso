@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { CustomerClaimsIssuer, RoutingEngine, SettingsService } from '@ocso/application';
 import {
   ChannelRuntime,
+  HeldUserTokenSource,
   channelContextFrom,
   ContextBuilder,
   ConversationInsightsService,
@@ -100,7 +101,7 @@ export const HISTORY_WINDOW = 20;
     { provide: RouteProcessor, inject: [DB, RoutingEngine, LOGGER], useFactory: (db: Db, engine: RoutingEngine, logger: Logger) => new RouteProcessor({ db, engine, logger }) },
     {
       provide: TurnProcessor,
-      inject: [DB, QUEUE, LeaseManager, ModelGateway, ContextBuilder, MediaMaterializer, TOOL_PROVIDERS, PROVIDER_SOURCE, CustomerClaimsIssuer, LOGGER],
+      inject: [DB, QUEUE, LeaseManager, ModelGateway, ContextBuilder, MediaMaterializer, TOOL_PROVIDERS, PROVIDER_SOURCE, CustomerClaimsIssuer, ChannelRuntime, LOGGER],
       useFactory: (
         db: Db,
         queue: QueueAdapter,
@@ -111,9 +112,11 @@ export const HISTORY_WINDOW = 20;
         toolProviders: ToolProviderRegistry,
         source: ProviderAdapterSource,
         claims: CustomerClaimsIssuer,
+        channels: ChannelRuntime,
         logger: Logger,
       ) => {
         const validate = createAjvValidator();
+        const userTokens = new HeldUserTokenSource(db, channels);
         return new TurnProcessor({
           db,
           queue,
@@ -121,7 +124,7 @@ export const HISTORY_WINDOW = 20;
           gateway,
           context,
           media,
-          toolRunner: (catalog) => new ToolRunner(db, catalog, toolProviders, validate, claims),
+          toolRunner: (catalog) => new ToolRunner(db, catalog, toolProviders, validate, claims, undefined, userTokens),
           capabilitiesFor: capabilitiesResolver(db, source),
           logger,
           summarizeAfter: HISTORY_WINDOW * 2,

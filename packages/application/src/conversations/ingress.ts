@@ -1,6 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { inboundStartsAiTurn, nextDeliveryStatus, type ControlState, type DeliveryStatus, type InteractionPart } from '@ocso/domain';
-import { channels, conversations, interactions, virtualAgents, type Db } from '@ocso/db';
+import { channels, conversations, interactions, virtualAgents, type Db, type DbOrTx, type HostContext } from '@ocso/db';
 import type { QueueAdapter } from '@ocso/queue';
 import { recordAudit } from '../audit/audit.js';
 import { emitEvent } from '../events/outbox.js';
@@ -18,6 +18,10 @@ export interface IngressMessage {
   profileName?: string | undefined;
   receivedAt: Date;
   parts: InteractionPart[];
+  /** The channel verified the primary identity (the customer identity row is marked verified). */
+  identityVerified?: boolean | undefined;
+  /** Context the embedding site passed with this session; stored on the conversation (latest session wins). */
+  hostContext?: { source: 'host' | 'client'; values: Readonly<Record<string, string | number | boolean>>; at: Date } | undefined;
 }
 
 export interface IngressStatusUpdate {
@@ -38,6 +42,15 @@ export interface IngressOptions {
   now?: () => Date;
   /** Called when a message is rejected because the channel routes nowhere (log it loudly: customers are unanswered). */
   onRejected?: ((rejection: { channelId: string; reason: 'no_router'; detail: string }) => void) | undefined;
+}
+
+/** The latest session's site context becomes the conversation's (written only when it changed). */
+async function applyHostContext(tx: DbOrTx, conversationId: string, context: NonNullable<IngressMessage['hostContext']>): Promise<void> {
+  const value: HostContext = { source: context.source, values: { ...context.values }, at: context.at.toISOString() };
+  await tx
+    .update(conversations)
+    .set({ hostContext: value })
+    .where(and(eq(conversations.id, conversationId), sql`${conversations.hostContext} IS DISTINCT FROM ${JSON.stringify(value)}::jsonb`));
 }
 
 /**
@@ -70,6 +83,7 @@ export class IngressService {
         primary: { kind: message.identityKind, value: message.identityValue },
         alternates: message.alternateIdentities,
         profileName: message.profileName,
+        primaryVerified: message.identityVerified,
         now,
       });
       // channel → router → queue → agent (PM/research/11 §5.3).
@@ -88,6 +102,7 @@ export class IngressService {
         return { status: 'rejected', reason: admission.reason } as const;
       }
       const { conversationId, created } = admission;
+      if (message.hostContext) await applyHostContext(tx, conversationId, message.hostContext);
       const appended = await appendInteraction(
         tx,
         conversationId,

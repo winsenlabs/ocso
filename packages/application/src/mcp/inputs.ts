@@ -38,7 +38,7 @@ export const CreateConnectionInput = z.object({
 export type CreateConnectionInput = z.input<typeof CreateConnectionInput>;
 
 const HEADER_NAME = /^[A-Za-z0-9!#$%&'*+.^_`|~-]{1,64}$/;
-const RESERVED_HEADERS = new Set(['host', 'content-length', 'content-type', 'transfer-encoding', 'connection', 'accept', 'cookie', 'idempotency-key', 'x-ocso-customer-claims']);
+const RESERVED_HEADERS = new Set(['host', 'content-length', 'content-type', 'transfer-encoding', 'connection', 'accept', 'cookie', 'idempotency-key', 'x-ocso-customer-claims', 'x-ocso-user-token', 'x-ocso-user-bearer']);
 
 export const HeaderAuthInput = z.object({
   headerName: z
@@ -104,6 +104,8 @@ export const ApproveConnectionInput = z.object({
   allowedAgentIds: z.union([z.literal('*'), z.array(z.uuid()).max(200)]),
   confirmationPolicy: z.enum(['SENSITIVE_ONLY', 'ALL_WRITES', 'NONE']).default('SENSITIVE_ONLY'),
   sendCustomerClaims: z.boolean().default(false),
+  /** Agent calls carry the customer's verified web chat user token (channels whose tool identity is passthrough). */
+  forwardUserToken: z.boolean().default(false),
   healthCheckSeconds: z.number().int().min(15).max(3_600).default(60),
 });
 export type ApproveConnectionInput = z.input<typeof ApproveConnectionInput>;

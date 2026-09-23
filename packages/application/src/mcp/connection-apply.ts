@@ -25,13 +25,14 @@ export const policyOf = (row: ConnectionRow) => ({
   allowedAgentIds: row.allowedAgentIds,
   confirmationPolicy: row.confirmationPolicy,
   sendCustomerClaims: row.sendCustomerClaims,
+  forwardUserToken: row.forwardUserToken,
   healthCheckSeconds: row.healthCheckSeconds,
 });
 
 /** Why a policy cannot apply (agents that do not exist, agents on a user-scope template). */
 export async function policyProblems(tx: DbOrTx, conn: ConnectionRow, policy: ConnectionPolicy): Promise<ApprovalProblem[]> {
   const allowed = policy.allowedAgentIds === '*' ? ['*'] : [...new Set(policy.allowedAgentIds)];
-  if (isTemplate(conn) && (allowed.length > 0 || policy.sendCustomerClaims)) {
+  if (isTemplate(conn) && (allowed.length > 0 || policy.sendCustomerClaims || policy.forwardUserToken)) {
     return [{ code: 'mcp_user_scope_agents', message: 'User-scoped connections are never available to virtual agents.' }];
   }
   const explicit = allowed.filter((id) => id !== '*');
@@ -115,7 +116,7 @@ export async function writeConnectionPolicy(
     .update(mcpConnections)
     .set({
       ...(policy
-        ? { allowedAgentIds: allowed, confirmationPolicy: policy.confirmationPolicy, sendCustomerClaims: policy.sendCustomerClaims, healthCheckSeconds: policy.healthCheckSeconds }
+        ? { allowedAgentIds: allowed, confirmationPolicy: policy.confirmationPolicy, sendCustomerClaims: policy.sendCustomerClaims, forwardUserToken: policy.forwardUserToken, healthCheckSeconds: policy.healthCheckSeconds }
         : {}),
       ...(o.live ? { status: 'ACTIVE' as const, approvedBy: o.live.approvedBy, approvedAt: o.now, lastHealthAt: null } : {}),
       updatedAt: o.now,
@@ -125,6 +126,7 @@ export async function writeConnectionPolicy(
   const resumed = o.live && conn.status === 'DISABLED';
   await recordAudit(tx, actor, {
     action: o.live ? (resumed ? 'mcp.connection.enable' : 'mcp.connection.approve') : 'mcp.connection.policy',
+    redaction: 'settings',
     targetType: 'mcp_connection',
     targetId: conn.id,
     summary: o.live

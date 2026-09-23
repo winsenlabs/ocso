@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { ocsoOrigin } from './ocso-origin';
 
 /**
  * Response policy for the public widget page `/chat/:publicKey` (runs in
@@ -55,9 +56,9 @@ export function widgetCsp(ancestors: string): string {
   ].join('; ');
 }
 
-async function allowedOriginsFor(publicKey: string): Promise<string[] | null> {
+async function allowedOriginsFor(publicKey: string, origin: string | null): Promise<string[] | null> {
   const res = await fetch(`${apiBase()}/public/webchat/${encodeURIComponent(publicKey)}/config`, {
-    headers: { accept: 'application/json' },
+    headers: { accept: 'application/json', ...(origin ? { origin } : {}) },
     cache: 'no-store',
     signal: AbortSignal.timeout(3_000),
   });
@@ -66,13 +67,13 @@ async function allowedOriginsFor(publicKey: string): Promise<string[] | null> {
   return Array.isArray(body.allowedOrigins) ? body.allowedOrigins.filter((o): o is string => typeof o === 'string') : null;
 }
 
-export async function framePolicyFor(publicKey: string, now = Date.now()): Promise<string> {
+export async function framePolicyFor(publicKey: string, now = Date.now(), origin: string | null = null): Promise<string> {
   const hit = cache.get(publicKey);
   if (hit && hit.expires > now) return hit.value;
   let value: string;
   let ttl = CACHE_TTL_MS;
   try {
-    value = frameAncestors(await allowedOriginsFor(publicKey));
+    value = frameAncestors(await allowedOriginsFor(publicKey, origin));
   } catch {
     value = "'none'";
   }
@@ -85,7 +86,7 @@ export async function framePolicyFor(publicKey: string, now = Date.now()): Promi
 /** proxy.ts entry: the widget page is public (no staff session) and gets the policy above. */
 export async function webChatPageResponse(request: NextRequest): Promise<NextResponse> {
   const key = request.nextUrl.pathname.split('/')[2] ?? '';
-  const ancestors = KEY.test(key) ? await framePolicyFor(key) : "'none'";
+  const ancestors = KEY.test(key) ? await framePolicyFor(key, Date.now(), ocsoOrigin(request.headers) ?? request.nextUrl.origin) : "'none'";
   const response = NextResponse.next();
   response.headers.set('Content-Security-Policy', widgetCsp(ancestors));
   response.headers.set('Referrer-Policy', 'no-referrer');

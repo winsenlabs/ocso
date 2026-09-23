@@ -170,9 +170,24 @@ export const ApiEnv = z.object({
    * need approval. Refused when NODE_ENV=production.
    */
   OCSO_DEV_SKIP_ACCESS_APPROVAL: blank(bool),
-  TRUST_PROXY: bool.default(true),
+  /** `true` (every hop; the leftmost X-Forwarded-For entry, client-forgeable), `false`/`0`, or a proxy hop count (`1` behind one ALB). */
+  TRUST_PROXY: z
+    .string()
+    .regex(/^(true|false|\d{1,2})$/i)
+    .default('true')
+    .transform((v) => (v.toLowerCase() === 'true' ? true : v.toLowerCase() === 'false' ? false : Number(v))),
   /** Deep link from telemetry to the trace backend, e.g. `http://localhost:16686/trace/{traceId}`. */
   OCSO_TRACE_URL_TEMPLATE: z.string().includes('{traceId}').optional(),
+  /**
+   * Overrides of the public web chat rate limits, requests per minute per API instance:
+   * `session=120,messages=90` (keys: sessionPassFailures, session, messages, attachments, stream). Raise `session`
+   * when many visitors share one address (an office NAT); `0` turns a limit off.
+   */
+  OCSO_WEBCHAT_RATE_LIMITS: z
+    .string()
+    .regex(/^$|^\s*(sessionPassFailures|session|messages|attachments|stream)\s*=\s*\d{1,6}\s*(,\s*(sessionPassFailures|session|messages|attachments|stream)\s*=\s*\d{1,6}\s*)*$/, 'use key=number pairs, e.g. session=120,messages=90')
+    .optional()
+    .transform((v) => Object.fromEntries((v ?? '').split(',').filter((pair) => pair.trim()).map((pair) => { const [k, n] = pair.split('='); return [k!.trim(), Number(n!.trim())]; })) as Partial<Record<'sessionPassFailures' | 'session' | 'messages' | 'attachments' | 'stream', number>>),
 });
 export type ApiEnv = z.infer<typeof ApiEnv>;
 

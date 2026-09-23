@@ -69,3 +69,16 @@ describe('configuration', () => {
     });
   });
 });
+
+describe('OCSO_WEBCHAT_RATE_LIMITS', () => {
+  it('is empty by default and parses key=number overrides', () => {
+    expect(ApiEnv.parse({ ...base }).OCSO_WEBCHAT_RATE_LIMITS).toEqual({});
+    expect(ApiEnv.parse({ ...base, OCSO_WEBCHAT_RATE_LIMITS: '' }).OCSO_WEBCHAT_RATE_LIMITS).toEqual({});
+    expect(ApiEnv.parse({ ...base, OCSO_WEBCHAT_RATE_LIMITS: 'session=120, messages=0' }).OCSO_WEBCHAT_RATE_LIMITS).toEqual({ session: 120, messages: 0 });
+  });
+
+  it('refuses unknown keys and malformed values', () => {
+    expect(() => ApiEnv.parse({ ...base, OCSO_WEBCHAT_RATE_LIMITS: 'sessions=5' })).toThrow();
+    expect(() => ApiEnv.parse({ ...base, OCSO_WEBCHAT_RATE_LIMITS: 'session=-1' })).toThrow();
+  });
+});

@@ -62,9 +62,11 @@
   },
   "devDependencies": {
     "@nestjs/testing": "catalog:",
-    "supertest": "catalog:",
-    "@types/supertest": "catalog:",
     "@types/express": "^5.0.6",
-    "@types/pg": "catalog:"
+    "@types/pg": "catalog:",
+    "@types/supertest": "catalog:",
+    "@winsendotai/ocso-chat": "workspace:*",
+    "jose": "6.2.12",
+    "supertest": "catalog:"
   }
 }

@@ -7,6 +7,9 @@ import { completeSetup, startApi, type ApiHarness } from './harness.js';
 import { activeWebChat } from './routing-web.js';
 import { setTeams } from './teams.js';
 
+/** Widget calls come from OCSO's own origin (the iframe); calls without an Origin need native apps or a pass. */
+const WIDGET_ORIGIN = 'http://localhost:3000';
+
 /**
  * Routing maker–checker over HTTP (PM/research/11 §4, §5.7; wave 2): a Lead
  * builds a language menu (English / Tamil) over two attribute queues; nothing
@@ -79,8 +82,8 @@ describe('a Lead builds a language menu; a Head approves it', () => {
     ids.version = (await h.http().post(`/v1/routers/${ids.router}/versions`).set(auth(lead)).send({ reason: 'first' }).expect(201)).body.id;
     const attached = await h.http().put(`/v1/routers/${ids.router}/channels`).set(auth(lead)).send({ channelIds: [ids.channel] }).expect(200);
     expect(attached.body).toEqual({ detached: [], attached: [ids.channel] });
-    const visitor = (await h.http().post(`/public/webchat/${ids.key}/session`).send({}).expect(200)).body.token;
-    await h.http().post(`/public/webchat/${ids.key}/messages`).set(auth(visitor)).send({ clientMessageId: 'cm_ra_0000', text: 'hello?' }).expect(400);
+    const visitor = (await h.http().post(`/public/webchat/${ids.key}/session`).set('origin', WIDGET_ORIGIN).send({}).expect(200)).body.token;
+    await h.http().post(`/public/webchat/${ids.key}/messages`).set('origin', WIDGET_ORIGIN).set(auth(visitor)).send({ clientMessageId: 'cm_ra_0000', text: 'hello?' }).expect(400);
   });
 
   it('activation is always a proposal, and only over approved queues', async () => {
@@ -110,11 +113,11 @@ describe('a Lead builds a language menu; a Head approves it', () => {
     const decided = await h.http().post(`/v1/approvals/${ids.routerProposal}/decision`).set(auth(head)).send({ decision: 'APPROVE', reason: 'Reviewed the menu', contentHash: shown.contentHash }).expect(200);
     expect(decided.body.status).toBe('APPROVED');
 
-    const visitor = (await h.http().post(`/public/webchat/${ids.key}/session`).send({}).expect(200)).body.token;
-    const sent = await h.http().post(`/public/webchat/${ids.key}/messages`).set(auth(visitor)).send({ clientMessageId: 'cm_ra_0001', text: 'vanakkam' }).expect(201);
+    const visitor = (await h.http().post(`/public/webchat/${ids.key}/session`).set('origin', WIDGET_ORIGIN).send({}).expect(200)).body.token;
+    const sent = await h.http().post(`/public/webchat/${ids.key}/messages`).set('origin', WIDGET_ORIGIN).set(auth(visitor)).send({ clientMessageId: 'cm_ra_0001', text: 'vanakkam' }).expect(201);
     const engine = new RoutingEngine({ db: h.db.db, queue: new MemoryQueue() });
     await engine.advance(sent.body.conversationId, 'r1');
-    await h.http().post(`/public/webchat/${ids.key}/messages`).set(auth(visitor)).send({ clientMessageId: 'cm_ra_0002', text: 'Tamil' }).expect(201);
+    await h.http().post(`/public/webchat/${ids.key}/messages`).set('origin', WIDGET_ORIGIN).set(auth(visitor)).send({ clientMessageId: 'cm_ra_0002', text: 'Tamil' }).expect(201);
     await engine.advance(sent.body.conversationId, 'r2');
     const detail = (await h.http().get(`/v1/conversations/${sent.body.conversationId}`).set(auth(lead)).expect(200)).body;
     expect(detail).toMatchObject({ controlState: 'AI_ACTIVE', agent: { id: ids.maya }, queue: { id: ids.tamil }, routing: { outcome: 'RULE', attributes: { language: 'ta' }, rule: 'language=ta' } });

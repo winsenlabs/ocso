@@ -2,11 +2,14 @@ import type { Tool } from '@modelcontextprotocol/client';
 import type { ToolInvocation, ToolOutcome, ToolProvider } from '@ocso/tools';
 import { classifyMcpError } from '../client/classify-error.js';
 import { createClientHandle, type McpClientHandle } from '../client/client-handle.js';
+import { USER_BEARER_MARKER } from '../client/credential-session.js';
 import type { McpConnectionTarget, McpServiceDeps } from '../types.js';
 import { mapCallError, mapCallResult } from './result-mapper.js';
 
 /** Header carrying OCSO's short-lived signed customer claims to trusted servers (docs/08 §4). */
 export const CUSTOMER_CLAIMS_HEADER = 'X-OCSO-Customer-Claims';
+/** Header carrying the customer's verified user token to connections that authenticate OCSO some other way. */
+export const USER_TOKEN_HEADER = 'X-OCSO-User-Token';
 /** Header carrying the per-call idempotency key (retry-safe writes). */
 export const IDEMPOTENCY_KEY_HEADER = 'Idempotency-Key';
 
@@ -22,6 +25,11 @@ export interface McpToolProviderOptions {
   deps: McpServiceDeps;
   /** Only trusted connections receive customer claims. Default false. */
   trusted?: boolean | undefined;
+  /**
+   * Forward the customer's verified user token when a call carries one: as `Authorization: Bearer` when the
+   * connection has no auth of its own, else as `X-OCSO-User-Token`. Default false.
+   */
+  forwardUserToken?: boolean | undefined;
   /** Lookup of approved definitions by server tool name (enables output-schema validation). */
   approvedTool?: ((toolName: string) => ApprovedToolDefinition | undefined) | undefined;
   /** Connect/negotiation deadline (bounded by each call's own timeout). Default 10 s. */
@@ -32,6 +40,7 @@ export interface McpToolProviderOptions {
 
 const HEADER_VALUE = /^[\x21-\x7E]+$/;
 const MAX_CLAIMS = 8_192;
+const MAX_USER_TOKEN = 8_192;
 const MAX_IDEMPOTENCY_KEY = 255;
 const RESET_KINDS = new Set(['auth', 'credentials', 'network', 'negotiation', 'egress']);
 
@@ -88,7 +97,7 @@ export class McpToolProvider implements ToolProvider {
     }
     const deadline = AbortSignal.timeout(Math.max(1, call.timeoutMs));
     const signal = call.signal ? AbortSignal.any([call.signal, deadline]) : deadline;
-    const extraSecrets = call.customerClaims ? [call.customerClaims] : [];
+    const extraSecrets = [call.customerClaims, call.userToken].filter((s): s is string => Boolean(s));
     try {
       const handle = await raceAbort(this.getHandle(call.timeoutMs), signal);
       const approved = this.options.approvedTool?.(call.toolName);
@@ -125,6 +134,12 @@ export class McpToolProvider implements ToolProvider {
     if (call.customerClaims !== undefined && this.options.trusted === true) {
       if (call.customerClaims.length > MAX_CLAIMS || !HEADER_VALUE.test(call.customerClaims)) return null;
       headers[CUSTOMER_CLAIMS_HEADER] = call.customerClaims;
+    }
+    if (call.userToken !== undefined && this.options.forwardUserToken === true) {
+      if (call.userToken.length > MAX_USER_TOKEN || !HEADER_VALUE.test(call.userToken)) return null;
+      // The SDK refuses a per-request Authorization: the marker becomes `Authorization: Bearer` in the credential fetch.
+      if (this.options.target.auth.strategy === 'NONE') headers[USER_BEARER_MARKER] = call.userToken;
+      else headers[USER_TOKEN_HEADER] = call.userToken;
     }
     return headers;
   }

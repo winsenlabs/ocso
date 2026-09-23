@@ -22,7 +22,16 @@ const RESERVED_HEADERS = new Set([
   'mcp-name',
   'idempotency-key',
   'x-ocso-customer-claims',
+  'x-ocso-user-token',
+  'x-ocso-user-bearer',
 ]);
+
+/**
+ * Internal per-request marker: the MCP SDK refuses a per-request `Authorization`, so a connection without
+ * auth of its own that forwards the customer's user token sets this header, and `wrapFetch` turns it into
+ * `Authorization: Bearer` on that one request (to the connection's own origin only; stripped everywhere else).
+ */
+export const USER_BEARER_MARKER = 'x-ocso-user-bearer';
 
 /**
  * Per-client credential handling. Secrets are resolved lazily through the
@@ -79,8 +88,8 @@ export class CredentialSession {
   /** Inject the HEADER-strategy credential on requests to the connection's own origin. */
   wrapFetch(fetchFn: FetchFn): FetchFn {
     const auth = this.target.auth;
-    if (auth.strategy !== 'HEADER') return fetchFn;
     const origin = new URL(this.target.url).origin;
+    if (auth.strategy !== 'HEADER') return forwardUserBearer(fetchFn, origin, auth.strategy === 'NONE');
     return async (input, init) => {
       const url = new URL(String(input));
       if (url.origin !== origin) return fetchFn(input, init);
@@ -174,4 +183,16 @@ export class CredentialSession {
       throw new McpCredentialError('unresolvable');
     }
   }
+}
+
+/** Move the user-bearer marker into `Authorization` for connections without auth of their own; strip it otherwise. */
+function forwardUserBearer(fetchFn: FetchFn, origin: string, allowed: boolean): FetchFn {
+  return async (input, init) => {
+    const headers = new Headers(init?.headers);
+    const bearer = headers.get(USER_BEARER_MARKER);
+    if (bearer === null) return fetchFn(input, init);
+    headers.delete(USER_BEARER_MARKER);
+    if (allowed && new URL(String(input)).origin === origin) headers.set('authorization', `Bearer ${bearer}`);
+    return fetchFn(input, { ...init, headers });
+  };
 }

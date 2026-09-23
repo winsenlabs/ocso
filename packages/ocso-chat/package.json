@@ -1,0 +1,56 @@
+{
+  "name": "@winsendotai/ocso-chat",
+  "version": "0.1.0",
+  "description": "Headless client for OCSO web chat: sessions, live streaming, attachments and choices, for browsers and React Native.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "ocso",
+    "chat",
+    "webchat",
+    "customer-service",
+    "react-native",
+    "sse"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/winsenlabs/ocso.git",
+    "directory": "packages/ocso-chat"
+  },
+  "homepage": "https://github.com/winsenlabs/ocso/tree/main/packages/ocso-chat#readme",
+  "bugs": {
+    "url": "https://github.com/winsenlabs/ocso/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "attw": "npx --yes @arethetypeswrong/cli --pack --profile esm-only",
+    "prepublishOnly": "node -e \"if(!String(process.env.npm_config_user_agent).startsWith('pnpm/')){console.error('Publish with pnpm publish: it rewrites catalog: and workspace: specifiers');process.exit(1)}\""
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

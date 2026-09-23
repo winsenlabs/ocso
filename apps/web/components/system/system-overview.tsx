@@ -5,6 +5,7 @@ import { AlertBanner } from '@/components/ui/alert-banner';
 import { SecHead } from '@/components/ui/sec-head';
 import { listAlerts } from '@/lib/api/alerts';
 import { loadAuditStoreStatus } from '@/lib/api/audit-store';
+import { listPlugins } from '@/lib/api/plugins';
 import { loadStorageReport } from '@/lib/api/storage';
 import { listProviderKinds } from '@/lib/api/models';
 import { loadWorkerSettings } from '@/lib/api/system';
@@ -16,6 +17,7 @@ import { ChangesCard } from './changes-card';
 import { LatencyCard } from './latency-card';
 import { LiveRefresh } from './live-refresh';
 import { McpHealthTable } from './mcp-health';
+import { PluginsPanel } from './plugins-panel';
 import { ProviderHealthGrid } from './provider-health';
 import { QueueCard } from './queue-card';
 import { StatusBar } from './status-bar';
@@ -34,7 +36,7 @@ export async function SystemOverview() {
   const canProviders = hasPermission(session, Permission.PROVIDERS_READ);
   const canAuditStore = hasPermission(session, Permission.SYSTEM_READ) || hasPermission(session, Permission.AUDIT_VERIFY);
   const canStorage = hasPermission(session, Permission.SYSTEM_READ);
-  const [overview, latency, usage, workers, providers, mcp, changes, settings, critical, kinds, auditStore, storage] = await Promise.all([
+  const [overview, latency, usage, workers, providers, mcp, changes, settings, critical, kinds, auditStore, storage, plugins] = await Promise.all([
     loadTelemetryOverview(),
     loadLatency(60),
     loadUsage(),
@@ -50,6 +52,8 @@ export async function SystemOverview() {
     canAuditStore ? loadAuditStoreStatus().catch(() => null) : Promise.resolve(undefined),
     // Storage growth (PM/research/11 §7): daily samples; like the audit store, never blocks the page.
     canStorage ? loadStorageReport().catch(() => null) : Promise.resolve(undefined),
+    // Installed and first-party plugins (docs/plugins/installing.md): system.read, never blocks the page.
+    canStorage ? listPlugins().catch(() => null) : Promise.resolve(undefined),
   ]);
   const cfg = workers.config;
   const turnAge = overview.queue.turn.oldestAgeSeconds;
@@ -119,6 +123,12 @@ export async function SystemOverview() {
       {storage !== undefined ? (
         <div style={{ marginBottom: 14 }} id="storage">
           <StoragePanel data={storage} timeZone={tz} />
+        </div>
+      ) : null}
+
+      {plugins !== undefined ? (
+        <div style={{ marginBottom: 14 }}>
+          <PluginsPanel plugins={plugins} />
         </div>
       ) : null}
 

@@ -2,7 +2,6 @@ import { Global, Inject, Logger, Module, type OnApplicationShutdown } from '@nes
 import { hostname } from 'node:os';
 import { SettingsService, SetupService, generatedSetupToken } from '@ocso/application';
 import {
-  FIRST_PARTY_PLUGINS,
   assertDrivers,
   createAuditStore,
   createBlobStore,
@@ -12,6 +11,8 @@ import {
   createQueue,
   createSecretStore,
   loadAuditSigner,
+  loadPlugins,
+  pluginSummary,
   type DriverRegistries,
   type OcsoPlugin,
 } from '@ocso/bootstrap';
@@ -47,6 +48,17 @@ function loadApiEnv(drivers: DriverRegistries): ApiEnv {
 }
 
 /**
+ * FIRST_PARTY_PLUGINS plus the installed plugins OCSO_PLUGINS pins (read from
+ * the raw environment: loadEnv strips unknown keys). A bad list stops start-up.
+ * The worker loads the same list and logs the same line, so the two can be compared.
+ */
+export async function loadApiPlugins(log: (line: string) => void = (line) => new Logger('Plugins').log(line)): Promise<readonly OcsoPlugin[]> {
+  const plugins = await loadPlugins();
+  log(pluginSummary(plugins, process.env['APP_VERSION'] ?? 'dev'));
+  return plugins;
+}
+
+/**
  * Global infrastructure bindings. Registries and adapters come from the
  * composition root (@ocso/bootstrap) — built from PLUGINS, selected by
  * configuration; modules depend on tokens, never on AWS/pg directly.
@@ -54,7 +66,7 @@ function loadApiEnv(drivers: DriverRegistries): ApiEnv {
 @Global()
 @Module({
   providers: [
-    { provide: PLUGINS, useValue: FIRST_PARTY_PLUGINS },
+    { provide: PLUGINS, useFactory: () => loadApiPlugins() },
     { provide: DRIVERS, inject: [PLUGINS], useFactory: (plugins: readonly OcsoPlugin[]) => createDriverRegistries(plugins) },
     { provide: ENV, inject: [DRIVERS], useFactory: loadApiEnv },
     {

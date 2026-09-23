@@ -80,6 +80,8 @@ async function project(tx: DbOrTx, row: ConnectionRow, change?: ConnectionChange
     agents: allowed.includes('*') ? 'any enabled agent' : explicit.map((id) => agents.find((a) => a.id === id)?.name ?? `missing (${id.slice(0, 8)})`).sort(),
     confirmationPolicy: policy?.confirmationPolicy ?? row.confirmationPolicy,
     sendCustomerClaims: policy?.sendCustomerClaims ?? row.sendCustomerClaims,
+    // Only when on: projections (and so the content hashes) of proposals submitted before this field existed stay stable.
+    ...((policy?.forwardUserToken ?? row.forwardUserToken) ? { forwardUserToken: true } : {}),
     healthCheckSeconds: policy?.healthCheckSeconds ?? row.healthCheckSeconds,
     toolSetHash: (row.serverInfo as { toolSetHash?: string }).toolSetHash ?? null,
     tools: (await toolLines(tx, row.id)).map((t) => {
