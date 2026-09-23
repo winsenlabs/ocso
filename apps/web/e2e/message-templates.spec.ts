@@ -207,7 +207,8 @@ test('a template goes to WhatsApp only after a second Head approves it; the make
   const d = page.getByRole('dialog', { name: /Submit template card_ready/ });
   await expect(d).toContainText('Hi {{1}}, your replacement card is ready at the {{2}} branch.');
   await d.getByRole('button', { name: 'Approve' }).click();
-  await expect(d).toContainText('approved');
+  // Approved: shown as "activating" until the worker has submitted it to WhatsApp, then "approved".
+  await expect(d).toContainText(/approved|activating/);
   // The worker submits it to WhatsApp (once).
   await expect.poll(() => [...contents.values()].filter((c) => c.item['friendly_name'] === 'card_ready').length, { timeout: 30_000 }).toBe(1);
   await logout(page);
