@@ -10,7 +10,7 @@ Include what you can:
 - the affected component (api, worker, web app, a channel or provider adapter, Compose or Terraform
   files) and the commit you tested;
 - steps to reproduce, or a proof of concept;
-- the impact as you understand it (for example: authentication bypass, a CS Exec reading another
+- the impact as you understand it (for example: authentication bypass, a Service member reading another
   team's conversations, a secret appearing in a log or API response, a prompt that makes an agent run
   a tool it should not).
 
@@ -52,7 +52,7 @@ Out of scope, or the operator's responsibility:
 - vulnerabilities in those third-party services themselves;
 - the example applications in `examples/`, which are demonstrations and not hardened;
 - denial of service that needs traffic volumes a rate limiter or firewall in front of OCSO would stop;
-- findings that require an already-compromised Platform Tech Admin account.
+- findings that require an already-compromised Tech admin account.
 
 The security model is described in [docs/15-SECURITY-AND-GOVERNANCE.md](docs/15-SECURITY-AND-GOVERNANCE.md)
 and, for Compose deployments, the hardening advice in

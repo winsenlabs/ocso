@@ -1,8 +1,9 @@
 import { randomBytes } from 'node:crypto';
-import { sql } from 'drizzle-orm';
-import { SetupService, type ActorContext } from '@ocso/application';
-import { teams, users } from '@ocso/db';
+import { and, eq, sql } from 'drizzle-orm';
+import { SETTINGS_OBJECT_ID, SetupService, type ActorContext } from '@ocso/application';
+import { approvalProposals, teams, users } from '@ocso/db';
 import { actorFor, type SeedContext } from '../context.js';
+import { approveAs, approveProposal, finishDeferred } from './agents.js';
 import { ORG, TEAMS, USERS, type DemoUser, type LeadKey, type TeamKey } from '../data/organization.js';
 
 export interface SeededPeople {
@@ -44,21 +45,47 @@ async function ensureAdmin(ctx: SeedContext): Promise<string> {
   return userId;
 }
 
-async function ensureUser(ctx: SeedContext, admin: ActorContext, user: DemoUser, teamIds: string[]): Promise<string> {
-  const existing = await userIdByEmail(ctx, user.email);
-  if (existing) return existing;
-  const view = await ctx.services.users.create(admin, {
-    email: user.email,
-    name: user.name,
-    role: user.role,
-    password: ctx.config.password,
-    teamIds,
-    languages: user.languages,
-    skills: user.skills,
-    maxConcurrent: user.maxConcurrent,
-  });
-  ctx.log(`created ${user.role} ${user.email}`);
-  return view.id;
+/** Who approves a new person: the first Head is a bootstrap (only the Tech admin exists), everyone else a Head. */
+type UserApproval = { bootstrap: true } | { checker: ActorContext };
+
+/**
+ * A demo person, created pending by the Tech admin and activated by the approval of their creation
+ * (PM/research/11 §3.4). Resumes a creation left pending by an interrupted run.
+ */
+async function ensureUser(ctx: SeedContext, admin: ActorContext, user: DemoUser, teamIds: string[], approval: UserApproval): Promise<string> {
+  const [row] = await ctx.db.select({ id: users.id, status: users.status }).from(users).where(sql`lower(${users.email}) = lower(${user.email})`);
+  if (row?.status === 'ACTIVE') return row.id;
+  const reason = `Demo seed: ${user.name} joins as ${user.role}`;
+  const choice = 'bootstrap' in approval ? { bootstrap: true as const, reason } : { checkerId: approval.checker.principal!.userId, reason };
+  let id: string;
+  let proposalId: string | null;
+  if (!row) {
+    const view = await ctx.services.users.create(admin, {
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      password: ctx.config.password,
+      teamIds,
+      languages: user.languages,
+      skills: user.skills,
+      maxConcurrent: user.maxConcurrent,
+      approval: choice,
+    });
+    id = view.id;
+    proposalId = view.proposal?.id ?? null;
+  } else if (row.status === 'PENDING_APPROVAL') {
+    id = row.id;
+    const [open] = await ctx.db
+      .select({ id: approvalProposals.id })
+      .from(approvalProposals)
+      .where(and(eq(approvalProposals.objectKind, 'user'), eq(approvalProposals.objectId, id), eq(approvalProposals.status, 'SUBMITTED')));
+    proposalId = open?.id ?? (await ctx.services.users.update(admin, id, { approval: choice })).proposal?.id ?? null;
+  } else {
+    throw new Error(`${user.email} exists but is ${row.status.toLowerCase()}; the demo seed only runs on a fresh database`);
+  }
+  if (proposalId) await ('checker' in approval ? approveProposal(ctx, approval.checker, proposalId) : finishDeferred(ctx, admin, proposalId));
+  ctx.log(`created ${user.role} ${user.email} (${'bootstrap' in approval ? 'bootstrap approval: no other checker exists yet' : `approved by ${approval.checker.principal!.displayName}`})`);
+  return id;
 }
 
 async function ensureTeams(ctx: SeedContext, lead: ActorContext): Promise<Record<TeamKey, string>> {
@@ -75,29 +102,34 @@ async function ensureTeams(ctx: SeedContext, lead: ActorContext): Promise<Record
 export async function seedOrganization(ctx: SeedContext): Promise<SeededPeople> {
   const adminId = await ensureAdmin(ctx);
   const admin = actorFor(ctx, { id: adminId, name: adminUser.name, role: adminUser.role });
-  await ctx.services.settings.updateDeployment(admin, {
-    orgName: ORG.orgName,
-    deploymentLabel: ORG.deploymentLabel,
-    regionLabel: ORG.regionLabel,
-    timezone: ORG.timezone,
-    residencyZone: ORG.residencyZone,
-  });
 
-  // The Lead manages teams, so she exists before them and joins them after.
-  const leadId = await ensureUser(ctx, admin, leadUser, []);
+  // The first Head: only the Tech admin exists, so her creation is the one bootstrap approval (PM/research/11 §4.2).
+  // She manages teams, so she exists before them and keeps only her own after creating them.
+  const leadId = await ensureUser(ctx, admin, leadUser, [], { bootstrap: true });
   const lead0 = actorFor(ctx, { id: leadId, name: leadUser.name, role: leadUser.role });
   const teamIds = await ensureTeams(ctx, lead0);
   const leadTeams = leadUser.teams.map((t) => teamIds[t]);
-  await ctx.services.users.update(admin, leadId, { teamIds: leadTeams });
+  // Leaving the Sales team she created only takes access away: it applies at once.
+  await ctx.services.users.update(admin, leadId, { teamIds: leadTeams, reason: 'Demo seed: Anjali keeps Cards & EMI and Hardship' });
   const lead = actorFor(ctx, { id: leadId, name: leadUser.name, role: leadUser.role, teamIds: leadTeams });
 
+  // Everyone after her is proposed by the Tech admin and checked by a Head.
   const salesTeams = salesLeadUser.teams.map((t) => teamIds[t]);
-  const salesLeadId = await ensureUser(ctx, admin, salesLeadUser, salesTeams);
+  const salesLeadId = await ensureUser(ctx, admin, salesLeadUser, salesTeams, { checker: lead });
   const lead2 = actorFor(ctx, { id: salesLeadId, name: salesLeadUser.name, role: salesLeadUser.role, teamIds: salesTeams });
 
   const ids = { admin: adminId, lead: leadId, lead2: salesLeadId } as Record<DemoUser['key'], string>;
   for (const user of USERS.filter((u) => u.role === 'SERVICE')) {
-    ids[user.key] = await ensureUser(ctx, admin, user, user.teams.map((t) => teamIds[t]));
+    ids[user.key] = await ensureUser(ctx, admin, user, user.teams.map((t) => teamIds[t]), { checker: lead });
+  }
+
+  // Organization identity and residency are deployment settings: the Tech admin proposes, a Head checks.
+  const settings = await ctx.services.settings.deployment();
+  const wanted = { orgName: ORG.orgName, deploymentLabel: ORG.deploymentLabel, regionLabel: ORG.regionLabel, timezone: ORG.timezone, residencyZone: ORG.residencyZone };
+  const deployment = Object.fromEntries(Object.entries(wanted).filter(([k, v]) => (settings as unknown as Record<string, unknown>)[k] !== v));
+  if (Object.keys(deployment).length) {
+    await approveAs(ctx, admin, lead, { objectKind: 'deployment_settings', objectId: SETTINGS_OBJECT_ID, action: 'UPDATE', payload: { deployment } }, 'Demo seed: Meridian Bank identity and residency');
+    ctx.log(`deployment settings: ${Object.keys(deployment).join(', ')} (approved by ${leadUser.name})`);
   }
   return { admin, lead, leads: { lead, lead2 }, ids, teamIds };
 }

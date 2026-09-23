@@ -1,40 +1,38 @@
 import { desc, eq } from 'drizzle-orm';
-import { RouterService, approvalGates, recordAudit, type ActorContext } from '@ocso/application';
+import { RouterService, approvalGates, type ActorContext } from '@ocso/application';
 import { passThroughDefinition } from '@ocso/domain';
 import { channels, queues, routerVersions, routers, slaPolicies } from '@ocso/db';
 import type { SeedContext } from '../context.js';
+import { approveAs, approveProposal } from './agents.js';
 import type { AgentKey } from '../data/agents.js';
 import type { LeadKey, QueueKey } from '../data/organization.js';
 
 /** Each demo queue's AI agent and attributes (PM/research/11 §5.5): the service unit. */
-const SERVICE: ReadonlyArray<{ queue: QueueKey; agent: AgentKey; attributes: Record<string, string>; transferTo: QueueKey[] }> = [
-  { queue: 'cardsT2', agent: 'maya', attributes: { product: 'cards' }, transferTo: ['salesCallback'] },
-  { queue: 'salesCallback', agent: 'arjun', attributes: { product: 'sales' }, transferTo: ['cardsT2'] },
-  { queue: 'hardship', agent: 'riya', attributes: { product: 'collections' }, transferTo: [] },
+/** `lead` is the Head whose team owns the queue and its agent (queue writes are team-scoped, ADR-026). */
+const SERVICE: ReadonlyArray<{ queue: QueueKey; agent: AgentKey; lead: LeadKey; attributes: Record<string, string>; transferTo: QueueKey[] }> = [
+  { queue: 'cardsT2', agent: 'maya', lead: 'lead', attributes: { product: 'cards' }, transferTo: ['salesCallback'] },
+  { queue: 'salesCallback', agent: 'arjun', lead: 'lead2', attributes: { product: 'sales' }, transferTo: ['cardsT2'] },
+  { queue: 'hardship', agent: 'riya', lead: 'lead', attributes: { product: 'collections' }, transferTo: [] },
 ];
 
 export const WEBCHAT_ROUTER = 'Meridian web chat';
 export const EXAMPLE_MENU_ROUTER = 'Meridian menu (example)';
 
 /**
- * Routing for the demo: draft queues get their agent, attributes and transfer
- * targets; the web chat is attached to a draft pass-through router to Maya
- * (activated through an approval by approveRouting once Maya is live); and a
- * menu router is left as an editable draft to show the builder.
+ * Routing for the demo: draft queues get their agent and attributes (a draft is edited directly, by the Head
+ * whose team owns it); the web chat is attached to a draft pass-through router to Maya (activated through an
+ * approval by approveRouting once Maya is live); and a menu router is left as an editable draft to show the
+ * builder. Transfer targets are added after the queues' first approval (approveRouting): the demo's queues
+ * transfer to each other, and a queue is approved only with approved (or pending) transfer targets.
  */
-export async function seedRouters(ctx: SeedContext, admin: ActorContext, lead: ActorContext, agents: Record<AgentKey, string>, queueIds: Record<QueueKey, string>, webchatChannelId: string): Promise<void> {
+export async function seedRouters(ctx: SeedContext, leads: Record<LeadKey, ActorContext>, agents: Record<AgentKey, string>, queueIds: Record<QueueKey, string>, webchatChannelId: string): Promise<void> {
+  const lead = leads.lead;
   for (const s of SERVICE) {
     const [row] = await ctx.db.select({ agentId: queues.agentId }).from(queues).where(eq(queues.id, queueIds[s.queue]));
     if (row?.agentId) continue;
     // Never behind a checker's back: a queue with any approval (or one open) changes only through proposals.
     if ((await approvalGates(ctx.db, 'queue', [queueIds[s.queue]])).get(queueIds[s.queue]) !== 'none') continue;
-    // Seeds are the trusted setup path (like the pass-through router below): the values an approved queue change
-    // would apply, written directly — the demo's queues span teams no one lead belongs to (queue writes are team-scoped).
-    const values = { agentId: agents[s.agent], attributes: s.attributes, transferTargetIds: s.transferTo.map((q) => queueIds[q]) };
-    await ctx.db.transaction(async (tx) => {
-      await tx.update(queues).set({ ...values, updatedAt: new Date() }).where(eq(queues.id, queueIds[s.queue]));
-      await recordAudit(tx, admin, { action: 'queue.update', targetType: 'queue', targetId: queueIds[s.queue], summary: `Demo seed: queue ${s.queue} is served by ${s.agent}`, after: values });
-    });
+    await ctx.services.queues.update(leads[s.lead], queueIds[s.queue], { agentId: agents[s.agent], attributes: s.attributes });
     ctx.log(`queue ${s.queue} is served by ${s.agent}`);
   }
   const [channel] = await ctx.db.select({ routerId: channels.routerId }).from(channels).where(eq(channels.id, webchatChannelId));
@@ -46,7 +44,6 @@ export async function seedRouters(ctx: SeedContext, admin: ActorContext, lead: A
     await service.freezeVersion(lead, created.id, 'Demo seed: pass-through to Maya');
     ctx.log(`web chat attached to draft router "${WEBCHAT_ROUTER}" (pass-through to Maya)`);
   }
-  void admin;
   const [example] = await ctx.db.select({ id: routers.id }).from(routers).where(eq(routers.name, EXAMPLE_MENU_ROUTER));
   if (!example) {
     await new RouterService(ctx.db).create(lead, {
@@ -84,8 +81,8 @@ export async function seedRouters(ctx: SeedContext, admin: ActorContext, lead: A
 /**
  * Maker–checker for the demo's routing (PM/research/11 §4): the SLA policies and queues get their first
  * approval, then the web chat router its activation — each proposed by one demo Head and checked by the
- * other (never a self-approval). Queue proposals are all submitted before any is decided, so queues that
- * transfer to each other can be approved. Runs after the agents are live (a router needs live agents).
+ * other (never a self-approval). Queues are approved as drafts without transfer targets, which are then added
+ * by an UPDATE proposal each. Runs after the agents are live (a router needs live agents).
  */
 export async function approveRouting(ctx: SeedContext, leads: Record<LeadKey, ActorContext>, queueIds: Record<QueueKey, string>): Promise<void> {
   const pairs: Array<[ActorContext, ActorContext]> = [
@@ -103,7 +100,7 @@ export async function approveRouting(ctx: SeedContext, leads: Record<LeadKey, Ac
     }
     throw new Error(`demo seed: no Head may propose ${kind} ${objectId}`);
   };
-  const decide = (d: Awaited<ReturnType<typeof submit>>) => ctx.services.approvalDecisions.decide(d.checker, d.proposal.id, { decision: 'APPROVE', reason: 'Demo seed: reviewed', contentHash: d.proposal.contentHash });
+  const decide = (d: Awaited<ReturnType<typeof submit>>) => approveProposal(ctx, d.checker, d.proposal.id);
   const todo = async (kind: string, ids: string[]) => {
     const gates = await approvalGates(ctx.db, kind, ids);
     return ids.filter((id) => gates.get(id) === 'none');
@@ -115,6 +112,18 @@ export async function approveRouting(ctx: SeedContext, leads: Record<LeadKey, Ac
   const submitted = [];
   for (const id of queuesToApprove) submitted.push(await submit('queue', id, 'CREATE', 'Demo seed: queue'));
   for (const d of submitted) await decide(d);
+  // Transfer targets, now that every queue is approved: an UPDATE proposal by the owning team's Head.
+  let transfers = 0;
+  for (const s of SERVICE) {
+    const [row] = await ctx.db.select({ targets: queues.transferTargetIds }).from(queues).where(eq(queues.id, queueIds[s.queue]));
+    const add = s.transferTo.map((q) => queueIds[q]).filter((id) => !row?.targets.includes(id));
+    if (!add.length || (await approvalGates(ctx.db, 'queue', [queueIds[s.queue]])).get(queueIds[s.queue]) !== 'approved') continue;
+    const maker = leads[s.lead];
+    const checker = leads[s.lead === 'lead' ? 'lead2' : 'lead'];
+    await approveAs(ctx, maker, checker, { objectKind: 'queue', objectId: queueIds[s.queue], action: 'UPDATE', payload: { addTransferTargetIds: add } }, `Demo seed: ${s.queue} may transfer to ${s.transferTo.join(', ')}`);
+    transfers++;
+  }
+  if (transfers) ctx.log(`added transfer targets to ${transfers} queues (approved)`);
   if (policies.length || queuesToApprove.length) ctx.log(`approved ${policies.length} SLA policies and ${queuesToApprove.length} queues (each Head checks the other)`);
 
   const [router] = await ctx.db.select({ id: routers.id, status: routers.status }).from(routers).where(eq(routers.name, WEBCHAT_ROUTER));

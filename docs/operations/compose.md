@@ -11,7 +11,7 @@ premises — running every OCSO process in containers. The same images run on EC
 | `audit-db` | PostgreSQL 18 for the audit store (ADR-032), data on the `auditdata` volume | – |
 | `migrate` | One-shot. Applies `packages/db/migrations`, then provisions the audit store (`audit-migrate`), then exits 0 | – |
 | `api` | NestJS control plane, port 4000 | – (internal) |
-| `worker` | Agent workers, health on 4100. Two replicas by default (`OCSO_WORKER_REPLICAS`) | – |
+| `worker` | Agent workers, health on 4100. Two replicas by default (`OCSO_WORKER_REPLICAS`). The leader also runs the audit tasks (ship, reconcile, seal, export, full verify; section 10), the weekly exception report, storage sampling and health roll-ups | – |
 | `web` | Next.js UI and BFF. Proxies `/channels`, `/public`, `/oauth`, `/.well-known`, `/blobs` to the API | **3000** |
 
 Profiles: `demo` (example MCP server and seed), `observability` (OTel Collector and Jaeger), and
@@ -101,7 +101,7 @@ postgres container never sees the master key. The images resolve `*_FILE` variab
 (`infra/compose/ocso-entrypoint.sh`); the master key is read as a file by the app and never enters
 the environment.
 
-**Create the first Tech Admin.** Open `http://localhost:3000`. You are sent to `/setup`. Get the
+**Create the first Tech admin.** Open `http://localhost:3000`. You are sent to `/setup`. Get the
 one-time token with:
 
 ```bash
@@ -110,6 +110,11 @@ docker compose logs api | grep "setup token"
 ```
 
 After setup the token no longer works: `/setup` refuses once a user exists.
+
+Configuration changes need a second person's approval (maker–checker, ADR-030). While the first Tech
+admin is the only one who can check, they approve their own platform changes and new users as recorded
+*bootstrap* approvals, which are listed in the exception report. Invite a Head (and a second Tech admin)
+early; bootstrap stops once another eligible checker exists ([setup guide](setup-guide.md)).
 
 **Sign-in and sessions (ADR-025).** The API sets the session cookie on the public origin (`/api/auth/*`
 is forwarded by the web app), so these are **api** settings:
@@ -120,7 +125,7 @@ is forwarded by the web app), so these are **api** settings:
 | `SESSION_IDLE_MINUTES` / `SESSION_ABSOLUTE_HOURS` | `120` / `24` | Idle and absolute session lifetime |
 | `BETTER_AUTH_SECRET` | keygen file | Override only to share one value across hosts |
 | `OCSO_AUTH_TRUSTED_ORIGINS` | empty | Extra origins Better Auth trusts, e.g. an OIDC IdP on a private network |
-| `OCSO_RECOVERY_TOKEN` / `_FILE` | unset | Break-glass `/recover` for a locked-out Tech Admin (setup guide §1). Set, use once, remove |
+| `OCSO_RECOVERY_TOKEN` / `_FILE` | unset | Break-glass `/recover` for a locked-out Tech admin (setup guide §1). Set, use once, remove |
 | `OCSO_TRUSTED_PROXY_HOPS` (web) | `0` | Reverse proxies in front of web; the client address used for sign-in rate limits comes from this hop |
 
 Upgrading from a release before ADR-025 applies migrations 0014/0015: passwords keep working, every
@@ -135,8 +140,8 @@ docker compose logs seed      # prints the logins
 
 This creates:
 - **Organization.** Meridian Bank, `ap-south-1`, `Asia/Kolkata`, residency `IN`.
-- **Users.** Tech Admin Tarun Shetty, CS Leads Anjali Rao (Cards & EMI, Hardship) and Rohan Kapoor
-  (Sales), CS Execs Nikhil Menon and Meera Pillai.
+- **Users.** Tech Tarun Shetty, Heads Anjali Rao (Cards & EMI, Hardship) and Rohan Kapoor
+  (Sales), Service members Nikhil Menon and Meera Pillai.
   Emails are `@meridian.example`. The password for all of them is `OCSO_DEMO_PASSWORD`, which
   defaults to `meridian-demo-2026`.
 - **Teams.** Three teams.
@@ -145,14 +150,15 @@ This creates:
   `support-fast`, `sales-primary` and `summarizer`.
 - **Agents.** Maya, Arjun and Riya, with curated prompt versions and escalation rules, all LIVE.
   Agents are owned by teams (ADR-026): Maya → Cards & EMI and Riya → Hardship (managed by Anjali),
-  Arjun → Sales (managed by Rohan); each lead sees only their teams' agents.
-- **Channels.** A web chat channel.
+  Arjun → Sales (managed by Rohan); each Head sees only their teams' agents.
+- **Channels.** A web chat channel, reaching the agents through a router and queues.
 - **MCP.** The demo MCP server `meridian-core`, discovered, authenticated, classified and approved
   for Maya, with `payments.reverse_transaction` above ₹5,000 requiring confirmation.
 - **Alerts.** The default alert rules.
 
-Everything is created through the application services, so it appears in the audit log. The seed is
-idempotent: later runs exit immediately.
+Everything is created through the application services, so it appears in the audit log. Everything
+that needs approval goes through it: each demo Head checks the other Head's agents, queues and SLA
+policies. The seed is idempotent: later runs exit immediately.
 
 `OCSO_DEMO_SEED=true` also enables the scripted model provider (ADR-015) for api, worker and seed.
 Never use it for a real deployment.
@@ -169,7 +175,7 @@ docker compose down                       # stop (volumes kept)
 
 **Scaling workers.** Workers hold conversation leases in PostgreSQL. Any worker can take over a
 conversation whose lease expired, so scaling up or down never loses a conversation (docs/10 §9).
-The Tech Admin worker settings (min/max workers, target utilization) are advisory under Compose
+The Tech worker settings (min/max workers, target utilization) are advisory under Compose
 (`DEPLOYMENT_DRIVER=compose`): you choose the replica count with `OCSO_WORKER_REPLICAS` in `.env`
 (default 2, so one worker can fail without a gap). `--scale worker=N` changes it until the next
 `docker compose up -d`. The worker settings page shows the exact
@@ -177,7 +183,7 @@ The Tech Admin worker settings (min/max workers, target utilization) are advisor
 workers) below PostgreSQL's `max_connections` (100 by default).
 
 **Health endpoints.**
-- api: `/health/live`, `/health/ready` (database) and `/health/dependencies` (Tech Admin token required), on the internal
+- api: `/health/live`, `/health/ready` (database) and `/health/dependencies` (Tech admin token required), on the internal
   network.
 - worker: `/health/ready` on port 4100.
 - web: `/login`.
@@ -209,6 +215,44 @@ docker compose up -d                       # recreate api / worker / web on the 
 ```
 
 Before an upgrade, take a backup (section 5).
+
+`docker compose run --rm migrate` runs both steps: the main migrations (`dist/bin/migrate.js`), then
+`audit-migrate` (`audit-store/dist/bin/audit-migrate.js`), which provisions the audit store. `docker
+compose up -d` runs the same `migrate` service before api and worker start.
+
+### Upgrading to the governance and routing release
+
+This release adds role presets, per-user permissions, maker–checker approvals, routers and a separate
+audit store (ADR-029 to ADR-033). On an existing deployment:
+
+1. **Back up first** (section 5): PostgreSQL and the `secrets` volume. The release adds a database
+   and new secrets, and there are no down-migrations.
+2. **Create the new secrets and start the audit database.** `docker compose up -d keygen audit-db`.
+   Keygen adds only the missing files (the `audit-postgres/`, `audit-migrate/` and `audit-writer/`
+   credentials, `app/audit_reader_url` and `app/audit_signing_key`) and never touches existing ones.
+   Back up the `secrets` volume again afterwards, since it now holds the audit signing key.
+3. **Migrate, then audit-migrate:** `docker compose run --rm migrate`. The main migrations run first
+   (0021–0031), then `audit-migrate` creates the audit schema, the `ocso_audit_writer` and
+   `ocso_audit_reader` roles and the minimum retention (`AUDIT_MIN_RETENTION_DAYS`, default 365). If it
+   fails, fix the cause and run it again; both steps are idempotent.
+4. **Start the stack:** `docker compose up -d`.
+
+What changes for people:
+
+- **Roles are mapped automatically** (migration 0021): Platform Tech Admin → Tech, CS Lead → Head,
+  CS Exec → Service. Role lists stored as data (alert audiences, tool human roles, MFA roles) are mapped
+  too; wherever CS Lead was allowed, Head and Lead both are. Nobody is added to Lead.
+- **Live configuration is grandfathered** (migration 0031). Every agent, active prompt, router, queue,
+  SLA policy, channel, rule, template, provider, profile, manual price, shared MCP connection, destination, webhook, SSO
+  provider and user that was live gets one approval record (`origin = MIGRATION`). Nothing that runs
+  today changes. Its *next* change is a proposal, and the exception report lists these once as
+  *installed only*.
+- **Routing was backfilled** (migration 0025). Each channel got a pass-through router named after it,
+  sending customers to the agent it answered as before.
+- **Audit history ships to the store.** Existing `audit_events` are backfilled with team scope in one
+  UPDATE (minutes per million rows; run `VACUUM (ANALYZE) audit_events` afterwards) and then shipped by
+  the worker. Watch **System → Audit store** until the backlog reaches zero, then check the chain
+  (section 10).
 
 **Migrations are expand/contract.** A release only adds schema that the previous release tolerates.
 Destructive changes ship one release later. This keeps a rolling restart and a rollback safe.
@@ -331,7 +375,7 @@ migrate existing blobs. Pick one before going live.
 OCSO sends invites, password resets, email verification and sign-in codes, security notices (password
 changed, new sign-in) and alert emails through one deployment-wide sender. Email is authentication
 infrastructure, so it is configured here — environment and secret files — and never in the web app.
-**Settings → Email** shows the Tech Admin what is configured and has a **Send test email** button.
+**Settings → Email** shows Tech admins what is configured and has a **Send test email** button.
 
 | Variable | Meaning |
 |---|---|
@@ -424,8 +468,8 @@ api and worker. Keygen creates a new key if the file is missing, so a lost `secr
 as **Checkpoints were signed by a key this deployment does not trust** (`SIGNING_KEY_CHANGED`) —
 restore the old key rather than trusting a new one blindly.
 
-**Verify the chain** from the System screen (**Verify recent entries**, needs `audit.verify`), with
-`POST /v1/audit/verify {from?, to?}`, or offline for any range:
+**Verify the chain** from the System screen (**Verify recent entries**, needs `audit.verify`, which
+Tech holds), with `POST /v1/audit/verify {from?, to?}`, or offline for any range:
 
 ```bash
 docker compose run --rm migrate node audit-store/dist/bin/audit-verify.js --from 1
@@ -436,7 +480,9 @@ An auditor verifies with public keys they pinned themselves (`GET /v1/audit/keys
 `--public-key audit_signing_key.pub.pem`) — never the key inside an export manifest. The bin also
 fails when no valid checkpoint signs the range or more than `--max-unsigned` (default 5 000) entries
 follow the last one. Exports are an independent copy only when the blob store keeps
-`audit-exports/` write-once (on the `s3` profile or AWS, enable S3 Object Lock for that prefix).
+`audit-exports/` write-once. OCSO does not enforce this: nothing in Compose or Terraform turns on S3
+Object Lock, and OCSO does not check it. Configure it yourself on the bucket (the local `blobs` volume
+cannot be made write-once).
 
 **A managed PostgreSQL for the store:** set `AUDIT_DATABASE_URL` (writer), `AUDIT_READER_URL`
 (reader) and `AUDIT_DATABASE_OWNER_URL` (owner; migrate only) in `.env`, `AUDIT_DATABASE_SSL=true`, and

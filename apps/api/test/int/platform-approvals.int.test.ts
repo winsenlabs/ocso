@@ -36,7 +36,7 @@ describe('deployment settings', () => {
       .set(auth(admin))
       .send({ objectKind: 'deployment_settings', objectId: SETTINGS, action: 'UPDATE', checkerId: checker.id, reason: 'Rename the deployment', payload: { deployment: { deploymentLabel: 'UAT' } } })
       .expect(201);
-    expect((await h.http().get('/v1/settings/approval').set(auth(admin)).expect(200)).body).toMatchObject({ approved: false, updateNeedsApproval: true, pending: { id: submitted.body.id } });
+    expect((await h.http().get('/v1/settings/approval').set(auth(admin)).expect(200)).body).toMatchObject({ approved: true, updateNeedsApproval: true, pending: { id: submitted.body.id } });
     // One settings proposal at a time.
     await h.http().patch('/v1/settings/deployment').set(auth(admin)).send({ orgName: 'Other', approval: { checkerId: checker.id, reason: 'x change' } }).expect(409);
     await approveProposal(h, checker, submitted.body);

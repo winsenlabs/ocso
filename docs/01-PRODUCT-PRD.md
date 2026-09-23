@@ -23,7 +23,11 @@ The core schema and runtime must not be designed as a multi-tenant SaaS platform
 
 ## 3. Primary users
 
-### Platform Tech Admin
+> As built (ADR-029): the three roles below are now four presets. Platform Tech Admin → **Tech**, CS Lead →
+> **Head** (with **Lead** as a narrower preset that proposes but cannot approve), CS Exec → **Service**.
+> Configuration changes are approved by a second person (ADR-030).
+
+### Tech (formerly Platform Tech Admin)
 Owns technical configuration and reliability:
 - deployment health
 - workers and concurrency
@@ -36,7 +40,7 @@ Owns technical configuration and reliability:
 - telemetry, token usage, latency and uptime
 - technical alerts
 
-### CS Lead
+### Head and Lead (formerly CS Lead)
 Owns business operations:
 - virtual-agent setup
 - prompt/instruction configuration
@@ -48,9 +52,9 @@ Owns business operations:
 - prompt corrections
 - business alerts
 - analytics
-- CS Exec access and team setup
+- Service access and team setup
 
-### CS Exec
+### Service (formerly CS Exec)
 Owns customer handling when a human is needed:
 - see permitted conversations
 - claim open conversations
@@ -112,8 +116,8 @@ Handoff can be triggered by:
 - business-specific conditions
 
 Handoff modes:
-1. **Auto-assign** to an eligible available CS Exec.
-2. **Open pickup** into a visible team inbox for an eligible CS Exec to claim.
+1. **Auto-assign** to an eligible available Service member.
+2. **Open pickup** into a visible team inbox for an eligible Service member to claim.
 
 Human takeover does not terminate the agent session. The agent remains attached to the conversation and can resume when the human returns control.
 
@@ -194,7 +198,7 @@ The internal agent must inherit the logged-in user's RBAC.
 
 Observability is role-specific.
 
-Tech Admin:
+Tech:
 - uptime
 - service health
 - worker health/capacity
@@ -209,7 +213,7 @@ Tech Admin:
 - cost/usage
 - traces and logs
 
-CS Lead:
+Head and Lead:
 - resolution/containment
 - escalation rate
 - handoff reasons
@@ -221,7 +225,7 @@ CS Lead:
 - sales/service outcome metrics
 - conversation trends
 
-CS Exec:
+Service:
 - assigned/open conversations
 - waiting customers
 - priority/escalation state

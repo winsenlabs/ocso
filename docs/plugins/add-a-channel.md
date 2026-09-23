@@ -192,7 +192,7 @@ export async function sendTelegram(target: OutboundTarget, message: RenderedOutb
 The bot token is part of the URL path here, so never put the URL in an error message. `redactSecrets`
 masks the token if the provider echoes it. `ctx.fetch` is the `deps.fetch` your factory received: the
 host's SSRF-guarded egress, which reaches `api.telegram.org` and refuses internal addresses unless the
-Tech Admin allowlisted them. Never call the global `fetch`.
+Tech admin allowlisted them. Never call the global `fetch`.
 
 Optionally implement `checkConnection` with read-only calls (Telegram's `getMe` and `getWebhookInfo`) to
 get a **Test connection** button.

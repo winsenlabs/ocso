@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import type { ActorContext } from '@ocso/application';
-import { escalationRules, promptVersions, virtualAgents } from '@ocso/db';
+import { approvalProposals, escalationRules, promptVersions, virtualAgents } from '@ocso/db';
 import type { SeedContext } from '../context.js';
 import { AGENTS, type AgentKey, type DemoAgent } from '../data/agents.js';
 import type { LeadKey, ProfileKey, QueueKey, TeamKey } from '../data/organization.js';
@@ -98,7 +98,7 @@ export async function publishAgents(ctx: SeedContext, leads: Record<LeadKey, Act
       checkerId: checker.principal!.userId,
       reason: 'Demo seed: take the agent live',
     });
-    await ctx.services.approvalDecisions.decide(checker, proposal.id, { decision: 'APPROVE', reason: 'Demo seed: reviewed', contentHash: proposal.contentHash });
+    await approveProposal(ctx, checker, proposal.id);
     ctx.log(`${agent.name} is live (approved by ${checker.principal!.displayName})`);
     await enableEscalations(ctx, maker, checker, id, agent.name);
   }
@@ -120,5 +120,25 @@ export async function approveAs(
   reason: string,
 ): Promise<void> {
   const proposal = await ctx.services.approvals.submit(maker, { ...target, checkerId: checker.principal!.userId, reason });
-  await ctx.services.approvalDecisions.decide(checker, proposal.id, { decision: 'APPROVE', reason: 'Demo seed: reviewed', contentHash: proposal.contentHash });
+  await approveProposal(ctx, checker, proposal.id);
+}
+
+/** Approve a proposal someone already submitted (e.g. through a service's `approval` choice), as its named checker. */
+export async function approveProposal(ctx: SeedContext, checker: ActorContext, proposalId: string): Promise<void> {
+  const proposal = await ctx.services.approvals.get(checker.principal!, proposalId);
+  if (proposal.status === 'SUBMITTED') {
+    await ctx.services.approvalDecisions.decide(checker, proposalId, { decision: 'APPROVE', reason: 'Demo seed: reviewed', contentHash: proposal.contentHash });
+  }
+  await finishDeferred(ctx, checker, proposalId);
+}
+
+/**
+ * The deferred half of an approval (e.g. a new user's invite step) normally runs on the worker's
+ * approval-activate job; the seed finishes it itself so the demo is complete without a worker.
+ */
+export async function finishDeferred(ctx: SeedContext, actor: ActorContext, proposalId: string): Promise<void> {
+  const [row] = await ctx.db.select({ status: approvalProposals.status, activatedAt: approvalProposals.activatedAt }).from(approvalProposals).where(eq(approvalProposals.id, proposalId));
+  if (row?.status !== 'APPROVED' || row.activatedAt) return;
+  const outcome = await ctx.services.approvalDecisions.finishActivation(actor, proposalId);
+  if (outcome === 'BLOCKED') throw new Error(`activation of approved proposal ${proposalId} was blocked`);
 }

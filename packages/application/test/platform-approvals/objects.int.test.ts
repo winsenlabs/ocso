@@ -138,9 +138,9 @@ describe('live objects and approvals (what the grandfather migration relies on)'
       const live = await d(kind).liveObjects(t.db);
       const unapproved = [];
       for (const id of live) if (!(await isApproved(t.db, kind, id))) unapproved.push(id);
-      // The fixture's provider (inserted enabled, like a pre-existing one) and the settings singleton were live
-      // before any approval here: exactly what 0031 grandfathers. Everything else went live through approvals.
-      const expected = kind === 'model_provider' ? [providerId] : kind === 'deployment_settings' ? live : [];
+      // The fixture's provider was inserted enabled after the migrations, like a pre-existing one: exactly what
+      // 0031 grandfathers. The settings singleton is grandfathered by 0031 itself; the rest went live through approvals.
+      const expected = kind === 'model_provider' ? [providerId] : [];
       expect(unapproved.sort(), kind).toEqual([...expected].sort());
     }
   });

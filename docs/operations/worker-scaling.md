@@ -1,7 +1,8 @@
 # Worker scaling: Compose vs ECS
 
-The Tech Admin sets worker capacity in OCSO (System → worker configuration, `PATCH /v1/settings/workers`,
-docs/10 §5). A **deployment adapter** in the worker maps those logical settings onto whatever the
+A Tech admin sets worker capacity in OCSO (System → worker configuration, docs/10 §5). Since ADR-030 a
+change is a settings proposal: `PATCH /v1/settings/workers` with `approval` submits it (202), without it answers
+409 `approval_required`. A **deployment adapter** in the worker maps those logical settings onto whatever the
 platform can enforce (docs/13 §4, ADR-023). The product code is identical on both platforms. Only
 `DEPLOYMENT_DRIVER` differs.
 

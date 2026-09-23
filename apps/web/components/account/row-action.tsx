@@ -10,7 +10,7 @@ const RUN: Record<'passkey' | 'session' | 'others', (id: string) => Promise<Acti
 };
 
 /** A single-click account action (remove passkey, sign out a session) with inline result. */
-export function RowAction({ kind, id, label, confirm }: { kind: 'passkey' | 'session' | 'others'; id: string; label: string; confirm?: string }) {
+export function RowAction({ kind, id, label, ariaLabel, confirm }: { kind: 'passkey' | 'session' | 'others'; id: string; label: string; ariaLabel?: string; confirm?: string }) {
   const [pending, start] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   return (
@@ -24,6 +24,7 @@ export function RowAction({ kind, id, label, confirm }: { kind: 'passkey' | 'ses
         type="button"
         className="btn tiny"
         disabled={pending}
+        aria-label={ariaLabel}
         onClick={() => {
           if (confirm && !window.confirm(confirm)) return;
           start(async () => {

@@ -18,7 +18,7 @@ Shipped adapters, all in `packages/channels/src/`:
 
 The package README ([packages/channels/README.md](../../packages/channels/README.md)) documents each
 adapter's provider details. The operator setup is in
-[docs/operations/setup-guide.md §3](../operations/setup-guide.md#3-channels-tech-admin).
+[docs/operations/setup-guide.md §3](../operations/setup-guide.md#3-channels-tech-a-head-approves).
 
 ## The contract
 
@@ -123,7 +123,7 @@ and the web app parses kinds as plain strings.
 Adapters reach the network only through `deps.fetch`. The composition root passes the SSRF-guarded
 channel egress (`createChannelEgress` in `packages/application/src/channels/egress.ts`, built on the
 MCP guard, ADR-021): public https hosts only; private, loopback and metadata addresses are refused
-unless the Tech Admin allowlisted the host in deployment settings (the same list INTERNAL MCP
+unless a Tech admin allowlisted the host in deployment settings (the same list INTERNAL MCP
 connections use, re-read every 10 s; plain http is allowed only for those hosts). Responses are capped
 at 101 MB. A factory called without `fetch` gets `NO_NETWORK`, which rejects every call — an adapter
 never falls back to the global `fetch`. Tests pass a stub.

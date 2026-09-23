@@ -50,10 +50,11 @@ OCSO is **single-tenant only**.
 
 One deployment = one organization.
 
-It is **multi-user**, with the product roles:
-- Platform Tech Admin
-- CS Lead
-- CS Exec
+It is **multi-user**, with the product role presets (ADR-029; formerly Platform Tech Admin, CS Lead, CS Exec):
+- Tech
+- Head
+- Lead
+- Service
 
 Do not:
 - add tenant switching
@@ -158,9 +159,9 @@ The internal OCSO agent follows the same rule.
 
 Do not expose the same telemetry surface to everyone.
 
-- Tech Admin: infrastructure, tokens, provider/tool health, cache, latency, uptime
-- CS Lead: agent/business performance, prompt corrections, escalation/SLA/outcomes
-- CS Exec: conversations, queue, priority and assigned workload
+- Tech: infrastructure, tokens, provider/tool health, cache, latency, uptime
+- Head and Lead: agent/business performance, prompt corrections, escalation/SLA/outcomes
+- Service: conversations, queue, priority and assigned workload
 
 ## 16. Alerts are first-class
 

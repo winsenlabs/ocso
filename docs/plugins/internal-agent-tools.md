@@ -57,7 +57,7 @@ exists for adding a tool to an instance.
 ## Rules for a tool
 
 - Call application services; do not write SQL that bypasses their authorization and scoping. For
-  example, `agent_performance` uses `AgentService.list(principal)`, so a CS Lead sees only the agents
+  example, `agent_performance` uses `AgentService.list(principal)`, so a Head or Lead sees only the agents
   their teams own.
 - Return no secrets in `data`, `links` or `table`.
 - Classify honestly: anything that changes state is at least `LOW_WRITE`.

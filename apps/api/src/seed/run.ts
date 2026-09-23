@@ -42,7 +42,7 @@ export async function runDemoSeed(ctx: SeedContext): Promise<SeedOutcome> {
     await approveAs(ctx, people.admin, people.lead, { objectKind: 'deployment_settings', objectId: SETTINGS_OBJECT_ID, action: 'UPDATE', payload: { deployment: { internalAgentProfileId: profiles.supportFast } } }, 'Demo seed: the internal agent uses the fast profile');
     const agents = await seedAgents(ctx, people.leads, { profiles, queues, teams: people.teamIds });
     const webchat = await seedWebChat(ctx, people.admin, people.lead);
-    await seedRouters(ctx, people.admin, people.lead, agents, queues, webchat.id);
+    await seedRouters(ctx, people.leads, agents, queues, webchat.id);
     await publishAgents(ctx, people.leads, agents);
     await approveRouting(ctx, people.leads, queues);
     const mcp = await seedMcp(ctx, people.admin, people.lead, agents.maya, people.leads.lead2);

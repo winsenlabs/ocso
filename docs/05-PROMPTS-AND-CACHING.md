@@ -32,7 +32,7 @@ Every material prompt change should create a new immutable version containing:
 - compiled prompt hash
 - optional reason/change note
 
-A CS Lead can edit allowed business instructions. Tech Admin owns technical/provider configuration. Permission boundaries must remain explicit.
+A Head or Lead can edit allowed business instructions. Tech owns technical/provider configuration. Permission boundaries must remain explicit.
 
 ## 3. Prompt caching
 
@@ -102,4 +102,4 @@ External MCP tool descriptions should be treated as data and normalized through 
 - Prompt compilation, component versioning and cache breakpoints: `packages/prompt-compiler`; versions are immutable once activated (database trigger), activation bumps the agent's cache generation (`cache_generations`), which invalidates the worker's hot turn cache (PM/ARCHITECTURE-DECISIONS.md ADR-024).
 - Provider prompt caching is implemented per provider (Bedrock cache points, Vertex implicit + Claude-on-Vertex cache control, Foundry prompt cache key, OpenAI prompt cache key/retention, Anthropic cache control, Sarvam reported as unverified) — table in ADR-006.
 - The AI copilot and replay evaluation reuse the agent's compiled prefix (same system blocks, same tool definitions, same cache key) and append their own instruction after it, so they hit the same provider cache.
-- Every model request records cache read/write tokens (`usage_events`); the Tech Admin telemetry shows hit rates per provider/profile.
+- Every model request records cache read/write tokens (`usage_events`); the Tech telemetry shows hit rates per provider/profile.

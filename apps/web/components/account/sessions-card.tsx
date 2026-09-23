@@ -23,7 +23,7 @@ export function SessionsCard({ sessions, currentId, timeZone }: { sessions: Sess
                 {METHOD[s.authMethod ?? ''] ?? 'password'} · {s.ipAddress || 'address unknown'} · signed in {formatDateTime(s.createdAt.toISOString(), timeZone)} · ends {formatDateTime(s.expiresAt.toISOString(), timeZone)}
               </span>
             </div>
-            {s.id === currentId ? null : <RowAction kind="session" id={s.id} label="Sign out" />}
+            {s.id === currentId ? null : <RowAction kind="session" id={s.id} label="Sign out" ariaLabel={`Sign out ${describeAgent(s.userAgent)} session`} />}
           </div>
         ))}
       </div>

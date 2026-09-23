@@ -95,13 +95,17 @@ export function InboxClient({ defaultView, agents, queues, meId, timeZone, marks
   }, [search]);
 
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // A reload scheduled before the view or filters changed must run the current query, not the one it closed over
+  // (it would abort the newer request and show the old view's rows under the new view's counts).
+  const latestLoad = useRef(load);
+  latestLoad.current = load;
   const scheduleLoad = useCallback(() => {
     if (pending.current) return;
     pending.current = setTimeout(() => {
       pending.current = null;
-      void load();
+      void latestLoad.current();
     }, 400);
-  }, [load]);
+  }, []);
   useEffect(
     () => () => {
       if (pending.current) clearTimeout(pending.current);

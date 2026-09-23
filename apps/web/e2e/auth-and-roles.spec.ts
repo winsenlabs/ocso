@@ -54,7 +54,7 @@ test('sign-in shows API errors, then the admin sees Platform navigation and not 
     'Home', 'Search',
     'System', 'Workers', 'Queues & leases', 'Telemetry',
     'Models', 'Connections', 'Channels', 'Message templates', 'Secrets', 'Webhooks',
-    'Alerts', 'Virtual agents', 'Audit log', 'Team & roles', 'Approvals', 'Exceptions',
+    'Alerts', 'Virtual agents', 'Audit log', 'Routers', 'Team & roles', 'Approvals', 'Exceptions',
     'My connections',
     'Settings',
   ]);
@@ -90,7 +90,7 @@ test('the Head sees Operations / Quality / Governance and creates only presets w
   expect(nav.groups).toEqual(['Operations', 'Quality', 'Governance']);
   expect(nav.items).toEqual([
     'Home', 'Search',
-    'Conversations', 'Virtual agents', 'Queues', 'Customers', 'Message templates',
+    'Conversations', 'Virtual agents', 'Queues', 'Routers', 'Customers', 'Message templates',
     'Analytics', 'Reviews', 'Prompt corrections', 'Escalation reasons',
     'Alerts', 'SLA policies', 'Team', 'Approvals', 'Exceptions',
     'My connections',

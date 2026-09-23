@@ -38,9 +38,11 @@ export const agentPerformance: InternalTool<{ windowDays: number }> = {
 
 export const setAgentStatus: InternalTool<{ agentId: string; status: 'LIVE' | 'PAUSED' }> = {
   name: 'set_agent_status',
-  description: 'Pause a virtual agent or put it live. Sensitive: requires the user to confirm.',
+  description:
+    'Pause a virtual agent (immediate once the user confirms), or ask to put it live — going live is a maker-checker change, so the API answers that it needs approval and the user submits it from the agent screen.',
   input: z.object({ agentId: z.uuid(), status: z.enum(['LIVE', 'PAUSED']) }),
-  permission: Permission.AGENTS_MANAGE,
+  // Pausing is a stop and has its own permission; going live is refused with approval_required by the service.
+  permission: Permission.AGENTS_PAUSE,
   risk: 'HIGH_WRITE',
   describe: (a) => `${a.status === 'PAUSED' ? 'Pause' : 'Put live'} virtual agent ${a.agentId}. ${a.status === 'PAUSED' ? 'New customer messages will wait for humans.' : ''}`,
   async preview(ctx, args) {

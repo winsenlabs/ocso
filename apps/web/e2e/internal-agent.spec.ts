@@ -145,7 +145,7 @@ test('Lead gets a streamed answer, can stop one, and the thread is kept', async 
   await settled(page);
   await page.getByRole('button', { name: /Ask OCSO/ }).first().click();
   await expect(drawer(page)).toContainText("scope · your teams' virtual agents and business operations");
-  await expect(drawer(page)).toContainText('role: cs lead');
+  await expect(drawer(page)).toContainText('role: head');
   await expect(drawer(page)).toContainText('context · home');
 
   const input = drawer(page).getByLabel('Ask about this deployment');

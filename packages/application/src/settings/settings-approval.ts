@@ -54,11 +54,10 @@ const DEPLOYMENT_KEYS = Object.keys(DeploymentSection.shape) as Array<keyof z.ou
 const WORKER_KEYS = ['minWarmWorkers', 'maxWorkers', 'conversationsPerWorker', 'targetUtilization', 'scaleOutQueueAgeSeconds', 'scaleOutQueueDepth', 'scaleInCooldownSeconds', 'turnTimeoutSeconds', 'leaseDurationSeconds', 'heartbeatIntervalSeconds', 'idleLeaseSeconds', 'autoscalingEnabled'] as const;
 
 async function current(tx: DbOrTx) {
-  const [[d], [w], [a]] = await Promise.all([
-    tx.select().from(deploymentSettings).where(eq(deploymentSettings.id, 1)),
-    tx.select().from(workerSettings).where(eq(workerSettings.id, 1)),
-    tx.select().from(authPolicy).where(eq(authPolicy.id, 1)),
-  ]);
+  // Sequential: `tx` may be a transaction, whose single connection cannot run queries in parallel.
+  const [d] = await tx.select().from(deploymentSettings).where(eq(deploymentSettings.id, 1));
+  const [w] = await tx.select().from(workerSettings).where(eq(workerSettings.id, 1));
+  const [a] = await tx.select().from(authPolicy).where(eq(authPolicy.id, 1));
   return { d: d!, w: w!, mfa: [...(a?.requireMfaRoles ?? [])].sort() };
 }
 

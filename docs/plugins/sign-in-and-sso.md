@@ -5,7 +5,7 @@ Authorization stays in OCSO code: roles map to permissions, a deny-by-default gu
 and services check resources and team scope.
 
 This is not an OCSO plugin contract. Sign-in methods are Better Auth plugins configured in one file.
-Identity providers, on the other hand, are runtime configuration: a Platform Tech Admin adds them in the
+Identity providers, on the other hand, are runtime configuration: a Tech admin adds them in the
 web app with no code.
 
 ## What is enabled
@@ -21,7 +21,7 @@ web app with no code.
 | Bearer sessions for the BFF | `bearer` (signed) | `/v1` never accepts cookies |
 | OCSO policy | `ocsoPolicy` (`policy-plugin.ts`) | idle timeout, MFA-required roles, HTTP endpoint allowlist, audit |
 
-**Settings → Sign-in security** lets the Tech Admin require a second factor for chosen roles. Passkey
+**Settings → Sign-in security** lets a Tech admin require a second factor for chosen roles. Passkey
 and SSO sessions count as multi-factor.
 
 ## Adding an identity provider (no code)
@@ -30,9 +30,9 @@ and SSO sessions count as multi-factor.
 secret) or SAML 2.0 (IdP sign-on URL, entity ID, signing certificate), plus the email domains it serves.
 OCSO runs the OIDC discovery itself, restricted to the issuer's own origin, which must be public or listed
 in `OCSO_AUTH_TRUSTED_ORIGINS`. Sign-in links an existing user by email. Unknown users are refused
-unless the provider has auto-provisioning on, which creates them as CS Execs. Provider management goes
+unless the provider has auto-provisioning on, which creates them as Service members, pending approval (ADR-029). Provider management goes
 through OCSO's `/v1/settings/sso-providers` API, so it is permission-checked and audited. Setup steps:
-[docs/operations/setup-guide.md §1](../operations/setup-guide.md#1-first-run-platform-tech-admin).
+[docs/operations/setup-guide.md §1](../operations/setup-guide.md#1-first-run-tech).
 
 The OIDC client secret is stored by Better Auth in `auth_sso_providers.oidc_config` in PostgreSQL, not
 in OCSO's SecretStore (ADR-025). It is write-only in the UI. Protect database backups accordingly.

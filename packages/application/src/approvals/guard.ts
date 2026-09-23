@@ -82,7 +82,9 @@ export interface ApprovalState {
 }
 
 export async function approvalState(tx: DbOrTx, kind: string, objectId: string): Promise<ApprovalState> {
-  const [approved, open] = await Promise.all([isApproved(tx, kind, objectId), openProposals(tx, kind, [objectId])]);
+  // Sequential: `tx` may be a transaction, whose single connection cannot run queries in parallel.
+  const approved = await isApproved(tx, kind, objectId);
+  const open = await openProposals(tx, kind, [objectId]);
   return { approved, pending: open.get(objectId) ?? (await activating(tx, kind, objectId)) };
 }
 

@@ -4,7 +4,7 @@
 
 Observability is user-type specific. Do not build one giant dashboard that mixes infrastructure and business metrics.
 
-## 2. Platform Tech Admin view
+## 2. Tech view
 
 Technical telemetry:
 - service uptime
@@ -28,7 +28,7 @@ Technical telemetry:
 - traces/logs
 - deploy/version metadata
 
-## 3. CS Lead view
+## 3. Head and Lead view
 
 Business/agent telemetry:
 - conversations by type/channel
@@ -50,7 +50,7 @@ Business/agent telemetry:
 
 Avoid claiming a universal "agent quality score" unless its method is explicit and auditable.
 
-## 4. CS Exec view
+## 4. Service view
 
 Operational attention:
 - assigned conversations

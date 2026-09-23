@@ -17,7 +17,7 @@ These systems connect through MCP or an approved tool adapter.
 
 ## 2. MCP connection manager
 
-Tech Admin can add an MCP server and authenticate it without writing application code.
+A Tech admin can add an MCP server and authenticate it without writing application code.
 
 The platform should support:
 - server URL/config

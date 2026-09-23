@@ -193,7 +193,7 @@ points at a server), `packages/bootstrap/test/audit-drivers.test.ts` (selection)
   banner, when the store fails or does not answer within 5 s), and incidents record the outage. The
   sealer is fenced by a lock in the main database, so a driver without unique positions is never
   written by two sealers at once. Reads are always scoped by the caller's `AuditScopeFilter`.
-- **Deployment.** The worker's scheduler leader reconciles the Tech Admin's worker settings through the
+- **Deployment.** The worker's scheduler leader reconciles the Tech admin's worker settings through the
   adapter. Compose returns advice and the exact `docker compose up -d --scale worker=N` command; ECS
   applies the settings ([docs/operations/worker-scaling.md](../operations/worker-scaling.md)).
 

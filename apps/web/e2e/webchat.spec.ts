@@ -234,7 +234,7 @@ test('the host identifies the customer with a signed JWT; the conversation conti
     .poll(async () => (await call<{ customer: { identities: Array<{ kind: string }> } }>('GET', `/v1/conversations/${ids.conversation}`, tok.exec)).customer.identities.map((i) => i.kind), { timeout: 10_000 })
     .toContain('webchat_customer_ref');
 
-  await page.getByRole('button', { name: 'Sign out' }).click();
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(log(chat).locator('.wc-row')).toHaveCount(0);
   await expect(chat.getByText('Hi! Ask us anything about your order.')).toBeVisible();
 });

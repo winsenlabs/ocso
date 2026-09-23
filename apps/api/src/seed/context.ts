@@ -15,6 +15,7 @@ import {
   SettingsService,
   TeamService,
   UserService,
+  identityGovernanceWith,
   type ActorContext,
   type AuditStore,
 } from '@ocso/application';
@@ -80,6 +81,10 @@ export function createSeedContext(database: Database, config: SeedConfig, plugin
     channelRegistry.has(kind) ? channelRegistry.get(kind).validateConfig(settings, values) : [`channel kind ${kind} is not available`];
   // Platform kinds validate channel/provider configuration and reach the MCP server when activating (COVERAGE-PLATFORM).
   const approvalRegistry = createApprovalRegistry({ platform: { secrets, validateChannel, providers: registry, publicUrl: config.api.OCSO_PUBLIC_URL } });
+  const approvals = new ApprovalService(db, approvalRegistry);
+  // People and their access go through maker–checker like everything else (PM/research/11 §3.4): the demo never
+  // skips access approval (OCSO_DEV_SKIP_ACCESS_APPROVAL is not consulted). The first Head is the only bootstrap.
+  const identity = identityGovernanceWith(approvals);
   return {
     database,
     db,
@@ -90,12 +95,10 @@ export function createSeedContext(database: Database, config: SeedConfig, plugin
     log: (line) => console.log(`seed: ${line}`),
     services: {
       settings: new SettingsService(db),
-      // The demo's people get the documented demo password (an operator tool, not the invite flow), and are
-      // created active: the seed stands in for the approvals a fresh deployment's first people get (PM/research/11 §3.4),
-      // like the grandfather migration does for existing users. Every such activation is audited with
-      // approvalSkipped: 'demo_seed', so the exception report lists it (ADR-029).
-      users: new UserService(db, { allowInitialPasswords: true, skipAccessApproval: true, skipReason: 'demo_seed' }),
-      teams: new TeamService(db, { skipAccessApproval: true, skipReason: 'demo_seed' }),
+      // The demo's people get the documented demo password (an operator tool, not the invite flow); each is
+      // created pending and activated by a checker's approval (seed steps/organization.ts).
+      users: new UserService(db, { ...identity, allowInitialPasswords: true }),
+      teams: new TeamService(db, identity),
       queues: new QueueService(db),
       providers: new ProviderService({ db, secrets, registry }),
       profiles: new ProfileService({ db, registry }),
@@ -105,7 +108,7 @@ export function createSeedContext(database: Database, config: SeedConfig, plugin
       channels: new ChannelService(db, secrets, validateChannel, (kind, publicKey) => channelRegistry.paths(kind, publicKey)),
       mcp: new McpConnectionService({ db, secrets, publicUrl: config.api.OCSO_PUBLIC_URL }),
       toolGrants: new AgentToolGrantService(db),
-      approvals: new ApprovalService(db, approvalRegistry),
+      approvals,
       approvalDecisions: new ApprovalDecisionService(db, approvalRegistry),
     },
   };

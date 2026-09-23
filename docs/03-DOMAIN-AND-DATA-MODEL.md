@@ -15,7 +15,8 @@ Fields:
 - id
 - name
 - email/login identity
-- role: PLATFORM_TECH_ADMIN | CS_LEAD | CS_EXEC
+- role: TECH | HEAD | LEAD | SERVICE (a preset, ADR-029; migration 0021 mapped PLATFORM_TECH_ADMIN → TECH, CS_LEAD → HEAD, CS_EXEC → SERVICE)
+- per-user permission grants and revokes (`user_permission_grants`, optional expiry)
 - status
 - team memberships
 - created_at / updated_at
