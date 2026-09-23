@@ -58,6 +58,7 @@ const REVIEWED_CREDENTIAL_ADJACENT_WRITES = [
   'alerts.delete_notification_destination',
   'alerts.test_notification_destination',
   'alerts.update_notification_destination',
+  'channels.create_channel',
   'channels.delete_channel',
   'channels.test_channel',
   'channels.update_channel',
@@ -74,6 +75,7 @@ const REVIEWED_CREDENTIAL_ADJACENT_WRITES = [
   'mcp.discover_personal_connection_tools',
   'mcp.enable_connection',
   'mcp.rediscover_connection_tools',
+  'mcp.set_connection_header_auth',
   'models.create_provider',
   'models.delete_provider',
   'models.test_provider',
@@ -88,9 +90,11 @@ const REVIEWED_CREDENTIAL_ADJACENT_WRITES = [
   'webhooks.test_webhook',
   'webhooks.update_webhook',
 ];
-/** Routes whose response can carry a secret or a sign-in link: never in the catalog. */
+/**
+ * Routes whose response can carry a secret or a sign-in link: never in the catalog. (POST /v1/channels is in it:
+ * its generated web chat key is redacted and handed to the user once through the confirm response's `reveal`.)
+ */
 const SECRET_RETURNING_WRITES = [
-  'POST /v1/channels', // web chat: the server-generated backend secret key, revealed once
   'POST /v1/webhooks', // the signing secret, once
   'POST /v1/webhooks/:id/rotate-secret',
   'POST /v1/users/:id/invite', // log email driver: the invite link
@@ -98,6 +102,7 @@ const SECRET_RETURNING_WRITES = [
 ];
 /** Capabilities whose responses are redacted by the runtime (`redactResult`) before the thread and model see them. */
 const REDACTED_RESPONSES: Record<string, string[]> = {
+  'channels.create_channel': ['revealedSecrets'], // web chat: the generated backend key, shown once through `reveal` only
   'users.create_user': ['onboarding.link'], // approval skipped: the invite link (log email driver)
   'users.update_user': ['onboarding.link'], // a pending user activated at once: the same
 };
@@ -174,7 +179,17 @@ describe('capability catalog', () => {
         if (!scalar) expect(SECRET_FIELD.test(name), `${c.name} exposes credential field ${name}`).toBe(false);
       }
       if (c.secretInputs) expect(c.input.body?.['additionalProperties'], c.name).toBe(false);
+      // Every credential field the route takes is one the card asks for, and the other way round.
+      expect((c.credentials ?? []).map((x) => x.field).sort(), c.name).toEqual([...(c.secretInputs ?? [])].sort());
+      if (c.revealResponse) expect(c.redactResponse, c.name).toContain(c.revealResponse);
     }
+  });
+
+  it('MCP OAuth stays out (a browser redirect) and says where to do it', () => {
+    const oauth = CAPABILITY_CATALOG.excluded.find((e) => e.route === 'POST /v1/mcp/connections/:id/oauth/begin');
+    expect(oauth?.reason).toMatch(/\/connections/);
+    expect(capabilityByName('mcp.set_connection_header_auth')?.approvalKind).toBe('mcp_connection');
+    expect(capabilityByName('channels.create_channel')?.approvalKind).toBe('channel');
   });
 
   it('leaves out auth, public ingress, streams, uploads, downloads and its own routes', () => {

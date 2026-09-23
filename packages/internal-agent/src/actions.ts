@@ -7,9 +7,10 @@ import { capabilityByName, fillPath, isAppRoute, redactResult, type Capability }
 import { routePath, splitArgs, type SplitArgs } from './runtime/args.js';
 import { buildCard, cardHash, createsGovernedObject, governCard, snapshotObject, type CardContext, type CardPlan } from './runtime/cards.js';
 import { resolveNames } from './runtime/changes.js';
+import { checkCredentials, credentialFields, revealedSecrets, scrubSecrets, withCredentials, type ResolvedCredential } from './runtime/credentials.js';
 import { label, trimResult } from './runtime/data.js';
 import { allowedFor } from './runtime/search.js';
-import { apiError, type ActionCard, type CapabilityRunner, type CardStatus } from './runtime/types.js';
+import { apiError, type ActionCard, type CapabilityRunner, type CardStatus, type ConfirmedCard, type RevealedSecret } from './runtime/types.js';
 
 /** At most this many cards per user per minute (PM/research/12 §9). */
 export const CARDS_PER_MINUTE = 10;
@@ -48,6 +49,17 @@ export type ActionStatus = CardStatus;
 export interface ConfirmInput {
   checkerId?: string | undefined;
   reason?: string | undefined;
+  /**
+   * Values the user typed into the card's credential fields (PM/research/12 §9). They go into the route's body for
+   * this one call and are never stored: not in the card, the action row, the thread, the audit row or an error.
+   */
+  credentials?: Readonly<Record<string, string>> | undefined;
+}
+
+/** What a claimed card's run ended as, plus any secret the route generated (shown once, never stored). */
+interface RunOutcome {
+  card: ActionCard;
+  reveal: RevealedSecret[];
 }
 
 /**
@@ -99,7 +111,7 @@ export class InternalActionService {
     return card;
   }
 
-  async confirm(principal: Principal, actionId: string, input: ConfirmInput, correlationId: string): Promise<ActionCard> {
+  async confirm(principal: Principal, actionId: string, input: ConfirmInput, correlationId: string): Promise<ConfirmedCard> {
     const row = await this.load(principal, actionId);
     const card = row.card as unknown as ActionCard;
     if (row.expiresAt.getTime() < Date.now()) return this.settle(row, card, 'EXPIRED', { message: 'This card expired. Ask again to see the current values.' });
@@ -123,10 +135,13 @@ export class InternalActionService {
     const plan = row.params as unknown as CardPlan;
     const ctx = this.context(principal, row.threadId, correlationId, { cardId: row.id });
     let split: SplitArgs;
+    let fields: ResolvedCredential[];
     try {
       split = splitArgs(capability, plan.args);
       const snapshot = await snapshotObject(ctx, capability, split);
-      if (cardHash(capability, plan.args, split, snapshot) !== row.cardHash) {
+      // The credential fields as the kind describes them now: a changed list is a changed card (STALE).
+      fields = await credentialFields(ctx, capability, split, snapshot.current);
+      if (cardHash(capability, plan.args, split, snapshot, fields.map((f) => f.key)) !== row.cardHash) {
         return this.settle(row, card, 'STALE', { message: 'This changed since the card was made. Ask again to see the current values.' }, principal, correlationId);
       }
     } catch (err) {
@@ -135,23 +150,47 @@ export class InternalActionService {
       }
       throw err;
     }
+    // Checked before the claim: a missing or unknown field leaves the card open to fill in and confirm again.
+    const values = checkCredentials(fields, input.credentials);
+    if (fields.length && !Object.keys(values).length && capability.method !== 'POST' && !Object.keys(split.body ?? {}).length) {
+      throw validation('credential_required', 'Enter at least one value on the card: nothing else would change.');
+    }
+    const secrets = Object.values(values);
 
     // Single use: only one confirm may claim the card.
     const claimed = await this.db.update(internalAgentActions).set({ status: 'CONFIRMING' }).where(and(eq(internalAgentActions.id, row.id), eq(internalAgentActions.status, 'PENDING'))).returning({ id: internalAgentActions.id });
     if (!claimed.length) throw new DomainError('conflict', 'action_not_pending', 'This card is already being confirmed or was decided');
 
     try {
-      return await this.run(principal, row, card, capability, split, approval, ctx, correlationId);
+      const { card: done, reveal } = await this.run(principal, row, card, capability, split, approval, ctx, correlationId, fields, values);
+      // Generated secrets go back to this user once, in this response only: never on the stored card or in the thread.
+      return reveal.length ? { ...done, reveal } : done;
     } catch (err) {
       // Whatever failed after the claim (the route, re-governing a card, recording the outcome), the card never stays CONFIRMING.
-      return this.settle(row, card, 'FAILED', { message: `It could not be finished: ${(err as Error).message}` }, principal, correlationId, undefined, 'CONFIRMING');
+      return this.settle(row, card, 'FAILED', { message: `It could not be finished: ${(err as Error).message}` }, principal, correlationId, undefined, 'CONFIRMING', secrets);
     }
   }
 
   /** Run a claimed card's route as the user and record how it ended. */
-  private async run(principal: Principal, row: ActionRow, card: ActionCard, capability: Capability, split: SplitArgs, approval: { checkerId: string; reason: string } | undefined, ctx: CardContext, correlationId: string): Promise<ActionCard> {
+  private async run(
+    principal: Principal,
+    row: ActionRow,
+    card: ActionCard,
+    capability: Capability,
+    split: SplitArgs,
+    approval: { checkerId: string; reason: string } | undefined,
+    ctx: CardContext,
+    correlationId: string,
+    fields: readonly ResolvedCredential[],
+    values: Readonly<Record<string, string>>,
+  ): Promise<RunOutcome> {
     const governed = card.kind === 'governed';
-    const body = approval ? { ...(split.body ?? {}), approval } : split.body;
+    // The typed credentials join the body for this one in-process call; a governed route stages them as the UI's does.
+    const withSecrets = withCredentials(split.body, fields, values);
+    const body = approval ? { ...(withSecrets ?? {}), approval } : withSecrets;
+    let secrets = Object.values(values);
+    const settle = (status: CardStatus, result: NonNullable<ActionCard['result']>, data?: unknown) => this.settle(row, card, status, result, principal, correlationId, data, 'CONFIRMING', secrets);
+    const outcome = async (status: CardStatus, result: NonNullable<ActionCard['result']>, data?: unknown, reveal: RevealedSecret[] = []): Promise<RunOutcome> => ({ card: await settle(status, result, data), reveal });
     let res;
     try {
       res = await this.runner.call(principal, ctx.scope, {
@@ -161,14 +200,14 @@ export class InternalActionService {
         ...(body !== undefined ? { body } : {}),
       });
     } catch (err) {
-      return this.settle(row, card, 'FAILED', { message: `It could not be run: ${(err as Error).message}` }, principal, correlationId, undefined, 'CONFIRMING');
+      return outcome('FAILED', { message: `It could not be run: ${(err as Error).message}` });
     }
 
     const error = apiError(res.body);
     const href = card.object?.href ?? resultHref(capability, split, res.body);
     if (res.status === 504 && error?.code === 'outcome_unknown') {
       // The route was sent and did not answer in time: it may still apply. Never "could not be run".
-      return this.settle(row, card, 'UNKNOWN', { message: OUTCOME_UNKNOWN_MESSAGE, ...(href ? { href } : {}) }, principal, correlationId, { error }, 'CONFIRMING');
+      return outcome('UNKNOWN', { message: OUTCOME_UNKNOWN_MESSAGE, ...(href ? { href } : {}) }, { error });
     }
     if (res.status >= 400) {
       if (error?.code === 'approval_required' && !governed) {
@@ -177,15 +216,19 @@ export class InternalActionService {
         if (objectKind && objectId) {
           const next = await governCard(ctx, card, objectKind, objectId, await appliedText(ctx, error.details?.['applied']));
           await this.db.update(internalAgentActions).set({ status: 'PENDING', card: next as unknown as Record<string, unknown> }).where(and(eq(internalAgentActions.id, row.id), eq(internalAgentActions.status, 'CONFIRMING')));
-          return next;
+          return { card: next, reveal: [] };
         }
       }
       if (error?.code === 'content_changed' || error?.code === 'dependency_changed') {
-        return this.settle(row, card, 'STALE', { message: `${error.message} Ask again to see the current version.` }, principal, correlationId, undefined, 'CONFIRMING');
+        return outcome('STALE', { message: `${error.message} Ask again to see the current version.` });
       }
-      return this.settle(row, card, 'FAILED', { message: error?.message ?? `The request failed (${res.status}).` }, principal, correlationId, { error: error ?? { status: res.status } }, 'CONFIRMING');
+      return outcome('FAILED', { message: error?.message ?? `The request failed (${res.status}).` }, { error: error ?? { status: res.status } });
     }
 
+    // Generated secrets (the web chat backend key) are taken out before anything is stored; the thread only hears they were shown.
+    const reveal = revealedSecrets(capability, res.body, card.credentials ?? []);
+    secrets = [...secrets, ...reveal.map((r) => r.value)];
+    const shown = reveal.length ? ` ${reveal.map((r) => r.label).join(', ')} issued and shown once to the user; OCSO does not keep it here or show it again.` : '';
     const data = redactResult(capability, res.body);
     const answer = data as { proposal?: { id?: string; checker?: { name?: string } | null } | null; applied?: unknown; approvalRequired?: unknown; activationError?: { message?: string } | null } | null;
     const proposal = answer?.proposal;
@@ -200,10 +243,10 @@ export class InternalActionService {
           : applied
             ? `Applied now: ${applied}. The rest was sent to ${checker} for approval and does not change until they approve it.`
             : `Sent to ${checker} for approval. Nothing changes until they approve it.`;
-      return this.settle(row, card, 'SUBMITTED', { message, ...(proposalId ? { href: `/approvals?box=sent&approval=${proposalId}`, proposalId } : {}) }, principal, correlationId, trimResult(data).data, 'CONFIRMING');
+      return outcome('SUBMITTED', { message: `${message}${shown}`, ...(proposalId ? { href: `/approvals?box=sent&approval=${proposalId}`, proposalId } : {}) }, trimResult(data).data, reveal);
     }
     const resultLink = card.object?.href ?? resultHref(capability, split, data);
-    return this.settle(row, card, 'EXECUTED', { message: doneMessage(capability, card, data, { governed, checker: chosen, applied }), ...(resultLink ? { href: resultLink } : {}) }, principal, correlationId, trimResult(data).data, 'CONFIRMING');
+    return outcome('EXECUTED', { message: `${doneMessage(capability, card, data, { governed, checker: chosen, applied })}${shown}`, ...(resultLink ? { href: resultLink } : {}) }, trimResult(data).data, reveal);
   }
 
   async reject(principal: Principal, actionId: string, correlationId: string): Promise<ActionCard> {
@@ -234,7 +277,20 @@ export class InternalActionService {
    * thread and card). Only from the status this path expects (`from`): PENDING before the single-use claim,
    * CONFIRMING after it. A second, racing confirm or cancel that lost the claim never overwrites how the card ended.
    */
-  private async settle(row: ActionRow, card: ActionCard, status: CardStatus, result: NonNullable<ActionCard['result']>, principal?: Principal, correlationId?: string, data?: unknown, from: 'PENDING' | 'CONFIRMING' = 'PENDING'): Promise<ActionCard> {
+  private async settle(
+    row: ActionRow,
+    card: ActionCard,
+    status: CardStatus,
+    rawResult: NonNullable<ActionCard['result']>,
+    principal?: Principal,
+    correlationId?: string,
+    rawData?: unknown,
+    from: 'PENDING' | 'CONFIRMING' = 'PENDING',
+    secrets: readonly string[] = [],
+  ): Promise<ActionCard> {
+    // Nothing a confirm stores may carry a value the user typed or the route generated (an error echoing it, a result).
+    const result = scrubSecrets(rawResult, secrets);
+    const data = scrubSecrets(rawData, secrets);
     const next: ActionCard = { ...card, status, result };
     await this.db.transaction(async (tx) => {
       const updated = await tx

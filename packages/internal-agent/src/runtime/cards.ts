@@ -8,6 +8,7 @@ import { bulkApprovalChanges, changesFor, widensRights } from './changes.js';
 import { routePath, type SplitArgs } from './args.js';
 import { get, objectReadCapability, paramNames, snapshotObject, type ObjectSnapshot } from './snapshot.js';
 import { partialStop } from './partial-stop.js';
+import { cardFields, credentialFields } from './credentials.js';
 import type { ActionCard, CapabilityRunner, CardChange, CardChecker, DelegationScope } from './types.js';
 
 export { createsGovernedObject, objectReadCapability, snapshotObject, type ObjectSnapshot } from './snapshot.js';
@@ -41,11 +42,14 @@ export function titleOf(capability: Capability): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-/** What the card hash covers: the arguments and the object state the user saw (the fields it changes, its status and version). */
-export function cardHash(capability: Capability, args: Record<string, unknown>, split: SplitArgs, snapshot: ObjectSnapshot): string {
+/**
+ * What the card hash covers: the (non-secret) arguments, the object state the user saw (the fields it changes, its
+ * status and version) and the names of the credential fields the card asks for. Never a credential value.
+ */
+export function cardHash(capability: Capability, args: Record<string, unknown>, split: SplitArgs, snapshot: ObjectSnapshot, credentialKeys: readonly string[] = []): string {
   const keys = new Set([...Object.keys(split.body ?? {}), 'status', 'updatedAt', 'revision', 'contentHash', 'version', 'enabled', 'args', 'argsHash', 'toolName']);
   const current = snapshot.current ? Object.fromEntries(Object.entries(snapshot.current).filter(([k]) => keys.has(k))) : null;
-  return sha256(stableJson({ tool: capability.name, args, current, projection: snapshot.projection }));
+  return sha256(stableJson({ tool: capability.name, args, current, projection: snapshot.projection, ...(credentialKeys.length ? { credentials: [...credentialKeys] } : {}) }));
 }
 
 /** The second line high-risk capabilities always show (PM/research/12 §9): credentials, rights, deletions, settings. */
@@ -55,7 +59,7 @@ const HIGH_RISK: Array<[RegExp, (name: string) => string]> = [
   [/^models\.(create_provider|update_provider)$/, (n) => `You are about to change a model provider${n ? ` (${n})` : ''}.`],
   [/^(mcp|webhooks)\./, (n) => `You are about to change an external connection${n ? ` (${n})` : ''}.`],
   [/^security\./, () => 'You are about to change a security credential: anything signed with the old key stops being accepted.'],
-  [/^channels\.update_channel$/, (n) => `You are about to change a customer channel's connection${n ? ` (${n})` : ''}.`],
+  [/^channels\.(create_channel|update_channel)$/, (n) => `You are about to change a customer channel's connection${n ? ` (${n})` : ''}.`],
   [/^approvals\.bulk_approve$/, () => 'You are about to approve every proposal listed here: each applies as if you approved it on its own.'],
   [/^approvals\.decide_approval$/, (n) => `You are about to decide someone else's change${n ? ` (${n})` : ''}: an approval applies it.`],
   [/^conversations\.(confirm_tool_call|run_conversation_tool)$/, (n) => `You are about to run a tool on a customer's behalf${n ? ` (${n})` : ''}: it acts in an external system as you, with exactly the arguments shown.`],
@@ -124,6 +128,7 @@ export async function buildCard(ctx: CardContext, capability: Capability, args: 
   if (snapshot.kind === 'tool_call' && snapshot.current?.['status'] !== 'AWAITING_CONFIRMATION') {
     throw new DomainError('conflict', 'tool_call_not_waiting', `This tool call is not waiting for confirmation (it is ${String(snapshot.current?.['status'] ?? 'gone').toLowerCase().replaceAll('_', ' ')}).`);
   }
+  const credentials = await credentialFields(ctx, capability, split, snapshot.current);
   const partial = await partialStop(ctx, capability, split.body, snapshot.current);
   const stop = isStopCall(capability, split.body) || partial?.kind === 'stop';
   const warnings: string[] = [];
@@ -187,10 +192,11 @@ export async function buildCard(ctx: CardContext, capability: Capability, args: 
     changes,
     warnings,
     ...(approval ? { approval } : {}),
+    ...(credentials.length ? { credentials: cardFields(credentials) } : {}),
     expiresAt: new Date(ctx.now.getTime() + CARD_TTL_MS).toISOString(),
     status: 'PENDING',
   };
-  return { card, hash: cardHash(capability, args, split, snapshot), plan: { args, objectKind: capability.approvalKind ?? snapshot.kind, objectId: snapshot.approvalId ?? snapshot.id } };
+  return { card, hash: cardHash(capability, args, split, snapshot, credentials.map((c) => c.key)), plan: { args, objectKind: capability.approvalKind ?? snapshot.kind, objectId: snapshot.approvalId ?? snapshot.id } };
 }
 
 /** A governed card for a write the route answered 409 approval_required (the prediction said direct). */

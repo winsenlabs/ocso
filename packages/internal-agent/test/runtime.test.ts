@@ -18,7 +18,13 @@ import {
   allowedFor,
   capabilityByName,
   capabilitySuggestions,
+  checkCredentials,
   compactInput,
+  describeTool,
+  revealedSecrets,
+  scrubSecrets,
+  withCredentials,
+  type ResolvedCredential,
   currentCard,
   displayFull,
   internalAgentInstructions,
@@ -109,7 +115,11 @@ describe('tool inputs', () => {
     expect(() => splitArgs(cap('agents.update_agent'), { id, maxToolSteps: 99 })).toThrow(/maxToolSteps|maximum|<=/);
     expect(() => splitArgs(cap('agents.update_agent'), { id, mystery: 1 })).toThrow(/unknown argument mystery/);
     expect(() => splitArgs(cap('agents.update_agent'), { id, approval: { bootstrap: true } })).toThrow(/confirmation card/);
-    expect(() => splitArgs(cap('models.update_provider'), { id, credentials: { apiKey: 'sk' } })).toThrow(/OCSO UI/);
+    expect(() => splitArgs(cap('models.update_provider'), { id, credentials: { apiKey: 'sk' } })).toThrow(/confirmation card's own fields/);
+    // A credential the model supplies anywhere is refused, whatever the field is called at the top.
+    expect(() => splitArgs(cap('models.create_provider'), { kind: 'ANTHROPIC', name: 'A', settings: { apiKey: 'sk-live' } })).toThrow(/apiKey: credentials are typed by the user/);
+    expect(() => splitArgs(cap('channels.create_channel'), { kind: 'TWILIO_WHATSAPP', name: 'T', secrets: { authToken: 'x' } })).toThrow(/secrets/);
+    expect(() => splitArgs(cap('mcp.set_connection_header_auth'), { id, headerName: 'Authorization', token: 'Bearer x' })).toThrow(/token/);
     expect(() => splitArgs(cap('agents.update_agent'), [1, 2])).toThrow(/object/);
   });
 });
@@ -147,6 +157,57 @@ describe('cards', () => {
 
   it('titles cards from the tool name', () => {
     expect(titleOf(cap('agents.update_agent'))).toBe('Update agent');
+  });
+});
+
+describe('credentials on the card', () => {
+  it('the catalog knows each capability’s credential inputs, from the route schema and the kind descriptors', () => {
+    expect(cap('models.create_provider').credentials).toEqual([{ field: 'credentials', shape: 'map', source: 'provider_kind' }]);
+    expect(cap('channels.create_channel').credentials).toEqual([{ field: 'secrets', shape: 'map', source: 'channel_kind' }]);
+    expect(cap('channels.create_channel').revealResponse).toBe('revealedSecrets');
+    expect(cap('channels.create_channel').redactResponse).toContain('revealedSecrets');
+    expect(cap('mcp.set_connection_header_auth').credentials).toEqual([{ field: 'token', shape: 'value', label: 'Token', required: true }]);
+    // The model's input never shows them, and a required credential is not required of the model.
+    const header = compactInput(cap('mcp.set_connection_header_auth')) as { properties: Record<string, unknown>; required: string[] };
+    expect(header.properties['token']).toBeUndefined();
+    expect(header.required).not.toContain('token');
+    expect(header.properties['headerName']).toBeDefined();
+    expect(describeTool(cap('models.create_provider'))).toMatchObject({ enteredOnCard: ['credentials'], note: expect.stringContaining('confirmation card') });
+  });
+
+  const fields: ResolvedCredential[] = [
+    { key: 'accountSid', label: 'Account SID', required: true, field: 'secrets', shape: 'map' },
+    { key: 'secretKey', label: 'Secret key', required: false, generate: true, field: 'secrets', shape: 'map' },
+    { key: 'token', label: 'Token', required: true, field: 'token', shape: 'value' },
+  ];
+
+  it('checks typed values against the card: required filled, unknown keys refused, blanks dropped; messages never carry values', () => {
+    expect(checkCredentials(fields, { accountSid: 'AC1', token: 't0k3n', secretKey: '' })).toEqual({ accountSid: 'AC1', token: 't0k3n' });
+    expect(() => checkCredentials(fields, { accountSid: 'AC1' })).toThrow(/Enter Token on the card/);
+    expect(() => checkCredentials(fields, { accountSid: 'AC1', token: 'v4lue', mystery: 'hunter2' })).toThrow(/no credential field mystery/);
+    try {
+      checkCredentials(fields, { accountSid: 'AC1', token: 'v4lue', mystery: 'hunter2' });
+    } catch (err) {
+      expect((err as Error).message).not.toContain('hunter2');
+    }
+    expect(() => checkCredentials([], { anything: 'x' })).toThrow(/takes no credentials/);
+    expect(checkCredentials([], undefined)).toEqual({});
+  });
+
+  it('puts values into the route body for the call: map fields merge, single values set', () => {
+    expect(withCredentials({ name: 'T', secrets: {} }, fields, { accountSid: 'AC1', token: 't' })).toEqual({ name: 'T', secrets: { accountSid: 'AC1' }, token: 't' });
+    const body = { name: 'T' };
+    expect(withCredentials(body, fields, {})).toBe(body);
+  });
+
+  it('hands generated secrets back labelled, and scrubs every value from what is stored', () => {
+    const channel = cap('channels.create_channel');
+    const revealed = revealedSecrets(channel, { id: 'c', revealedSecrets: { secretKey: 'sk_generated_1' } }, fields);
+    expect(revealed).toEqual([{ key: 'secretKey', label: 'Secret key', value: 'sk_generated_1' }]);
+    expect(revealedSecrets(cap('models.create_provider'), { revealedSecrets: { a: 'b' } }, fields)).toEqual([]);
+    const scrubbed = scrubSecrets({ message: 'bad key sk-live-9999 given', nested: [{ 'sk-live-9999': 1 }] }, ['sk-live-9999']);
+    expect(JSON.stringify(scrubbed)).not.toContain('sk-live-9999');
+    expect(scrubbed.message).toBe('bad key [redacted] given');
   });
 });
 
@@ -227,6 +288,7 @@ describe('final review fixes', () => {
       'agents.create_escalation_rule',
       'alerts.create_alert_rule',
       'alerts.create_notification_destination',
+      'channels.create_channel',
       'channels.create_message_template',
       'models.create_price',
       'models.create_provider',

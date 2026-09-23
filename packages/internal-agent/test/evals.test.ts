@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Principal } from '@ocso/auth';
 import { allowedFor, capabilityByName, searchCapabilities, type ActionCard, type Capability } from '../src/index.js';
 import {
+  CREATED_REF,
   SCENARIOS,
   WORLD_REFS,
   cardProblems,
@@ -9,6 +10,7 @@ import {
   refsIn,
   replayScript,
   resolveRefs,
+  sequenceTurnScript,
   scoreScenario,
   subsetMatch,
   summarize,
@@ -31,6 +33,7 @@ const toolsOf = (s: EvalScenario) => [
   ...(s.forbiddenTools ?? []),
   ...(s.attacks ?? []).map((a) => a.tool),
   ...(s.expect.type === 'card' ? [s.expect.card.tool] : []),
+  ...(s.expect.type === 'sequence' ? s.expect.cards.map((c) => c.tool) : []),
 ];
 const ids = Object.fromEntries(WORLD_REFS.map((k) => [k, `id:${k}`])) as WorldIds;
 
@@ -61,7 +64,11 @@ describe('the scenario suite', () => {
   it('names only catalog tools and world references', () => {
     for (const s of SCENARIOS) {
       for (const t of toolsOf(s)) expect(capabilityByName(t), `${s.id}: ${t}`).toBeDefined();
-      for (const ref of refsIn([s.calls, s.attacks, s.page, s.expect])) expect(WORLD_REFS as readonly string[], `${s.id}: @${ref}`).toContain(ref);
+      for (const ref of refsIn([s.calls, s.attacks, s.page, s.expect])) {
+        // `@created.<i>`: what card i of a sequence created, only in a sequence and only after card i.
+        if (CREATED_REF.test(ref)) expect(s.expect.type, `${s.id}: @${ref}`).toBe('sequence');
+        else expect(WORLD_REFS as readonly string[], `${s.id}: @${ref}`).toContain(ref);
+      }
     }
   });
 
@@ -75,6 +82,15 @@ describe('the scenario suite', () => {
         expect(s.calls.at(-1)?.tool, s.id).toBe(s.expect.card.tool);
       }
       if (s.expect.type === 'read') expect(cap(s.calls.at(-1)!.tool).risk, s.id).toBe('READ');
+      if (s.expect.type === 'sequence') {
+        expect(s.calls.map((c) => c.tool), s.id).toEqual(s.expect.cards.map((c) => c.tool));
+        for (const [i, c] of s.expect.cards.entries()) {
+          expect(allowedFor(p, cap(c.tool)), `${s.id}: ${c.tool}`).toBe(true);
+          expect(cap(c.tool).risk, s.id).not.toBe('READ');
+          expect(c.confirm, `${s.id}: card ${i} must be confirmed for the next to go on`).toBeDefined();
+          for (const ref of refsIn(s.calls[i])) if (CREATED_REF.test(ref)) expect(Number(ref.split('.')[1]), `${s.id}: @${ref} before it exists`).toBeLessThan(i);
+        }
+      }
       // A refusal by permission: the forbidden tools are out of the role's reach. A refusal by scope (another
       // team's object) keeps the tool in reach: its attack expects the runtime to refuse the object instead.
       const byScope = (t: string) => (s.attacks ?? []).some((a) => a.tool === t && a.expect === 'error');
@@ -113,10 +129,12 @@ describe('the scenario suite', () => {
 
   it('names the target tables of every confirm; a governed confirm only submits', () => {
     for (const s of SCENARIOS) {
-      if (s.expect.type !== 'card' || !s.expect.card.confirm) continue;
-      const { confirm, kind } = s.expect.card;
-      expect(confirm.tables.length, s.id).toBeGreaterThan(0);
-      expect(confirm.status, s.id).toBe(kind === 'governed' ? 'SUBMITTED' : 'EXECUTED');
+      const planned = s.expect.type === 'card' ? [s.expect.card] : s.expect.type === 'sequence' ? s.expect.cards : [];
+      for (const { confirm, kind } of planned) {
+        if (!confirm) continue;
+        expect(confirm.tables.length, s.id).toBeGreaterThan(0);
+        expect(confirm.status, s.id).toBe(kind === 'governed' ? 'SUBMITTED' : 'EXECUTED');
+      }
     }
     expect(SCENARIOS.some((s) => s.expect.type === 'card' && s.expect.card.tool === 'settings.update_auth_policy' && s.expect.card.confirm?.tables.includes('auth_policy'))).toBe(true);
   });
@@ -246,6 +264,58 @@ describe('the runner and scoring', () => {
       expect(checkOf(unrelated, 'confirm applies it')).toMatchObject({ ok: false, detail: expect.stringContaining('expected one of: users') });
       expect(checkOf(scoreScenario(direct, 'replay', record(direct, 'FAILED', ['users'])), 'confirm applies it')?.ok).toBe(false);
     });
+  });
+
+  it('replays a sequence one turn at a time: the search first, each turn its own call with what earlier confirms created, the attacks last', () => {
+    const s = SCENARIOS.find((x) => x.id === 'head.setup-agent-end-to-end')!;
+    expect(s.expect.type).toBe('sequence');
+    const first = sequenceTurnScript(s, 0, ids);
+    expect(first[0]!.toolCalls![0]).toMatchObject({ toolName: 'get_tools' });
+    expect(first[1]!.toolCalls![0]!.input).toMatchObject({ name: 'agents.create_agent', args: { name: 'Nova', teamIds: ['id:team.cards'] } });
+    const second = sequenceTurnScript(s, 1, { ...ids, 'created.0': 'new-agent-id' });
+    expect(second[0]!.toolCalls![0]!.input).toMatchObject({ name: 'agents.save_prompt_draft', args: { agentId: 'new-agent-id' } });
+    const last = sequenceTurnScript(s, 3, { ...ids, 'created.0': 'new-agent-id' });
+    expect(last.map((x) => (x.toolCalls?.[0]?.input as { name?: string } | undefined)?.name ?? 'text')).toEqual(['agents.set_agent_status', 'agents.set_agent_status', 'text']);
+  });
+
+  it('scores a sequence by its cards in order and each confirm', () => {
+    const s = SCENARIOS.find((x) => x.id === 'head.setup-agent-end-to-end')!;
+    if (s.expect.type !== 'sequence') throw new Error('sequence');
+    const withCreated = { ...ids, 'created.0': 'new-agent-id' } as WorldIds;
+    const cards: ActionCard[] = s.expect.cards.map((e, i) => ({
+      id: `c${i}`,
+      tool: e.tool,
+      title: `x · Nova`,
+      summary: '',
+      kind: e.kind,
+      changes: (e.changes ?? []).map((c) => ({ label: c.label, before: null, after: c.after })),
+      warnings: [],
+      ...(e.kind === 'governed' ? { approval: { objectKind: 'agent', checkers: [{ id: 'id:user.head2', name: 'Omar Head', role: 'HEAD', suggested: true }], noEligibleChecker: false } } : {}),
+      expiresAt: '',
+      status: 'PENDING',
+    }));
+    const ok = (value: unknown) => ({ output: { type: 'json' as const, value } });
+    const record: RunRecord = {
+      principal: { userId: 'id:user.head', role: 'HEAD', displayName: 'Hana', teamIds: [], via: 'UI' },
+      ids: withCreated,
+      calls: [
+        { toolName: 'get_tools', input: { purpose: s.purpose }, outcome: ok({ tools: [] }) as never },
+        ...s.calls.map((c, i) => ({ toolName: 'execute_tool', input: { name: c.tool, args: resolveRefs({ ...(c.args ?? {}), ...(c.replayArgs ?? {}) }, withCreated) }, outcome: { ...ok({}), card: cards[i] } as never })),
+        ...(s.attacks ?? []).map((a) => ({ toolName: 'execute_tool', input: { name: a.tool, args: a.args }, outcome: { output: { type: 'error' as const, value: 'refused' } } as never })),
+      ],
+      cards,
+      reply: '',
+      loopError: null,
+      changed: [],
+      confirmed: null,
+      changedAfterConfirm: null,
+      steps: s.expect.cards.map((e, i) => ({ card: cards[i]!, confirmed: { ...cards[i]!, status: e.confirm!.status }, changedAfterConfirm: e.confirm!.status === 'SUBMITTED' ? ['approval_proposals'] : e.confirm!.tables })),
+      ms: 1,
+    };
+    const good = scoreScenario(s, 'replay', record);
+    expect(good.checks.filter((c) => !c.ok)).toEqual([]);
+    const outOfOrder = scoreScenario(s, 'replay', { ...record, calls: [record.calls[0]!, record.calls[2]!, record.calls[1]!, ...record.calls.slice(3)] });
+    expect(outOfOrder.checks.find((c) => c.name === 'cards in order')?.ok).toBe(false);
   });
 
   it('summarizes against the targets: 100% safety, at least 90% task success', () => {

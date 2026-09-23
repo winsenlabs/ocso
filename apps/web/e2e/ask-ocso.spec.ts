@@ -25,7 +25,7 @@ const SERVICE = { name: 'Sol Service', email: `sol.service.${RUN}@e2e.ocso.test`
 const AGENT = `Orion ${RUN}`;
 const NEW_AGENT = `Nova ${RUN}`;
 
-const ids: { admin?: string; maker?: string; checker?: string; service?: string; team?: string; agent?: string; provider?: string; profile?: string; proposal?: string } = {};
+const ids: { admin?: string; tech?: string; maker?: string; checker?: string; service?: string; team?: string; agent?: string; provider?: string; profile?: string; proposal?: string } = {};
 const tok: { admin: string; maker: string; checker: string; service: string } = { admin: '', maker: '', checker: '', service: '' };
 let api: APIRequestContext;
 /** The deployment's Ask OCSO profile and writes switch before this spec: restored in afterAll. */
@@ -55,7 +55,8 @@ async function approvedSettings(patch: Record<string, unknown>): Promise<void> {
 
 const drawer = (page: Page) => page.getByRole('dialog', { name: 'Ask OCSO' });
 const log = (page: Page) => drawer(page).getByRole('log', { name: 'Ask OCSO conversation' });
-const lastCard = (page: Page): Locator => log(page).getByRole('group').last();
+/** The newest card (a card's credential fieldset is a group too, so cards are matched by their own class). */
+const lastCard = (page: Page): Locator => log(page).locator('.ia-card[role="group"]').last();
 const directive = (name: string, args: Record<string, unknown>) => `[[call:execute_tool ${JSON.stringify({ name, args })}]]`;
 
 async function openDrawer(page: Page) {
@@ -227,6 +228,91 @@ test('a service member asking for a platform change is refused: no card, nothing
   expect(Number(sqlValue(`SELECT count(*) FROM internal_agent_actions WHERE user_id = '${ids.service}'`))).toBe(0);
   const provider = await call<{ enabled: boolean }>('GET', `/v1/model-providers/${ids.provider}`, tok.admin);
   expect(provider.enabled).toBe(true);
+});
+
+/** A Tech admin of this spec (its own threads): model providers and channels need providers.manage / channels.manage. */
+const TECH = { name: 'Tia Tech', email: `tia.tech.${RUN}@e2e.ocso.test`, password: 'correct-horse-battery-tia' };
+const PROVIDER_KEY = `sk-ant-e2e-${RUN}-typed-on-the-card-only`;
+
+/** The whole database as text: a credential typed on a card, or a key shown once, must appear nowhere in it. */
+function databaseText(): string {
+  return execFileSync('pg_dump', ['--data-only', '--no-owner', databaseUrl], { stdio: 'pipe', maxBuffer: 512 * 1024 * 1024 }).toString();
+}
+
+async function techToken(): Promise<string> {
+  if (!ids.tech) {
+    const created = await call<{ id?: string }>('POST', '/v1/users', tok.admin, { name: TECH.name, email: TECH.email, role: 'TECH', password: TECH.password, teamIds: [], languages: [], maxConcurrent: 5 });
+    ids.tech = created.id!;
+  }
+  return (await loginApi(TECH.email, TECH.password)).token;
+}
+
+async function lastThreadText(userId: string, token: string): Promise<string> {
+  const thread = sqlValue(`SELECT id FROM internal_agent_threads WHERE user_id = '${userId}' ORDER BY updated_at DESC LIMIT 1`);
+  return JSON.stringify(await call('GET', `/v1/internal-agent/threads/${thread}/messages`, token));
+}
+
+test('a model provider is added with its API key typed into the card, never into chat or storage', async ({ page }) => {
+  const token = await techToken();
+  await login(page, TECH);
+  await openDrawer(page);
+  const name = `Claude ${RUN}`;
+  // The model passes the non-secret arguments only; the card asks for the key.
+  await ask(page, `Add an Anthropic provider called ${name}. ${directive('models.create_provider', { kind: 'ANTHROPIC', name })}`);
+  const card = lastCard(page);
+  await expect(card).toContainText(name);
+  const key = card.getByLabel(/api key/i);
+  await expect(key).toHaveAttribute('type', 'password');
+  await expect(key).toHaveAttribute('autocomplete', 'new-password');
+  await expect(card.getByRole('group', { name: 'Credentials' })).toContainText('(required)');
+
+  // Required on the card itself.
+  await card.getByRole('button', { name: 'Confirm change' }).click();
+  await expect(card.getByRole('alert')).toContainText(/api key/i);
+  await key.fill(PROVIDER_KEY);
+  await card.getByRole('button', { name: 'Confirm change' }).click();
+  await expect(card.getByRole('status')).toContainText('done');
+  await expect(card.locator('input[type="password"]')).toHaveCount(0);
+
+  const providers = await call<Array<{ name: string; secretRefs: Record<string, string> }> | { rows: Array<{ name: string; secretRefs: Record<string, string> }> }>('GET', '/v1/model-providers', token);
+  const created = (Array.isArray(providers) ? providers : providers.rows).find((p) => p.name === name);
+  expect(created?.secretRefs, 'the key went to the secret store').toHaveProperty('apiKey');
+
+  // Nowhere else: not on the page, the thread, its history, the audit log or any table.
+  expect(await page.content()).not.toContain(PROVIDER_KEY);
+  expect(await lastThreadText(ids.tech!, token)).not.toContain(PROVIDER_KEY);
+  await page.reload();
+  expect(await page.content()).not.toContain(PROVIDER_KEY);
+  expect(databaseText()).not.toContain(PROVIDER_KEY);
+});
+
+test('a web chat channel created from a card shows its secret key once, and only there', async ({ page }) => {
+  const token = await techToken();
+  await login(page, TECH);
+  await openDrawer(page);
+  const name = `Site chat ${RUN}`;
+  await ask(page, `Add a web chat channel called ${name}. ${directive('channels.create_channel', { kind: 'WEBCHAT', name })}`);
+  const card = lastCard(page);
+  await expect(card).toContainText(name);
+  await expect(card.getByLabel(/^Secret key/)).toHaveAttribute('placeholder', 'Leave blank to generate');
+  await card.getByRole('button', { name: 'Confirm change' }).click();
+  await expect(card.getByRole('status').first()).toContainText('done');
+
+  const panel = card.getByRole('alert');
+  await expect(panel).toContainText('Shown once. Copy it now: OCSO will not show it again.');
+  const secret = await panel.getByLabel('Secret key').inputValue();
+  expect(secret).toMatch(/^sk_/);
+  await expect(panel.getByRole('button', { name: 'Copy' })).toBeVisible();
+  // The card's own result tells the thread only that it was issued.
+  await expect(card).toContainText('shown once to the user');
+
+  await panel.getByRole('button', { name: 'Done, I have copied it' }).click();
+  await expect(card.getByRole('alert')).toHaveCount(0);
+  expect(await page.content()).not.toContain(secret);
+  expect(await lastThreadText(ids.tech!, token)).not.toContain(secret);
+  await page.reload();
+  expect(await page.content()).not.toContain(secret);
+  expect(databaseText()).not.toContain(secret);
 });
 
 test('with writes turned off in Settings, Ask OCSO still answers but proposes no change', async ({ page }) => {

@@ -68,7 +68,12 @@ export class ModelProvidersController {
   }
 
   /** A disabled draft (201); `enabled: true` with `approval` also submits its activation (202). */
-  @Capability({ name: 'models.create_provider', summary: 'Add a model provider as a disabled draft (enabling needs approval; credentials are entered in the UI).' })
+  @Capability({
+    name: 'models.create_provider',
+    summary: 'Add a model provider as a disabled draft (its credentials are entered on the confirmation card; enabling needs approval).',
+    credentialSource: 'provider_kind',
+    tags: ['add', 'new', 'api key', 'connect'],
+  })
   @Post()
   @RequirePermission(Permission.PROVIDERS_MANAGE)
   create(@Actor() actor: ActorContext, @Body({ schema: CreateBody }) body: CreateBody, @Res({ passthrough: true }) res: Response) {
@@ -80,7 +85,13 @@ export class ModelProvidersController {
    * `enabled: false` disables at once (never gated); `enabled: true` is an ACTIVATE proposal (a draft's other
    * fields are saved first). Other fields: written directly on a draft, an UPDATE proposal once approved.
    */
-  @Capability({ name: 'models.update_provider', summary: 'Change a model provider: disabling applies at once, enabling needs approval.', stopWhen: { enabled: false }, tags: ['disable'] })
+  @Capability({
+    name: 'models.update_provider',
+    summary: 'Change a model provider or rotate its credentials (entered on the card): disabling applies at once, enabling needs approval.',
+    stopWhen: { enabled: false },
+    credentialSource: 'provider_kind',
+    tags: ['disable', 'rotate', 'api key'],
+  })
   @Patch(':id')
   @RequirePermission(Permission.PROVIDERS_MANAGE)
   async update(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string, @Body({ schema: PatchBody }) body: PatchBody, @Res({ passthrough: true }) res: Response) {

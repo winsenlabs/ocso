@@ -1,6 +1,6 @@
 import type { WorldIds } from './world.js';
 
-const REF = /@([A-Za-z][\w]*(?:\.[A-Za-z][\w]*)*)/g;
+const REF = /@([A-Za-z][\w]*(?:\.\w+)*)/g;
 
 /** The world id for a ref key, trying the longest dotted prefix first (`@agent.maya` inside `/agents/@agent.maya`). */
 function lookup(key: string, ids: WorldIds): string | undefined {

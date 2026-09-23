@@ -3,10 +3,10 @@
 import Link from 'next/link';
 import { useEffect, useId, useRef, useState, useTransition, type FormEvent } from 'react';
 import { confirmAskOcsoAction, rejectAskOcsoAction } from '../../lib/actions/internal-agent';
-import { honestCard, UNKNOWN_MESSAGE, type ActionDecision } from './decisions';
+import { honestCard, UNKNOWN_MESSAGE, withoutReveal, type ActionDecision } from './decisions';
 import { LinkCards, MiniTable, safeHref } from './parts';
 import { useReconcileUnknown } from './use-reconcile-unknown';
-import { toActionCard, type ActionCardData, type ActionPart, type ActionStatus } from './types';
+import { toActionCard, type ActionCardData, type ActionPart, type ActionStatus, type CredentialField, type RevealedSecret } from './types';
 
 /**
  * A write the agent wants to make (PM/research/12 §5, design/05 `.confirm`). The server built this card;
@@ -35,6 +35,25 @@ const OUTCOME: Record<Exclude<ActionStatus, 'PENDING'>, { chip: string; tone: st
 
 /** "HEAD" → "Head"; a label the API already cased stays as it is. */
 const roleLabel = (role: string) => (role === role.toUpperCase() ? role.charAt(0) + role.slice(1).toLowerCase() : role);
+
+/** Form field name of a credential input (read from the form on submit; never held in React state). */
+const credentialName = (key: string) => `credential:${key}`;
+
+/**
+ * The values typed into a card's credential fields, read from its form: blanks dropped (kept or generated values),
+ * and the labels of required fields left empty.
+ */
+export function readCredentials(fields: readonly CredentialField[], form: Pick<FormData, 'get'>): { values: Record<string, string>; missing: string[] } {
+  const values: Record<string, string> = {};
+  const missing: string[] = [];
+  for (const f of fields) {
+    const raw = form.get(credentialName(f.key));
+    const value = typeof raw === 'string' ? raw : '';
+    if (value.trim() !== '') values[f.key] = value;
+    else if (f.required && !f.generate) missing.push(f.label);
+  }
+  return { values, missing };
+}
 
 /** The runtime's warning for a governed card with no eligible checker (packages/internal-agent runtime/cards.ts). */
 const NOBODY_WARNING = /^Nobody else can approve\b/;
@@ -70,7 +89,11 @@ export function ActionCard({ action, decision, onDecided, userName }: { action: 
   const [picked, setCheckerId] = useState('');
   const checkerId = checkers.some((c) => c.id === picked) ? picked : (checkers[0]?.id ?? '');
   const [reason, setReason] = useState('');
-  const [localError, setLocalError] = useState<{ field: 'checkerId' | 'reason'; message: string } | null>(null);
+  const [localError, setLocalError] = useState<{ field: 'checkerId' | 'reason' | 'credentials'; message: string } | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  // A secret the route generated, shown once: only here, never in the drawer's decisions or the thread.
+  const [reveal, setReveal] = useState<RevealedSecret[] | null>(null);
+  const credentialFields = card.credentials ?? [];
 
   const status = statusOf(card, decision, now);
   const error = decision && !decision.ok ? decision.message : null;
@@ -111,10 +134,21 @@ export function ActionCard({ action, decision, onDecided, userName }: { action: 
       if (!checkerId) return setLocalError({ field: 'checkerId', message: 'Choose who approves this.' });
       if (reason.trim().length < 3) return setLocalError({ field: 'reason', message: 'Give a reason of at least 3 characters.' });
     }
+    let credentials: Record<string, string> | undefined;
+    if (credentialFields.length && formRef.current) {
+      const typed = readCredentials(credentialFields, new FormData(formRef.current));
+      if (typed.missing.length) return setLocalError({ field: 'credentials', message: `Enter ${typed.missing.join(', ')}.` });
+      credentials = typed.values;
+      // The values leave the page with this request only: the fields are cleared at once, whatever the outcome.
+      for (const input of formRef.current.querySelectorAll<HTMLInputElement>('input[type="password"]')) input.value = '';
+    }
     setLocalError(null);
     setChoice('confirm');
     startTransition(async () => {
-      onDecided(await confirmAskOcsoAction(card.id, governed ? { checkerId, reason: reason.trim() } : {}));
+      const decision = await confirmAskOcsoAction(card.id, { ...(governed ? { checkerId, reason: reason.trim() } : {}), ...(credentials ? { credentials } : {}) });
+      credentials = undefined;
+      if (decision.ok && 'card' in decision && decision.reveal?.length) setReveal(decision.reveal);
+      onDecided(withoutReveal(decision));
     });
   }
 
@@ -203,7 +237,52 @@ export function ActionCard({ action, decision, onDecided, userName }: { action: 
           </span>
         </>
       ) : status === 'PENDING' ? (
-        <form className="ia-card-form" onSubmit={confirm} noValidate>
+        <form className="ia-card-form" onSubmit={confirm} noValidate autoComplete="off" ref={formRef}>
+          {credentialFields.length ? (
+            <fieldset className="ia-credentials" aria-describedby={`${id}-cred-note`}>
+              <legend>Credentials</legend>
+              <span className="ia-cred-note" id={`${id}-cred-note`}>
+                Typed here only: sent with your confirmation, never shown to Ask OCSO, never kept in this conversation.
+              </span>
+              {credentialFields.map((f) => {
+                const inputId = `${id}-cred-${f.key}`;
+                const hintId = `${inputId}-hint`;
+                const hint = [f.generate ? 'Leave blank to generate.' : '', f.hint ?? ''].filter(Boolean).join(' ');
+                return (
+                  <span className="ia-field" key={f.key}>
+                    <label htmlFor={inputId}>
+                      {f.label}
+                      {f.required && !f.generate ? <span className="ia-req"> (required)</span> : <span className="ia-opt"> (optional)</span>}
+                    </label>
+                    <input
+                      id={inputId}
+                      name={credentialName(f.key)}
+                      type="password"
+                      className="ia-secret"
+                      autoComplete="new-password"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      data-1p-ignore=""
+                      data-lpignore="true"
+                      data-form-type="other"
+                      maxLength={16_000}
+                      disabled={pending}
+                      required={f.required && !f.generate}
+                      placeholder={f.generate ? 'Leave blank to generate' : undefined}
+                      aria-invalid={fieldError?.field === 'credentials' || undefined}
+                      aria-describedby={[hint ? hintId : '', fieldError?.field === 'credentials' ? `${id}-err` : ''].filter(Boolean).join(' ') || undefined}
+                    />
+                    {hint ? (
+                      <span className="ia-hint" id={hintId}>
+                        {hint}
+                      </span>
+                    ) : null}
+                  </span>
+                );
+              })}
+            </fieldset>
+          ) : null}
           {governed ? (
             <span className="ia-approval">
               <span className="ia-field">
@@ -282,6 +361,7 @@ export function ActionCard({ action, decision, onDecided, userName }: { action: 
           ) : null}
         </div>
       )}
+      {reveal?.length ? <RevealOnce secrets={reveal} onDone={() => setReveal(null)} /> : null}
       {decision?.ok && !('card' in decision) && decision.status === 'EXECUTED' ? (
         <>
           {decision.table ? <MiniTable table={decision.table} /> : null}
@@ -289,5 +369,49 @@ export function ActionCard({ action, decision, onDecided, userName }: { action: 
         </>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Secrets the route generated, shown once (e.g. a web chat backend key): copy it now, it is not shown again. Lives
+ * only in the card's own state until "Done" or the drawer closes; never in the thread or its history.
+ */
+function RevealOnce({ secrets, onDone }: { secrets: RevealedSecret[]; onDone: () => void }) {
+  const id = useId();
+  const [copied, setCopied] = useState<string | null>(null);
+  async function copy(secret: RevealedSecret) {
+    try {
+      await navigator.clipboard.writeText(secret.value);
+      setCopied(secret.key);
+    } catch {
+      setCopied(null);
+    }
+  }
+  return (
+    <section className="ia-reveal" role="alert" aria-labelledby={`${id}-title`}>
+      <b id={`${id}-title`}>Shown once. Copy it now: OCSO will not show it again.</b>
+      {secrets.map((s) => {
+        const fieldId = `${id}-${s.key}`;
+        return (
+          <span className="ia-field" key={s.key}>
+            <label htmlFor={fieldId}>{s.label}</label>
+            <span className="rowsplit">
+              <input id={fieldId} className="ia-secret mono" type="text" readOnly value={s.value} autoComplete="off" spellCheck={false} onFocus={(e) => e.currentTarget.select()} />
+              <button type="button" className="btn tiny" onClick={() => void copy(s)}>
+                {copied === s.key ? 'Copied' : 'Copy'}
+              </button>
+            </span>
+          </span>
+        );
+      })}
+      <span className="sr-only" role="status">
+        {copied ? 'Copied to the clipboard.' : ''}
+      </span>
+      <span className="rowsplit">
+        <button type="button" className="btn tiny accent" onClick={onDone}>
+          Done, I have copied it
+        </button>
+      </span>
+    </section>
   );
 }

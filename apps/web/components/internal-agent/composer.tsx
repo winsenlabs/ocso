@@ -27,6 +27,7 @@ export function Composer({
   onSend,
   onStop,
   onWhatCanYouDo,
+  prefill,
 }: {
   id: string;
   inputRef: RefObject<HTMLTextAreaElement | null>;
@@ -42,9 +43,17 @@ export function Composer({
   onStop: () => void;
   /** Show the catalog answer instead of asking the model; absent when the API sent no areas. */
   onWhatCanYouDo?: (() => void) | undefined;
+  /** A question handed over from the page (e.g. a Home "needs you" item): fills the box once per id. */
+  prefill?: { id: number; text: string } | null | undefined;
 }) {
   const [draft, setDraft] = useState('');
+  const [prefilled, setPrefilled] = useState<number | null>(null);
   const blocked = disabled || working;
+  // Adjust state while rendering (not in an effect) when a new question is handed over.
+  if (prefill && prefill.id !== prefilled) {
+    setPrefilled(prefill.id);
+    setDraft(prefill.text);
+  }
 
   function send(text: string) {
     const question = text.trim();

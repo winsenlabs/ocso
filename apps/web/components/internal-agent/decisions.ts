@@ -1,23 +1,23 @@
 import { ApiError, describeApiError } from '../../lib/api/errors';
 import { z } from 'zod';
-import { ActionCardSchema, MiniTableSchema, ObjectLinkSchema, type ActionCardData, type MiniTableData, type ObjectLink } from './types';
+import { ActionCardSchema, MiniTableSchema, ObjectLinkSchema, RevealedSecretSchema, type ActionCardData, type MiniTableData, type ObjectLink, type RevealedSecret } from './types';
 
 /**
  * Outcome of Confirm / Cancel on an Ask OCSO card. `card` is the API's word on where the card stands now
  * (EXECUTED / SUBMITTED / REJECTED / STALE / …, with its result); an older API answered with the tool's links.
  */
 export type ActionDecision =
-  | { ok: true; card: ActionCardData }
+  | { ok: true; card: ActionCardData; reveal?: RevealedSecret[] | undefined }
   | { ok: true; status: 'EXECUTED'; links: ObjectLink[]; table: MiniTableData | null }
   | { ok: true; status: 'REJECTED' }
-  | { ok: false; message: string; settled: 'EXPIRED' | 'STALE' | 'DECIDED' | 'UNKNOWN' | null; field?: 'checkerId' | 'reason' | undefined };
+  | { ok: false; message: string; settled: 'EXPIRED' | 'STALE' | 'DECIDED' | 'UNKNOWN' | null; field?: 'checkerId' | 'reason' | 'credentials' | undefined };
 
 /**
  * The confirm / reject endpoint's answer: the card, the older `{ links, table }` (confirm only), nothing (204),
  * or a body this page cannot read (`unreadable`), which is never reported as applied.
  */
 export type ActionAnswer =
-  | { card: ActionCardData }
+  | { card: ActionCardData; reveal?: RevealedSecret[] | undefined }
   | { legacy: { links?: ObjectLink[] | undefined; table?: MiniTableData | undefined } }
   | { card: null }
   | { unreadable: true };
@@ -78,12 +78,32 @@ const LegacyResultSchema = z.object({ links: z.array(ObjectLinkSchema).optional(
 export function readActionAnswer(body: unknown, endpoint: 'confirm' | 'reject'): ActionAnswer {
   if (body === undefined || body === null || body === '') return { card: null };
   const card = ActionCardSchema.safeParse(body);
-  if (card.success) return { card: honestCard(card.data) };
+  if (card.success) {
+    // Generated secrets come once, on the confirm response only; they never become part of the card.
+    const reveal = endpoint === 'confirm' ? readReveal(body) : [];
+    return reveal.length ? { card: honestCard(card.data), reveal } : { card: honestCard(card.data) };
+  }
   if (endpoint === 'confirm' && typeof body === 'object' && !Array.isArray(body) && ('links' in body || 'table' in body) && !('status' in body) && !('kind' in body)) {
     const legacy = LegacyResultSchema.safeParse(body);
     if (legacy.success && (legacy.data.links !== undefined || legacy.data.table !== undefined)) return { legacy: legacy.data };
   }
   return { unreadable: true };
+}
+
+/** The confirm response's `reveal`: every well-formed entry, or none. (ActionCardSchema strips it from the card.) */
+export function readReveal(body: unknown): RevealedSecret[] {
+  const raw = body && typeof body === 'object' && !Array.isArray(body) ? (body as { reveal?: unknown }).reveal : undefined;
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((r) => {
+    const parsed = RevealedSecretSchema.safeParse(r);
+    return parsed.success ? [parsed.data] : [];
+  });
+}
+
+/** A decision without its one-time secrets: what the drawer may keep (the card shows the secrets itself, once). */
+export function withoutReveal(decision: ActionDecision): ActionDecision {
+  if (decision.ok && 'card' in decision && decision.reveal) return { ok: true, card: decision.card };
+  return decision;
 }
 
 /** An API refusal in words the card can act on: settled ones remove the buttons. */
@@ -92,6 +112,7 @@ export function decisionFailure(err: unknown): ActionDecision {
     if (err.code === 'action_not_pending' || err.code === 'action_outdated') return { ok: false, message: `${err.message.replace(/\.$/, '')}.`, settled: 'DECIDED' };
     if (err.code === 'checker_required' || err.code === 'checker_not_eligible') return { ok: false, message: err.message, settled: null, field: 'checkerId' };
     if (err.code === 'reason_required') return { ok: false, message: err.message, settled: null, field: 'reason' };
+    if (err.code === 'credential_required' || err.code === 'unknown_credential' || err.code === 'unexpected_credentials') return { ok: false, message: err.message, settled: null, field: 'credentials' };
     if (err.code === 'action_stale' || err.code === 'content_changed' || /changed since|\bstale\b/i.test(err.message)) {
       return { ok: false, message: 'This changed since the card was made, so nothing was done. Ask again for a fresh card.', settled: 'STALE' };
     }
@@ -112,6 +133,6 @@ export function fromAnswer(answer: ActionAnswer, fallback: 'EXECUTED' | 'REJECTE
     return { ok: false, message: 'OCSO took the decision but this page could not read the result. Open the thread again to see where it stands.', settled: 'DECIDED' };
   }
   if ('legacy' in answer) return { ok: true, status: 'EXECUTED', links: answer.legacy.links ?? [], table: answer.legacy.table ?? null };
-  if (answer.card) return { ok: true, card: answer.card };
+  if (answer.card) return 'reveal' in answer && answer.reveal?.length ? { ok: true, card: answer.card, reveal: answer.reveal } : { ok: true, card: answer.card };
   return fallback === 'REJECTED' ? { ok: true, status: 'REJECTED' } : { ok: true, status: 'EXECUTED', links: [], table: null };
 }

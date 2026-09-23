@@ -53,6 +53,11 @@ export class ExceptionService {
 
   async live(principal: Principal): Promise<{ content: ExceptionReportContent; scoped: boolean }> {
     assertCan(principal, Permission.EXCEPTIONS_READ);
+    return scopeContent(await this.liveContent(), principal);
+  }
+
+  /** The whole live view, before any reader's scope: callers that share it between readers scope it with scopeContent. */
+  async liveContent(): Promise<ExceptionReportContent> {
     const now = this.now();
     const settings = await new SettingsService(this.db).deployment();
     const content = await computeExceptions(this.db, this.registry, {
@@ -64,7 +69,7 @@ export class ExceptionService {
       dataFrom: dataFromOf(settings, now),
       onCheckError: this.generation(now).onCheckError,
     });
-    return scopeContent(content, principal);
+    return content;
   }
 
   async list(principal: Principal, q: ExceptionReportQuery): Promise<{ rows: ExceptionReportSummary[]; next: { before: string; beforeId: string } | null }> {

@@ -32,10 +32,17 @@ const ChatInput = z.object({
   context: PageContextInput.nullable().optional(),
 });
 type ChatInput = z.infer<typeof ChatInput>;
-/** Governed cards name the checker and why (PM/research/12 §5); other cards send nothing. */
+/**
+ * Governed cards name the checker and why (PM/research/12 §5); other cards send nothing. `credentials`: what the user
+ * typed into the card's own credential fields (§9), by field key. Never stored; used for this one call only.
+ */
 const ConfirmInput = z.object({
   checkerId: z.uuid().optional(),
   reason: z.string().trim().min(3).max(500).optional(),
+  credentials: z
+    .record(z.string().regex(/^[A-Za-z0-9_.-]{1,80}$/, 'a credential field key'), z.string().max(16_000, 'at most 16000 characters'))
+    .refine((c) => Object.keys(c).length <= 20, 'at most 20 credential fields')
+    .optional(),
 });
 type ConfirmInput = z.infer<typeof ConfirmInput>;
 
@@ -143,7 +150,9 @@ export class InternalAgentController {
   /**
    * Run a confirmation card: a fresh permission check, the card's hash against the object now (STALE when it
    * changed), then the real route as this user — applied (direct, stop) or submitted to the chosen checker
-   * (governed: `checkerId` and `reason` required). Answers the card with its final status and result.
+   * (governed: `checkerId` and `reason` required). Answers the card with its final status and result. A card with
+   * credential fields takes their values in `credentials` (required ones checked here); a secret the route
+   * generates comes back once in `reveal` on this response only, never on the stored card or in the thread.
    */
   @Post('actions/:id/confirm')
   @HttpCode(200)

@@ -47,8 +47,18 @@ export interface Capability {
   stopWhen?: Record<string, unknown>;
   /** Approval descriptor kind when the route can answer 202 `{ proposal }` / 409 approval_required. */
   approvalKind?: string;
-  /** Credential fields the route accepts that were removed from `input.body`: they are entered in the UI, never through the model. */
+  /**
+   * Credential fields the route accepts that were removed from `input.body`: the model never sends them; the
+   * confirmation card collects them in its own fields (`credentials`).
+   */
   secretInputs?: string[];
+  /** How the card asks for each credential body field (PM/research/12 §9). */
+  credentials?: CredentialInput[];
+  /**
+   * A response field of server-generated secrets shown once (`{ key: value }`, e.g. the web chat backend key): the
+   * confirm response hands them to the user once; never stored, never in the thread. Also in `redactResponse`.
+   */
+  revealResponse?: string;
   /**
    * Response fields (dotted paths; arrays are walked) that can carry a credential or sign-in link, e.g.
    * `onboarding.link`. The runtime removes them with `redactResult` before a result reaches the thread or model.
@@ -60,6 +70,15 @@ export interface Capability {
   /** Web page for the object, with the API route's `:param` names, e.g. `/agents/:id`. */
   uiHref?: string;
 }
+
+/**
+ * A credential body field the confirmation card asks for. `map`: the body field is `{ key: value }` and its keys
+ * come from the kind's descriptor at card time (the channel kind's `secrets`, the model provider kind's
+ * `credentials`). `value`: the body field is the value itself, described here.
+ */
+export type CredentialInput =
+  | { field: string; shape: 'map'; source: 'channel_kind' | 'provider_kind' }
+  | { field: string; shape: 'value'; label: string; hint?: string; required: boolean };
 
 export interface ExcludedRoute {
   route: string;

@@ -14,20 +14,34 @@ const ActionId = z.uuid();
 const ConfirmSchema = z.object({
   checkerId: z.uuid('Choose who approves this.').optional(),
   reason: z.string().trim().min(3, 'Give a reason of at least 3 characters.').max(500, 'Keep the reason under 500 characters.').optional(),
+  credentials: z
+    .record(z.string().regex(/^[A-Za-z0-9_.-]{1,80}$/, 'Unknown credential field.'), z.string().max(16_000, 'A credential can be at most 16000 characters.'))
+    .refine((c) => Object.keys(c).length <= 20, 'Too many credential fields.')
+    .optional(),
 });
+
+/** Typed credentials without blanks (a blank keeps or generates the value). Never logged. */
+function filledCredentials(credentials: Record<string, string> | undefined): Record<string, string> | undefined {
+  if (!credentials) return undefined;
+  const filled = Object.entries(credentials).filter(([, v]) => typeof v === 'string' && v.trim() !== '');
+  return filled.length ? Object.fromEntries(filled) : undefined;
+}
 
 /**
  * POST /v1/internal-agent/actions/:id/confirm. The API re-checks the card and the user's permission, then runs
  * the real route as them: it applies (direct, stop) or goes to the chosen checker (governed; `checkerId` + `reason`).
  * The current page is refreshed so it shows the change.
  */
-export async function confirmAskOcsoAction(actionId: string, input: { checkerId?: string; reason?: string } = {}): Promise<ActionDecision> {
+export async function confirmAskOcsoAction(actionId: string, input: { checkerId?: string; reason?: string; credentials?: Record<string, string> } = {}): Promise<ActionDecision> {
   const id = ActionId.safeParse(actionId);
   if (!id.success) return { ok: false, message: 'Unknown action.', settled: null };
-  const parsed = ConfirmSchema.safeParse({ ...(input.checkerId ? { checkerId: input.checkerId } : {}), ...(input.reason?.trim() ? { reason: input.reason } : {}) });
+  const credentials = filledCredentials(input.credentials);
+  const parsed = ConfirmSchema.safeParse({ ...(input.checkerId ? { checkerId: input.checkerId } : {}), ...(input.reason?.trim() ? { reason: input.reason } : {}), ...(credentials ? { credentials } : {}) });
   if (!parsed.success) {
+    // Messages name the problem, never a typed value.
     const issue = parsed.error.issues[0];
-    return { ok: false, message: issue?.message ?? 'Check the approval details.', settled: null, field: issue?.path[0] === 'checkerId' ? 'checkerId' : 'reason' };
+    const field = issue?.path[0] === 'checkerId' ? 'checkerId' : issue?.path[0] === 'credentials' ? 'credentials' : 'reason';
+    return { ok: false, message: issue?.message ?? 'Check the approval details.', settled: null, field };
   }
   try {
     const answer = await confirmInternalAgentAction(id.data, parsed.data);

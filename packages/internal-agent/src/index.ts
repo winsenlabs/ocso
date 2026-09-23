@@ -12,3 +12,4 @@ export * from './runtime/cards.js';
 export * from './runtime/meta-tools.js';
 export { trimResult, stableJson, display, displayFull, CARD_VALUE_MAX } from './runtime/data.js';
 export { NAME_SOURCES, changesFor, resolveNames } from './runtime/changes.js';
+export * from './runtime/credentials.js';

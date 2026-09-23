@@ -80,3 +80,15 @@
 .ia-sugg button{border-radius:999px;padding:4px 10px;font-size:12px}
 .ia-sugg button:first-child{border-color:var(--accent-soft-2);color:var(--accent);background:var(--accent-soft)}
 .ia-sugg button[aria-disabled="true"]{opacity:.6;cursor:default}
+
+/* Credentials typed on the card (PM/research/12 §9) and secrets shown once after it ran. */
+.ia-credentials{display:grid;gap:8px;margin:0;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);min-width:0}
+.ia-credentials legend{padding:0 4px;font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-3)}
+.ia-cred-note,.ia-hint{font-size:11.5px;color:var(--ink-3)}
+.ia-req,.ia-opt{text-transform:none;letter-spacing:0}
+.ia-secret{flex:1;min-width:0;width:100%;box-sizing:border-box;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:5px 8px;font:inherit;font-size:12.5px;color:var(--ink)}
+.ia-secret.mono{font-family:var(--font-mono);font-size:12px}
+.ia-secret:focus-visible{outline:none;border-color:var(--accent-2);box-shadow:0 0 0 3px var(--accent-ring)}
+.ia-secret[aria-invalid="true"]{border-color:var(--danger)}
+.ia-reveal{display:grid;gap:8px;margin-top:8px;padding:8px 10px;border:1px solid var(--warn);border-radius:var(--radius-sm);background:var(--warn-soft)}
+.ia-reveal > b{font-size:12.5px;color:var(--ink)}

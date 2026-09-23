@@ -33,6 +33,8 @@ export function getInternalAgentMessages(threadId: string): Promise<StoredMessag
 export interface ConfirmInput {
   checkerId?: string | undefined;
   reason?: string | undefined;
+  /** Values typed into the card's credential fields: sent with this one request, never logged or kept. */
+  credentials?: Record<string, string> | undefined;
 }
 
 /**
@@ -40,7 +42,11 @@ export interface ConfirmInput {
  * and runs the real route as this user: a direct or stop card applies, a governed card becomes a proposal to the checker.
  */
 export async function confirmInternalAgentAction(actionId: string, input: ConfirmInput = {}): Promise<ActionAnswer> {
-  const body = { ...(input.checkerId ? { checkerId: input.checkerId } : {}), ...(input.reason ? { reason: input.reason } : {}) };
+  const body = {
+    ...(input.checkerId ? { checkerId: input.checkerId } : {}),
+    ...(input.reason ? { reason: input.reason } : {}),
+    ...(input.credentials && Object.keys(input.credentials).length ? { credentials: input.credentials } : {}),
+  };
   // The API's own confirm can run a snapshot read and then a slow route (a copilot draft, a bulk approval): wait past its bound.
   return readActionAnswer(await api.post(`/v1/internal-agent/actions/${encodeURIComponent(actionId)}/confirm`, body, z.unknown(), { timeoutMs: CARD_DECISION_TIMEOUT_MS }), 'confirm');
 }

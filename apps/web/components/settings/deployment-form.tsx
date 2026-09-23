@@ -40,7 +40,7 @@ export function DeploymentForm({ initial, timezones }: { initial: DeploymentForm
       ) : null}
       <div className="fld-row">
         <TextField name="orgName" label="Organization name" defaultValue={v('orgName')} error={errors['orgName']} required />
-        <TextField name="deploymentLabel" label="Deployment label" defaultValue={v('deploymentLabel')} error={errors['deploymentLabel']} hint="shown in the sidebar, e.g. PROD or UAT" required />
+        <TextField name="deploymentLabel" label="Deployment label" defaultValue={v('deploymentLabel')} error={errors['deploymentLabel']} hint="names this deployment in alert messages sent outside OCSO, e.g. PROD" required />
       </div>
       <div className="fld-row">
         <TextField name="regionLabel" label="Region label" defaultValue={v('regionLabel')} error={errors['regionLabel']} hint="e.g. ap-south-1 · optional" />

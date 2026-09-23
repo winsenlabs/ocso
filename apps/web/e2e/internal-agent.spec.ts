@@ -239,3 +239,33 @@ test('Threads are per user, refusals read plainly, and an earlier proposal does 
   const agent = await (await api.get(`/v1/agents/${ids.agent}`, { headers: auth('lead') })).json();
   expect(agent.status).toBe('DRAFT');
 });
+
+test('Home: the Ask OCSO bar asks in the drawer, and a "needs you" item hands over its question', async ({ page }) => {
+  // Something waiting on the lead: a deployment settings change the admin sends to them for approval.
+  const proposed = await api.patch('/v1/settings/deployment', { headers: auth('admin'), data: { regionLabel: 'home-e2e', approval: { checkerId: ids.lead, reason: 'E2E: Home needs you' } } });
+  expect(proposed.status()).toBe(202);
+
+  await login(page, ACCOUNTS.lead);
+  await settled(page);
+  const bar = page.getByRole('search', { name: 'Ask OCSO a question' });
+  await expect(bar).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Ask OCSO' }).getByRole('group', { name: 'Suggested questions' }).getByRole('button').first()).toBeVisible();
+  await bar.getByLabel('Ask OCSO').fill('What is waiting on me today?');
+  await bar.getByRole('button', { name: 'Ask', exact: true }).click();
+  await expect(drawer(page)).toBeVisible();
+  await expect(log(page)).toContainText('What is waiting on me today?');
+  await expect(log(page)).toContainText('You said: "What is waiting on me today?"', { timeout: 15_000 });
+  await page.keyboard.press('Escape');
+  await expect(drawer(page)).toBeHidden();
+
+  // The approval is ranked in "needs you" with a ready question; Ask OCSO puts it in the ask box to send or edit.
+  const needs = page.getByRole('region', { name: 'Needs you' });
+  const item = needs.getByRole('listitem').filter({ hasText: 'Approve or reject:' }).first();
+  await expect(item).toBeVisible();
+  const askAbout = item.getByRole('button', { name: /^Ask OCSO about / });
+  const question = await askAbout.getAttribute('title');
+  expect(question).toContain('waiting on me');
+  await askAbout.click();
+  await expect(drawer(page).getByLabel('Ask about this deployment')).toHaveValue(question!);
+  await expect(drawer(page).getByLabel('Ask about this deployment')).toBeFocused();
+});

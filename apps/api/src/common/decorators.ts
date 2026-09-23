@@ -61,6 +61,16 @@ export interface CapabilityOptions {
    * Ask OCSO runtime drops them before a result reaches the thread or the model (`redactResult`).
    */
   redactResponse?: string[];
+  /**
+   * Where the names of a map-shaped credential body field (`secrets`, `credentials`: `{ key: value }`) come from:
+   * the channel kind's or the model provider kind's descriptor. Ask OCSO's card asks for them in its own fields.
+   */
+  credentialSource?: 'channel_kind' | 'provider_kind';
+  /**
+   * A response field holding server-generated secrets shown once (`{ key: value }`, e.g. `revealedSecrets`). Ask OCSO
+   * hands them to the confirming user once, in the confirm response only, and never keeps them. Also redact it.
+   */
+  revealResponse?: string;
   /** Leave the route out of the catalog, with the reason (auth, streams, uploads, credentials…). */
   exclude?: string;
 }

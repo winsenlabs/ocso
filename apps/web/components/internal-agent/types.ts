@@ -30,6 +30,16 @@ export type ActionStatus = z.infer<typeof ActionStatusSchema>;
 
 const ChangeSchema = z.object({ label: z.string(), before: z.string().nullable(), after: z.string() });
 
+/** One credential field on a card. `generate`: left blank, OCSO generates the value. */
+export const CredentialFieldSchema = z.object({
+  key: z.string().min(1),
+  label: z.string().min(1),
+  hint: z.string().nullish(),
+  required: z.boolean().default(false),
+  generate: z.boolean().nullish(),
+});
+export type CredentialField = z.infer<typeof CredentialFieldSchema>;
+
 /**
  * A confirmation card (PM/research/12 §5): built by the server for every write
  * the agent wants to make. Nothing runs until this user confirms it; governed
@@ -52,11 +62,23 @@ export const ActionCardSchema = z.object({
       uiHref: z.string().nullish(),
     })
     .nullish(),
+  /**
+   * Credentials the user types into the card's own password fields (PM/research/12 §9): names only, never values.
+   * The model never sees them; the values go with this user's confirm and are not kept anywhere.
+   */
+  credentials: z.array(CredentialFieldSchema).nullish(),
   expiresAt: z.string(),
   status: ActionStatusSchema.default('PENDING'),
   result: z.object({ message: z.string(), href: z.string().nullish(), proposalId: z.string().nullish() }).nullish(),
 });
 export type ActionCardData = z.infer<typeof ActionCardSchema>;
+
+/**
+ * A secret the confirmed route generated (e.g. a web chat backend key). It arrives once, on the confirm response
+ * only: never on the stored card, never in the thread history.
+ */
+export const RevealedSecretSchema = z.object({ key: z.string(), label: z.string(), value: z.string().min(1) });
+export type RevealedSecret = z.infer<typeof RevealedSecretSchema>;
 
 /** The earlier proposal shape (before cards): still rendered for old threads. */
 export const PendingActionSchema = z.object({

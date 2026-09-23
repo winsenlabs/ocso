@@ -62,7 +62,14 @@ export class ChannelsAdminController {
   }
 
   /** A draft (201); `status: 'ACTIVE'` with `approval` also submits its activation (202 `{…channel, proposal}`). */
-  @Capability({ exclude: 'may return a server-generated secret key once (web chat backend key); create channels on the Channels page' })
+  @Capability({
+    name: 'channels.create_channel',
+    summary: 'Create a channel as a draft (its secrets are entered on the confirmation card; activating it needs approval).',
+    credentialSource: 'channel_kind',
+    revealResponse: 'revealedSecrets',
+    redactResponse: ['revealedSecrets'],
+    tags: ['add', 'new', 'twilio', 'connect'],
+  })
   @Post()
   @RequirePermission(Permission.CHANNELS_MANAGE)
   create(@Actor() actor: ActorContext, @Body({ schema: CreateBody }) body: CreateBody, @Res({ passthrough: true }) res: Response) {
@@ -121,7 +128,13 @@ export class ChannelsAdminController {
    * (a draft's other fields are saved first; an approved channel's must come separately). Name, settings and
    * secrets: written directly on a draft, an UPDATE proposal once approved (new secrets travel as refs).
    */
-  @Capability({ name: 'channels.update_channel', summary: "Change a channel's name or settings: disabling applies at once, activating needs approval.", stopWhen: { status: 'DISABLED' }, tags: ['disable'] })
+  @Capability({
+    name: 'channels.update_channel',
+    summary: "Change a channel's name, settings or secrets (entered on the card): disabling applies at once, activating needs approval.",
+    stopWhen: { status: 'DISABLED' },
+    credentialSource: 'channel_kind',
+    tags: ['disable'],
+  })
   @Patch(':id')
   @RequirePermission(Permission.CHANNELS_MANAGE)
   async update(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Body({ schema: PatchBody }) body: PatchBody, @Res({ passthrough: true }) res: Response) {

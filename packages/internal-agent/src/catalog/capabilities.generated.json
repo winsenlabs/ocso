@@ -1773,6 +1773,14 @@
       "secretInputs": [
         "secret"
       ],
+      "credentials": [
+        {
+          "field": "secret",
+          "shape": "value",
+          "label": "Secret",
+          "required": false
+        }
+      ],
       "input": {
         "body": {
           "type": "object",
@@ -2398,6 +2406,14 @@
       "approvalKind": "notification_destination",
       "secretInputs": [
         "secret"
+      ],
+      "credentials": [
+        {
+          "field": "secret",
+          "shape": "value",
+          "label": "Secret",
+          "required": false
+        }
       ],
       "input": {
         "params": {
@@ -3583,6 +3599,86 @@
       "uiHref": "/audit"
     },
     {
+      "name": "channels.create_channel",
+      "method": "POST",
+      "path": "/v1/channels",
+      "permissions": {
+        "mode": "all",
+        "list": [
+          "channels.manage"
+        ]
+      },
+      "summary": "Create a channel as a draft (its secrets are entered on the confirmation card; activating it needs approval).",
+      "details": "A draft (201); `status: 'ACTIVE'` with `approval` also submits its activation (202 `{…channel, proposal}`).",
+      "risk": "HIGH_WRITE",
+      "approvalKind": "channel",
+      "secretInputs": [
+        "secrets"
+      ],
+      "credentials": [
+        {
+          "field": "secrets",
+          "shape": "map",
+          "source": "channel_kind"
+        }
+      ],
+      "revealResponse": "revealedSecrets",
+      "redactResponse": [
+        "revealedSecrets"
+      ],
+      "input": {
+        "body": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]{1,39}$"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "settings": {
+              "default": {},
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            "status": {
+              "default": "DRAFT",
+              "type": "string",
+              "enum": [
+                "ACTIVE",
+                "DISABLED",
+                "DRAFT"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "name"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "tags": [
+        "add",
+        "new",
+        "twilio",
+        "connect",
+        "channel",
+        "whatsapp",
+        "email",
+        "web chat",
+        "inbox",
+        "channels"
+      ],
+      "uiHref": "/settings"
+    },
+    {
       "name": "channels.create_message_template",
       "method": "POST",
       "path": "/v1/channels/:id/templates",
@@ -4223,7 +4319,7 @@
           "channels.manage"
         ]
       },
-      "summary": "Change a channel's name or settings: disabling applies at once, activating needs approval.",
+      "summary": "Change a channel's name, settings or secrets (entered on the card): disabling applies at once, activating needs approval.",
       "details": "`status: 'DISABLED'` stops the channel at once (never gated). `status: 'ACTIVE'` is an ACTIVATE proposal (a draft's other fields are saved first; an approved channel's must come separately). Name, settings and secrets: written directly on a draft, an UPDATE proposal once approved (new secrets travel as refs).",
       "risk": "HIGH_WRITE",
       "stopWhen": {
@@ -4232,6 +4328,13 @@
       "approvalKind": "channel",
       "secretInputs": [
         "secrets"
+      ],
+      "credentials": [
+        {
+          "field": "secrets",
+          "shape": "map",
+          "source": "channel_kind"
+        }
       ],
       "input": {
         "params": {
@@ -7224,7 +7327,7 @@
           "mcp.manage"
         ]
       },
-      "summary": "Register a shared MCP connection by URL as a draft (credentials are set in the UI).",
+      "summary": "Register a shared MCP connection by URL as a draft (a header token is set with mcp.set_connection_header_auth; OAuth sign-in happens on its Connections page).",
       "risk": "HIGH_WRITE",
       "input": {
         "body": {
@@ -7847,6 +7950,72 @@
       "uiHref": "/connections"
     },
     {
+      "name": "mcp.set_connection_header_auth",
+      "method": "POST",
+      "path": "/v1/mcp/connections/:id/auth/header",
+      "permissions": {
+        "mode": "all",
+        "list": [
+          "mcp.manage"
+        ]
+      },
+      "summary": "Set the header and token an MCP connection signs in with (the token is entered on the confirmation card).",
+      "risk": "HIGH_WRITE",
+      "approvalKind": "mcp_connection",
+      "secretInputs": [
+        "token"
+      ],
+      "credentials": [
+        {
+          "field": "token",
+          "shape": "value",
+          "label": "Token",
+          "required": true
+        }
+      ],
+      "input": {
+        "params": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "body": {
+          "type": "object",
+          "properties": {
+            "headerName": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]{1,64}$"
+            }
+          },
+          "required": [
+            "headerName"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "tags": [
+        "auth",
+        "header",
+        "token",
+        "credential",
+        "sign in",
+        "mcp",
+        "connection",
+        "integration",
+        "tools",
+        "connections"
+      ],
+      "uiHref": "/connections"
+    },
+    {
       "name": "models.activate_price",
       "method": "POST",
       "path": "/v1/model-pricing/:id/activate",
@@ -8260,12 +8429,19 @@
           "providers.manage"
         ]
       },
-      "summary": "Add a model provider as a disabled draft (enabling needs approval; credentials are entered in the UI).",
+      "summary": "Add a model provider as a disabled draft (its credentials are entered on the confirmation card; enabling needs approval).",
       "details": "A disabled draft (201); `enabled: true` with `approval` also submits its activation (202).",
       "risk": "HIGH_WRITE",
       "approvalKind": "model_provider",
       "secretInputs": [
         "credentials"
+      ],
+      "credentials": [
+        {
+          "field": "credentials",
+          "shape": "map",
+          "source": "provider_kind"
+        }
       ],
       "input": {
         "body": {
@@ -8332,6 +8508,10 @@
         }
       },
       "tags": [
+        "add",
+        "new",
+        "api key",
+        "connect",
         "model",
         "llm",
         "provider",
@@ -9072,7 +9252,7 @@
           "providers.manage"
         ]
       },
-      "summary": "Change a model provider: disabling applies at once, enabling needs approval.",
+      "summary": "Change a model provider or rotate its credentials (entered on the card): disabling applies at once, enabling needs approval.",
       "details": "`enabled: false` disables at once (never gated); `enabled: true` is an ACTIVATE proposal (a draft's other fields are saved first). Other fields: written directly on a draft, an UPDATE proposal once approved.",
       "risk": "HIGH_WRITE",
       "stopWhen": {
@@ -9081,6 +9261,13 @@
       "approvalKind": "model_provider",
       "secretInputs": [
         "credentials"
+      ],
+      "credentials": [
+        {
+          "field": "credentials",
+          "shape": "map",
+          "source": "provider_kind"
+        }
       ],
       "input": {
         "params": {
@@ -9148,6 +9335,8 @@
       },
       "tags": [
         "disable",
+        "rotate",
+        "api key",
         "model",
         "llm",
         "provider",
@@ -13647,6 +13836,14 @@
       "secretInputs": [
         "password"
       ],
+      "credentials": [
+        {
+          "field": "password",
+          "shape": "value",
+          "label": "Password",
+          "required": false
+        }
+      ],
       "redactResponse": [
         "onboarding.link"
       ],
@@ -14622,11 +14819,6 @@
       "reason": "auth, session, sign-in, MFA or setup"
     },
     {
-      "route": "POST /v1/channels",
-      "handler": "ChannelsAdminController.create",
-      "reason": "may return a server-generated secret key once (web chat backend key); create channels on the Channels page"
-    },
-    {
       "route": "POST /v1/conversations/:id/attachments",
       "handler": "ConversationAttachmentsController.upload",
       "reason": "reads the raw request (file upload or streamed body)"
@@ -14647,14 +14839,9 @@
       "reason": "the internal agent's own routes"
     },
     {
-      "route": "POST /v1/mcp/connections/:id/auth/header",
-      "handler": "McpConnectionsController.headerAuth",
-      "reason": "takes a credential (header token); set it on the Connections page"
-    },
-    {
       "route": "POST /v1/mcp/connections/:id/oauth/begin",
       "handler": "McpConnectionsController.beginOAuth",
-      "reason": "starts a browser OAuth flow; authorize connections on the Connections page"
+      "reason": "starts a browser OAuth flow (a redirect Ask OCSO cannot follow); authorize the connection on its Connections page (/connections)"
     },
     {
       "route": "POST /v1/mcp/personal/:id/auth/header",

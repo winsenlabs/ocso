@@ -201,7 +201,7 @@ describe('reads run through the real route as the user', () => {
     });
     expect(secret.output).toMatchObject({
       type: 'error',
-      value: expect.stringContaining('OCSO UI'),
+      value: expect.stringContaining("confirmation card's own fields"),
     });
   });
 });

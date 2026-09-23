@@ -10,13 +10,12 @@ import { AskOcsoButton } from './ask-ocso-button';
 export interface AppSidebarProps {
   nav: NavGroup[];
   region: string | null;
-  scope: { org: string; label: string; path: string };
   user: { initials: string; name: string; roleLabel: string };
   footerAction: ReactNode;
 }
 
 /** Binds the presentational Sidebar to the router: active item from the current URL. */
-export function AppSidebar({ nav, region, scope, user, footerAction }: AppSidebarProps) {
+export function AppSidebar({ nav, region, user, footerAction }: AppSidebarProps) {
   const pathname = usePathname();
   const tab = useSearchParams().get('tab');
   const active = activeNavKey(nav, pathname, tab);
@@ -29,7 +28,6 @@ export function AppSidebar({ nav, region, scope, user, footerAction }: AppSideba
   return (
     <Sidebar
       region={region}
-      scope={scope}
       ask={<AskOcsoButton variant="sidebar" />}
       groups={groups}
       user={user}

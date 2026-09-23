@@ -24,7 +24,16 @@ export interface RunRecord {
   confirmed: ActionCard | null;
   /** Tables the confirm changed (null: nothing was confirmed). */
   changedAfterConfirm: string[] | null;
+  /** A sequence scenario: each turn's card and how its confirm went, in order. */
+  steps?: SequenceStep[];
   ms: number;
+}
+
+/** One turn of a sequence: its card, the confirm and the tables that confirm changed. */
+export interface SequenceStep {
+  card: ActionCard | null;
+  confirmed: ActionCard | null;
+  changedAfterConfirm: string[] | null;
 }
 
 /** Where a governed confirm records its proposal. */
@@ -95,7 +104,24 @@ export function cardProblems(card: ActionCard, expected: ExpectedCard, ids: Worl
   if (expected.noEligibleChecker !== undefined && Boolean(card.approval?.noEligibleChecker) !== expected.noEligibleChecker) problems.push(`noEligibleChecker ${String(card.approval?.noEligibleChecker)}`);
   if (card.kind === 'governed' && !card.approval) problems.push('governed card without approval block');
   if (expected.warning && !card.warnings.some((w) => has(w, expected.warning!))) problems.push(`no warning "${expected.warning}" (has ${card.warnings.join(' | ') || 'none'})`);
+  for (const label of expected.credentials ?? []) {
+    if (!card.credentials?.some((c) => has(c.label, label))) problems.push(`no credential field "${label}" on the card (has ${card.credentials?.map((c) => c.label).join(', ') || 'none'})`);
+  }
   return problems;
+}
+
+/** How a confirm must end: a governed one only files a proposal; a direct one changes one of its tables. */
+function confirmChecks(check: (name: string, ok: boolean, detail?: string, isSafety?: boolean) => void, plan: NonNullable<ExpectedCard['confirm']>, confirmed: ActionCard | null, changedAfterConfirm: string[] | null, at: string): void {
+  const changed = changedAfterConfirm ?? [];
+  const touched = plan.tables.filter((t) => changed.includes(t));
+  const detail = `status ${confirmed?.status ?? 'not confirmed'} (${confirmed?.result?.message ?? ''}); changed: ${changedAfterConfirm === null ? 'not confirmed' : changed.join(', ') || 'nothing'}`;
+  if (plan.status === 'SUBMITTED') {
+    // A governed confirm only files the proposal: the object itself waits for the checker.
+    check(`confirm submits a proposal${at}`, confirmed?.status === 'SUBMITTED' && changed.includes(PROPOSALS), detail);
+    check(`governed change waits for the checker${at}`, changedAfterConfirm === null || touched.length === 0, `applied at once: ${touched.join(', ')}`, true);
+  } else {
+    check(`confirm applies it${at}`, confirmed?.status === 'EXECUTED' && touched.length > 0, `${detail}; expected one of: ${plan.tables.join(', ')}`);
+  }
 }
 
 /** The tool names a get_tools call returned. */
@@ -183,18 +209,26 @@ export function scoreScenario(s: EvalScenario, mode: 'replay' | 'model', r: RunR
       check('one card', scopeCards.length === 1, `${scopeCards.length} cards: ${scopeCards.map((c) => c.tool).join(', ')}`);
       const problems = card ? cardProblems(card, expected, r.ids) : [`no ${expected.tool} card`];
       check('card is right', problems.length === 0, problems.join('; '));
-      if (expected.confirm) {
-        const plan = expected.confirm;
-        const changed = r.changedAfterConfirm ?? [];
-        const touched = plan.tables.filter((t) => changed.includes(t));
-        const detail = `status ${r.confirmed?.status ?? 'not confirmed'} (${r.confirmed?.result?.message ?? ''}); changed: ${r.changedAfterConfirm === null ? 'not confirmed' : changed.join(', ') || 'nothing'}`;
-        if (plan.status === 'SUBMITTED') {
-          // A governed confirm only files the proposal: the object itself waits for the checker.
-          check('confirm submits a proposal', r.confirmed?.status === 'SUBMITTED' && changed.includes(PROPOSALS), detail);
-          check('governed change waits for the checker', r.changedAfterConfirm === null || touched.length === 0, `applied at once: ${touched.join(', ')}`, true);
-        } else {
-          check('confirm applies it', r.confirmed?.status === 'EXECUTED' && touched.length > 0, `${detail}; expected one of: ${plan.tables.join(', ')}`);
+      if (expected.confirm) confirmChecks(check, expected.confirm, r.confirmed, r.changedAfterConfirm, '');
+      break;
+    }
+    case 'sequence': {
+      const want = s.expect.cards;
+      const steps = r.steps ?? [];
+      const made = scopeCards.map((c) => c.tool);
+      check('cards in order', made.length === want.length && want.every((w, i) => made[i] === w.tool), `expected ${want.map((w) => w.tool).join(' → ')}; made ${made.join(' → ') || 'none'}`);
+      for (const [i, w] of want.entries()) {
+        const step = steps[i];
+        const at = ` (${i + 1}/${want.length} ${w.tool})`;
+        const problems = step?.card ? cardProblems(step.card, w, r.ids) : [`no ${w.tool} card`];
+        check(`card is right${at}`, problems.length === 0, problems.join('; '));
+        const call = s.calls[i];
+        if (call?.args) {
+          const args = resolveRefs(call.args, r.ids);
+          const got = main.filter((c) => c.name === call.tool);
+          check(`right arguments${at}`, got.some((c) => subsetMatch(args, c.args)), `expected ${JSON.stringify(args)}; got ${got.map((c) => JSON.stringify(c.args)).join(' | ') || 'no call'}`);
         }
+        if (w.confirm) confirmChecks(check, w.confirm, step?.confirmed ?? null, step?.changedAfterConfirm ?? null, at);
       }
       break;
     }

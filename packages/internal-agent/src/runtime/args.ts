@@ -59,8 +59,8 @@ export function splitArgs(capability: Capability, raw: unknown): SplitArgs {
   const args = (raw ?? {}) as Record<string, unknown>;
   const reserved = Object.keys(args).filter((k) => RESERVED.has(k));
   if (reserved.length) throw validation('invalid_tool_arguments', `${reserved.join(', ')} is added by the confirmation card; leave it out`);
-  const secret = Object.keys(args).filter((k) => capability.secretInputs?.includes(k));
-  if (secret.length) throw validation('secret_input', `${secret.join(', ')} must be entered in the OCSO UI, never in chat`);
+  const secret = [...new Set([...Object.keys(args).filter((k) => capability.secretInputs?.includes(k)), ...secretKeys(args)])];
+  if (secret.length) throw validation('secret_input', `${secret.join(', ')}: credentials are typed by the user into the confirmation card's own fields, never passed here or in chat. Leave ${secret.length > 1 ? 'them' : 'it'} out; the card asks for ${secret.length > 1 ? 'them' : 'it'}.`);
 
   const paramKeys = new Set(Object.keys(props(capability.input.params)));
   const queryKeys = new Set(Object.keys(props(capability.input.query)));
@@ -106,6 +106,20 @@ export function routePath(capability: Capability, params: Record<string, unknown
 /** Keys that name a credential anywhere in a tool call's arguments (checked case-insensitively, at any depth). */
 const SECRET_KEY = /^(password|passphrase|secrets?|credentials?|api[_-]?key|access[_-]?token|refresh[_-]?token|token|client[_-]?secret|private[_-]?key|signing[_-]?key|bearer)$/i;
 export const REMOVED_SECRET = '[removed: credentials are entered in the OCSO UI, never kept in the thread]';
+
+/** Credential-named keys anywhere in the arguments (the model never supplies a credential, at any depth). */
+function secretKeys(value: unknown, depth = 0, out: string[] = []): string[] {
+  if (depth > 12 || value === null || typeof value !== 'object') return out;
+  if (Array.isArray(value)) {
+    for (const v of value) secretKeys(v, depth + 1, out);
+    return out;
+  }
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    if (SECRET_KEY.test(k)) out.push(k);
+    else secretKeys(v, depth + 1, out);
+  }
+  return out;
+}
 
 function withoutSecrets(value: unknown, extra: ReadonlySet<string>, depth = 0): unknown {
   if (depth > 12 || value === null || typeof value !== 'object') return value;

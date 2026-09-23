@@ -111,8 +111,13 @@ test('a Lead creates a team, is its first member, and adds a Service member (nev
 });
 
 test('the Service member now works in the team', async ({ page }) => {
+  // Membership is the member's own record (team names are not shown in the app chrome).
+  const me = await call<{ teamIds: string[] }>('GET', '/v1/auth/me', await loginApi(EXEC.email, EXEC.password));
+  const teams = await call<Array<{ id: string; name: string }>>('GET', '/v1/teams', tok.lead);
+  expect(me.teamIds).toContain(teams.find((t) => t.name === CARDS)!.id);
   await login(page, EXEC);
-  await expect(page.locator('.scope-sw')).toContainText(CARDS);
+  await expect(page.getByRole('region', { name: 'Needs you' })).toBeVisible();
+  await expect(page.locator('.scope-sw')).toHaveCount(0);
 });
 
 test('the Tech admin moves the lead to another team and the lead’s agents follow', async ({ page }) => {

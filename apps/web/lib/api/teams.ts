@@ -81,9 +81,3 @@ export async function listTeamBoundAgents(): Promise<TeamBoundAgent[]> {
 export function listTeamBoundQueues(): Promise<TeamBoundQueue[]> {
   return api.get('/v1/queues', z.array(TeamBoundQueueSchema));
 }
-
-/** Names of the given teams, in directory order. */
-export function teamNames(teams: readonly Team[], ids: readonly string[]): string[] {
-  const wanted = new Set(ids);
-  return teams.filter((t) => wanted.has(t.id)).map((t) => t.name);
-}

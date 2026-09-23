@@ -68,6 +68,7 @@ export function describeTool(capability: Capability) {
     governed: Boolean(capability.approvalKind),
     stop: Boolean(capability.stop),
     ...(capability.stopWhen ? { stopWhen: capability.stopWhen } : {}),
+    ...(capability.secretInputs?.length ? { enteredOnCard: capability.secretInputs, note: `${capability.secretInputs.join(', ')}: the user types ${capability.secretInputs.length > 1 ? 'these' : 'this'} into the confirmation card's own fields. Never ask for or pass a credential.` } : {}),
     input: compactInput(capability),
   };
 }
@@ -147,10 +148,12 @@ export class AskOcsoTools {
             changes: card.changes,
             warnings: card.warnings,
             ...(card.approval ? { approval: { checkers: card.approval.checkers.map((c) => ({ name: c.name, role: c.role, suggested: c.suggested })), noEligibleChecker: card.approval.noEligibleChecker } } : {}),
-            note:
+            ...(card.credentials?.length ? { credentialsOnCard: card.credentials.map((c) => ({ label: c.label, required: c.required, ...(c.generate ? { generatedIfBlank: true } : {}) })) } : {}),
+            note: `${
               card.kind === 'governed'
                 ? 'Nothing has changed. The user picks a checker and a reason on the card; confirming submits it for approval.'
-                : 'Nothing has changed. The user confirms or cancels the card; do not say it is done.',
+                : 'Nothing has changed. The user confirms or cancels the card; do not say it is done.'
+            }${card.credentials?.length ? ' The user types the credentials into the card\'s own fields: never ask for them in chat, and you will never see them.' : ''}`,
           },
         },
       };

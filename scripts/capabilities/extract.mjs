@@ -239,9 +239,31 @@ function uiHrefFor(path) {
 /** Signed-in web pages as `/agents/:id` patterns: what `ui.open_page` may link to. */
 export const appRoutes = () => pageRoutes(WEB_APP_DIR);
 
+/* ───────────────────────── credentials ───────────────────────── */
+
+const humanize = (key) => {
+  const words = key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').trim().toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+};
+
+/**
+ * What the confirmation card asks for in place of a credential body field (PM/research/12 §9): a map field
+ * (`secrets`, `credentials`: `{ key: value }`) takes its keys from the channel or provider kind's descriptor at card
+ * time (`credentialSource`); a single value is one field described here. A problem string when it cannot be.
+ */
+function credentialInput(field, schema, required, source) {
+  const isMap = schema?.type === 'object' || schema?.additionalProperties !== undefined;
+  if (isMap) {
+    if (!source) return `the credential map \`${field}\` needs @Capability({ credentialSource }) (channel_kind or provider_kind)`;
+    return { field, shape: 'map', source };
+  }
+  if (schema?.type !== 'string') return `the credential field \`${field}\` is neither a string nor a map; exclude the route with @Capability({ exclude })`;
+  return { field, shape: 'value', label: humanize(field), ...(schema.description ? { hint: schema.description } : {}), required };
+}
+
 /* ───────────────────────── catalog ───────────────────────── */
 
-const KEY_ORDER = ['name', 'method', 'path', 'permissions', 'summary', 'details', 'risk', 'stop', 'stopWhen', 'approvalKind', 'secretInputs', 'redactResponse', 'input', 'tags', 'uiHref'];
+const KEY_ORDER = ['name', 'method', 'path', 'permissions', 'summary', 'details', 'risk', 'stop', 'stopWhen', 'approvalKind', 'secretInputs', 'credentials', 'revealResponse', 'redactResponse', 'input', 'tags', 'uiHref'];
 
 function ordered(cap) {
   const out = {};
@@ -291,15 +313,27 @@ export async function extractCatalog({ lenient = false } = {}) {
 
     const { input, governedBody } = inputOf(route, toJson);
     const secretInputs = [];
+    const credentials = [];
     if (input.body?.properties) {
       for (const [k, v] of Object.entries(input.body.properties)) {
         if (!isSecretField(k, v)) continue;
-        if (input.body.required?.includes(k)) problems.push(`${where}: requires the credential field \`${k}\`; exclude it with @Capability({ exclude })`);
+        // Credential fields never reach the model: the confirmation card asks for them in its own fields.
+        const credential = credentialInput(k, v, Boolean(input.body.required?.includes(k)), route.cap.credentialSource);
+        if (typeof credential === 'string') problems.push(`${where}: ${credential}`);
+        else credentials.push(credential);
         delete input.body.properties[k];
         secretInputs.push(k);
       }
-      if (secretInputs.length) input.body.additionalProperties = false;
+      if (secretInputs.length) {
+        input.body.additionalProperties = false;
+        if (Array.isArray(input.body.required)) {
+          input.body.required = input.body.required.filter((k) => !secretInputs.includes(k));
+          if (!input.body.required.length) delete input.body.required;
+        }
+      }
     }
+    if (route.cap.credentialSource && !credentials.some((c) => c.shape === 'map')) problems.push(`${where}: credentialSource set but the body has no map-shaped credential field`);
+    if (route.cap.revealResponse && !route.cap.redactResponse?.includes(route.cap.revealResponse)) problems.push(`${where}: revealResponse ${route.cap.revealResponse} must also be in redactResponse`);
     const nestedSecrets = [...nestedProperties(input.query ?? {}), ...nestedProperties(input.body ?? {})].filter(([k, v]) => isSecretField(k, v)).map(([k]) => k);
     if (nestedSecrets.length) problems.push(`${where}: nested credential-like fields (${nestedSecrets.join(', ')}); exclude the route or review the pattern`);
 
@@ -333,6 +367,8 @@ export async function extractCatalog({ lenient = false } = {}) {
         stopWhen: route.cap.stopWhen,
         approvalKind,
         secretInputs: secretInputs.length ? secretInputs.sort() : undefined,
+        credentials: credentials.length ? credentials.sort((a, b) => a.field.localeCompare(b.field)) : undefined,
+        revealResponse: route.cap.revealResponse,
         redactResponse: route.cap.redactResponse?.length ? [...route.cap.redactResponse].sort() : undefined,
         input,
         tags: tagsFor(src.module, route, route.cap.tags),
