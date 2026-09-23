@@ -427,8 +427,11 @@ UI: `/exceptions` (live · weekly reports · sign · export) behind `exceptions.
 | 0024 | `routing` — routers, versions, drafts, queue columns, conversation changes, conversation_routing | ROUTING |
 | 0025 | `routing_backfill` — service queues, pass-through routers, dedupe, unique index swap | ROUTING |
 | 0026 | `audit_outbox` — audit_events columns + trigger, incidents, settings column, team_ids backfill | AUDIT |
-| 0027 | `approvals_grandfather` — MIGRATION proposals for live objects and ACTIVE users | APPROVALS-COVERAGE |
+| 0027 | `approvals_coverage_business` — any columns the business/identity descriptors need | COVERAGE-BUSINESS |
 | 0028 | `exceptions_storage` — reports, storage samples, health rollups | EXCEPTIONS |
+| 0029 | `approvals_coverage_platform` — any columns the platform descriptors need | COVERAGE-PLATFORM |
+| 0030 | `routing_web` — any columns the router/queue descriptors need | ROUTING-WEB |
+| 0031 | `approvals_grandfather` — MIGRATION proposals for every live object and ACTIVE user (last, so every kind exists) | integrator |
 
 Stubs exist from wave 0; owners fill their file by hand (never run `drizzle-kit generate`). The integrator refreshes
 drizzle snapshots at the end.
@@ -441,7 +444,11 @@ drizzle snapshots at the end.
   `Principal.permissions`, `/v1/auth/me`, migration 0021, migration stubs 0022–0028, approval contract skeleton
   (`packages/domain/src/approvals/*` types, `packages/application/src/approvals/contract.ts` + `registry.ts`).
 - **Wave 1 (parallel):** PERMS, APPROVALS-CORE, ROUTING, AUDIT.
-- **Wave 2 (parallel):** APPROVALS-COVERAGE, EXCEPTIONS.
+- **Wave 2 (parallel):** COVERAGE-BUSINESS (agent tool grants, escalation rules, business alert rules, message
+  templates, users, permission changes), COVERAGE-PLATFORM (channels, model providers/profiles, MCP connections,
+  notification destinations, webhooks, technical alert rules, deployment settings), ROUTING-WEB (router/queue/SLA
+  descriptors + the router builder and routing UI), EXCEPTIONS. The integrator writes 0031 (grandfather) last, guarded
+  by a test that a migrated database has no live object without an approval.
 - **Wave 3:** integration, drizzle snapshot refresh, full verification (typecheck, lint, unit, integration, every
   Playwright spec, chaos), adversarial review, fixes, ADRs 029–033, README/docs, PR.
 
