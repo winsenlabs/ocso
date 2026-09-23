@@ -150,8 +150,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # The stack runs the built API (and @ocso/db's migrate.js). The web app is built by
       # e2e/stack/start-web.mjs itself, because its API rewrites are fixed at build time.
-      - name: Build API and dependencies
-        run: pnpm turbo run build --filter=@ocso/api...
+      # The worker runs AI turns, routing, audit shipping and approvals' deferred steps in the stack.
+      - name: Build API, worker and dependencies
+        run: pnpm turbo run build --filter=@ocso/api... --filter=@ocso/worker...
       - name: Install Chromium for Playwright
         run: pnpm --filter @ocso/web exec playwright install --with-deps chromium
       # Each spec is one serial story from a fresh deployment (first-run setup onward), so each
