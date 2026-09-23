@@ -1,6 +1,6 @@
 import { count, eq } from 'drizzle-orm';
 import { Permission } from '@ocso/auth';
-import { channels, conversations, type DbOrTx } from '@ocso/db';
+import { channels, conversations, webchatUserTokens, type DbOrTx } from '@ocso/db';
 import type { SecretStore } from '@ocso/secrets';
 import { z } from 'zod';
 import { recordAudit } from '../audit/audit.js';
@@ -135,12 +135,16 @@ export function channelApproval(deps: ChannelApprovalDeps = {}): ApprovalDescrip
           .where(eq(channels.id, row.id));
         await recordAudit(tx, actor, {
           action: 'channel.update',
+          redaction: 'settings',
           targetType: 'channel',
           targetId: row.id,
           summary: `Updated channel ${row.name}${change.credentials?.length ? ` (credentials replaced: ${change.credentials.map((c) => c.field).join(', ')})` : ''}`,
           before: { name: row.name, settings: row.settings, credentials: Object.keys(row.secretRefs) },
           after: { name: change.name, settings: change.settings, credentialsReplaced: change.credentials?.map((c) => c.field) },
         });
+        // Held end-user tokens were kept under the old settings (tool identity, verification, secret key): drop them,
+        // so nothing is forwarded under a policy that no longer allows it. Visitors re-verify on their next session.
+        await tx.delete(webchatUserTokens).where(eq(webchatUserTokens.channelId, row.id));
         // The staged values are the channel's now; the replaced ones are deleted once this commits.
         await claimSecrets(tx, (change.credentials ?? []).map((c) => c.ref));
         await releaseSecrets(tx, { kind: 'channel', objectId: row.id }, (change.credentials ?? []).map((c) => (row.secretRefs[c.field] !== c.ref ? row.secretRefs[c.field] : null)));

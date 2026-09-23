@@ -11,7 +11,7 @@
  */
 import { createDatabase } from '@ocso/db';
 import { loadSeedConfig } from './seed/config.js';
-import { createSeedContext } from './seed/context.js';
+import { createSeedContext, loadSeedPlugins } from './seed/context.js';
 import { printLogins, runDemoSeed } from './seed/run.js';
 
 async function main(): Promise<number> {
@@ -27,7 +27,8 @@ async function main(): Promise<number> {
     ssl: config.api.DATABASE_SSL,
   });
   try {
-    const ctx = createSeedContext(database, config);
+    // The same plugins as the api and worker (FIRST_PARTY_PLUGINS plus OCSO_PLUGINS), so seeded channels and providers exist there.
+    const ctx = createSeedContext(database, config, await loadSeedPlugins());
     try {
       const outcome = await runDemoSeed(ctx);
       printLogins(ctx, outcome);

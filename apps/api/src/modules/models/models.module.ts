@@ -32,10 +32,11 @@ export class CatalogEgress implements OnModuleDestroy {
     CatalogEgress,
     {
       provide: ModelCatalogService,
-      inject: [DB, CatalogEgress, ENV],
+      inject: [DB, CatalogEgress, ENV, PROVIDER_REGISTRY],
       // OCSO_MODEL_CATALOG_REFRESH=false (air-gapped): bundled snapshot only, refresh disabled.
-      useFactory: (db: Db, egress: CatalogEgress, env: ApiEnv) =>
-        new ModelCatalogService({ db, ...(env.OCSO_MODEL_CATALOG_REFRESH ? { fetch: egress.guarded.fetch } : {}) }),
+      // Snapshots keep the catalog providers of every registered definition, installed plugins included.
+      useFactory: (db: Db, egress: CatalogEgress, env: ApiEnv, registry: ProviderRegistry) =>
+        new ModelCatalogService({ db, providers: registry.list(), ...(env.OCSO_MODEL_CATALOG_REFRESH ? { fetch: egress.guarded.fetch } : {}) }),
     },
     {
       provide: ProviderService,

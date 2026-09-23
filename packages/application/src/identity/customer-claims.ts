@@ -1,6 +1,6 @@
 import { createHash, createPrivateKey, generateKeyPairSync, randomUUID, sign, type KeyObject } from 'node:crypto';
-import { and, eq, inArray, lt, sql } from 'drizzle-orm';
-import { customers, signingKeys, type Db, type DbOrTx } from '@ocso/db';
+import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm';
+import { conversations, customerIdentities, customers, signingKeys, type Db, type DbOrTx } from '@ocso/db';
 import type { SecretStore } from '@ocso/secrets';
 import { recordAudit } from '../audit/audit.js';
 import type { ActorContext } from '../shared/context.js';
@@ -51,12 +51,20 @@ export class CustomerClaimsIssuer {
 
   async issue(input: CustomerClaimsInput): Promise<string> {
     const { kid, key } = await this.activeKey();
-    const [customer] = await this.options.db.select({ externalRef: customers.externalRef }).from(customers).where(eq(customers.id, input.customerId));
+    const [conversation] = await this.options.db
+      .select({ hostContext: conversations.hostContext, channelId: conversations.channelId })
+      .from(conversations)
+      .where(eq(conversations.id, input.conversationId));
+    const subject = await this.subjectOf(input.customerId, conversation?.channelId ?? null);
+    // Only values the site's backend vouched for; browser-sent context never reaches a tool as a claim.
+    const ctx = conversation?.hostContext?.source === 'host' && Object.keys(conversation.hostContext.values).length ? conversation.hostContext.values : undefined;
     const now = Math.floor(this.now().getTime() / 1000);
     const payload = {
       iss: this.options.issuer,
       // The business system's own reference when OCSO knows it; otherwise an opaque OCSO id.
-      sub: customer?.externalRef ?? `ocso:customer:${input.customerId}`,
+      sub: subject.sub,
+      // Present when `sub` is a user id a channel verified: the channel that vouched for it (only the conversation's own).
+      ...(subject.channelId ? { ocso_channel: subject.channelId } : {}),
       aud: `ocso-mcp:${input.connectionId}`,
       iat: now,
       nbf: now - 5,
@@ -65,10 +73,33 @@ export class CustomerClaimsIssuer {
       cid: input.conversationId,
       agt: input.agentId,
       scope: [...input.scopes].sort().join(' '),
+      ...(ctx ? { ctx } : {}),
     };
     const signingInput = `${b64url({ alg: 'ES256', typ: 'JWT', kid })}.${b64url(payload)}`;
     const signature = sign('sha256', Buffer.from(signingInput), { key, dsaEncoding: 'ieee-p1363' });
     return `${signingInput}.${signature.toString('base64url')}`;
+  }
+
+  /**
+   * `sub`: the customer's external reference when staff set one; else the user id the conversation's own channel
+   * verified for them (identity values namespaced `<channel id>:<id>`, e.g. the web chat user the site vouched
+   * for; the most recently seen wins), with that channel as `channelId`; else an opaque OCSO id. A user id
+   * another channel verified is never presented: that channel's site may not be the one the tool trusts.
+   */
+  private async subjectOf(customerId: string, channelId: string | null): Promise<{ sub: string; channelId?: string | undefined }> {
+    const [customer] = await this.options.db.select({ externalRef: customers.externalRef }).from(customers).where(eq(customers.id, customerId));
+    if (customer?.externalRef) return { sub: customer.externalRef };
+    if (channelId) {
+      const prefix = `${channelId}:`;
+      const [verified] = await this.options.db
+        .select({ value: customerIdentities.value })
+        .from(customerIdentities)
+        .where(and(eq(customerIdentities.customerId, customerId), eq(customerIdentities.verified, true), sql`starts_with(${customerIdentities.value}, ${prefix})`))
+        .orderBy(desc(customerIdentities.lastSeenAt))
+        .limit(1);
+      if (verified && verified.value.length > prefix.length) return { sub: verified.value.slice(prefix.length), channelId };
+    }
+    return { sub: `ocso:customer:${customerId}` };
   }
 
   /** Public keys verifiers may accept: the active key and keys still retiring. */

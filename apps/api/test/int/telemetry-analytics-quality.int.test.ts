@@ -9,6 +9,9 @@ import { conversations, jobs, teamMembers, teams, users, uuidv7 } from '@ocso/db
 import type { Principal } from '@ocso/auth';
 import { routeChannel } from './routing.js';
 
+/** Widget calls come from OCSO's own origin (the iframe); calls without an Origin need native apps or a pass. */
+const WIDGET_ORIGIN = 'http://localhost:3000';
+
 const PASSWORD = 'a password 12345';
 let db: TestDatabase;
 let auditDb: TestAuditDatabase;
@@ -215,14 +218,14 @@ describe('quality API', () => {
 
   it('accepts customer CSAT from the web-chat visitor for their own conversation', async () => {
     await db.db.update(conversations).set({ controlState: 'RESOLVED', resolvedAt: new Date() }).where(eq(conversations.id, ids.conversation!));
-    const ok = await http().post(`/public/webchat/${ids.publicKey}/csat`).set(auth(ids.visitorToken!)).send({ score: 5, comment: 'quick' }).expect(201);
+    const ok = await http().post(`/public/webchat/${ids.publicKey}/csat`).set('origin', WIDGET_ORIGIN).set(auth(ids.visitorToken!)).send({ score: 5, comment: 'quick' }).expect(201);
     expect(ok.body).toMatchObject({ recorded: true, score: 5 });
-    await http().post(`/public/webchat/${ids.publicKey}/csat`).set(auth(ids.visitorToken!)).send({ score: 1 }).expect(409);
-    await http().post(`/public/webchat/${ids.publicKey}/csat`).send({ score: 5 }).expect(401);
-    await http().post(`/public/webchat/${ids.publicKey}/csat`).set(auth(ids.visitorToken!)).send({ score: 7 }).expect(400);
+    await http().post(`/public/webchat/${ids.publicKey}/csat`).set('origin', WIDGET_ORIGIN).set(auth(ids.visitorToken!)).send({ score: 1 }).expect(409);
+    await http().post(`/public/webchat/${ids.publicKey}/csat`).set('origin', WIDGET_ORIGIN).send({ score: 5 }).expect(401);
+    await http().post(`/public/webchat/${ids.publicKey}/csat`).set('origin', WIDGET_ORIGIN).set(auth(ids.visitorToken!)).send({ score: 7 }).expect(400);
     const { issueVisitorToken } = await import('@ocso/channels');
     const stranger = issueVisitorToken({ channelId: ids.channel!, ttlSeconds: 3600 }, ids.secret!, new Date()).token;
-    await http().post(`/public/webchat/${ids.publicKey}/csat`).set(auth(stranger)).send({ score: 5 }).expect(404);
+    await http().post(`/public/webchat/${ids.publicKey}/csat`).set('origin', WIDGET_ORIGIN).set(auth(stranger)).send({ score: 5 }).expect(404);
     const [row] = await db.db.select({ csat: conversations.csatScore }).from(conversations).where(eq(conversations.id, ids.conversation!));
     expect(row!.csat).toBe(5);
   });

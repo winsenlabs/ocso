@@ -58,7 +58,8 @@ const PUBLIC_ROUTES = [
   'POST /public/webchat/:publicKey/attachments', // visitor token required in the handler
   'POST /public/webchat/:publicKey/csat', // visitor token required in the handler
   'POST /public/webchat/:publicKey/messages', // visitor token required in the handler
-  'POST /public/webchat/:publicKey/session',
+  'POST /public/webchat/:publicKey/session', // anonymous, or a session pass / verified user token per the channel's auth mode
+  'POST /public/webchat/:publicKey/session-pass', // server-to-server: the channel secret key (constant-time) as the bearer; never CORS-enabled
   'POST /v1/auth/login', // JSON sign-in for API clients: Better Auth's /sign-in/email in-process (same rate limits, throttling, 2FA refusal)
   'GET /v1/setup/status',
   'POST /v1/setup', // one-time setup token, refused once a user exists

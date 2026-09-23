@@ -56,7 +56,7 @@ export class PricingService {
   constructor(deps: PricingServiceDeps) {
     this.db = deps.db;
     this.registry = deps.registry;
-    this.catalog = deps.catalog ?? new ModelCatalogService({ db: deps.db });
+    this.catalog = deps.catalog ?? new ModelCatalogService({ db: deps.db, providers: deps.registry.list() });
     this.now = deps.now;
   }
 

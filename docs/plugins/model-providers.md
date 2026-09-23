@@ -221,10 +221,14 @@ needs it by name). If you declared new catalog providers, regenerate the vendore
 
 ## Limits today
 
-- Providers are compiled in and registered in this package (`FIRST_PARTY_PROVIDERS`); there is no loader
-  for providers published elsewhere yet.
-- The catalog snapshots keep the catalog providers the first-party definitions declare. A provider
-  registered from outside this package would also need its catalog providers passed to `buildSnapshot`.
+- First-party providers are compiled in (`FIRST_PARTY_PROVIDERS`); a provider published elsewhere is built on
+  `@winsendotai/ocso-plugin-sdk` and loaded from `OCSO_PLUGINS` ([installing plugins](installing.md)). The SDK
+  exports the contract types, not the internal AI SDK adapter engine, so a third-party provider implements
+  `ModelProviderAdapter` itself.
+- The catalog snapshots keep the catalog providers of every first-party definition plus those of the
+  definitions the registry holds, installed plugins included (`snapshotCatalogProviders`). An installed
+  provider's models are priced from the first catalog refresh after it is loaded; until then the stored
+  or vendored snapshot, filtered for the providers known when it was taken, answers.
 - Provider behaviour is verified against recorded provider-format responses. Live calls need real
   credentials, which CI does not have.
 - The Vertex and Bedrock model listings are built to their documented shapes and still owe a live check.

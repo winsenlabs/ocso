@@ -115,6 +115,8 @@ export async function ChannelsTab({ session, params }: { session: Session; param
                       { k: 'kind', v: kindLabel(c.kind) },
                       ...(id ? [id] : []),
                       { k: c.embedPath && !c.webhookPath ? 'widget' : 'inbound', v: <span className="mono-sm">{c.webhookPath ?? c.embedPath ?? '—'}</span> },
+                      // Embeddable kinds: the key is public (script tag, SDKs); the server-side secret key never shows.
+                      ...(c.embedPath ? [{ k: 'publishable key', v: <span className="mono-sm">{c.publicKey}</span> }] : []),
                       { k: 'credentials', v: secrets.length ? `${secrets.join(', ')} set` : 'none set' },
                       {
                         // channel → router → queue → agent (PM/research/11 §5.7): the channel shows its router.

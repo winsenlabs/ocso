@@ -1,6 +1,6 @@
 'use client';
 
-import type { SettingsField, SettingsGroup } from './settings-form';
+import { chosenVariant, type SettingsField, type SettingsGroup } from './settings-form';
 
 interface Props {
   group: SettingsGroup;
@@ -78,8 +78,42 @@ function Field({ f, value, error, onChange }: { f: SettingsField; value: string 
   );
 }
 
+/** A choice between shapes: a select of the branches, then the chosen branch's own fields. */
+function VariantFields({ group, values, errors, onChange }: Props) {
+  const variant = group.variant!;
+  const path = `${group.path}.${variant.discriminator}`;
+  const id = idOf(path);
+  const chosen = chosenVariant(group, values);
+  return (
+    <fieldset className="conn-fieldset">
+      <legend>{group.label}</legend>
+      <div className="fld">
+        <label htmlFor={id}>
+          {group.label}
+          {variant.required ? '' : ' (optional)'}
+        </label>
+        <select id={id} value={String(values[path] ?? '')} onChange={(e) => onChange(path, e.target.value)} aria-invalid={errors[path] ? true : undefined}>
+          {variant.required ? null : <option value="">Off</option>}
+          {variant.options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        {errors[path] || errors[group.path] ? (
+          <span className="err" role="alert">
+            {errors[path] ?? errors[group.path]}
+          </span>
+        ) : null}
+      </div>
+      {chosen ? <SettingsFields group={{ ...chosen.group, path: '' }} values={values} errors={errors} onChange={onChange} /> : null}
+    </fieldset>
+  );
+}
+
 /** Settings rendered from the channel kind's JSON Schema; nested objects become their own field groups. */
 export function SettingsFields({ group, values, errors, onChange }: Props) {
+  if (group.variant) return <VariantFields group={group} values={values} errors={errors} onChange={onChange} />;
   const body = (
     <>
       <div className="fld-row">

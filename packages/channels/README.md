@@ -180,7 +180,7 @@ OCSO's first-party widget uses AI SDK UI `useChat` with an OCSO transport. It po
   - `iss` and `aud` are enforced when `settings.hostJwtIssuer` or `settings.hostJwtAudience` is set.
   - The widget can send the JWT directly as the bearer token.
   - Alternatively, the API can verify it once and issue a visitor token with `{ externalCustomerRef }`.
-  - Identity kind: `webchat_customer_ref`, with the visitor id kept as an alternate when known. Anonymous visitors use `webchat_visitor`.
+  - Identity kind: `webchat_customer_ref`, value `<channel id>:<sub>` (a channel vouches only for its own users), with the visitor id kept as an alternate when known. Anonymous visitors use `webchat_visitor`. The visitor id carries over to a signed-in user only while the verified user stays the same; another user on the same browser gets a new visitor.
 - `verifyRequest` returns 401 for a missing or expired token, which tells the widget to refresh. It returns 403 for forged tokens and tokens bound to another channel.
 - `embed.identify(channel, bearerToken)` gives the upload, history and stream endpoints the same identity.
 - In staff lists an anonymous visitor shows as `web · sess 8f2a` (`displayIdentity`); host-identified customers get the generic masking.

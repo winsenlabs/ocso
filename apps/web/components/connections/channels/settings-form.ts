@@ -19,13 +19,30 @@ export interface SettingsGroup {
   label: string;
   fields: SettingsField[];
   groups: SettingsGroup[];
+  /**
+   * A choice between object shapes (JSON Schema `oneOf`/`anyOf` whose branches share a `const` discriminator,
+   * e.g. how user tokens are verified): the admin picks one and fills its fields. Values: the discriminator
+   * at `<path>.<discriminator>` ('' = none), the chosen branch's fields at `<path>.<field>`.
+   */
+  variant?: SettingsVariant | undefined;
+}
+
+export interface SettingsVariant {
+  discriminator: string;
+  required: boolean;
+  options: Array<{ value: string; label: string; group: SettingsGroup }>;
 }
 
 interface Node {
   type?: string | string[];
   properties?: Record<string, Node>;
+  required?: string[];
   default?: unknown;
   title?: string;
+  const?: unknown;
+  items?: Node;
+  oneOf?: Node[];
+  anyOf?: Node[];
 }
 
 const isObjectNode = (n: Node | undefined): n is Node & { properties: Record<string, Node> } =>
@@ -33,17 +50,53 @@ const isObjectNode = (n: Node | undefined): n is Node & { properties: Record<str
 
 const join = (prefix: string, name: string) => (prefix ? `${prefix}.${name}` : name);
 
+/** The shared `const` property of every object branch of a union, if there is one. */
+function discriminatorOf(branches: readonly Node[]): string | null {
+  if (!branches.length || !branches.every(isObjectNode)) return null;
+  const first = branches[0]!.properties ?? {};
+  return Object.keys(first).find((key) => branches.every((b) => typeof b.properties?.[key]?.const === 'string')) ?? null;
+}
+
+function variantGroup(node: Node, path: string, label: string, required: boolean): SettingsGroup | null {
+  const branches = node.oneOf ?? node.anyOf ?? [];
+  const discriminator = discriminatorOf(branches);
+  if (!discriminator) return null;
+  const options = branches.map((branch) => {
+    const value = String(branch.properties![discriminator]!.const);
+    const { [discriminator]: _omit, ...rest } = branch.properties!;
+    const inner = settingsGroups({ ...branch, properties: rest, required: (branch.required ?? []).filter((r) => r !== discriminator) }, path, label);
+    return { value, label: branch.title ?? value, group: inner };
+  });
+  return { path, label, fields: [], groups: [], variant: { discriminator, required, options } };
+}
+
 /** The schema as nested groups of fields (root group has path ''). */
 export function settingsGroups(schema: unknown, path = '', label = ''): SettingsGroup {
   const root = (typeof schema === 'object' && schema !== null ? schema : {}) as Node;
   const props = root.properties ?? {};
+  const required = new Set(root.required ?? []);
   const group: SettingsGroup = { path, label, fields: [], groups: [] };
   for (const field of schemaFields(root)) {
     const node = props[field.name];
-    if (isObjectNode(node)) group.groups.push(settingsGroups(node, join(path, field.name), node.title ?? humanizeName(field.name)));
-    else group.fields.push({ ...field, path: join(path, field.name), defaultValue: node?.default });
+    const childPath = join(path, field.name);
+    const childLabel = node?.title ?? humanizeName(field.name);
+    const variant = node && (node.oneOf || node.anyOf) ? variantGroup(node, childPath, childLabel, required.has(field.name)) : null;
+    if (variant) group.groups.push(variant);
+    else if (isObjectNode(node)) group.groups.push(settingsGroups(node, childPath, childLabel));
+    else {
+      // A list of allowed words (string enum items) is typed one per line like any list; the API validates the words.
+      const enumList = field.kind === 'json' && node?.type === 'array' && node.items?.type === 'string';
+      group.fields.push({ ...field, kind: enumList ? 'list' : field.kind, path: childPath, defaultValue: node?.default });
+    }
   }
   return group;
+}
+
+/** The branch a variant group currently shows (from the form values), or null for none. */
+export function chosenVariant(group: SettingsGroup, values: FormValues): SettingsVariant['options'][number] | null {
+  if (!group.variant) return null;
+  const chosen = values[join(group.path, group.variant.discriminator)];
+  return group.variant.options.find((o) => o.value === chosen) ?? null;
 }
 
 function valueAt(settings: unknown, path: string): unknown {
@@ -54,6 +107,12 @@ function valueAt(settings: unknown, path: string): unknown {
 export function initialSettingsValues(group: SettingsGroup, settings: Record<string, unknown> | null): FormValues {
   const values: FormValues = {};
   const walk = (g: SettingsGroup) => {
+    if (g.variant) {
+      const stored = settings ? valueAt(settings, join(g.path, g.variant.discriminator)) : undefined;
+      values[join(g.path, g.variant.discriminator)] = typeof stored === 'string' ? stored : '';
+      g.variant.options.forEach((o) => walk(o.group));
+      return;
+    }
     for (const f of g.fields) {
       const stored = settings ? valueAt(settings, f.path) : undefined;
       if (f.kind === 'boolean') values[f.path] = stored === undefined ? f.defaultValue === true : stored === true;
@@ -72,6 +131,10 @@ export function initialSettingsValues(group: SettingsGroup, settings: Record<str
 export function buildSettings(group: SettingsGroup, values: FormValues): { settings: Record<string, unknown>; errors: Record<string, string> } {
   const errors: Record<string, string> = {};
   const build = (g: SettingsGroup): Record<string, unknown> => {
+    if (g.variant) {
+      const chosen = chosenVariant(g, values);
+      return chosen ? { [g.variant.discriminator]: chosen.value, ...build(chosen.group) } : {};
+    }
     const local: FormValues = {};
     const leaves = g.fields.filter((f) => f.kind !== 'boolean');
     for (const f of leaves) {

@@ -83,6 +83,21 @@ export interface InboundMessage {
   /** Media parts carry `media.status = 'PENDING'` and `media.source.externalId`. */
   parts: InteractionPart[];
   replyToExternalId?: string | undefined;
+  /**
+   * The channel verified the primary identity (e.g. a signed-in user the embedding site vouched for). Customer
+   * claims present it to tools as `sub` (with `ocso_channel`) only on this channel's conversations, and only when
+   * the value is namespaced `<channel id>:<user id>`, so channels never vouch for each other's users.
+   */
+  identityVerified?: boolean | undefined;
+  /** Context the embedding site passed with the sender's session (embeddable kinds), and who vouched for it. */
+  hostContext?: InboundHostContext | undefined;
+}
+
+/** Allowlisted key/values from the embedding site: `host` = its backend vouched, `client` = the browser sent them. */
+export interface InboundHostContext {
+  source: 'host' | 'client';
+  values: Readonly<Record<string, string | number | boolean>>;
+  at: Date;
 }
 
 export interface DeliveryStatusUpdate {

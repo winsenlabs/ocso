@@ -13,6 +13,8 @@ export interface CatalogEntry {
   serverName: string;
   /** Trusted connection: calls carry short-lived customer identity claims (docs/08 §4). */
   sendCustomerClaims: boolean;
+  /** The connection receives the customer's verified user token (web chat tool identity passthrough). */
+  forwardUserToken: boolean;
   /** The `tools` row (MCP tools); null for first-party tools, which are code rather than records. */
   recordId: string | null;
 }
@@ -45,6 +47,7 @@ function firstPartyEntry(tool: FirstPartyTool, agentId: string): CatalogEntry {
     grant: { agentId, toolId: tool.name, enabled: true, alwaysConfirm: false, argumentRules: [] },
     serverName: tool.name,
     sendCustomerClaims: false,
+    forwardUserToken: false,
     recordId: null,
   };
 }
@@ -85,6 +88,7 @@ export async function loadAgentToolCatalog(db: DbOrTx, agentId: string, firstPar
     entries.set(t.modelName, {
       serverName: t.name,
       sendCustomerClaims: c.sendCustomerClaims,
+      forwardUserToken: c.forwardUserToken,
       recordId: t.id,
       tool: {
         id: t.id,

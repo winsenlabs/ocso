@@ -16,6 +16,7 @@ export function StepApprove({ connection, tools, agents, api }: { connection: Co
   const [chosen, setChosen] = useState<string[]>(initialAgents);
   const [policy, setPolicy] = useState<ConfirmationPolicy>(connection?.confirmationPolicy ?? 'SENSITIVE_ONLY');
   const [claims, setClaims] = useState(connection?.sendCustomerClaims ?? false);
+  const [forwardToken, setForwardToken] = useState(connection?.forwardUserToken ?? false);
   const [healthSeconds, setHealthSeconds] = useState(String(connection?.healthCheckSeconds ?? 60));
   const approval = useApprovalRequest();
   useEffect(() => {
@@ -52,6 +53,7 @@ export function StepApprove({ connection, tools, agents, api }: { connection: Co
       allowedAgentIds: template ? [] : anyAgent ? '*' : chosen,
       confirmationPolicy: policy,
       sendCustomerClaims: template ? false : claims,
+      forwardUserToken: template ? false : forwardToken,
       healthCheckSeconds: seconds,
     } as const;
     // Recording the policy is a draft write; going live is a proposal a second person approves (the submit
@@ -112,6 +114,10 @@ export function StepApprove({ connection, tools, agents, api }: { connection: Co
           <label className="toggle-row" style={{ marginTop: 6 }}>
             <input type="checkbox" checked={claims} onChange={(e) => setClaims(e.target.checked)} />
             Send signed customer identity claims with each call
+          </label>
+          <label className="toggle-row">
+            <input type="checkbox" checked={forwardToken} onChange={(e) => setForwardToken(e.target.checked)} />
+            Forward the customer’s verified web chat user token (channels with tool identity “passthrough”)
           </label>
         </fieldset>
       )}

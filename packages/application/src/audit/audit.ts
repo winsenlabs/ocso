@@ -1,5 +1,5 @@
 import { auditEvents, uuidv7, type DbOrTx } from '@ocso/db';
-import { sanitizeForAudit } from '@ocso/tools';
+import { sanitizeForAudit, sanitizeSettingsForAudit } from '@ocso/tools';
 import type { ActorContext } from '../shared/context.js';
 import { auditTeams } from './audit-teams.js';
 
@@ -13,6 +13,12 @@ export interface AuditEntry {
   confirmation?: Record<string, unknown> | undefined;
   /** Extra teams the event concerns, beyond the target's and the actor's (auditTeams). */
   teamIds?: readonly string[] | undefined;
+  /**
+   * 'settings' only where configuration settings are audited (channel create/update, MCP connection policy):
+   * `auth`, `userToken` and `forwardUserToken` holding an object or a boolean are kept (sanitizeSettingsForAudit).
+   * Default: strict redaction, as for tool-call payloads.
+   */
+  redaction?: 'strict' | 'settings' | undefined;
 }
 
 /**
@@ -27,6 +33,7 @@ export interface AuditEntry {
 export async function recordAudit(tx: DbOrTx, actor: ActorContext, entry: AuditEntry): Promise<string> {
   const id = uuidv7();
   const principal = actor.principal;
+  const redact = entry.redaction === 'settings' ? sanitizeSettingsForAudit : sanitizeForAudit;
   const resolved = await auditTeams(tx, entry.targetType, entry.targetId, actor);
   const teamIds = entry.teamIds?.length ? [...new Set([...resolved, ...entry.teamIds])].sort() : resolved;
   await tx.insert(auditEvents).values({
@@ -39,8 +46,8 @@ export async function recordAudit(tx: DbOrTx, actor: ActorContext, entry: AuditE
     targetType: entry.targetType,
     targetId: entry.targetId ?? null,
     summary: entry.summary,
-    before: entry.before === undefined ? null : sanitizeForAudit(entry.before),
-    after: entry.after === undefined ? null : sanitizeForAudit(entry.after),
+    before: entry.before === undefined ? null : redact(entry.before),
+    after: entry.after === undefined ? null : redact(entry.after),
     confirmation: entry.confirmation ?? null,
     correlationId: actor.correlationId,
     ip: actor.ip ?? null,

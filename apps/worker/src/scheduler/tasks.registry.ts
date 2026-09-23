@@ -5,6 +5,7 @@ import {
   ModelCatalogService,
   relayOutboxToWebhooks,
   sweepApprovalSecrets,
+  sweepEmbedSessions,
   systemActor,
   type AlertDeliveryService,
   type AlertEngine,
@@ -13,6 +14,7 @@ import {
 } from '@ocso/application';
 import type { WorkerEnv } from '@ocso/config';
 import type { Db } from '@ocso/db';
+import type { ProviderDefinition } from '@ocso/model-providers';
 import type { QueueAdapter } from '@ocso/queue';
 import type { SecretStore } from '@ocso/secrets';
 import type { ScheduledTask } from './scheduler.service.js';
@@ -34,6 +36,8 @@ export interface SubsystemDeps {
   routing: { sweep(correlationId: string): Promise<unknown> };
   /** Weekly exception report, storage samples, health-sample roll-ups (apps/worker/src/exceptions, PM/research/11 §7). */
   exceptions: { tasks(): ScheduledTask[] };
+  /** Registered model provider definitions (installed plugins included): catalog snapshots keep their catalog providers. */
+  providers: readonly ProviderDefinition[];
 }
 
 /**
@@ -55,7 +59,7 @@ export function subsystemTasks(deps: SubsystemDeps): ScheduledTask[] {
     ...(deps.scaling.publishesMetrics ? [{ name: 'scaling-metrics', everySeconds: 60, run: () => deps.scaling.publishMetrics() }] : []),
     { name: 'scaling-reconcile', everySeconds: 300, run: () => deps.scaling.reconcile('periodic') },
     // Model catalog (ADR-027): hourly check, downloads when a source is a day old (an hour after a failure).
-    ...(deps.env.OCSO_MODEL_CATALOG_REFRESH ? [{ name: 'model-catalog-refresh', everySeconds: 3600, run: () => refreshModelCatalog(deps.db) }] : []),
+    ...(deps.env.OCSO_MODEL_CATALOG_REFRESH ? [{ name: 'model-catalog-refresh', everySeconds: 3600, run: () => refreshModelCatalog(deps.db, deps.providers) }] : []),
     // Maker–checker: checker validity (flags, never reassigns), notice/activation redispatch, orphan voiding.
     ...deps.approvals.tasks(),
     ...deps.audit.tasks(),
@@ -63,14 +67,16 @@ export function subsystemTasks(deps: SubsystemDeps): ScheduledTask[] {
     ...deps.exceptions.tasks(),
     // Maker–checker secrets: delete what approved changes released (after their commit) and orphaned staged values.
     { name: 'approval-secret-sweep', everySeconds: 60, run: () => sweepApprovalSecrets(deps.db, deps.secrets) },
+    // Web chat: held user tokens past their exp and spent session-pass ids.
+    { name: 'embed-session-sweep', everySeconds: 300, run: () => sweepEmbedSessions(deps.db) },
   ];
 }
 
 /** One SSRF-guarded, allowlisted fetch per run; catalog-origin prices follow the refresh (audited as a system change). */
-async function refreshModelCatalog(db: Db) {
+async function refreshModelCatalog(db: Db, providers: readonly ProviderDefinition[]) {
   const egress = createCatalogFetch();
   try {
-    return await new ModelCatalogService({ db, fetch: egress.fetch }).refreshIfStale(systemActor('model-catalog', randomUUID(), 'Model catalog refresh'));
+    return await new ModelCatalogService({ db, fetch: egress.fetch, providers }).refreshIfStale(systemActor('model-catalog', randomUUID(), 'Model catalog refresh'));
   } finally {
     egress.close();
   }

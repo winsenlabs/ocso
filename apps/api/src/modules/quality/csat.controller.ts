@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Inject, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Inject, Param, Post, Req } from '@nestjs/common';
 import { Permission, type Principal } from '@ocso/auth';
 import { CsatInput, CsatService, SettingsService, assertConversationAccess, recordCsat, type ActorContext } from '@ocso/application';
 import { notFound } from '@ocso/domain';
@@ -55,9 +55,16 @@ export class WebChatCsatController {
 
   @Post()
   @Public()
-  async submit(@Param('publicKey') publicKey: string, @Headers('authorization') auth: string | undefined, @Body({ schema: CsatInput }) body: CsatInput) {
-    const ctx = await this.identity.channel(publicKey);
-    const visitor = this.identity.identify(ctx, auth);
+  async submit(
+    @Param('publicKey') publicKey: string,
+    @Headers('origin') origin: string | undefined,
+    @Headers('authorization') auth: string | undefined,
+    @Req() req: object,
+    @Body({ schema: CsatInput }) body: CsatInput,
+  ) {
+    // Same caller rules as the rest of the widget API: allowed sites, or no Origin only for native apps / passes.
+    const ctx = await this.identity.access(req, publicKey, origin);
+    const visitor = await this.identity.identify(ctx, auth);
     const conversation = await this.identity.conversationFor(ctx.config.id, visitor);
     if (!conversation) throw notFound('conversation', 'visitor');
     const recorded = await recordCsat(this.db, conversation.id, body.score, body.comment ?? null);

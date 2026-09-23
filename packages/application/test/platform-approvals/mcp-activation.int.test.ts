@@ -3,10 +3,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Principal } from '@ocso/auth';
-import { approvalProposals, mcpConnections, uuidv7 } from '@ocso/db';
+import { approvalProposals, auditEvents, mcpConnections, uuidv7 } from '@ocso/db';
 import { createTestDatabase, type TestDatabase } from '@ocso/db/testing';
 import { InMemorySecretRows, LocalSecretStore, parseMasterKey } from '@ocso/secrets';
-import { McpConnectionService, assertOAuthAllowed, isApproved, systemActor, type ActorContext } from '../../src/index.js';
+import { McpConnectionService, assertOAuthAllowed, isApproved, proposalContentHash, systemActor, type ActorContext } from '../../src/index.js';
 import { startV2Server, type McpTestServer } from '../../../mcp/test/helpers/custom-servers.js';
 import { ensureUser, platformApprover, type PlatformApprover } from '../support/platform-approvals.js';
 
@@ -95,6 +95,52 @@ describe('deferred activation', () => {
     expect(stamped).toMatchObject({ status: 'APPROVED' });
     expect(stamped!.activatedAt).toBeInstanceOf(Date);
     await expect(svc.approve(admin, id, { allowedAgentIds: [] })).rejects.toMatchObject({ code: 'approval_required' });
+  });
+});
+
+describe('proposals submitted before forwardUserToken existed (upgrade)', () => {
+  /** Rewrite a proposal as the previous release stored it: a before-snapshot without forwardUserToken, hashed over that. */
+  async function asPreUpgrade(proposalId: string): Promise<string> {
+    const [p] = await t.db.select().from(approvalProposals).where(eq(approvalProposals.id, proposalId));
+    const { forwardUserToken: _dropped, ...before } = p!.beforeSnapshot as Record<string, unknown>;
+    const contentHash = proposalContentHash({ ...p!, payload: p!.payload as Record<string, unknown>, beforeSnapshot: before }, ['status']);
+    await t.db.update(approvalProposals).set({ beforeSnapshot: before, contentHash }).where(eq(approvalProposals.id, proposalId));
+    return contentHash;
+  }
+
+  it('an open ACTIVATE hashed without the field can still be approved and goes live', async () => {
+    const id = await readyDraft('pre-upgrade-open');
+    const open = await approver.submit(admin, 'mcp_connection', id, 'ACTIVATE');
+    expect(open.before).not.toHaveProperty('forwardUserToken');
+    const contentHash = await asPreUpgrade(open.id);
+    const decided = await approver.decide({ ...open, contentHash });
+    expect(decided.status).toBe('APPROVED');
+    expect(await approver.finish(open.id)).toBe('ACTIVATED');
+    expect((await row(id)).status).toBe('ACTIVE');
+  });
+
+  it('an approved ACTIVATE awaiting its deferred activation, hashed without the field, is not blocked', async () => {
+    const id = await readyDraft('pre-upgrade-deferred');
+    const approved = await approver.approve(admin, 'mcp_connection', id, 'ACTIVATE');
+    await asPreUpgrade(approved.id);
+    expect(await approver.finish(approved.id)).toBe('ACTIVATED');
+    expect((await row(id)).approvedAt).toBeInstanceOf(Date);
+  });
+
+  it('an open UPDATE hashed without the field can still be approved; turning forwarding on shows in the projection', async () => {
+    const id = await readyDraft('pre-upgrade-update');
+    await approver.finish((await approver.approve(admin, 'mcp_connection', id, 'ACTIVATE')).id);
+    const open = await approver.submit(admin, 'mcp_connection', id, 'UPDATE', { policy: { allowedAgentIds: '*', confirmationPolicy: 'NONE' } });
+    const contentHash = await asPreUpgrade(open.id);
+    expect((await approver.decide({ ...open, contentHash })).status).toBe('APPROVED');
+    const on = await approver.submit(admin, 'mcp_connection', id, 'UPDATE', { policy: { allowedAgentIds: '*', forwardUserToken: true } });
+    expect(on.after).toMatchObject({ forwardUserToken: true });
+    expect(on.before).not.toHaveProperty('forwardUserToken');
+    // The policy audit row is a settings audit: the forwardUserToken flag is kept, not redacted.
+    await approver.decide(on);
+    const policyRows = await t.db.select().from(auditEvents).where(eq(auditEvents.targetId, id));
+    const turnedOn = policyRows.find((r) => r.action === 'mcp.connection.policy' && (r.after as { forwardUserToken?: unknown }).forwardUserToken === true);
+    expect(turnedOn?.before).toMatchObject({ forwardUserToken: false });
   });
 });
 

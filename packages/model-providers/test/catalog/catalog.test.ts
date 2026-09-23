@@ -4,7 +4,8 @@ import { normalizeLiteLlm, perMillion } from '../../src/catalog/litellm.js';
 import { normalizeModelsDev, tierThreshold } from '../../src/catalog/models-dev.js';
 import { CatalogSnapshotSchema } from '../../src/catalog/types.js';
 import { vendoredSnapshots } from '../../src/catalog/vendored.js';
-import { catalogProvidersOf, createDefaultRegistry, FIRST_PARTY_PROVIDERS } from '../../src/registry.js';
+import { catalogProvidersOf, createDefaultRegistry, createRegistry, FIRST_PARTY_PROVIDERS, snapshotCatalogProviders } from '../../src/registry.js';
+import type { ProviderDefinition } from '../../src/providers/definition.js';
 
 /** Each provider definition carries its own catalog mapping (ADR-027); tests look it up by kind. */
 const registry = createDefaultRegistry({ enableDevProviders: true });
@@ -172,6 +173,27 @@ describe('catalog lookups (kind + model id → catalog key)', () => {
     expect(catalogProvidersOf(FIRST_PARTY_PROVIDERS, 'litellm').sort()).toEqual(['anthropic', 'azure', 'azure_ai', 'bedrock', 'bedrock_converse', 'openai', 'vertex_ai-anthropic_models', 'vertex_ai-language-models']);
     // A new provider's catalog provider is kept once its definition maps to it.
     expect(normalizeModelsDev(MODELS_DEV, ['groq']).map((e) => e.id)).toEqual(['llama-x']);
+  });
+
+  it("an installed provider's catalog mapping is kept in snapshots built from the registry's definitions", () => {
+    // Stand-in for an installed plugin (e.g. @acme/ocso-provider-groq) that maps its models to models.dev's groq.
+    const groq = {
+      ...FIRST_PARTY_PROVIDERS[0]!,
+      kind: 'GROQ',
+      label: 'Groq (plugin)',
+      catalog: { providers: { 'models.dev': ['groq'] }, candidates: (id: string) => [{ source: 'models.dev' as const, provider: 'groq', id }] },
+    } as unknown as ProviderDefinition;
+    const installed = createRegistry([...FIRST_PARTY_PROVIDERS, groq], { enableDevProviders: false });
+    // First-party only (the old default): the plugin's models are dropped and stay unpriced.
+    expect(buildSnapshot('models.dev', MODELS_DEV, NOW).entries.map((e) => e.provider)).not.toContain('groq');
+    const providers = snapshotCatalogProviders('models.dev', installed.list());
+    expect(providers).toEqual(expect.arrayContaining([...catalogProvidersOf(FIRST_PARTY_PROVIDERS, 'models.dev'), 'groq']));
+    // Dev-only first-party providers stay in whatever the registry holds, so every process keeps the same snapshot.
+    expect(snapshotCatalogProviders('litellm', []).sort()).toEqual(catalogProvidersOf(FIRST_PARTY_PROVIDERS, 'litellm').sort());
+    const snapshot = buildSnapshot('models.dev', MODELS_DEV, NOW, providers);
+    const withPlugin = new ModelCatalog([{ snapshot, origin: 'database' }]);
+    expect(withPlugin.describe(groq.catalog, 'llama-x').price).toMatchObject({ source: 'models.dev', entry: { provider: 'groq', id: 'llama-x' }, price: { input: 0.1, output: 0.1 } });
+    expect(withPlugin.describe(mapping('OPENAI'), 'gpt-5.5').price).toMatchObject({ price: { input: 5 } });
   });
 
   it('snapshots carry a content hash that changes with the content', () => {

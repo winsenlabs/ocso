@@ -10,6 +10,7 @@ import type { AgentLite } from '@/lib/api/mcp';
 import { Input } from '../profiles/profile-fields';
 import { useCloseTo } from '../routed-modal';
 import { ChannelNextSteps } from './next-steps';
+import { RevealedSecrets } from './provider-steps';
 import { SecretFields } from './secret-fields';
 import { SettingsFields } from './settings-fields';
 import { buildSettings, initialSettingsValues, settingsGroups, splitProblems } from './settings-form';
@@ -96,6 +97,11 @@ export function ChannelDialog({ kinds, channel, initialKind, agents, publicOrigi
     .split('\n')
     .map((s) => s.trim())
     .filter(Boolean);
+  const authMode = typeof values['auth.mode'] === 'string' && values['auth.mode'] ? values['auth.mode'] : 'anonymous';
+  // OCSO-generated keys the admin must copy now (the create response carries them once).
+  const revealed = saved?.revealedSecrets
+    ? (def?.secrets ?? []).filter((f) => saved.revealedSecrets?.[f.key]).map((f) => ({ key: f.key, label: f.label, value: saved.revealedSecrets![f.key]! }))
+    : [];
   const kindInfo = { inboundWebhook: def?.inboundWebhook ?? false, embeddable: def?.embeddable ?? false, label: kindLabel(def), connectionCheck: def?.connectionCheck ?? false, setupSteps: def?.setupSteps ?? [] };
   // Client-generated secrets are for pasting elsewhere (e.g. the provider's console): shown once more with the next steps.
   const generatedSecrets = (def?.secrets ?? []).filter((f) => generated[f.key]).map((f) => ({ label: f.label, value: generated[f.key]! }));
@@ -106,7 +112,8 @@ export function ChannelDialog({ kinds, channel, initialKind, agents, publicOrigi
         <AlertBanner style={{ margin: 0 }} title={channel ? 'Channel updated.' : 'Channel created.'}>
           Secrets were stored by reference; the form no longer holds them.
         </AlertBanner>
-        <ChannelNextSteps channel={saved} kind={kindInfo} publicOrigin={publicOrigin} generated={generatedSecrets} allowedOrigins={origins} />
+        <RevealedSecrets secrets={revealed} />
+        <ChannelNextSteps channel={saved} kind={kindInfo} publicOrigin={publicOrigin} generated={generatedSecrets} allowedOrigins={origins} authMode={authMode} />
       </Modal>
     );
   }
@@ -186,7 +193,7 @@ export function ChannelDialog({ kinds, channel, initialKind, agents, publicOrigi
             }}
           />
         </fieldset>
-        {channel ? <ChannelNextSteps channel={channel} kind={kindInfo} publicOrigin={publicOrigin} allowedOrigins={origins} /> : null}
+        {channel ? <ChannelNextSteps channel={channel} kind={kindInfo} publicOrigin={publicOrigin} allowedOrigins={origins} authMode={authMode} /> : null}
       </form>
     </Modal>
   );

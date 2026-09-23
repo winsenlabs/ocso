@@ -22,9 +22,9 @@ and keep external implementations behind adapters ([§4](../99-BUILD-RULES.md#4-
   build runs is `FIRST_PARTY_PLUGINS` in `packages/bootstrap/src/first-party.ts`. The api, the worker
   and the demo seed build every registry from that list and nothing else (see
   [The plugin shape](#the-plugin-shape)). This is the seam a plugin loader will extend.
-- **Plugins are compile-time and in-repo today.** Each implementation lives in a workspace package under
-  `packages/`, and one entry in `FIRST_PARTY_PLUGINS` registers it. There is no loader that reads npm
-  packages from configuration yet, and all workspace packages are `"private": true`.
+- **First-party plugins are compiled in; third-party ones are loaded.** Each first-party implementation lives in a
+  workspace package and one entry in `FIRST_PARTY_PLUGINS` registers it. Third-party packages built on
+  `@winsendotai/ocso-plugin-sdk` are listed in `OCSO_PLUGINS` and appended to that list at start-up (see below).
 - **Kinds are open.** A kind exists when a registered plugin declares it: `ChannelKind`, `ProviderKind`
   and alert destination kinds are strings, and API input is validated against the registry, never
   against a hard-coded list. The `kind` columns are `text`, so a new kind needs no migration.
@@ -148,32 +148,35 @@ none.
 `pnpm lint` lists any core line that still names a kind. Beyond that, these limits are known; do not
 copy them as patterns:
 
-- **Contracts live in several packages.** Each contract sits in its plugin package and `OcsoPlugin` in
-  `@ocso/bootstrap`; the SDK will re-export them from one versioned place.
+- **Contracts live in several packages.** Each internal contract sits in its plugin package; the SDK carries the
+  public copy of four of them, kept identical by a CI type guard.
 - **Three registries are core-internal.** Alert conditions, scheduled tasks and Ask OCSO tools have
   registries but are not `OcsoPlugin` contributions yet.
 - **Driver settings are declared centrally.** `@ocso/config` parses the settings of the first-party
   drivers; a driver from another plugin reads its own settings from `process.env`.
-- **The model catalog knows the compiled-in providers.** The price catalog snapshot keeps the catalog
-  providers of the first-party provider definitions (`firstPartyCatalogProviders`), not of whatever
-  the registry holds.
 - **Seeds and tests name kinds on purpose.** The demo seed creates a web chat channel and the
   development-only scripted provider; the guard exempts seeds, tests and fixtures.
 
-## Roadmap: third-party plugins
+## Third-party plugins (v0.1)
 
-The next piece is a plugin SDK, to be published as `@winsendotai/ocso-plugin-sdk`. It does not exist
-yet. The plan is a stable, versioned package that exports the plugin contracts (today spread over
-the contract files in the table above, plus `OcsoPlugin` in `@ocso/bootstrap`), plus a loader that
-imports the plugin packages named in configuration and appends their `OcsoPlugin` objects to
-`FIRST_PARTY_PLUGINS` — the one list the api and worker provide under `PLUGINS`. Because kinds are
-already open and validated by the registries, a loaded plugin needs no change to core code, the
-database or the web app. That is what lets a third party ship a channel or model provider as its own
-npm package without forking OCSO. Driver plugins will also need a way to declare their own
-environment settings (today `@ocso/config` declares them).
+[`@winsendotai/ocso-plugin-sdk`](../../packages/ocso-plugin-sdk/README.md) is the public, versioned contract
+(`apiVersion: 1`). It exports the types for the four kinds open to third parties in v0.1 (**channels, model
+providers, alert destinations, email drivers**), `definePlugin`, `pluginError` (errors OCSO translates into its own
+typed errors) and `@winsendotai/ocso-plugin-sdk/testing` (`checkPlugin`, the same validations the registries run).
+A type-level guard in CI (`packages/bootstrap/test/sdk-conformance.types.ts`) fails when an internal contract drifts
+from the SDK, and an agreement test runs `checkPlugin` and the registries over every first-party contribution.
+[`examples/ocso-plugin-example-channel`](../../examples/ocso-plugin-example-channel) is a complete plugin built only
+on the SDK.
 
-Until it ships, plugins live in this repository and are registered at compile time, as described
-above. To propose one, open a "New plugin proposal" issue.
+The loader (`packages/bootstrap/src/plugins`) reads `OCSO_PLUGINS` (`name@exactVersion`, comma-separated) and imports
+each package from `OCSO_PLUGINS_DIR` (default `/app/plugins`). It refuses to start when the installed version differs
+from the pin, the plugin's `apiVersion` is not supported, the name clashes, or a contribution fails validation; the
+api, the worker and the seed load the same list and log it, and the System page shows it (`GET /v1/system/plugins`).
+See [installing plugins](installing.md) for the derived-image recipe and the trust statement: plugins run in-process
+with full trust.
+
+Still internal in v0.1: blob, secrets, queue, deployment and audit-store drivers and tool providers (their contracts
+need `@ocso/db` or `@ocso/config`), alert conditions, scheduled tasks and Ask OCSO tools.
 
 ## Pages
 

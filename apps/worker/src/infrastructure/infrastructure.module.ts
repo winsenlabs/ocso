@@ -2,7 +2,6 @@ import { Global, Inject, Module, type OnApplicationShutdown } from '@nestjs/comm
 import { randomBytes } from 'node:crypto';
 import { SettingsService, type AuditStore } from '@ocso/application';
 import {
-  FIRST_PARTY_PLUGINS,
   PgListener,
   assertWorkerDrivers,
   createAuditStore,
@@ -13,7 +12,9 @@ import {
   createQueue,
   createSecretStore,
   loadAuditSigner,
+  loadPlugins,
   pgQueueNotifier,
+  pluginSummary,
   type DriverRegistries,
   type OcsoPlugin,
 } from '@ocso/bootstrap';
@@ -59,15 +60,20 @@ function loadWorkerEnv(drivers: DriverRegistries): WorkerEnv {
 @Global()
 @Module({
   providers: [
-    { provide: PLUGINS, useValue: FIRST_PARTY_PLUGINS },
+    // FIRST_PARTY_PLUGINS plus the installed plugins OCSO_PLUGINS pins (raw environment; loadEnv strips unknown keys).
+    { provide: PLUGINS, useFactory: () => loadPlugins() },
     { provide: DRIVERS, inject: [PLUGINS], useFactory: (plugins: readonly OcsoPlugin[]) => createDriverRegistries(plugins) },
     { provide: ENV, inject: [DRIVERS], useFactory: loadWorkerEnv },
     { provide: WORKER_ID, inject: [ENV], useFactory: (env: WorkerEnv) => env.WORKER_ID ?? `wkr-${randomBytes(3).toString('hex').slice(0, 5)}` },
     {
       provide: LOGGER,
-      inject: [ENV, WORKER_ID],
-      useFactory: (env: WorkerEnv, workerId: string) =>
-        createLogger({ service: 'ocso-worker', version: env.APP_VERSION, level: env.LOG_LEVEL }).child({ workerId }),
+      inject: [ENV, WORKER_ID, PLUGINS],
+      useFactory: (env: WorkerEnv, workerId: string, plugins: readonly OcsoPlugin[]) => {
+        const logger = createLogger({ service: 'ocso-worker', version: env.APP_VERSION, level: env.LOG_LEVEL }).child({ workerId });
+        // The same line the api logs: the two processes must run the same plugins.
+        logger.info(pluginSummary(plugins, env.APP_VERSION));
+        return logger;
+      },
     },
     {
       provide: DATABASE,

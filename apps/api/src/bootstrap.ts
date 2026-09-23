@@ -6,6 +6,7 @@ import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module.js';
 import { mountAuthHandler } from './common/auth-handler.js';
 import { correlationMiddleware } from './common/correlation.js';
+import { trustProxySetting } from './common/trust-proxy.js';
 
 /** Build the configured Nest application (shared by main.ts and integration tests). */
 export async function createApp(options: { logger?: boolean } = {}): Promise<INestApplication> {
@@ -19,7 +20,7 @@ export async function createApp(options: { logger?: boolean } = {}): Promise<INe
 }
 
 export function configureApp(app: NestExpressApplication): void {
-  app.set('trust proxy', process.env['TRUST_PROXY'] !== 'false');
+  app.set('trust proxy', trustProxySetting(process.env['TRUST_PROXY']));
   app.disable('x-powered-by');
   // Better Auth (ADR-025) reads its own request bodies, so it is mounted before any body parser.
   mountAuthHandler(app, new NestLogger('Auth'));

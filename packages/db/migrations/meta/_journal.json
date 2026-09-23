@@ -225,6 +225,20 @@
       "when": 1790152341832,
       "tag": "0031_approvals_grandfather",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1790176057868,
+      "tag": "0032_webchat_auth",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1790177926074,
+      "tag": "0033_webchat_customer_ref_scope",
+      "breakpoints": true
     }
   ]
 }

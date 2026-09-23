@@ -21,12 +21,16 @@ const Claims = z.object({
   iss: z.string().optional(),
   aud: z.union([z.string(), z.array(z.string())]).optional(),
   name: z.string().max(500).optional(),
+  email: z.string().max(320).optional(),
 });
 
 export interface HostJwtClaims {
   customerRef: string;
   name?: string | undefined;
+  email?: string | undefined;
   expiresAt: Date;
+  /** Every claim of the verified token (context allowlisting picks from these). */
+  raw: Readonly<Record<string, unknown>>;
 }
 
 export interface HostJwtExpectations {
@@ -81,13 +85,16 @@ export function verifyHostJwt(token: string, secret: string, expected: HostJwtEx
   const provided = base64UrlDecode(signature);
   const computed = hmacSha256(secret, `${encodedHeader}.${encodedClaims}`);
   if (!provided || !equalBytes(provided, computed)) throw new WebChatAuthError('bad_signature', 'host token signature is invalid');
-  const claims = Claims.safeParse(decodeJson(encodedClaims));
+  const json = decodeJson(encodedClaims);
+  const claims = Claims.safeParse(json);
   if (!claims.success) throw new WebChatAuthError('malformed', 'host token claims are malformed');
   checkTimes(claims.data, Math.floor(expected.now.getTime() / 1000));
   checkIssuerAudience(claims.data, expected);
   return {
     customerRef: claims.data.sub,
     name: claims.data.name?.trim() || undefined,
+    email: claims.data.email?.trim() || undefined,
     expiresAt: new Date(claims.data.exp * 1000),
+    raw: json as Record<string, unknown>,
   };
 }

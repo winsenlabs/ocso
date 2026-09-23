@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as z from 'zod';
 import { McpToolProvider, type McpConnectionTarget, type McpToolProviderOptions } from '../src/index.js';
@@ -45,6 +45,10 @@ describe('McpToolProvider', () => {
       server.registerTool('slow', { inputSchema: z.object({ ms: z.number() }) }, async ({ ms }) => {
         await new Promise((r) => setTimeout(r, ms));
         return { content: [{ type: 'text', text: 'late' }] };
+      });
+      server.registerTool('echo_identity', { inputSchema: z.object({}) }, async (_args, ctx) => {
+        const digest = (v: string | null | undefined) => (v ? createHash('sha256').update(v).digest('hex') : 'none');
+        return { content: [{ type: 'text', text: 'ok' }], structuredContent: { auth: digest(ctx.http?.req?.headers.get('authorization')), user: digest(ctx.http?.req?.headers.get('x-ocso-user-token')), marker: digest(ctx.http?.req?.headers.get('x-ocso-user-bearer')) } };
       });
       server.registerTool('echo_auth', { inputSchema: z.object({ fail: z.boolean() }) }, async ({ fail }, ctx) => {
         const seen = ctx.http?.req?.headers.get('authorization') ?? 'none';
@@ -175,5 +179,24 @@ describe('McpToolProvider', () => {
     expect(JSON.stringify(denied)).not.toContain(wrongCustomer);
     const allowed = await trusted.invoke(call('crm.get_customer', { cif: '88214' }, { customerClaims: claimsFor('88214') }));
     expect(allowed).toMatchObject({ status: 'SUCCEEDED' });
+  });
+
+  it('forwards the customer user token only when the connection opted in: as the bearer without own auth, else in its own header', async () => {
+    const sha = (v: string) => createHash('sha256').update(v).digest('hex');
+    const USER = 'eyJ.customer-user-token.sig';
+    const seen = async (p: McpToolProvider) => {
+      const out = await p.invoke(call('echo_identity', {}, { userToken: USER }));
+      if (out.status !== 'SUCCEEDED' || out.output.type !== 'json') throw new Error(`expected json, got ${JSON.stringify(out)}`);
+      return out.output.value as { auth: string; user: string; marker: string };
+    };
+    expect(await seen(provider(target(custom.url)))).toEqual({ auth: 'none', user: 'none', marker: 'none' });
+    expect(await seen(provider(target(custom.url), { forwardUserToken: true }))).toEqual({ auth: sha(`Bearer ${USER}`), user: 'none', marker: 'none' });
+    const own = target(custom.url, { auth: { strategy: 'HEADER', headerName: 'Authorization', tokenRef: 'secret://svc' } });
+    const creds = new InMemoryCredentials({ 'secret://svc': 'service-token-1' });
+    expect(await seen(provider(own, { forwardUserToken: true }, creds))).toEqual({ auth: sha('Bearer service-token-1'), user: sha(USER), marker: 'none' });
+    // Concurrent calls never share a token (per-request headers).
+    const p = provider(target(custom.url), { forwardUserToken: true });
+    const [a, b] = await Promise.all([p.invoke(call('echo_identity', {}, { userToken: 'user-a' })), p.invoke(call('echo_identity', {}, { userToken: 'user-b' }))]);
+    expect([a, b].map((o) => (o.status === 'SUCCEEDED' && o.output.type === 'json' ? (o.output.value as { auth: string }).auth : null))).toEqual([sha('Bearer user-a'), sha('Bearer user-b')]);
   });
 });

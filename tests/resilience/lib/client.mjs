@@ -74,7 +74,9 @@ export async function seedWebChat(baseUrl, setupToken, { latencyMs = 1500, worke
   // A draft queue with its agent, then its first approval; a draft router attached to the channel, then its activation.
   const queue = await api.post('/v1/queues', { name: 'Support', teamIds: [team.id], agentId: agent.id }, { token: lead });
   await api.post(`/v1/queues/${queue.id}/submit`, bootstrap('the support queue'), { token: lead });
-  const channel = await api.post('/v1/channels', { kind: 'WEBCHAT', name: 'Web chat', status: 'ACTIVE' }, { token: admin }).catch(() => api.post('/v1/channels', { kind: 'WEBCHAT', name: 'Web chat', status: 'DRAFT' }, { token: admin }));
+  // Visitors are simulated from Node (no Origin header), like a native app.
+  const settings = { auth: { allowNativeApps: true } };
+  const channel = await api.post('/v1/channels', { kind: 'WEBCHAT', name: 'Web chat', status: 'ACTIVE', settings }, { token: admin }).catch(() => api.post('/v1/channels', { kind: 'WEBCHAT', name: 'Web chat', status: 'DRAFT', settings }, { token: admin }));
   // Channels are checked by a Head (approvals.check.channels): the lead checks the admin's channel.
   await ensureApproved(api, 'channel', channel.id, admin, headChecker);
   const router = await api.post('/v1/routers', { name: 'Web chat', definition: { steps: [], rules: [], fallbackQueueId: queue.id, returning: null, timeoutMinutes: 10 } }, { token: lead });

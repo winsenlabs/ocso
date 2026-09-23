@@ -42,6 +42,7 @@
     "@ocso/audit-store": "workspace:*"
   },
   "devDependencies": {
-    "@types/pg": "catalog:"
+    "@types/pg": "catalog:",
+    "@winsendotai/ocso-plugin-sdk": "workspace:*"
   }
 }

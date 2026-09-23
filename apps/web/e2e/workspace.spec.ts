@@ -89,6 +89,8 @@ test.beforeAll(async ({ playwright }) => {
   const channel = await approvedChannel<{ id: string; publicKey: string }>(api, tok.admin, { id: lead.id, token: tok.lead }, {
     kind: 'WEBCHAT',
     name: 'WS Web chat',
+    // Visitors are simulated from Node (no Origin header), like a native app.
+    settings: { auth: { allowNativeApps: true } },
     secrets: { visitorTokenSecret: randomBytes(32).toString('hex') },
   });
   ids.webchatKey = channel.publicKey;

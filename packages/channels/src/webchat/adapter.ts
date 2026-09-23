@@ -4,6 +4,7 @@ import type {
   ChannelAdapter,
   ChannelAdapterDeps,
   ChannelCapabilities,
+  ChannelFetch,
   ChannelRuntimeConfig,
   FetchedMedia,
   InboundEnvelope,
@@ -14,6 +15,7 @@ import type {
   SendResult,
   VerificationResult,
 } from '../contract/types.js';
+import { NO_NETWORK } from '../contract/types.js';
 import type { ChannelKindDescriptor } from '../contract/descriptor.js';
 import type { EmbeddedChat } from '../contract/embed.js';
 import { ChannelMediaError } from '../common/errors.js';
@@ -42,6 +44,8 @@ import { issueVisitorToken, type IssuedVisitorToken } from './visitor-token.js';
 export interface WebChatAdapterDeps {
   now: () => Date;
   generateId: () => string;
+  /** Egress fetch for the identity provider's JWKS (user-token verification); nothing else reaches the network. */
+  fetch?: ChannelFetch | undefined;
 }
 
 const WEBCHAT_IDENTITY_KINDS: ReadonlySet<string> = new Set(Object.values(WEBCHAT_IDENTITY));
@@ -52,7 +56,7 @@ export class WebChatChannelAdapter implements ChannelAdapter {
   readonly embed: EmbeddedChat;
 
   constructor(private readonly deps: WebChatAdapterDeps) {
-    this.embed = webChatEmbed(deps.now);
+    this.embed = webChatEmbed({ now: deps.now, fetch: deps.fetch ?? NO_NETWORK });
   }
 
   capabilities(config?: ChannelRuntimeConfig): ChannelCapabilities {
@@ -154,12 +158,13 @@ export class WebChatChannelAdapter implements ChannelAdapter {
   }
 }
 
-/** Accepts the common channel deps for uniform wiring; `fetch` is unused (no network I/O). */
+/** Accepts the common channel deps for uniform wiring; `fetch` is used only for user-token JWKS. */
 export function createWebChatAdapter(
   deps: Partial<ChannelAdapterDeps> & Partial<Pick<WebChatAdapterDeps, 'generateId'>> = {},
 ): WebChatChannelAdapter {
   return new WebChatChannelAdapter({
     now: deps.now ?? (() => new Date()),
     generateId: deps.generateId ?? randomUUID,
+    fetch: deps.fetch ?? NO_NETWORK,
   });
 }

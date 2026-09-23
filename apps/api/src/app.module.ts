@@ -33,6 +33,7 @@ import { QualityModule } from './modules/quality/quality.module.js';
 import { ApprovalsModule } from './modules/approvals/approvals.module.js';
 import { RoutersModule } from './modules/routers/routers.module.js';
 import { ExceptionsModule } from './modules/exceptions/exceptions.module.js';
+import { PluginsModule } from './modules/plugins/plugins.module.js';
 
 /** Feature modules are registered here; each owns one domain area (build rule §2). */
 export const FEATURE_MODULES = [
@@ -63,6 +64,7 @@ export const FEATURE_MODULES = [
   ApprovalsModule,
   RoutersModule,
   ExceptionsModule,
+  PluginsModule,
 ];
 
 @Module({

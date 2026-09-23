@@ -14,6 +14,11 @@ export interface ToolInvocation {
   timeoutMs: number;
   /** Short-lived signed customer claims for trusted connections (docs/08 §4). */
   customerClaims?: string | undefined;
+  /**
+   * The customer's verified end-user token (web chat tool identity `passthrough`), for connections that opted
+   * in to receive it. Never logged; providers redact it from results.
+   */
+  userToken?: string | undefined;
   idempotencyKey?: string | undefined;
   signal?: AbortSignal | undefined;
   /**

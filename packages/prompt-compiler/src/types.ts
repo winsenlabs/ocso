@@ -22,6 +22,11 @@ export interface CustomerContext {
   language?: string | undefined;
   /** Stable, non-secret attributes (segment, CIF, preferences). */
   attributes: Readonly<Record<string, unknown>>;
+  /**
+   * Allowlisted context the embedding website passed with this conversation's session: `host` = vouched for
+   * by the site's backend (verified), `client` = sent by the visitor's browser (unverified).
+   */
+  siteContext?: { source: 'host' | 'client'; values: Readonly<Record<string, string | number | boolean>> } | null | undefined;
 }
 
 export interface SummaryContext {

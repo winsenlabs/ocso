@@ -137,7 +137,7 @@ PostgreSQL.
 
 ### Limits today
 
-- Adapters are compiled in and listed in `FIRST_PARTY_PLUGINS`; there is no loader yet.
+- First-party adapters are compiled in and listed in `FIRST_PARTY_PLUGINS`; a third-party destination ships as an npm package built on `@winsendotai/ocso-plugin-sdk` and is loaded from `OCSO_PLUGINS` ([installing plugins](installing.md)).
 - The form renderer understands flat objects, nested objects as field groups, string lists, and one
   level of `oneOf` variants pinned by a `const` property. Deeper conditionals are not rendered.
 

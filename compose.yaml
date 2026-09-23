@@ -286,6 +286,8 @@ services:
       OCSO_SETUP_TOKEN: ${OCSO_SETUP_TOKEN:-}
       OCSO_SETUP_TOKEN_FILE: /run/secrets/ocso/setup_token
       TRUST_PROXY: "true"
+      # Public web chat rate limits, e.g. session=120 when many visitors share one office address (docs/operations/compose.md §10a).
+      OCSO_WEBCHAT_RATE_LIMITS: ${OCSO_WEBCHAT_RATE_LIMITS:-}
       # Authentication (Better Auth, ADR-025; docs/operations/compose.md §2). The secret
       # comes from keygen; a non-empty BETTER_AUTH_SECRET wins. The API sets the
       # session cookie, so its Secure flag is configured here.

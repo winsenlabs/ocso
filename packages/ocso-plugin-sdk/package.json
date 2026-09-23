@@ -1,0 +1,70 @@
+{
+  "name": "@winsendotai/ocso-plugin-sdk",
+  "version": "0.1.0",
+  "description": "Types, helpers and a conformance checker for building OCSO plugins: channels, model providers, alert destinations and email drivers.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "import": "./dist/testing/index.js",
+      "default": "./dist/testing/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/winsenlabs/ocso.git",
+    "directory": "packages/ocso-plugin-sdk"
+  },
+  "homepage": "https://github.com/winsenlabs/ocso/tree/main/packages/ocso-plugin-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/winsenlabs/ocso/issues"
+  },
+  "keywords": [
+    "ocso",
+    "plugin",
+    "sdk",
+    "customer-service",
+    "channel"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "peerDependencies": {
+    "@types/node": ">=20",
+    "zod": "^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@types/node": {
+      "optional": true
+    },
+    "zod": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "zod": "catalog:"
+  }
+}

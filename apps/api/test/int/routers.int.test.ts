@@ -7,6 +7,9 @@ import { completeSetup, startApi, type ApiHarness } from './harness.js';
 import { activeWebChat } from './routing-web.js';
 import { setTeams } from './teams.js';
 
+/** Widget calls come from OCSO's own origin (the iframe); calls without an Origin need native apps or a pass. */
+const WIDGET_ORIGIN = 'http://localhost:3000';
+
 /**
  * Routers over HTTP (PM/research/11 §5.7) and a menu router end to end
  * through the public web chat API: routers.read / routers.manage, 409
@@ -119,35 +122,35 @@ describe('router API', () => {
     expect(channelView).toMatchObject({ router: { id: ids.router, name: 'Web menu', status: 'ACTIVE' }, defaultAgentId: null });
 
     const key = channel.publicKey;
-    const config = await h.http().get(`/public/webchat/${key}/config`).expect(200);
+    const config = await h.http().get(`/public/webchat/${key}/config`).set('origin', WIDGET_ORIGIN).expect(200);
     expect(config.body.assistantName).toBeNull();
-    const visitor = (await h.http().post(`/public/webchat/${key}/session`).send({}).expect(200)).body.token;
-    const sent = await h.http().post(`/public/webchat/${key}/messages`).set(auth(visitor)).send({ clientMessageId: 'cm_menu_0001', text: 'hi there' }).expect(201);
+    const visitor = (await h.http().post(`/public/webchat/${key}/session`).set('origin', WIDGET_ORIGIN).send({}).expect(200)).body.token;
+    const sent = await h.http().post(`/public/webchat/${key}/messages`).set('origin', WIDGET_ORIGIN).set(auth(visitor)).send({ clientMessageId: 'cm_menu_0001', text: 'hi there' }).expect(201);
     const conversationId = sent.body.conversationId;
     const engine = new RoutingEngine({ db: h.db.db, queue: new MemoryQueue() });
     await engine.advance(conversationId, 'r1');
 
     const inbox = (await h.http().get('/v1/conversations?view=ai').set(auth(lead)).expect(200)).body.items.find((c: { id: string }) => c.id === conversationId);
     expect(inbox).toMatchObject({ controlState: 'ROUTING', agent: null });
-    const history = await h.http().get(`/public/webchat/${key}/messages`).set(auth(visitor)).expect(200);
+    const history = await h.http().get(`/public/webchat/${key}/messages`).set('origin', WIDGET_ORIGIN).set(auth(visitor)).expect(200);
     const question = history.body.messages.at(-1);
     expect(question).toMatchObject({ from: 'agent', name: null, parts: [{ type: 'STRUCTURED', schema: 'ocso.choices', data: { options: [{ label: 'Cards & EMI' }, { label: 'Loans' }] } }] });
 
-    await h.http().post(`/public/webchat/${key}/messages`).set(auth(visitor)).send({ clientMessageId: 'cm_menu_0002', text: 'Loans' }).expect(201);
+    await h.http().post(`/public/webchat/${key}/messages`).set('origin', WIDGET_ORIGIN).set(auth(visitor)).send({ clientMessageId: 'cm_menu_0002', text: 'Loans' }).expect(201);
     await engine.advance(conversationId, 'r2');
     const detail = (await h.http().get(`/v1/conversations/${conversationId}`).set(auth(lead)).expect(200)).body;
     expect(detail).toMatchObject({ controlState: 'AI_ACTIVE', agent: { id: ids.arjun, name: 'Arjun' }, queue: { id: ids.sales }, routing: { router: { id: ids.router, name: 'Web menu' }, outcome: 'RULE', ruleIndex: 0, attributes: { product: 'sales' } } });
-    const after = await h.http().get(`/public/webchat/${key}/messages`).set(auth(visitor)).expect(200);
+    const after = await h.http().get(`/public/webchat/${key}/messages`).set('origin', WIDGET_ORIGIN).set(auth(visitor)).expect(200);
     expect(after.body.agentName).toBe('Arjun');
 
     // Stopping is never gated: disabled, the router's channel takes no new messages.
     await h.http().post(`/v1/routers/${ids.router}/disable`).set(auth(lead)).expect(204);
     const [row] = await h.db.db.select({ status: virtualAgents.status }).from(virtualAgents).where(eq(virtualAgents.id, ids.arjun!));
     expect(row?.status).toBe('LIVE');
-    const visitor2 = (await h.http().post(`/public/webchat/${key}/session`).send({}).expect(200)).body.token;
-    await h.http().post(`/public/webchat/${key}/messages`).set(auth(visitor2)).send({ clientMessageId: 'cm_menu_0003', text: 'anyone?' }).expect(400);
+    const visitor2 = (await h.http().post(`/public/webchat/${key}/session`).set('origin', WIDGET_ORIGIN).send({}).expect(200)).body.token;
+    await h.http().post(`/public/webchat/${key}/messages`).set('origin', WIDGET_ORIGIN).set(auth(visitor2)).send({ clientMessageId: 'cm_menu_0003', text: 'anyone?' }).expect(400);
     // …while the visitor already talking to Arjun keeps reaching him.
-    const still = await h.http().post(`/public/webchat/${key}/messages`).set(auth(visitor)).send({ clientMessageId: 'cm_menu_0004', text: 'still there?' }).expect(201);
+    const still = await h.http().post(`/public/webchat/${key}/messages`).set('origin', WIDGET_ORIGIN).set(auth(visitor)).send({ clientMessageId: 'cm_menu_0004', text: 'still there?' }).expect(201);
     expect(still.body.conversationId).toBe(conversationId);
   });
 

@@ -73,7 +73,7 @@ export class ContextBuilder {
       layer === 'HOT' ? cached! : { generations, agent: null, customer: null, summary: null, history: [], historyThroughSeq: 0, lastUsed: Date.now() };
 
     const prefix = await this.agentPrefix(agent, generations[`agent:${agent.id}`] ?? 1);
-    const customer = await this.customerContext(conv.customerId);
+    const customer = { ...(await this.customerContext(conv.customerId)), siteContext: conv.hostContext ?? null };
     const summary = await this.summary(conv, entry);
     const history = await this.history(conv, entry, summary?.context?.coversThroughSeq ?? 0);
     const pending = await loadPending(this.db, conv.id, conv.lastProcessedSeq);

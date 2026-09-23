@@ -247,6 +247,8 @@ checked on the configured interval.
 - **Trusted** connections receive a short-lived signed customer-identity token in
   `X-OCSO-Customer-Claims` (ES256, 120 s). Verify it against `<public URL>/.well-known/jwks.json`, check
   `iss` and `aud` (`ocso-mcp:<connection id>`), and use `sub` (your customer reference) to scope data.
+  When `sub` is a user id a web chat channel verified (no staff-set reference), `ocso_channel` names that
+  channel; it is only ever the conversation's own channel, so accept it only from channels whose sites you trust.
   `examples/mcp-bank-demo/src/claims-jwks.ts` is a complete verifier.
 - Internal hosts (private IPs, `http://`) are blocked unless listed in the egress allowlist (Settings API).
 - If a server changes a tool's schema or description, the tool is un-approved until re-reviewed.

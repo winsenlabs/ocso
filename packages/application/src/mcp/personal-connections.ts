@@ -73,6 +73,7 @@ export class PersonalConnectionService {
             confirmationPolicy: template.confirmationPolicy,
             allowedAgentIds: [],
             sendCustomerClaims: false,
+            forwardUserToken: false,
             healthCheckSeconds: template.healthCheckSeconds,
             createdBy: principal.userId,
             createdAt: now,

@@ -35,6 +35,8 @@ export async function startStack({ dbName = 'ocso_resilience', apiPort = 4490, w
     DATABASE_POOL_SIZE: process.env.RES_DB_POOL ?? '10',
     // The scripts create working users directly (maker–checker access approval is exercised elsewhere).
     OCSO_DEV_SKIP_ACCESS_APPROVAL: 'true',
+    // Every simulated visitor comes from this machine's one address: lift the per-address web chat limits.
+    OCSO_WEBCHAT_RATE_LIMITS: 'session=0,messages=0,attachments=0,stream=0',
     ...audit.env,
   };
   const procs = new Map();

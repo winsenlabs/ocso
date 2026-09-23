@@ -90,6 +90,8 @@ export function parseWebChatInbound(rawBody: Buffer | null, ctx: WebChatParseCon
     receivedAt: ctx.now,
     parts,
     replyToExternalId: body.replyToExternalId,
+    ...(identity.verified ? { identityVerified: true } : {}),
+    ...(identity.context ? { hostContext: identity.context } : {}),
   };
   return { messages: [message], statuses: [], ignored: 0 };
 }

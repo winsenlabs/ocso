@@ -63,7 +63,7 @@ const SAMPLES: Record<string, Record<string, unknown>> = {
   model_profile: { model: 'gpt-5.5', temperature: 0.2, maxOutputTokens: 2048, fallbacks: [{ providerId: '01a0cd12-87fc-71e6-85ff-7b598bcdf97b', model: 'gpt-5.5-mini' }] },
   model_pricing: { inputPerMTokMicros: 1_250_000, outputPerMTokMicros: 10_000_000, effectiveFrom: '2026-10-01T00:00:00.000Z' },
   mcp_connection: {
-    policy: { allowedAgentIds: ['01a0cd12-87fc-71e6-85ff-7b598bcdf97b'], confirmationPolicy: 'ALL_WRITES', sendCustomerClaims: false, healthCheckSeconds: 60 },
+    policy: { allowedAgentIds: ['01a0cd12-87fc-71e6-85ff-7b598bcdf97b'], confirmationPolicy: 'ALL_WRITES', sendCustomerClaims: false, forwardUserToken: false, healthCheckSeconds: 60 },
     tools: [{ toolId: '01a0cd12-87fc-71e6-85ff-7b598bcdf97c', riskClass: 'WRITE', approved: true, humanRoles: ['HEAD'] }],
     headerCredential: { headerName: 'X-Api-Key', ref: 'sec_mcp_7d21aa' },
   },
@@ -86,8 +86,13 @@ const SAMPLES: Record<string, Record<string, unknown>> = {
  * deviation 1): a model profile's `maxOutputTokens` is a number. Compared with the key removed, so any other
  * masked key still fails.
  */
-const NOT_SECRETS = new Set(['maxOutputTokens']);
-const withoutNonSecrets = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([k]) => !NOT_SECRETS.has(k)));
+const NOT_SECRETS = new Set(['maxOutputTokens', 'forwardUserToken']); // forwardUserToken: an MCP connection's boolean policy flag
+const withoutNonSecrets = (o: Record<string, unknown>): Record<string, unknown> =>
+  Object.fromEntries(
+    Object.entries(o)
+      .filter(([k]) => !NOT_SECRETS.has(k))
+      .map(([k, v]) => [k, v && typeof v === 'object' && !Array.isArray(v) ? withoutNonSecrets(v as Record<string, unknown>) : v]),
+  );
 
 describe('approval payloads carry no secrets', () => {
   const registry = createApprovalRegistry();

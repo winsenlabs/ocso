@@ -1,0 +1,86 @@
+{
+  "name": "@winsendotai/ocso-chat-react",
+  "version": "0.1.0",
+  "description": "React and React Native hooks and components for OCSO web chat.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./native": {
+      "types": "./dist/native/index.d.ts",
+      "import": "./dist/native/index.js",
+      "default": "./dist/native/index.js"
+    },
+    "./styles.css": "./dist/styles.css",
+    "./package.json": "./package.json"
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "native",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "ocso",
+    "chat",
+    "webchat",
+    "react",
+    "react-native",
+    "customer-service"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/winsenlabs/ocso.git",
+    "directory": "packages/ocso-chat-react"
+  },
+  "homepage": "https://github.com/winsenlabs/ocso/tree/main/packages/ocso-chat-react#readme",
+  "bugs": {
+    "url": "https://github.com/winsenlabs/ocso/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node -e \"require('node:fs').cpSync('src/styles.css','dist/styles.css')\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "attw": "npx --yes @arethetypeswrong/cli --pack --profile esm-only --exclude-entrypoints ./styles.css",
+    "prepublishOnly": "node -e \"if(!String(process.env.npm_config_user_agent).startsWith('pnpm/')){console.error('Publish with pnpm publish: it rewrites catalog: and workspace: specifiers');process.exit(1)}\""
+  },
+  "peerDependencies": {
+    "@winsendotai/ocso-chat": "^0.1.0",
+    "react": ">=18",
+    "react-native": ">=0.74"
+  },
+  "peerDependenciesMeta": {
+    "react-native": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@testing-library/dom": "10.4.2",
+    "@testing-library/react": "16.3.3",
+    "@types/node": "catalog:",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@types/react-test-renderer": "19.3.0",
+    "@winsendotai/ocso-chat": "workspace:^",
+    "jsdom": "30.1.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-native": "0.87.1",
+    "react-test-renderer": "19.3.0",
+    "typescript": "catalog:"
+  }
+}

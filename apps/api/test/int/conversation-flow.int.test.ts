@@ -26,6 +26,9 @@ import { completeSetup, startApi, type ApiHarness } from './harness.js';
 import { setTeams } from './teams.js';
 import { routeChannel } from './routing.js';
 
+/** Widget calls come from OCSO's own origin (the iframe); calls without an Origin need native apps or a pass. */
+const WIDGET_ORIGIN = 'http://localhost:3000';
+
 let channelChecker: Checker;
 let h: ApiHarness;
 let admin: string;
@@ -99,17 +102,17 @@ describe('web chat → AI → human → AI over the API', () => {
   let conversationId: string;
 
   it('lets a customer open a session and send a message that is persisted and answered', async () => {
-    const session = await h.http().post(`/public/webchat/${ids.webchatKey}/session`).send({}).expect(200);
+    const session = await h.http().post(`/public/webchat/${ids.webchatKey}/session`).set('origin', WIDGET_ORIGIN).send({}).expect(200);
     visitor = session.body.token;
-    const sent = await h.http().post(`/public/webchat/${ids.webchatKey}/messages`).set(auth(visitor)).send({ clientMessageId: 'c-000001', text: 'My EMI was debited twice' }).expect(201);
+    const sent = await h.http().post(`/public/webchat/${ids.webchatKey}/messages`).set('origin', WIDGET_ORIGIN).set(auth(visitor)).send({ clientMessageId: 'c-000001', text: 'My EMI was debited twice' }).expect(201);
     expect(sent.body.status).toBe('accepted');
     conversationId = sent.body.conversationId;
-    const dup = await h.http().post(`/public/webchat/${ids.webchatKey}/messages`).set(auth(visitor)).send({ clientMessageId: 'c-000001', text: 'My EMI was debited twice' }).expect(201);
+    const dup = await h.http().post(`/public/webchat/${ids.webchatKey}/messages`).set('origin', WIDGET_ORIGIN).set(auth(visitor)).send({ clientMessageId: 'c-000001', text: 'My EMI was debited twice' }).expect(201);
     expect(dup.body.status).toBe('duplicate');
 
     adapter.script = [{ text: 'Thanks — let me check the two debits.' }];
     expect(await runTurn(conversationId)).toEqual({ kind: 'ack' });
-    const history = await h.http().get(`/public/webchat/${ids.webchatKey}/messages`).set(auth(visitor)).expect(200);
+    const history = await h.http().get(`/public/webchat/${ids.webchatKey}/messages`).set('origin', WIDGET_ORIGIN).set(auth(visitor)).expect(200);
     expect(history.body.messages.map((m: { from: string; parts: Array<{ text?: string }> }) => [m.from, m.parts[0]?.text])).toEqual([
       ['customer', 'My EMI was debited twice'],
       ['agent', 'Thanks — let me check the two debits.'],
@@ -118,10 +121,10 @@ describe('web chat → AI → human → AI over the API', () => {
   });
 
   it('rejects another visitor reading this conversation', async () => {
-    const other = (await h.http().post(`/public/webchat/${ids.webchatKey}/session`).send({}).expect(200)).body.token;
-    const res = await h.http().get(`/public/webchat/${ids.webchatKey}/messages`).set(auth(other)).expect(200);
+    const other = (await h.http().post(`/public/webchat/${ids.webchatKey}/session`).set('origin', WIDGET_ORIGIN).send({}).expect(200)).body.token;
+    const res = await h.http().get(`/public/webchat/${ids.webchatKey}/messages`).set('origin', WIDGET_ORIGIN).set(auth(other)).expect(200);
     expect(res.body.messages).toEqual([]);
-    await h.http().get(`/public/webchat/${ids.webchatKey}/messages`).set(auth('wcv1.forged.token')).expect((r) => expect([401, 403]).toContain(r.status));
+    await h.http().get(`/public/webchat/${ids.webchatKey}/messages`).set('origin', WIDGET_ORIGIN).set(auth('wcv1.forged.token')).expect((r) => expect([401, 403]).toContain(r.status));
   });
 
   it('shows the conversation to the exec, routes a handoff, and lets them claim and reply', async () => {
@@ -133,7 +136,7 @@ describe('web chat → AI → human → AI over the API', () => {
       { toolCalls: [{ toolName: 'ocso_request_handoff', input: { reason: 'refund above authority', summary: 'dup debit\nledger checked\napprove reversal', priority: 'P1' } }] },
       { text: 'A colleague will confirm here shortly.' },
     ];
-    await h.http().post(`/public/webchat/${ids.webchatKey}/messages`).set(auth(visitor)).send({ clientMessageId: 'c-000002', text: 'please reverse one' }).expect(201);
+    await h.http().post(`/public/webchat/${ids.webchatKey}/messages`).set('origin', WIDGET_ORIGIN).set(auth(visitor)).send({ clientMessageId: 'c-000002', text: 'please reverse one' }).expect(201);
     await runTurn(conversationId);
     const waiting = await h.http().get('/v1/conversations?view=waiting').set(auth(exec)).expect(200);
     expect(waiting.body.items[0]).toMatchObject({ id: conversationId, controlState: 'WAITING_FOR_HUMAN', priority: 'P1' });
@@ -152,7 +155,7 @@ describe('web chat → AI → human → AI over the API', () => {
     expect(kinds).toContain('note');
     expect(kinds).toContain('system');
     // Customers never see internal notes or system events.
-    const customerView = await h.http().get(`/public/webchat/${ids.webchatKey}/messages`).set(auth(visitor)).expect(200);
+    const customerView = await h.http().get(`/public/webchat/${ids.webchatKey}/messages`).set('origin', WIDGET_ORIGIN).set(auth(visitor)).expect(200);
     expect(JSON.stringify(customerView.body)).not.toContain('Duplicate confirmed');
     expect(customerView.body.messages.at(-1)).toMatchObject({ from: 'human', parts: [{ text: 'Reversal done: RVSL-5521904.' }] });
   });
@@ -181,7 +184,7 @@ describe('web chat → AI → human → AI over the API', () => {
   it('returns control to the AI, which resumes with the handover context', async () => {
     await h.http().post(`/v1/conversations/${conversationId}/return-to-ai`).set(auth(exec)).send({ handoverSummary: 'Reversal RVSL-5521904 completed.' }).expect(204);
     adapter.script = [{ text: 'Your reference is RVSL-5521904.' }];
-    await h.http().post(`/public/webchat/${ids.webchatKey}/messages`).set(auth(visitor)).send({ clientMessageId: 'c-000003', text: 'what was the reference?' }).expect(201);
+    await h.http().post(`/public/webchat/${ids.webchatKey}/messages`).set('origin', WIDGET_ORIGIN).set(auth(visitor)).send({ clientMessageId: 'c-000003', text: 'what was the reference?' }).expect(201);
     await runTurn(conversationId);
     const detail = await h.http().get(`/v1/conversations/${conversationId}`).set(auth(lead)).expect(200);
     expect(detail.body.controlState).toBe('AI_ACTIVE');

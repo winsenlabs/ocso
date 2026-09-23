@@ -1,4 +1,4 @@
-import { and, eq, inArray, or, sql } from 'drizzle-orm';
+import { and, eq, inArray, ne, or, sql } from 'drizzle-orm';
 import { customerIdentities, customers, uuidv7, type DbOrTx } from '@ocso/db';
 
 export interface IdentityClaim {
@@ -10,6 +10,8 @@ export interface ResolveCustomerInput {
   primary: IdentityClaim;
   alternates: readonly IdentityClaim[];
   profileName?: string | undefined;
+  /** The channel verified the primary identity (e.g. a site-verified user): mark it `verified`. */
+  primaryVerified?: boolean | undefined;
   now: Date;
 }
 
@@ -36,8 +38,7 @@ export async function resolveCustomer(tx: DbOrTx, input: ResolveCustomerInput): 
     .from(customerIdentities)
     .where(or(...claims.map((c) => and(eq(customerIdentities.kind, c.kind), eq(customerIdentities.value, c.value)))));
 
-  const primaryMatch = existing.find((e) => e.kind === input.primary.kind && e.value === input.primary.value);
-  const customerId = primaryMatch?.customerId ?? existing[0]?.customerId ?? null;
+  const customerId = await pickCustomer(tx, input, existing);
   let created = false;
   let resolvedId: string;
   if (customerId) {
@@ -69,6 +70,12 @@ export async function resolveCustomer(tx: DbOrTx, input: ResolveCustomerInput): 
         ),
       );
   }
+  if (input.primaryVerified) {
+    await tx
+      .update(customerIdentities)
+      .set({ verified: true })
+      .where(and(eq(customerIdentities.customerId, resolvedId), eq(customerIdentities.kind, input.primary.kind), eq(customerIdentities.value, input.primary.value)));
+  }
   if (!created && input.profileName) {
     await tx
       .update(customers)
@@ -76,6 +83,46 @@ export async function resolveCustomer(tx: DbOrTx, input: ResolveCustomerInput): 
       .where(and(eq(customers.id, resolvedId), sql`${customers.displayName} IS NULL`));
   }
   return { customerId: resolvedId, created, conflicts };
+}
+
+export interface CustomerLookup {
+  primary: IdentityClaim;
+  alternates: readonly IdentityClaim[];
+  primaryVerified?: boolean | undefined;
+}
+
+/**
+ * The customer `resolveCustomer` would pick for these identities, without writing anything (the web chat
+ * history and stream use it to find the conversation the caller's next message joins).
+ */
+export async function lookupCustomer(db: DbOrTx, input: CustomerLookup): Promise<string | null> {
+  const claims = dedupeClaims([input.primary, ...input.alternates]);
+  if (!claims.length) return null;
+  const existing = await db
+    .select({ kind: customerIdentities.kind, value: customerIdentities.value, customerId: customerIdentities.customerId })
+    .from(customerIdentities)
+    .where(or(...claims.map((c) => and(eq(customerIdentities.kind, c.kind), eq(customerIdentities.value, c.value)))));
+  return pickCustomer(db, input, existing);
+}
+
+/**
+ * The primary identity's customer; else the first alternate's. A verified primary never joins a customer that
+ * already holds a different identity of its kind (another verified user): an alternate such as a shared
+ * browser's visitor id must not merge two signed-in people. Then a new customer is created instead.
+ */
+async function pickCustomer(db: DbOrTx, input: CustomerLookup, existing: ReadonlyArray<{ kind: string; value: string; customerId: string }>): Promise<string | null> {
+  const primaryMatch = existing.find((e) => e.kind === input.primary.kind && e.value === input.primary.value);
+  if (primaryMatch) return primaryMatch.customerId;
+  const ordered = dedupeClaims(input.alternates)
+    .map((a) => existing.find((e) => e.kind === a.kind && e.value === a.value)?.customerId)
+    .filter((id): id is string => Boolean(id));
+  if (!input.primaryVerified || !ordered.length) return ordered[0] ?? null;
+  const taken = await db
+    .selectDistinct({ customerId: customerIdentities.customerId })
+    .from(customerIdentities)
+    .where(and(inArray(customerIdentities.customerId, [...new Set(ordered)]), eq(customerIdentities.kind, input.primary.kind), ne(customerIdentities.value, input.primary.value)));
+  const blocked = new Set(taken.map((t) => t.customerId));
+  return ordered.find((id) => !blocked.has(id)) ?? null;
 }
 
 /**

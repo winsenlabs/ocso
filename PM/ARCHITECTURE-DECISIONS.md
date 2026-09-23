@@ -1110,3 +1110,43 @@ signature did not bind what the signer attested. Decisions:
 Not changed: the per-check cap still exists (5,000) — a child table of items was judged disproportionate; truncation
 is flagged, signed and acknowledged. Duplicates between a standing grant and the audit event that created it (both in
 `permission_bypass`) remain: they are different facts (state vs event).
+
+## ADR-034 — Third-party plugins and the chat SDK: public contracts, pinned in-process loading, web chat auth modes
+
+**Status:** Accepted, 2026-09-23. Extends ADR-028 (the plugin boundary).
+
+**Context.** ADR-028 made every per-kind implementation a plugin behind a contract, registered at compile time. Adopters
+need to add channels and providers without forking, and to build their own chat UI on OCSO with their own users signed in.
+
+**Decision.**
+1. **Public contract package.** `@winsendotai/ocso-plugin-sdk` (Apache-2.0, ESM, zero runtime dependencies) carries the
+   public copy of four contracts: channels, model providers, alert destinations and email drivers, with `apiVersion: 1`,
+   `definePlugin`, `pluginError` (a marker OCSO translates into its typed errors at the boundary) and a `/testing`
+   `checkPlugin` that runs the registries' validations. Drivers for blob, secrets, queue, deployment and the audit store,
+   tool providers, alert conditions, scheduled tasks and Ask OCSO tools stay internal until their contracts stop needing
+   `@ocso/db`/`@ocso/config`. A type-level guard (`packages/bootstrap/test/sdk-conformance.types.ts`) fails CI when an
+   internal contract drifts from its public copy; an agreement test runs `checkPlugin` and the registries side by side.
+2. **Loading: in-process, pinned, fail closed.** `OCSO_PLUGINS=name@exactVersion,…` from `OCSO_PLUGINS_DIR`. The installed
+   version must equal the pin, `apiVersion` must be supported, the name must not clash, every contribution must pass
+   validation, and the entry must resolve inside the package (Node's `import` resolution); otherwise the process refuses
+   to start. api, worker and seed load the same list and log it; the System page lists installed plugins. Plugins run with
+   full trust (no sandbox in v0.1): operators install only code they trust. An out-of-process transport is left open.
+3. **Chat SDK.** `@winsendotai/ocso-chat` (headless, browsers and React Native, SSE with a polling fallback) and
+   `@winsendotai/ocso-chat-react` (hooks, themeable web components with `'use client'`, a `/native` entry) speak the public
+   web chat API directly (CORS per channel allowlist) instead of the iframe widget, which stays.
+4. **Web chat auth modes** per channel: `anonymous` (today), `client` (the host's backend mints a single-use, short-lived
+   session pass with the channel's secret key, HMAC with an HKDF-derived key), `user` (the host's own login token,
+   verified against its JWKS with issuer and audience, or HS256 with a shared secret). Requests without `Origin` (native
+   apps, servers) are refused in anonymous mode unless "allow native apps" is set. Host context is filtered by an
+   allowlist and size cap and shown to the agent labelled verified (from the host) or unverified (from the browser).
+   Tool identity: OCSO-signed customer claims by default; `passthrough` stores the verified user token encrypted until its
+   own expiry and forwards it only to MCP connections with `forward_user_token` (an approvable setting). Verified user ids
+   are namespaced per channel (`<channelId>:<sub>`, migration 0033), and a verified user never inherits another user's
+   visitor id or customer. All new settings are channel settings, so the maker–checker spine governs them (ADR-030).
+5. **Rate limits** on the public web chat routes (per address, per visitor; failed session-pass mints per channel and
+   address; successful mints unlimited because the caller proved the secret key).
+
+**Consequences.** Adopters can ship channels and providers as npm packages and embed chat natively. In-process plugins
+can do anything the api/worker can; the trust statement is explicit in `docs/plugins/installing.md`. The public contract
+is now a compatibility promise: breaking it means `apiVersion: 2`. Migrations 0032 (host context, held user tokens,
+single-use passes, `forward_user_token`) and 0033 (per-channel verified ids) are additive and data-only respectively.

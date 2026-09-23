@@ -36,6 +36,10 @@ export const ChannelSecretFieldSchema = z.object({
   hint: z.string().default(''),
   /** `server`: OCSO generates it when left empty. `client`: the form offers a generator (the admin must copy it elsewhere). */
   generate: z.enum(['server', 'client']).optional(),
+  /** Prefix of generated values (e.g. `sk_`). */
+  prefix: z.string().max(16).optional().catch(undefined),
+  /** `once`: returned once on create and rotated from the edit form (the admin copies it to their backend). */
+  reveal: z.literal('once').optional().catch(undefined),
 });
 export type ChannelSecretField = z.infer<typeof ChannelSecretFieldSchema>;
 
@@ -110,6 +114,7 @@ export const listChannelKinds = () => api.get('/v1/channels/kinds', z.array(Chan
  */
 export const loadChannelKinds = cache((): Promise<ChannelKind[]> => listChannelKinds().catch((): ChannelKind[] => []));
 /** A new channel is always a draft (its activation is a proposal). */
-export const createChannel = (input: ChannelCreate) => api.post('/v1/channels', { ...input, status: 'DRAFT' }, ChannelSchema);
+export const createChannel = (input: ChannelCreate) =>
+  api.post('/v1/channels', { ...input, status: 'DRAFT' }, ChannelSchema.extend({ revealedSecrets: z.record(z.string(), z.string()).optional() }));
 export const updateChannel = (id: string, input: ChannelUpdate) => api.patch(`/v1/channels/${id}`, input, z.union([ChannelSchema, ProposedSchema]));
 export const testChannel = (id: string) => api.post(`/v1/channels/${id}/test`, undefined, ChannelTestSchema, { timeoutMs: 30_000 });

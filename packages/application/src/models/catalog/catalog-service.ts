@@ -10,7 +10,9 @@ import {
   CATALOG_URLS,
   CatalogSnapshotSchema,
   ModelCatalog,
+  snapshotCatalogProviders,
   vendoredSnapshots,
+  type ProviderDefinition,
   type CatalogOrigin,
   type CatalogSnapshot,
   type CatalogSource,
@@ -24,6 +26,12 @@ export interface ModelCatalogServiceDeps {
   /** Allowlisted, SSRF-guarded fetch (`createCatalogFetch().fetch`). Absent = refresh disabled (read-only). */
   fetch?: FetchFn | undefined;
   now?: (() => Date) | undefined;
+  /**
+   * The provider definitions this deployment registered (`registry.list()`,
+   * installed plugins included). Snapshots keep the catalog providers they
+   * map to, on top of the first-party ones; absent = first-party only.
+   */
+  providers?: readonly ProviderDefinition[] | undefined;
 }
 
 export interface CatalogSourceView {
@@ -149,7 +157,7 @@ export class ModelCatalogService {
       try {
         const response = await fetchFn(CATALOG_URLS[source], { headers: { accept: 'application/json' } });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const snapshot = buildSnapshot(source, await response.json(), now);
+        const snapshot = buildSnapshot(source, await response.json(), now, snapshotCatalogProviders(source, this.deps.providers));
         if (snapshot.entries.length < MIN_ENTRIES[source]) throw new Error('catalog_too_small: fewer models than expected; keeping the previous snapshot');
         sources.push({ source, ok: true, changed: await this.store(snapshot, now), entries: snapshot.entries.length, error: null });
         this.unsavedFailures.delete(source);

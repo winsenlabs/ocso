@@ -166,6 +166,7 @@ const ApproveInput = z.object({
   allowedAgentIds: z.union([z.literal('*'), z.array(Id).max(200)]),
   confirmationPolicy: z.enum(CONFIRMATION_POLICIES),
   sendCustomerClaims: z.boolean(),
+  forwardUserToken: z.boolean().default(false),
   healthCheckSeconds: z.number().int().min(15, 'at least 15 seconds').max(3_600, 'at most 3600 seconds'),
 });
 

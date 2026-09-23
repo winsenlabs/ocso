@@ -125,6 +125,7 @@ export class McpConnectionService {
           .returning();
         await recordAudit(tx, actor, {
           action: 'mcp.connection.create',
+          redaction: 'settings',
           targetType: 'mcp_connection',
           targetId: id,
           summary: `Added MCP server ${input.name} (${input.scope === 'USER' ? 'user-scoped template' : 'shared'})`,

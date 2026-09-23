@@ -7,6 +7,14 @@ import { virtualAgents } from './agents.js';
 import { queues } from './routing.js';
 import { routerVersions, routers, type RoutingOutcome, type RoutingPhase } from './routers.js';
 
+/** Allowlisted key/values an embedding site passed for a conversation, and who vouched for them. */
+export interface HostContext {
+  source: 'host' | 'client';
+  values: Record<string, string | number | boolean>;
+  /** ISO time the session carrying these values was opened. */
+  at: string;
+}
+
 export const conversations = pgTable(
   'conversations',
   {
@@ -48,6 +56,11 @@ export const conversations = pgTable(
     contentPurgedAt: ts('content_purged_at'),
     /** Resolution SLA deadline from the queue's policy for this conversation type (null = none). */
     resolutionDueAt: ts('resolution_due_at'),
+    /**
+     * Context the embedding site passed with the visitor's latest session (0032): `host` = vouched by the
+     * site's backend (session pass / verified user token), `client` = sent by the browser (unverified).
+     */
+    hostContext: jsonb().$type<HostContext>(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

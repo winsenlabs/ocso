@@ -71,7 +71,12 @@ export class ChannelsAdminController {
       kind: 'channel',
       live: input.status === 'ACTIVE',
       approval,
-      create: () => this.channels.create(actor, { ...input, secrets: this.withGeneratedSecrets(input.kind, input.secrets) }),
+      create: async () => {
+        const { secrets, revealed } = this.withGeneratedSecrets(input.kind, input.secrets);
+        const channel = await this.channels.create(actor, { ...input, secrets });
+        // Generated keys the admin must copy elsewhere (e.g. a backend secret key) are shown once, here only.
+        return Object.keys(revealed).length ? { ...channel, revealedSecrets: revealed } : channel;
+      },
     });
   }
 
@@ -93,12 +98,16 @@ export class ChannelsAdminController {
     return adapter.checkConnection(config);
   }
 
-  /** Secrets nobody needs to copy anywhere (e.g. the visitor token key) are generated when left empty. */
-  private withGeneratedSecrets(kind: string, secrets: Record<string, string>): Record<string, string> {
-    if (!this.registry.has(kind)) return secrets;
-    const fields = this.registry.get(kind).describe().secrets;
-    const generated = Object.fromEntries(fields.filter((f) => f.generate === 'server' && !secrets[f.key]).map((f) => [f.key, randomBytes(32).toString('base64url')]));
-    return { ...generated, ...secrets };
+  /**
+   * Server-generated secrets are filled in when left empty: ones nobody needs to copy (e.g. the visitor token
+   * key) stay write-only; `reveal: 'once'` ones (e.g. a backend secret key) are also returned once to the creator.
+   */
+  private withGeneratedSecrets(kind: string, secrets: Record<string, string>): { secrets: Record<string, string>; revealed: Record<string, string> } {
+    if (!this.registry.has(kind)) return { secrets, revealed: {} };
+    const fields = this.registry.get(kind).describe().secrets.filter((f) => f.generate === 'server' && !secrets[f.key]);
+    const generated = Object.fromEntries(fields.map((f) => [f.key, `${f.prefix ?? ''}${randomBytes(32).toString('base64url')}`]));
+    const revealed = Object.fromEntries(fields.filter((f) => f.reveal === 'once').map((f) => [f.key, generated[f.key]!]));
+    return { secrets: { ...generated, ...secrets }, revealed };
   }
 
   /**
