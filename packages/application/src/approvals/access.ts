@@ -2,6 +2,7 @@ import { and, asc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import { APPROVAL_CHECK_PERMISSIONS, Permission, can, effectivePermissions, type Principal } from '@ocso/auth';
 import { approvalProposals, teamMembers, users, type DbOrTx } from '@ocso/db';
 import { forbidden, type ApprovalAction } from '@ocso/domain';
+import { recentCheckerLosses } from '../identity/approval/eligibility.js';
 import { loadPrincipal } from '../identity/sessions.js';
 import type { ApprovalDescriptor, ProposalRow } from './contract.js';
 
@@ -128,9 +129,14 @@ export async function eligibleCheckers(tx: DbOrTx, d: ApprovalDescriptor, propos
 
 /**
  * Bootstrap (§4.2): the maker holds the check permission (or the descriptor's bootstrapPermission) and nobody
- * else anywhere is eligible.
+ * else anywhere is eligible — and nobody else lost the check permission recently (disabled, demoted, revoked or a
+ * grant expired: recentCheckerLosses), since those stops are immediate and must not manufacture "nobody else can
+ * check". Identity kinds (approvals.check.permissions) make that refusal in their validate
+ * (identityBootstrapProblem), which also lets re-enabling or restoring a checker be self-approved.
  */
 export async function bootstrapAllowed(tx: DbOrTx, d: ApprovalDescriptor, proposal: ProposalFacts, maker: Principal, excludeAlso: readonly string[] = []): Promise<boolean> {
   if (!can(maker, d.checkPermission) && !(d.bootstrapPermission && can(maker, d.bootstrapPermission))) return false;
-  return (await eligibleCheckers(tx, d, { ...proposal, makerId: maker.userId }, excludeAlso)).length === 0;
+  if ((await eligibleCheckers(tx, d, { ...proposal, makerId: maker.userId }, excludeAlso)).length > 0) return false;
+  if (d.checkPermission === Permission.APPROVALS_CHECK_PERMISSIONS) return true;
+  return (await recentCheckerLosses(tx, d.checkPermission, [maker.userId])).length === 0;
 }

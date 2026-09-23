@@ -264,3 +264,65 @@ describe('bootstrap after disabling the other checkers', () => {
     }
   });
 });
+
+describe('bootstrap after taking the check right away from the other checker', () => {
+  /** A fresh deployment: one Tech, one Head (the only other checker), one Service member. */
+  const solo = async (withHead = true) => {
+    const db = await createTestDatabase();
+    const mailer = new AuthMailer({ db: db.db, sender, publicUrl: 'https://ocso.bank.test' });
+    const soloApprovals = new ApprovalService(db.db, createApprovalRegistry({ business: { authMailer: mailer } }));
+    const team = await addTeam(db.db, 'Ops');
+    const tech = await addPerson(db.db, { name: 'Tess Tech', role: 'TECH', password: true });
+    const head = withHead ? await addPerson(db.db, { name: 'Hari Head', role: 'HEAD', teamIds: [team] }) : '';
+    const service = await addPerson(db.db, { name: 'Sid Service', role: 'SERVICE', teamIds: [team] });
+    const gov = identityGovernanceWith(soloApprovals);
+    return { db, team, tech, head, service, users: new UserService(db.db, { ...gov, mailer }), perms: new PermissionService(db.db, gov), actor: await actorOf(db.db, tech) };
+  };
+  const refusedAsManufactured = { code: 'validation_failed', details: { problems: expect.arrayContaining([expect.objectContaining({ code: 'bootstrap_checker_disabled' })]) } };
+
+  it('demoting the other checker (HEAD→LEAD, applied at once) does not unlock a self-approval; restoring them may be self-approved', async () => {
+    const s = await solo();
+    try {
+      await s.users.update(s.actor, s.head, { role: 'LEAD' });
+      expect((await loadPrincipal(s.db.db, s.head, 'UI'))?.permissions?.has(P.APPROVALS_CHECK_PERMISSIONS)).toBe(false);
+      await expect(
+        s.perms.change(s.actor, s.service, { changes: [{ op: 'GRANT', permission: P.CONVERSATIONS_ASSIGN, expiresAt: null }], reason, approval: { bootstrap: true } }),
+      ).rejects.toMatchObject(refusedAsManufactured);
+      // Nor can the maker mint a new Head of their choosing.
+      await expect(s.users.create(s.actor, { email: 'new.head@bank.test', name: 'New Head', role: 'HEAD', teamIds: [s.team], approval: { bootstrap: true } })).rejects.toMatchObject(
+        refusedAsManufactured,
+      );
+      // Giving the demoted Head their preset back restores a checker, and may be self-approved.
+      const restored = await s.users.update(s.actor, s.head, { role: 'HEAD', approval: { bootstrap: true } });
+      expect(restored.proposal).toMatchObject({ status: 'APPROVED', bootstrap: true });
+    } finally {
+      await s.db.drop();
+    }
+  });
+
+  it('revoking the check permission from the other checker does not unlock a self-approval', async () => {
+    const s = await solo();
+    try {
+      await s.perms.change(s.actor, s.head, { changes: [{ op: 'REVOKE', permission: P.APPROVALS_CHECK_PERMISSIONS }], reason });
+      const principal = await loadPrincipal(s.db.db, s.head, 'UI');
+      expect(principal?.permissions?.has(P.APPROVALS_CHECK_PERMISSIONS)).toBe(false);
+      await expect(
+        s.perms.change(s.actor, s.service, { changes: [{ op: 'GRANT', permission: P.CONVERSATIONS_ASSIGN, expiresAt: null }], reason, approval: { bootstrap: true } }),
+      ).rejects.toMatchObject(refusedAsManufactured);
+    } finally {
+      await s.db.drop();
+    }
+  });
+
+  it('a first run, with no other checker ever, still bootstraps', async () => {
+    const s = await solo(false);
+    try {
+      const result = await s.perms.change(s.actor, s.service, { changes: [{ op: 'GRANT', permission: P.CONVERSATIONS_ASSIGN, expiresAt: null }], reason, approval: { bootstrap: true } });
+      expect(result.proposal).toMatchObject({ status: 'APPROVED', bootstrap: true });
+      const created = await s.users.create(s.actor, { email: 'first.head@bank.test', name: 'First Head', role: 'HEAD', teamIds: [s.team], approval: { bootstrap: true } });
+      expect(created.proposal).toMatchObject({ status: 'APPROVED', bootstrap: true });
+    } finally {
+      await s.db.drop();
+    }
+  });
+});

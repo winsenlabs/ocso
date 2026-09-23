@@ -1,9 +1,11 @@
 import { randomBytes } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { extendChain, verifyChain } from '../src/chain.js';
-import { ClickHouseHttp } from '../src/clickhouse/http.js';
+import { chDateTime, ClickHouseHttp } from '../src/clickhouse/http.js';
 import { provisionClickHouseAuditStore } from '../src/clickhouse/provision.js';
+import { json } from '../src/clickhouse/rows.js';
 import { ClickHouseAuditStore } from '../src/clickhouse/store.js';
+import { utcMonthKey, type AuditRecord } from '../src/contract.js';
 import { generateSigningKeyPem, loadSigningKey, publicKeyOf, signCheckpoint } from '../src/signing.js';
 import { daysAgo, recordAt } from './support.js';
 
@@ -39,6 +41,15 @@ function endpoint() {
   u.password = '';
   return { url: u.toString(), ...creds };
 }
+
+/** A record row as the driver writes it, with an explicit arrival time. */
+const rawRow = (r: AuditRecord, ingestedAt: Date) => ({
+  id: r.id, occurred_at: chDateTime(r.occurredAt), actor_type: r.actorType, actor_id: r.actorId, actor_name: r.actorName, via: r.via, action: r.action,
+  target_type: r.targetType, target_id: r.targetId, summary: r.summary, before: json(r.before), after: json(r.after), correlation_id: r.correlationId,
+  confirmation: json(r.confirmation), ip: r.ip, team_ids: [...r.teamIds], ingested_at: chDateTime(ingestedAt),
+});
+
+const positionOf = async (id: string) => Number((await admin.query<{ p: number | string }>('SELECT position AS p FROM audit_chain WHERE record_id = {id:UUID}', { id }))[0]!.p);
 
 async function sealAll(): Promise<void> {
   for (;;) {
@@ -177,6 +188,45 @@ suite('clickhouse audit store (CLICKHOUSE_TEST_URL)', () => {
     expect((await store.purgeHorizon())!.getTime()).toBeGreaterThan(ancient.occurredAt.getTime());
   });
 
+  it('logs a purge before dropping: a failed drop leaves the records verifiable, and a re-run completes it', async () => {
+    const old = recordAt(daysAgo(900));
+    await store.append([old]);
+    await sealAll();
+    const position = await positionOf(old.id);
+    const purgeHttp = new ClickHouseHttp({ url: endpoint().url, database, user: purgeUser, password: purgePassword, fetch });
+    const failingDrops = new Proxy(purgeHttp, {
+      get(target, prop, receiver) {
+        if (prop === 'exec') return async (sql: string, options?: Parameters<ClickHouseHttp['exec']>[1]) => { if (/DROP PARTITION/.test(sql)) throw new Error('connection reset'); return target.exec(sql, options); };
+        const v = Reflect.get(target, prop, receiver) as unknown;
+        return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(target) : v;
+      },
+    });
+    await expect(new ClickHouseAuditStore(writer, failingDrops).purgeBefore(new Date())).rejects.toThrow(/connection reset/);
+    expect((await store.has([old.id])).has(old.id)).toBe(true);
+    expect((await store.purges()).some((p) => p.months.includes(utcMonthKey(old.occurredAt)))).toBe(true);
+    expect(await verifyChain(store, { from: position, to: position, keys })).toMatchObject({ ok: true, records: 1, purged: 0 });
+    // The next run finds the partition still there and drops it; the record now counts as purged.
+    expect(await store.purgeBefore(new Date())).toBeGreaterThanOrEqual(1);
+    expect((await store.has([old.id])).has(old.id)).toBe(false);
+    expect(await verifyChain(store, { from: position, to: position, keys })).toMatchObject({ ok: true, records: 0, purged: 1 });
+  });
+
+  it('does not count a recent record as purged under a purge log row that breaks the floor', async () => {
+    const victim = recordAt(daysAgo(30));
+    await store.append([victim]);
+    await sealAll();
+    const position = await positionOf(victim.id);
+    // The purge user (ALTER DELETE + INSERT on audit_purges) deletes a recent record and logs a "purge" of its month up to tomorrow.
+    const purger = new ClickHouseHttp({ url: endpoint().url, database, user: purgeUser, password: purgePassword, fetch });
+    await purger.exec('ALTER TABLE audit_records DELETE WHERE id = {id:UUID}', { params: { id: victim.id }, settings: { mutations_sync: 2 } });
+    await purger.insert('audit_purges', [{ cutoff: chDateTime(new Date(Date.now() + 24 * 3600 * 1000)), partitions: [utcMonthKey(victim.occurredAt)], records: 1 }]);
+    expect((await store.purgeHorizon())!.getTime()).toBeLessThanOrEqual(daysAgo(365).getTime());
+    const report = await verifyChain(store, { from: position, to: position, keys });
+    expect(report.purged).toBe(0);
+    expect(report.problems).toEqual([expect.objectContaining({ kind: 'RECORD_MISSING', position, recordId: victim.id })]);
+    await store.append([victim]);
+  });
+
   it('reports stats and health', async () => {
     const stats = await store.stats();
     expect(stats.rows).toBeGreaterThan(3);
@@ -184,5 +234,22 @@ suite('clickhouse audit store (CLICKHOUSE_TEST_URL)', () => {
     expect(await store.health()).toMatchObject({ ok: true });
     const wrong = new ClickHouseAuditStore(new ClickHouseHttp({ url: endpoint().url, database, user: writerUser, password: 'wrong', fetch }));
     expect((await wrong.health()).ok).toBe(false);
+  });
+
+  // Last: it writes arrival times in the future, which moves the unsealed window for anything after it.
+  it('keeps unsealed records in the window when a sealed record is re-shipped later', async () => {
+    await sealAll();
+    const hour = 3600 * 1000;
+    const base = Date.now();
+    const sealed = recordAt(new Date(), { targetId: 'window-a' });
+    const pending = recordAt(new Date(), { targetId: 'window-b' });
+    await admin.insert('audit_records', [rawRow(sealed, new Date(base + 1.5 * hour)), rawRow(pending, new Date(base + 2 * hour))]);
+    // The sealer got through the first record only (a small batch, then failures).
+    const [first] = await store.unsealed(1);
+    expect(first!.id).toBe(sealed.id);
+    await store.appendChain(extendChain(await store.chainHead(), [first!]));
+    // The shipper re-sends the sealed record much later (its shipped_at update was lost).
+    await admin.insert('audit_records', [rawRow(sealed, new Date(base + 5 * hour))]);
+    expect((await store.unsealed(10)).map((r) => r.id)).toEqual([pending.id]);
   });
 });

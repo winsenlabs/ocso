@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GENESIS_HASH } from '../src/canonical.js';
 import { assertContinues, extendChain, verifyChain } from '../src/chain.js';
-import type { AuditRecord, ChainEntry, Checkpoint, CheckpointQuery } from '../src/contract.js';
+import { utcMonthKey, type AuditPurge, type AuditRecord, type ChainEntry, type Checkpoint, type CheckpointQuery } from '../src/contract.js';
 import { generateSigningKeyPem, loadSigningKey, publicKeyOf, signCheckpoint } from '../src/signing.js';
 import { daysAgo, recordAt } from './support.js';
 
@@ -13,7 +13,7 @@ class MemoryChain {
   entries: ChainEntry[] = [];
   records = new Map<string, AuditRecord>();
   cps: Checkpoint[] = [];
-  horizon: Date | null = null;
+  purgeLog: AuditPurge[] = [];
   forks = new Map<number, number>();
   conflicts = new Map<number, number>();
   seal(records: AuditRecord[]) {
@@ -31,8 +31,8 @@ class MemoryChain {
       .slice(0, limit)
       .map((entry) => ({ entry, record: this.records.get(entry.recordId) ?? null, forks: this.forks.get(entry.position), conflicts: this.conflicts.get(entry.position) }));
   }
-  async purgeHorizon() {
-    return this.horizon;
+  async purges() {
+    return this.purgeLog;
   }
   async checkpoints(q: CheckpointQuery) {
     return this.cps
@@ -90,16 +90,39 @@ describe('verifyChain', () => {
     expect(kinds).toEqual(expect.arrayContaining([['RECORD_HASH_MISMATCH', 3], ['CHAIN_LINK_BROKEN', 5], ['CHAIN_HASH_MISMATCH', 5], ['CHECKPOINT_MISMATCH', 6]]));
   });
 
-  it('counts a record as purged only under a logged purge horizon', async () => {
+  it('counts a record as purged only under a logged purge of its month', async () => {
     const m = new MemoryChain();
-    m.seal([recordAt(daysAgo(400)), recordAt(daysAgo(10))]);
+    const old = recordAt(daysAgo(400));
+    m.seal([old, recordAt(daysAgo(10))]);
     for (const e of m.entries) m.records.delete(e.recordId);
     // No purge was ever logged: an old record gone is still missing (a writer cannot pass off deletion as retention).
     expect((await verifyChain(m, { keys })).problems.map((p) => [p.kind, p.position])).toEqual([['RECORD_MISSING', 1], ['RECORD_MISSING', 2]]);
-    m.horizon = daysAgo(380);
+    m.purgeLog = [{ purgedAt: new Date(), cutoff: daysAgo(380), months: [utcMonthKey(old.occurredAt)] }];
     const report = await verifyChain(m, { keys });
     expect(report.purged).toBe(1);
     expect(report.problems).toEqual([expect.objectContaining({ kind: 'RECORD_MISSING', position: 2 })]);
+  });
+
+  it('never trusts a purge cutoff younger than the 365-day floor, nor one for other months', async () => {
+    const m = new MemoryChain();
+    const old = recordAt(daysAgo(400));
+    const recent = recordAt(daysAgo(10));
+    m.seal([old, recent]);
+    for (const e of m.entries) m.records.delete(e.recordId);
+    const future = new Date(Date.now() + 24 * 3600 * 1000);
+    // A forged log row: a future cutoff naming both months. The recent record is still missing.
+    m.purgeLog = [{ purgedAt: new Date(), cutoff: future, months: [utcMonthKey(old.occurredAt), utcMonthKey(recent.occurredAt)] }];
+    let report = await verifyChain(m, { keys });
+    expect(report.purged).toBe(1);
+    expect(report.problems).toEqual([expect.objectContaining({ kind: 'RECORD_MISSING', position: 2, detail: expect.stringMatching(/claims it/) })]);
+    // A purged_at in the future does not help: the cutoff is also clamped to the verifier's clock.
+    m.purgeLog = [{ purgedAt: future, cutoff: future, months: [utcMonthKey(recent.occurredAt)] }];
+    expect((await verifyChain(m, { keys })).problems.map((p) => [p.kind, p.position])).toEqual([['RECORD_MISSING', 1], ['RECORD_MISSING', 2]]);
+    // A cutoff past the record but a purge of another month explains nothing either.
+    m.purgeLog = [{ purgedAt: new Date(), cutoff: daysAgo(380), months: [utcMonthKey(daysAgo(700))] }];
+    report = await verifyChain(m, { keys });
+    expect(report.purged).toBe(0);
+    expect(report.problems.map((p) => p.position)).toEqual([1, 2]);
   });
 
   it('reports forks and conflicting record copies the store reveals', async () => {

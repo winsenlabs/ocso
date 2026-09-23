@@ -129,16 +129,29 @@ export interface AuditStore {
   /**
    * Removes records older than the cutoff; never anything younger than the store's
    * minimum retention (at least PURGE_FLOOR_DAYS). Every removal is logged in the
-   * store (purgeHorizon). Returns records removed.
+   * store (purges) before or atomically with the removal. Returns records removed.
    */
   purgeBefore(cutoff: Date): Promise<number>;
-  /** Records older than this were removed by a logged purge; null = nothing was ever purged. */
+  /**
+   * The store's purge log, oldest first. Verification counts a missing record as purged
+   * only when a logged purge covers its month and it is older than the floor-clamped
+   * cutoff (purgeCovers); the log itself is never trusted beyond PURGE_FLOOR_DAYS.
+   */
+  purges(): Promise<AuditPurge[]>;
+  /** Records older than this were removed by a logged purge (floor-clamped, see purgeHorizonOf); null = nothing was ever purged. */
   purgeHorizon(): Promise<Date | null>;
   stats(): Promise<AuditStoreStats>;
   health(): Promise<AuditStoreHealth>;
   /** What these credentials may do in the store, and any weakness to show operators. */
   selfCheck(): Promise<AuditStoreSelfCheck>;
   close(): Promise<void>;
+}
+
+/** One logged purge: whole UTC months (yyyymm) whose records older than `cutoff` were removed. */
+export interface AuditPurge {
+  purgedAt: Date;
+  cutoff: Date;
+  months: readonly number[];
 }
 
 /** One chain position as chainRange reads it. */
@@ -165,6 +178,38 @@ export const PURGE_FLOOR_DAYS = 365;
 export function flooredCutoff(cutoff: Date, now: Date = new Date()): Date {
   const floor = new Date(now.getTime() - PURGE_FLOOR_DAYS * 24 * 3600 * 1000);
   return cutoff < floor ? cutoff : floor;
+}
+
+const DAY_MS = 24 * 3600 * 1000;
+
+/** yyyymm of a time's UTC month (the partition key of both first-party drivers). */
+export const utcMonthKey = (d: Date): number => d.getUTCFullYear() * 100 + d.getUTCMonth() + 1;
+
+/**
+ * A logged purge's cutoff as far as it can be believed: never younger than
+ * PURGE_FLOOR_DAYS before the purge ran, nor before `now`. A log row claiming
+ * more (forged, or written by a buggy driver) is clamped, never trusted.
+ */
+export function clampedPurgeCutoff(p: Pick<AuditPurge, 'purgedAt' | 'cutoff'>, now: Date = new Date()): Date {
+  const floorAtPurge = p.purgedAt.getTime() - PURGE_FLOOR_DAYS * DAY_MS;
+  const floorNow = now.getTime() - PURGE_FLOOR_DAYS * DAY_MS;
+  return new Date(Math.min(p.cutoff.getTime(), floorAtPurge, floorNow));
+}
+
+/** Whether a logged purge explains a record that occurred at `occurredAt` being gone: its month was purged, and it is older than the clamped cutoff. */
+export function purgeCovers(purges: readonly AuditPurge[], occurredAt: Date, now: Date = new Date()): boolean {
+  const month = utcMonthKey(occurredAt);
+  return purges.some((p) => p.months.includes(month) && occurredAt < clampedPurgeCutoff(p, now));
+}
+
+/** The newest clamped purge cutoff; null = nothing was ever purged. */
+export function purgeHorizonOf(purges: readonly AuditPurge[], now: Date = new Date()): Date | null {
+  let horizon: Date | null = null;
+  for (const p of purges) {
+    const c = clampedPurgeCutoff(p, now);
+    if (!horizon || c > horizon) horizon = c;
+  }
+  return horizon;
 }
 
 export interface AuditStoreLogger {

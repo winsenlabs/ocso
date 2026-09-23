@@ -90,6 +90,22 @@ describe('returning customers', () => {
     expect(f.queue.count('conversation.turn', fresh!.id)).toBe(1);
   });
 
+  it('"new": messages the customer sent after the "new" reply are carried too (only the reply itself is left out)', async () => {
+    const oldId = await oldConversation('+919811000007', 3);
+    await f.say(channel, 'hello again', '+919811000007');
+    await f.engine.advance(oldId, 'r1');
+    // Both are written before the route job for "new" runs (queue lag).
+    await f.say(channel, 'something new', '+919811000007');
+    await f.say(channel, 'I want to ask about my loan', '+919811000007');
+    await f.engine.advance(oldId, 'r2');
+
+    const old = await f.conversation(oldId);
+    expect(old).toMatchObject({ controlState: 'RESOLVED', disposition: 'CUSTOMER_STARTED_NEW' });
+    const [fresh] = await f.t.db.select().from(conversations).where(and(eq(conversations.customerId, old.customerId), eq(conversations.controlState, 'AI_ACTIVE')));
+    const carried = await f.t.db.select({ preview: interactions.preview }).from(interactions).where(and(eq(interactions.conversationId, fresh!.id), like(interactions.idempotencyKey, '%:carried')));
+    expect(carried.map((c) => c.preview)).toEqual(['hello again', 'I want to ask about my loan']);
+  });
+
   it('a conversation resolved within the reopen window is asked too, and reopens on "continue"', async () => {
     const id = await oldConversation('+919811000004', 5);
     await new HumanControlService(f.t.db).resolve(f.actor, id, {});

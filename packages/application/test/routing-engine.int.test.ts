@@ -195,6 +195,70 @@ describe('KNOWN and CLASSIFY steps', () => {
     expect(await f.routing(conversationId)).toMatchObject({ outcome: 'FALLBACK', classifications: { intent: { label: null, confidence: 0, error: 'classifier_error' } } });
     f.classify.impl = null;
   });
+
+  /** A classifier whose calls wait until the test answers them. */
+  function heldClassifier() {
+    const calls: Array<{ transcript: string[]; answer: (c: { label: string | null; confidence: number; followUp: string | null }) => void }> = [];
+    let notify: (() => void) | null = null;
+    f.classify.impl = (r) =>
+      new Promise((resolve) => {
+        calls.push({ transcript: r.transcript.map((m) => `${m.from}: ${m.text}`), answer: resolve });
+        notify?.();
+      });
+    const called = (n: number) =>
+      new Promise<void>((resolve) => {
+        const check = () => (calls.length >= n ? resolve() : (notify = check));
+        check();
+      });
+    return { calls, called };
+  }
+
+  it('a route job arriving while a classification is in flight leaves it alone; the in-flight job folds the new message in', async () => {
+    const channel = await f.channelWith(CLASSIFY, 'Classify race');
+    const held = heldClassifier();
+    const { conversationId } = await f.say(channel, 'I need some money', '+919800200004');
+    const first = f.engine.advance(conversationId, 'rA');
+    await held.called(1);
+    // The customer writes again while the model runs; its route job must not re-issue CLASSIFY.
+    await f.say(channel, 'for a new loan', '+919800200004');
+    await f.engine.advance(conversationId, 'rB');
+    expect(held.calls).toHaveLength(1);
+    expect(await f.routing(conversationId)).toMatchObject({ phase: 'STEPS', stepIndex: 0, attempts: 1, awaitingSince: null });
+
+    held.calls[0]!.answer({ label: 'cards', confidence: 0.9, followUp: null });
+    await held.called(2);
+    // The first job's result missed the second message: it classifies again over both.
+    expect(held.calls[1]!.transcript).toEqual(['customer: I need some money', 'customer: for a new loan']);
+    held.calls[1]!.answer({ label: 'sales', confidence: 0.95, followUp: null });
+    await first;
+    expect(held.calls).toHaveLength(2);
+    expect(await f.conversation(conversationId)).toMatchObject({ controlState: 'AI_ACTIVE', agentId: f.agents.arjun });
+    expect(await f.routing(conversationId)).toMatchObject({ outcome: 'MODEL', classifications: { intent: { label: 'sales', confidence: 0.95 } } });
+    f.classify.impl = null;
+  });
+
+  it('a classification that never returns does not wedge the conversation: past the in-flight bound it is issued again', async () => {
+    const channel = await f.channelWith(CLASSIFY, 'Classify crash');
+    const held = heldClassifier();
+    const { conversationId } = await f.say(channel, 'I want a loan', '+919800200005');
+    const lost = f.engine.advance(conversationId, 'rA'); // its worker "crashed": the call is never answered in time
+    await held.called(1);
+    await f.engine.advance(conversationId, 'rB');
+    expect(held.calls).toHaveLength(1);
+    // Past the bound (the sweep re-signals a session with no awaiting_since every minute).
+    await f.t.db.update(conversationRouting).set({ updatedAt: sql`now() - interval '3 minutes'` }).where(eq(conversationRouting.conversationId, conversationId));
+    const retry = f.engine.advance(conversationId, 'rC');
+    await held.called(2);
+    held.calls[1]!.answer({ label: 'sales', confidence: 0.9, followUp: null });
+    await retry;
+    expect(await f.conversation(conversationId)).toMatchObject({ controlState: 'AI_ACTIVE', agentId: f.agents.arjun });
+    // The lost call's late answer is stale: dropped, nothing re-issued.
+    held.calls[0]!.answer({ label: 'cards', confidence: 0.9, followUp: null });
+    await lost;
+    expect(held.calls).toHaveLength(2);
+    expect(await f.routing(conversationId)).toMatchObject({ outcome: 'MODEL', attributes: { product: 'sales' } });
+    f.classify.impl = null;
+  });
 });
 
 describe('timeout', () => {

@@ -42,6 +42,15 @@ interface Effects {
 const MAX_STEPS = 12;
 const SWEEP_BATCH = 100;
 const UNCLASSIFIED: Classification = { label: null, confidence: 0, followUp: null };
+/**
+ * How long an issued CLASSIFY counts as in flight. Route jobs are not
+ * serialized per conversation, so a second job must not re-issue a
+ * classification another job is still waiting for (each would discard the
+ * other's result). Past this bound the job is presumed dead (worker crash, a
+ * hung provider) and the next route job — at the latest the sweep's re-signal
+ * of a session with no `awaiting_since` — issues it again.
+ */
+export const CLASSIFY_IN_FLIGHT_MS = 120_000;
 
 /**
  * `conversation.route` (PM/research/11 §5.3): runs a ROUTING conversation's
@@ -71,6 +80,8 @@ export class RoutingEngine {
         id = outcome.conversationId;
         continue;
       }
+      // No step left to apply the result in: leave it in flight (the next route job or the sweep re-issues it).
+      if (i === MAX_STEPS - 1) return;
       const result = await this.classify(outcome.request);
       classified = { stepId: outcome.request.step.id, result, expected: outcome.expected };
     }
@@ -187,14 +198,25 @@ export class RoutingEngine {
     const pending = await customerMessagesAfter(tx, conversationId, conv.lastProcessedSeq);
     const events: Array<{ event: RoutingEvent; seq: number | null }> = [];
     const replies = () => pending.map((m) => ({ event: { type: 'REPLY' as const, reply: replyOf(m) }, seq: m.seq }));
+    // A CLASSIFY was issued (the engine marks it with attempts ≥ 1, see below) and its result is not in yet.
+    const current = session.phase === 'STEPS' ? def.steps[session.stepIndex] : undefined;
+    const classifying = !deciding && !session.awaiting && current?.kind === 'CLASSIFY' && row.attempts > 0;
+    const inFlight = classifying && now.getTime() - row.updatedAt.getTime() < CLASSIFY_IN_FLIGHT_MS;
     if (deciding) events.push({ event: { type: 'START' }, seq: null });
     else if (input.timeout) {
       // An answer that arrived before the sweep counts; the timeout applies only to real silence.
       if (session.awaiting && pending.length) events.push(...replies());
       else if (session.awaiting && row.awaitingSince && now.getTime() - row.awaitingSince.getTime() >= def.timeoutMinutes * 60_000) events.push({ event: { type: 'TIMEOUT' }, seq: null });
-    } else if (input.classified && row.updatedAt.getTime() === input.classified.expected.getTime()) {
-      events.push({ event: { type: 'CLASSIFIED', stepId: input.classified.stepId, result: input.classified.result }, seq: null });
+    } else if (input.classified) {
+      // Stale: another job moved the session (it owns whatever comes next).
+      if (row.updatedAt.getTime() !== input.classified.expected.getTime()) return { kind: 'idle' };
+      // The customer wrote more while the model ran: classify again over the whole transcript
+      // (those messages' own route jobs left them to this one) instead of applying a result that missed them.
+      if (classifying && pending.length) events.push({ event: { type: 'START' }, seq: null });
+      else events.push({ event: { type: 'CLASSIFIED', stepId: input.classified.stepId, result: input.classified.result }, seq: null });
     } else if (session.awaiting) events.push(...replies());
+    // Another job's classification is in flight: leave the messages pending for it to fold in.
+    else if (inFlight) return { kind: 'idle' };
     else events.push({ event: { type: 'START' }, seq: null });
     if (!events.length) return { kind: 'idle' };
 
@@ -202,7 +224,6 @@ export class RoutingEngine {
     let classify: ClassifyStep | null = null;
     let asked = false;
     for (const { event, seq } of events) {
-      const at = { phase: session.phase, stepIndex: session.stepIndex };
       const result = advanceSession(def, session, event, ctx);
       session = result.session;
       for (const action of result.actions) {
@@ -233,9 +254,12 @@ export class RoutingEngine {
         }
       }
       if (classify || session.phase === 'DONE') break;
-      // A new question went out: later messages were written before the customer saw it, so they do not answer it.
-      if (asked && (session.phase !== at.phase || session.stepIndex !== at.stepIndex)) break;
+      // A question (new, or asked again) went out: later messages were written before the customer saw it,
+      // so they do not answer it — and it must stay the current question rather than be overtaken by them.
+      if (asked) break;
     }
+    // The in-flight marker: attempts count classifications issued for a CLASSIFY step (the next step resets it).
+    if (classify) session = { ...session, attempts: Math.max(1, session.attempts) };
     const saved = await this.persist(tx, conv, row, session, pending, now, asked);
     if (!classify) return { kind: 'idle' };
     return { kind: 'classify', expected: saved, request: { conversationId, step: classify, transcript: await transcript(tx, conversationId, row.seqFrom), correlationId } };

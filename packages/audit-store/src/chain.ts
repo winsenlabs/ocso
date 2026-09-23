@@ -1,5 +1,5 @@
 import { GENESIS_HASH, chainHash, recordHash } from './canonical.js';
-import type { AuditRecord, AuditStore, ChainEntry, Checkpoint } from './contract.js';
+import { purgeCovers, type AuditRecord, type AuditStore, type ChainEntry, type Checkpoint } from './contract.js';
 import { verifyCheckpoint, type AuditPublicKey } from './signing.js';
 
 /** The chain entries sealing `records` in order after `head` (null = empty chain). */
@@ -60,7 +60,7 @@ export interface ChainVerification {
   entries: number;
   /** Records present and re-hashed. */
   records: number;
-  /** Records gone because a logged purge removed them (older than the store's purge horizon; their hashes still link). */
+  /** Records gone because a logged purge removed them (their month is in the purge log and they are older than its floor-clamped cutoff; their hashes still link). */
   purged: number;
   checkpoints: { checked: number; valid: number; latest: Checkpoint | null };
   problems: ChainProblem[];
@@ -90,7 +90,7 @@ export interface VerifyOptions {
  * Read-only; the auditor's tool (`audit-verify`, POST /v1/audit/verify) and the
  * sealer's check before it signs a new checkpoint.
  */
-export async function verifyChain(store: Pick<AuditStore, 'chainHead' | 'chainRange' | 'checkpoints' | 'purgeHorizon'>, options: VerifyOptions): Promise<ChainVerification> {
+export async function verifyChain(store: Pick<AuditStore, 'chainHead' | 'chainRange' | 'checkpoints' | 'purges'>, options: VerifyOptions): Promise<ChainVerification> {
   const now = options.now ?? new Date();
   const batch = Math.max(1, options.batch ?? 1000);
   const maxEntries = options.maxEntries ?? 1_000_000;
@@ -109,8 +109,10 @@ export async function verifyChain(store: Pick<AuditStore, 'chainHead' | 'chainRa
     if (result.problems.length < maxProblems) result.problems.push(p);
     result.ok = false;
   };
-  // Only a purge the store logged explains a missing record; anything else is RECORD_MISSING.
-  const horizon = await store.purgeHorizon();
+  // Only a purge the store logged explains a missing record, and only for a month it names and
+  // a cutoff clamped to the retention floor (a forged or over-reaching log row explains nothing
+  // younger than PURGE_FLOOR_DAYS); anything else is RECORD_MISSING.
+  const purges = await store.purges();
   let lastValidCheckpoint = 0;
   const cps = await store.checkpoints({ fromPosition: from, toPosition: to, limit: 100_000 });
   result.checkpoints.latest = cps[0] ?? null;
@@ -143,8 +145,14 @@ export async function verifyChain(store: Pick<AuditStore, 'chainHead' | 'chainRa
       if (forks) problem({ kind: 'CHAIN_FORK', position: entry.position, recordId: entry.recordId, detail: `${forks} other chain row(s) at this position or sealing this record` });
       if (conflicts) problem({ kind: 'RECORD_CONFLICT', position: entry.position, recordId: entry.recordId, detail: `${conflicts} other stored cop(ies) of this record with different content` });
       if (!record) {
-        if (horizon && entry.recordOccurredAt < horizon) result.purged++;
-        else problem({ kind: 'RECORD_MISSING', position: entry.position, recordId: entry.recordId, detail: 'the sealed record is not in the store' });
+        if (purgeCovers(purges, entry.recordOccurredAt, now)) result.purged++;
+        else {
+          const claimed = purges.some((p) => entry.recordOccurredAt < p.cutoff);
+          problem({
+            kind: 'RECORD_MISSING', position: entry.position, recordId: entry.recordId,
+            detail: claimed ? 'the sealed record is not in the store; a logged purge cutoff claims it, but no purge covers its month within the retention floor' : 'the sealed record is not in the store',
+          });
+        }
       } else {
         result.records++;
         if (record.id !== entry.recordId || recordHash(record) !== entry.recordHash) {

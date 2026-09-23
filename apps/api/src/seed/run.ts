@@ -26,8 +26,9 @@ async function alreadySeeded(ctx: SeedContext): Promise<boolean> {
 
 /**
  * Builds the Meridian Bank demo. Every step is idempotent (matched by natural
- * keys), so a run interrupted half-way can simply be repeated; the marker is
- * written last. A session-level advisory lock serializes concurrent runs.
+ * keys; an approval is skipped when its change is already in effect, and a
+ * proposal left open by an earlier run is finished rather than resubmitted), so
+ * a run interrupted half-way can simply be repeated; the marker is written last. A session-level advisory lock serializes concurrent runs.
  */
 export async function runDemoSeed(ctx: SeedContext): Promise<SeedOutcome> {
   const client = await ctx.database.pool.connect();
@@ -39,7 +40,10 @@ export async function runDemoSeed(ctx: SeedContext): Promise<SeedOutcome> {
     const queues = await seedRouting(ctx, people.lead, people.teamIds);
     const profiles = await seedModels(ctx, people.admin, people.lead);
     // Settings change only through an approval (PM/research/11 §4): the Tech admin proposes, a Head checks.
-    await approveAs(ctx, people.admin, people.lead, { objectKind: 'deployment_settings', objectId: SETTINGS_OBJECT_ID, action: 'UPDATE', payload: { deployment: { internalAgentProfileId: profiles.supportFast } } }, 'Demo seed: the internal agent uses the fast profile');
+    // Skipped when already in effect (a re-run after an interruption): an unchanged UPDATE is refused as no_changes.
+    if ((await ctx.services.settings.deployment()).internalAgentProfileId !== profiles.supportFast) {
+      await approveAs(ctx, people.admin, people.lead, { objectKind: 'deployment_settings', objectId: SETTINGS_OBJECT_ID, action: 'UPDATE', payload: { deployment: { internalAgentProfileId: profiles.supportFast } } }, 'Demo seed: the internal agent uses the fast profile');
+    }
     const agents = await seedAgents(ctx, people.leads, { profiles, queues, teams: people.teamIds });
     const webchat = await seedWebChat(ctx, people.admin, people.lead);
     await seedRouters(ctx, people.leads, agents, queues, webchat.id);

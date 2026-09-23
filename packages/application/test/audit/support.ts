@@ -67,6 +67,10 @@ export class FlakyStore implements AuditStore {
     this.check();
     return this.inner.purgeBefore(cutoff);
   }
+  async purges() {
+    this.check();
+    return this.inner.purges();
+  }
   async purgeHorizon() {
     this.check();
     return this.inner.purgeHorizon();

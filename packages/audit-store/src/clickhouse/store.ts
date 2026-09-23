@@ -2,6 +2,8 @@ import { recordHash } from '../canonical.js';
 import { assertContinues } from '../chain.js';
 import {
   PURGE_FLOOR_DAYS,
+  purgeHorizonOf,
+  type AuditPurge,
   type AuditRecord,
   type AuditScopeFilter,
   type AuditStore,
@@ -29,7 +31,7 @@ const FIRST_COPY = 'LIMIT 1 BY id_s';
  * of a record, a second chain row at a position) is reported by verification
  * (RECORD_CONFLICT, CHAIN_FORK) — tamper-evident, not tamper-proof (ADR-032).
  * Dropping a partition needs ALTER DELETE, so the purge runs as a separate
- * purge user (worker only), logs itself in audit_purges and honours the
+ * purge user (worker only), logs itself in audit_purges before dropping and honours the
  * admin-set minimum retention (never below PURGE_FLOOR_DAYS).
  */
 export class ClickHouseAuditStore implements AuditStore {
@@ -116,12 +118,20 @@ export class ClickHouseAuditStore implements AuditStore {
     return rows.map(toRecord);
   }
 
+  /**
+   * The window starts an hour before the newest *first* arrival among the last 100 sealed
+   * records. First copy only: a re-shipped copy of a sealed record arrives later and must not
+   * move the window past records that are still unsealed (the sealer chains by first arrival).
+   */
   async unsealed(limit: number): Promise<AuditRecord[]> {
     const rows = await this.ch.query<RecordRow>(
       `SELECT ${COLUMNS} FROM audit_records
         WHERE ingested_at >= (
-                SELECT coalesce(max(ingested_at), toDateTime64(0, 6, 'UTC')) FROM audit_records
-                 WHERE id IN (SELECT record_id FROM audit_chain WHERE position + 100 > (SELECT max(position) FROM audit_chain))
+                SELECT coalesce(max(first_ingested), toDateTime64(0, 6, 'UTC')) FROM (
+                  SELECT min(ingested_at) AS first_ingested FROM audit_records
+                   WHERE id IN (SELECT record_id FROM audit_chain WHERE position + 100 > (SELECT max(position) FROM audit_chain))
+                   GROUP BY id
+                )
               ) - INTERVAL 1 HOUR
           AND id NOT IN (SELECT record_id FROM audit_chain)
         ORDER BY ingested_at, id_s ${FIRST_COPY} LIMIT {limit:UInt32}`,
@@ -230,38 +240,47 @@ export class ClickHouseAuditStore implements AuditStore {
     });
   }
 
-  /** Drops whole monthly partitions that end on or before the floored cutoff, as the purge user, and logs the drop. */
+  /**
+   * Drops whole monthly partitions that end on or before the floored cutoff, as the purge user.
+   * ClickHouse has no transactions, so the purge is logged *before* anything is dropped: a
+   * logged purge whose drops then fail is harmless (the records are still there and verify
+   * re-hashes them), and a re-run finds the remaining partitions and logs and drops them again.
+   * Dropping first could leave records gone with no log row, a break that never clears.
+   */
   async purgeBefore(cutoff: Date): Promise<number> {
     if (!this.purge) throw new Error('the clickhouse audit store purges only with CLICKHOUSE_PURGE_USER (worker); nothing was removed');
     const [config] = await this.purge.query<{ days: number | string | null }>('SELECT max(min_retention_days) AS days FROM audit_store_config');
     const floorDays = Math.max(PURGE_FLOOR_DAYS, Number(config?.days ?? 0) || 0);
-    const floor = new Date(Date.now() - floorDays * 24 * 3600 * 1000);
+    const now = new Date();
+    const floor = new Date(now.getTime() - floorDays * 24 * 3600 * 1000);
     const effective = cutoff < floor ? cutoff : floor;
     const monthStart = new Date(Date.UTC(effective.getUTCFullYear(), effective.getUTCMonth(), 1));
-    const parts = await this.purge.query<{ p: number | string; n: number | string }>(
-      "SELECT toYYYYMM(occurred_at) AS p, uniqExact(id) AS n FROM audit_records WHERE occurred_at < {before:DateTime64(3, 'UTC')} GROUP BY p ORDER BY p",
-      { before: monthStart },
-    );
-    let removed = 0;
-    const dropped: number[] = [];
-    for (const { p, n } of parts) {
-      const partition = Number(p);
-      if (!Number.isInteger(partition) || partition < 190001 || partition > 299912) continue;
-      await this.purge.exec(`ALTER TABLE audit_records DROP PARTITION ${partition}`);
-      removed += Number(n);
-      dropped.push(partition);
-    }
-    if (dropped.length) {
-      const newest = dropped[dropped.length - 1]!;
-      const end = new Date(Date.UTC(Math.floor(newest / 100), newest % 100, 1));
-      await this.purge.insert('audit_purges', [{ cutoff: chDateTime(end), partitions: dropped, records: removed }]);
-    }
+    const parts = (
+      await this.purge.query<{ p: number | string; n: number | string }>(
+        "SELECT toYYYYMM(occurred_at) AS p, uniqExact(id) AS n FROM audit_records WHERE occurred_at < {before:DateTime64(3, 'UTC')} GROUP BY p ORDER BY p",
+        { before: monthStart },
+      )
+    )
+      .map(({ p, n }) => ({ partition: Number(p), n: Number(n) }))
+      .filter(({ partition }) => Number.isInteger(partition) && partition >= 190001 && partition <= 299912);
+    if (!parts.length) return 0;
+    const months = parts.map((x) => x.partition);
+    const removed = parts.reduce((sum, x) => sum + x.n, 0);
+    const newest = months[months.length - 1]!;
+    const end = new Date(Date.UTC(Math.floor(newest / 100), newest % 100, 1));
+    // purged_at is the clock the floor was computed with, so the log row satisfies cutoff ≤ purged_at − floor.
+    await this.purge.insert('audit_purges', [{ purged_at: chDateTime(now), cutoff: chDateTime(end), partitions: months, records: removed }]);
+    for (const partition of months) await this.purge.exec(`ALTER TABLE audit_records DROP PARTITION ${partition}`);
     return removed;
   }
 
+  async purges(): Promise<AuditPurge[]> {
+    const rows = await this.ch.query<{ purged_at: string; cutoff: string; partitions: (number | string)[] }>('SELECT purged_at, cutoff, partitions FROM audit_purges ORDER BY purged_at');
+    return rows.map((r) => ({ purgedAt: utc(r.purged_at), cutoff: utc(r.cutoff), months: r.partitions.map(Number) }));
+  }
+
   async purgeHorizon(): Promise<Date | null> {
-    const [row] = await this.ch.query<{ cutoff: string | null }>('SELECT if(count() = 0, NULL, max(cutoff)) AS cutoff FROM audit_purges');
-    return row?.cutoff ? utc(row.cutoff) : null;
+    return purgeHorizonOf(await this.purges());
   }
 
   async selfCheck(): Promise<AuditStoreSelfCheck> {

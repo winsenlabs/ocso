@@ -174,21 +174,33 @@ terraform apply -var image_tag=$TAG
 - **Expand/contract rule.** While a deploy rolls, tasks of version N-1 and N run side by side against the
   new schema. Migrations must therefore be additive: add nullable columns and tables, backfill in the
   application, and drop or rename only in a *later* release. This is also what makes image rollback safe.
-- **Rollback.** Apply the previous `image_tag`. Schema rollbacks are forward fixes (a new migration), never
-  down-migrations.
+  **The governance and routing release breaks this rule** (below): migration 0021 renames the stored roles,
+  and the previous image fails on every authenticated request once it has run.
+- **Rollback.** Within releases that follow the rule, apply the previous `image_tag`. Schema rollbacks are
+  forward fixes (a new migration), never down-migrations. Rolling back past the governance and routing
+  release is different: restore the pre-upgrade RDS snapshot; the previous `image_tag` alone does not work.
 
 ### Upgrading an existing deployment to the governance and routing release
 
 Not tested on AWS; the steps follow from the Terraform source.
 
-1. **Back up first.** Take a manual RDS snapshot of the main instance
-   (`aws rds create-db-snapshot`). There are no down-migrations.
+This release is one-way. Rolling back past it means restoring the snapshot from step 1 to the main
+instance (the audit RDS instance is new and can be deleted), which discards everything since the
+upgrade. Redeploying the previous `image_tag` against the migrated database locks out every signed-in
+user, because the previous release does not know the renamed roles (migration 0021).
+
+1. **Back up first (required).** Take a manual RDS snapshot of the main instance
+   (`aws rds create-db-snapshot`). It is the only way back: there are no down-migrations and the previous
+   image does not run against the migrated schema.
 2. **Create the audit signing key secret** (§2) and set `audit_signing_key_secret_arn`.
 3. **Bump `bootstrap_secret_version`.** The bootstrap JSON gains `AUDIT_DATABASE_URL`, `AUDIT_READER_URL`
    and `AUDIT_DATABASE_OWNER_URL`, but Terraform writes the secret only when the version changes. The
    bump also rotates the main database password and the setup token (§6 rotation), so do it in a quiet
    window.
 4. `terraform apply -var image_tag=$TAG` creates the audit RDS instance and rewrites the bootstrap secret.
+   Before running the migrate task, scale api, worker and web to zero
+   (`aws ecs update-service --desired-count 0`), or accept that tasks of the old release return errors
+   to signed-in users from the moment 0021 applies until the new tasks replace them.
    Then run the migrate task as above. It applies migrations 0021–0031, then `audit-migrate`
    provisions the audit store. Only then roll the api and worker (`--force-new-deployment` if the image
    tag did not change), because tasks started before the bump hold the old database password.
@@ -211,7 +223,7 @@ the VPC with those settings. There is no ready-made ECS task for it.
 | Task | How |
 |---|---|
 | Deploy a release | Build and push the 4 images with a new tag → section 4 |
-| Roll back | `terraform apply -var image_tag=<previous>` (the ECR lifecycle keeps the last 30 tags) |
+| Roll back | `terraform apply -var image_tag=<previous>` (the ECR lifecycle keeps the last 30 tags). Not past the governance and routing release: restore the pre-upgrade snapshot instead (section 4) |
 | Restart a service | `aws ecs update-service --cluster <c> --service api --force-new-deployment` |
 | Shell into a task (break glass) | `enable_execute_command = true`, apply, then `aws ecs execute-command --cluster <c> --task <id> --container api --interactive --command sh` |
 | API/web capacity | `aws ecs update-service --desired-count N`. Terraform ignores `desired_count` after creation |

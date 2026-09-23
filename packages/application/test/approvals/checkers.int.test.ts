@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { eq, sql } from 'drizzle-orm';
 import { approvalProposals, outboxEvents, users } from '@ocso/db';
-import { revalidateCheckers, systemActor } from '../../src/index.js';
+import { Permission } from '@ocso/auth';
+import { PermissionService, identityGovernanceWith, loadPrincipal, revalidateCheckers, systemActor } from '../../src/index.js';
 import { act, createApprovalFixture, type ApprovalFixture } from './fixture.js';
 
 /** Who may check, self-review, bootstrap, the checker sweep and reassignment (PM/research/11 §4.2–4.3, 11b). */
@@ -70,6 +71,26 @@ describe('bootstrap approval', () => {
     expect(proposal.decisions.map((d) => d.kind)).toEqual(['SUBMIT', 'BOOTSTRAP_APPROVE', 'ACTIVATE']);
     await f.t.db.update(users).set({ status: 'ACTIVE' }).where(eq(users.id, f.p.head2.userId));
     await f.t.db.update(users).set({ status: 'ACTIVE' }).where(eq(users.id, f.p.headLoans.userId));
+  });
+});
+
+describe('bootstrap after taking a check right away (other check.* kinds)', () => {
+  it('revoking approvals.check.agents from the other checkers does not unlock a self-approval of agent changes', async () => {
+    const g = await createApprovalFixture();
+    try {
+      const tech = { principal: (await loadPrincipal(g.t.db, g.p.tech.userId, 'UI'))!, correlationId: 'checkers-test' };
+      const perms = new PermissionService(g.t.db, identityGovernanceWith(g.approvals));
+      for (const other of [g.p.head2, g.p.headLoans]) {
+        await perms.change(tech, other.userId, { changes: [{ op: 'REVOKE', permission: Permission.APPROVALS_CHECK_AGENTS }], reason: 'Revoke to test bootstrap' });
+      }
+      // Nobody else can check agent changes now, but only because the right was just taken away.
+      expect((await g.approvals.checkerCandidates(g.p.head, 'agent', g.maya)).bootstrapAllowed).toBe(false);
+      await expect(g.approvals.submit(act(g.p.head), { objectKind: 'agent', objectId: g.maya, action: 'ACTIVATE', bootstrap: true, reason: 'Alone' })).rejects.toMatchObject({
+        code: 'bootstrap_not_allowed',
+      });
+    } finally {
+      await g.t.drop();
+    }
   });
 });
 

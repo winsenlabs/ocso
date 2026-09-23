@@ -30,7 +30,10 @@ Bootstrap stops as soon as a second eligible checker exists. Invite a Head (and 
 
 **Upgrading an existing deployment** changes nobody's access. Roles are mapped automatically (migration
 0021): Platform Tech Admin → Tech, CS Lead → Head, CS Exec → Service. Everything already live is recorded
-as approved (migration 0031), so it keeps running. Its *next* change is a proposal.
+as approved (migration 0031), so it keeps running. Its *next* change is a proposal. The upgrade is
+one-way: take a backup first, because rolling back means restoring it, not redeploying the previous
+version, which cannot sign anyone in after the role rename ([compose.md §4](compose.md#4-upgrades-and-migrations)).
+Stop api, worker and web before migrating, or accept a brief window of errors while the old api serves.
 
 ## 1. First run (Tech)
 

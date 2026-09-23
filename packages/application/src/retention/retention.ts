@@ -1,5 +1,5 @@
 import { and, inArray, isNotNull, lt, sql } from 'drizzle-orm';
-import type { AuditStore } from '@ocso/audit-store';
+import { flooredCutoff, type AuditStore } from '@ocso/audit-store';
 import { auditEvents, type Db } from '@ocso/db';
 import { recordAudit } from '../audit/audit.js';
 import { SettingsService } from '../settings/settings.js';
@@ -162,6 +162,8 @@ export class RetentionService {
     let horizon: Date | null;
     try {
       horizon = await store.purgeHorizon();
+      // Never trust a horizon younger than the retention floor (a forged purge log row): such rows get the store check instead.
+      if (horizon) horizon = flooredCutoff(horizon);
     } catch (err) {
       this.log('retention: audit store unavailable; local audit window not pruned this run', err);
       return 0;

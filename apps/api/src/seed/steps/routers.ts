@@ -3,7 +3,7 @@ import { RouterService, approvalGates, type ActorContext } from '@ocso/applicati
 import { passThroughDefinition } from '@ocso/domain';
 import { channels, queues, routerVersions, routers, slaPolicies } from '@ocso/db';
 import type { SeedContext } from '../context.js';
-import { approveAs, approveProposal } from './agents.js';
+import { approveAs, approveProposal, unfinishedProposal } from './agents.js';
 import type { AgentKey } from '../data/agents.js';
 import type { LeadKey, QueueKey } from '../data/organization.js';
 
@@ -90,6 +90,12 @@ export async function approveRouting(ctx: SeedContext, leads: Record<LeadKey, Ac
     [leads.lead2, leads.lead],
   ];
   const submit = async (kind: string, objectId: string, action: 'CREATE' | 'ACTIVATE', reason: string) => {
+    // A proposal an interrupted run left open is finished by its named checker, not resubmitted (approval_open).
+    const unfinished = await unfinishedProposal(ctx, kind, objectId, action);
+    if (unfinished) {
+      const pair = pairs.find(([, checker]) => checker.principal!.userId === unfinished.checkerId) ?? pairs[0]!;
+      return { checker: pair[1], proposal: { id: unfinished.id } };
+    }
     for (const [maker, checker] of pairs) {
       try {
         return { checker, proposal: await ctx.services.approvals.submit(maker, { objectKind: kind, objectId, action, checkerId: checker.principal!.userId, reason }) };
@@ -103,7 +109,8 @@ export async function approveRouting(ctx: SeedContext, leads: Record<LeadKey, Ac
   const decide = (d: Awaited<ReturnType<typeof submit>>) => approveProposal(ctx, d.checker, d.proposal.id);
   const todo = async (kind: string, ids: string[]) => {
     const gates = await approvalGates(ctx.db, kind, ids);
-    return ids.filter((id) => gates.get(id) === 'none');
+    const pending = await Promise.all(ids.map(async (id) => gates.get(id) === 'none' || Boolean(await unfinishedProposal(ctx, kind, id, 'CREATE'))));
+    return ids.filter((_, i) => pending[i]);
   };
 
   const policies = await todo('sla_policy', (await ctx.db.select({ id: slaPolicies.id }).from(slaPolicies)).map((p) => p.id));

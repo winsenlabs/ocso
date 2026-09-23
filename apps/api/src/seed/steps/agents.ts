@@ -1,5 +1,5 @@
-import { and, eq } from 'drizzle-orm';
-import type { ActorContext } from '@ocso/application';
+import { and, desc, eq, isNull, or } from 'drizzle-orm';
+import { approvalGates, type ActorContext } from '@ocso/application';
 import { approvalProposals, escalationRules, promptVersions, virtualAgents } from '@ocso/db';
 import type { SeedContext } from '../context.js';
 import { AGENTS, type AgentKey, type DemoAgent } from '../data/agents.js';
@@ -90,16 +90,11 @@ export async function publishAgents(ctx: SeedContext, leads: Record<LeadKey, Act
     const maker = leads[agent.lead];
     const checker = leads[agent.lead === 'lead' ? 'lead2' : 'lead'];
     const current = await ctx.services.agents.get(maker.principal!, id);
-    if (current.status === 'LIVE') continue;
-    const proposal = await ctx.services.approvals.submit(maker, {
-      objectKind: 'agent',
-      objectId: id,
-      action: 'ACTIVATE',
-      checkerId: checker.principal!.userId,
-      reason: 'Demo seed: take the agent live',
-    });
-    await approveProposal(ctx, checker, proposal.id);
-    ctx.log(`${agent.name} is live (approved by ${checker.principal!.displayName})`);
+    if (current.status !== 'LIVE') {
+      await approveAs(ctx, maker, checker, { objectKind: 'agent', objectId: id, action: 'ACTIVATE' }, 'Demo seed: take the agent live');
+      ctx.log(`${agent.name} is live (approved by ${checker.principal!.displayName})`);
+    }
+    // Also on a re-run: an interrupted run may have taken the agent live before its rules were turned on.
     await enableEscalations(ctx, maker, checker, id, agent.name);
   }
 }
@@ -119,8 +114,40 @@ export async function approveAs(
   target: { objectKind: string; objectId: string; action: 'CREATE' | 'UPDATE' | 'DELETE' | 'ACTIVATE'; payload?: Record<string, unknown> },
   reason: string,
 ): Promise<void> {
-  const proposal = await ctx.services.approvals.submit(maker, { ...target, checkerId: checker.principal!.userId, reason });
-  await approveProposal(ctx, checker, proposal.id);
+  // Re-runnable after an interruption: finish a proposal an earlier run left open (or approved but not
+  // activated) instead of submitting a second one, which would fail with approval_open.
+  const unfinished = await unfinishedProposal(ctx, target.objectKind, target.objectId, target.action);
+  const proposalId = unfinished?.id ?? (await ctx.services.approvals.submit(maker, { ...target, checkerId: checker.principal!.userId, reason })).id;
+  await approveProposal(ctx, checker, proposalId);
+}
+
+/** The newest proposal for this object (and action) that is still open, or approved but not yet activated. */
+export async function unfinishedProposal(
+  ctx: SeedContext,
+  objectKind: string,
+  objectId: string,
+  action?: 'CREATE' | 'UPDATE' | 'DELETE' | 'ACTIVATE',
+): Promise<{ id: string; checkerId: string | null } | null> {
+  const [row] = await ctx.db
+    .select({ id: approvalProposals.id, checkerId: approvalProposals.checkerId })
+    .from(approvalProposals)
+    .where(
+      and(
+        eq(approvalProposals.objectKind, objectKind),
+        eq(approvalProposals.objectId, objectId),
+        action ? eq(approvalProposals.action, action) : undefined,
+        or(eq(approvalProposals.status, 'SUBMITTED'), and(eq(approvalProposals.status, 'APPROVED'), isNull(approvalProposals.activatedAt))),
+      ),
+    )
+    .orderBy(desc(approvalProposals.submittedAt))
+    .limit(1);
+  return row ?? null;
+}
+
+/** True when the object's approval (e.g. a draft's first ACTIVATE) has been approved and fully applied. */
+export async function isApproved(ctx: SeedContext, objectKind: string, objectId: string): Promise<boolean> {
+  if (await unfinishedProposal(ctx, objectKind, objectId)) return false;
+  return (await approvalGates(ctx.db, objectKind, [objectId])).get(objectId) === 'approved';
 }
 
 /** Approve a proposal someone already submitted (e.g. through a service's `approval` choice), as its named checker. */

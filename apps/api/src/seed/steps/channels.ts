@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import type { ActorContext } from '@ocso/application';
 import { channels } from '@ocso/db';
 import type { SeedContext } from '../context.js';
-import { approveAs } from './agents.js';
+import { approveAs, isApproved } from './agents.js';
 
 export const WEBCHAT_NAME = 'Meridian web chat';
 
@@ -15,7 +15,13 @@ export const WEBCHAT_NAME = 'Meridian web chat';
 /** The channel only; who answers is its router (seed steps/routers.ts). */
 export async function seedWebChat(ctx: SeedContext, admin: ActorContext, checker: ActorContext): Promise<{ id: string; publicKey: string }> {
   const [existing] = await ctx.db.select({ id: channels.id, publicKey: channels.publicKey }).from(channels).where(eq(channels.name, WEBCHAT_NAME));
-  if (existing) return existing;
+  if (existing) {
+    // Created by an interrupted run before its activation was approved.
+    if (!(await isApproved(ctx, 'channel', existing.id))) {
+      await approveAs(ctx, admin, checker, { objectKind: 'channel', objectId: existing.id, action: 'ACTIVATE' }, 'Demo seed: open the web chat channel');
+    }
+    return existing;
+  }
   const view = await ctx.services.channels.create(admin, {
     kind: 'WEBCHAT',
     name: WEBCHAT_NAME,

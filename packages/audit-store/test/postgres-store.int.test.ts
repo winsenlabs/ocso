@@ -246,6 +246,30 @@ describe('postgres audit store: purge floor, stats, health', () => {
     expect(report.problems.filter((p) => p.kind === 'RECORD_MISSING')).toEqual([]);
   });
 
+  it('does not count a recent record as purged under a purge log row that breaks the floor', async () => {
+    const victim = recordAt(daysAgo(30));
+    await store.append([victim]);
+    await sealAll();
+    const { rows } = await owner.query<{ position: string }>('SELECT position FROM audit_chain WHERE record_id = $1', [victim.id]);
+    const position = Number(rows[0]!.position);
+    const month = `${victim.occurredAt.getUTCFullYear()}${String(victim.occurredAt.getUTCMonth() + 1).padStart(2, '0')}`;
+    // Someone past the append-only triggers deletes the record and logs a "purge" of its month up to tomorrow.
+    await owner.query('BEGIN');
+    await owner.query('SET LOCAL session_replication_role = replica');
+    await owner.query('DELETE FROM audit_records WHERE id = $1', [victim.id]);
+    await owner.query('COMMIT');
+    await owner.query(`INSERT INTO audit_purges (cutoff, partitions, records) VALUES (now() + interval '1 day', $1, 1)`, [[`audit_records_p${month}`]]);
+    try {
+      expect((await store.purgeHorizon())!.getTime()).toBeLessThanOrEqual(daysAgo(365).getTime());
+      const report = await verifyChain(store, { from: position, to: position, keys });
+      expect(report.purged).toBe(0);
+      expect(report.problems).toEqual([expect.objectContaining({ kind: 'RECORD_MISSING', position, recordId: victim.id })]);
+    } finally {
+      await store.append([victim]);
+    }
+    expect(await verifyChain(store, { from: position, to: position, keys })).toMatchObject({ ok: true, records: 1 });
+  });
+
   it('reports stats and health', async () => {
     const stats = await store.stats();
     expect(stats.rows).toBeGreaterThan(5);

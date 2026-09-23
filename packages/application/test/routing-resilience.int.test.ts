@@ -102,6 +102,22 @@ describe('bursts', () => {
     expect(await f.routing(conversationId)).toMatchObject({ stepIndex: 1, attempts: 1, answers: { product: 'sales' } });
     expect(await f.routerMessages(conversationId)).toHaveLength(2);
   });
+
+  it('a re-prompt stays the current question: a second unmatched message in the same burst does not move past it', async () => {
+    const channel = await f.channelWith(ONE_STEP, 'Burst re-prompt');
+    const { conversationId } = await f.say(channel, 'hi', '+919870000008');
+    await f.engine.advance(conversationId, 'r1');
+    await f.say(channel, 'hmm', '+919870000008');
+    await f.say(channel, '?', '+919870000008');
+    await f.engine.advance(conversationId, 'r2');
+    // Re-asked once (attempt 2 of 2) and still waiting for the answer to it — not routed behind its back.
+    expect(await f.conversation(conversationId)).toMatchObject({ controlState: 'ROUTING' });
+    expect(await f.routing(conversationId)).toMatchObject({ phase: 'STEPS', stepIndex: 0, attempts: 2 });
+    expect(await f.routerMessages(conversationId)).toHaveLength(2);
+    await f.say(channel, '2', '+919870000008');
+    await f.engine.advance(conversationId, 'r3');
+    expect(await f.conversation(conversationId)).toMatchObject({ controlState: 'AI_ACTIVE', agentId: f.agents.arjun });
+  });
 });
 
 describe('queues that lose their agents', () => {

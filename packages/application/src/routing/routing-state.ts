@@ -86,15 +86,15 @@ export interface CustomerMessage {
   parts: InteractionPart[];
 }
 
-/** Customer messages after `afterSeq`, oldest first, with their parts. */
-export async function customerMessagesAfter(tx: DbOrTx, conversationId: string, afterSeq: number, upToSeq?: number): Promise<CustomerMessage[]> {
+/** Customer messages after `afterSeq`, oldest first, with their parts (leaving out `exceptSeq`). */
+export async function customerMessagesAfter(tx: DbOrTx, conversationId: string, afterSeq: number, exceptSeq?: number): Promise<CustomerMessage[]> {
   const rows = await tx
     .select({ id: interactions.id, seq: interactions.seq, idempotencyKey: interactions.idempotencyKey })
     .from(interactions)
     .where(and(eq(interactions.conversationId, conversationId), eq(interactions.actorType, 'CUSTOMER'), eq(interactions.kind, 'MESSAGE'), gt(interactions.seq, afterSeq)))
     .orderBy(asc(interactions.seq))
     .limit(100);
-  const within = upToSeq === undefined ? rows : rows.filter((r) => r.seq < upToSeq);
+  const within = exceptSeq === undefined ? rows : rows.filter((r) => r.seq !== exceptSeq);
   if (!within.length) return [];
   const parts = await tx
     .select()

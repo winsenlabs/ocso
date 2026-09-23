@@ -4,7 +4,9 @@ import {
   AUDIT_STORE_CONNECT_TIMEOUT_MS,
   AUDIT_STORE_TIMEOUT_MS,
   flooredCutoff,
+  purgeHorizonOf,
   withTimeout,
+  type AuditPurge,
   type AuditRecord,
   type AuditScopeFilter,
   type AuditStore,
@@ -206,9 +208,18 @@ export class PostgresAuditStore implements AuditStore {
     }
   }
 
+  async purges(): Promise<AuditPurge[]> {
+    const { rows } = await this.pool.query<{ purged_at: Date; cutoff: Date; partitions: string[] }>('SELECT purged_at, cutoff, partitions FROM audit_purges ORDER BY purged_at, id');
+    return rows.map((r) => ({
+      purgedAt: r.purged_at,
+      cutoff: r.cutoff,
+      // audit_purge_before logs the dropped partition names (audit_records_pYYYYMM).
+      months: r.partitions.map((name) => /^audit_records_p(\d{6})$/.exec(name)?.[1]).filter((m): m is string => m !== undefined).map(Number),
+    }));
+  }
+
   async purgeHorizon(): Promise<Date | null> {
-    const { rows } = await this.pool.query<{ cutoff: Date | null }>('SELECT max(cutoff) AS cutoff FROM audit_purges');
-    return rows[0]?.cutoff ?? null;
+    return purgeHorizonOf(await this.purges());
   }
 
   async selfCheck(): Promise<AuditStoreSelfCheck> {

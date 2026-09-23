@@ -2,7 +2,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { SETTINGS_OBJECT_ID, type ActorContext, type ClassifyToolsInput, type SetAgentToolGrantsInput } from '@ocso/application';
 import { mcpConnections } from '@ocso/db';
 import type { SeedContext } from '../context.js';
-import { approveAs } from './agents.js';
+import { approveAs, approveProposal, unfinishedProposal } from './agents.js';
 
 export const MCP_CONNECTION_NAME = 'meridian-core';
 
@@ -77,10 +77,15 @@ async function connectAndApprove(ctx: SeedContext, admin: ActorContext, checker:
   await ctx.services.mcp.approve(admin, connectionId, { allowedAgentIds: [mayaId], confirmationPolicy: 'SENSITIVE_ONLY', sendCustomerClaims: false, healthCheckSeconds: 60 });
   // Going live is an approval (a Head checks the Tech admin's connection); activation re-contacts the server,
   // which the seed finishes itself instead of waiting for the worker.
-  const proposal = await ctx.services.approvals.submit(admin, { objectKind: 'mcp_connection', objectId: connectionId, action: 'ACTIVATE', checkerId: checker.principal!.userId, reason: 'Demo seed: connect core banking for Maya' });
-  await ctx.services.approvalDecisions.decide(checker, proposal.id, { decision: 'APPROVE', reason: 'Demo seed: reviewed', contentHash: proposal.contentHash });
-  const activation = await ctx.services.approvalDecisions.finishActivation(checker, proposal.id);
-  if (activation !== 'ACTIVATED') throw new Error(`MCP activation ${activation.toLowerCase()}`);
+  const unfinished = await unfinishedProposal(ctx, 'mcp_connection', connectionId, 'ACTIVATE');
+  if (unfinished) {
+    await approveProposal(ctx, checker, unfinished.id);
+  } else {
+    const proposal = await ctx.services.approvals.submit(admin, { objectKind: 'mcp_connection', objectId: connectionId, action: 'ACTIVATE', checkerId: checker.principal!.userId, reason: 'Demo seed: connect core banking for Maya' });
+    await ctx.services.approvalDecisions.decide(checker, proposal.id, { decision: 'APPROVE', reason: 'Demo seed: reviewed', contentHash: proposal.contentHash });
+    const activation = await ctx.services.approvalDecisions.finishActivation(checker, proposal.id);
+    if (activation !== 'ACTIVATED') throw new Error(`MCP activation ${activation.toLowerCase()}`);
+  }
   ctx.log(`approved ${MCP_CONNECTION_NAME} for Maya (${tools.length} tools classified)`);
 }
 

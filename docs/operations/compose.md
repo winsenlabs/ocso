@@ -225,13 +225,25 @@ compose up -d` runs the same `migrate` service before api and worker start.
 This release adds role presets, per-user permissions, maker–checker approvals, routers and a separate
 audit store (ADR-029 to ADR-033). On an existing deployment:
 
-1. **Back up first** (section 5): PostgreSQL and the `secrets` volume. The release adds a database
-   and new secrets, and there are no down-migrations.
+**This release is one-way.** It is an exception to the expand/contract rule below: migration 0021
+renames the stored roles, and the previous release cannot read the new names, so the previous image
+fails on every authenticated request once 0021 has run. Rolling back past this release means
+restoring the pre-upgrade backup, not redeploying the old image. A backup taken right before the
+upgrade is therefore required, not optional.
+
+1. **Back up first** (section 5): PostgreSQL and the `secrets` volume. This is the only way back.
+   There are no down-migrations, and the previous image does not work against the migrated schema.
+   The audit database (`auditdata`) does not exist yet; it is created by this release.
 2. **Create the new secrets and start the audit database.** `docker compose up -d keygen audit-db`.
    Keygen adds only the missing files (the `audit-postgres/`, `audit-migrate/` and `audit-writer/`
    credentials, `app/audit_reader_url` and `app/audit_signing_key`) and never touches existing ones.
    Back up the `secrets` volume again afterwards, since it now holds the audit signing key.
-3. **Migrate, then audit-migrate:** `docker compose run --rm migrate`. The main migrations run first
+3. **Stop the old application, then migrate:** `docker compose stop api worker web`, then
+   `docker compose run --rm migrate`. While `run --rm migrate` runs, an old api that is still up
+   serves against the migrated schema and returns errors to signed-in users until step 4 replaces it.
+   Stopping api, worker and web first avoids that; if you skip it, accept a brief window of errors
+   (the length of the migration plus the restart). `docker compose up -d --build` has the same window,
+   because Compose recreates api and worker only after `migrate` exits. The main migrations run first
    (0021–0031), then `audit-migrate` creates the audit schema, the `ocso_audit_writer` and
    `ocso_audit_reader` roles and the minimum retention (`AUDIT_MIN_RETENTION_DAYS`, default 365). If it
    fails, fix the cause and run it again; both steps are idempotent.
@@ -254,13 +266,20 @@ What changes for people:
   the worker. Watch **System → Audit store** until the backlog reaches zero, then check the chain
   (section 10).
 
-**Migrations are expand/contract.** A release only adds schema that the previous release tolerates.
-Destructive changes ship one release later. This keeps a rolling restart and a rollback safe.
+**Migrations are normally expand/contract.** A release normally adds only schema that the previous
+release tolerates, and destructive changes ship one release later, which keeps a rolling restart and
+an image rollback safe. **The governance and routing release is an exception** (above): it renames
+roles in place (0021), and the previous release fails on every authenticated request against it.
 
-**Rolling back the application.** Redeploy the previous image tag. The schema stays at the newer
-version, which the previous release tolerates by the rule above.
+**Rolling back the application.** Within releases that follow the rule, redeploy the previous image
+tag; the schema stays at the newer version, which the previous release tolerates. To go back past the
+governance and routing release, do not redeploy the old image: restore the pre-upgrade backup instead
+(below). That discards everything that happened after the upgrade.
 
-**Rolling back the schema.** Restore the pre-upgrade backup. There are no down-migrations.
+**Rolling back the schema.** Restore the pre-upgrade backup (section 5): PostgreSQL and the `secrets`
+volume. There are no down-migrations. When rolling back past the governance and routing release, the
+audit database and its secrets did not exist before it; remove the `audit-db` service and the
+`auditdata` volume, or leave them unused by the older release.
 
 **PostgreSQL major upgrades** (18 → 19) use `pg_upgrade` or dump/restore into a new volume. The
 volume is mounted at `/var/lib/postgresql`, the PG18+ layout, so `pg_upgrade --link` works.

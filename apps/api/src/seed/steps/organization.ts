@@ -1,9 +1,9 @@
 import { randomBytes } from 'node:crypto';
-import { and, eq, sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { SETTINGS_OBJECT_ID, SetupService, type ActorContext } from '@ocso/application';
-import { approvalProposals, teams, users } from '@ocso/db';
+import { teams, users } from '@ocso/db';
 import { actorFor, type SeedContext } from '../context.js';
-import { approveAs, approveProposal, finishDeferred } from './agents.js';
+import { approveAs, approveProposal, finishDeferred, unfinishedProposal } from './agents.js';
 import { ORG, TEAMS, USERS, type DemoUser, type LeadKey, type TeamKey } from '../data/organization.js';
 
 export interface SeededPeople {
@@ -75,10 +75,7 @@ async function ensureUser(ctx: SeedContext, admin: ActorContext, user: DemoUser,
     proposalId = view.proposal?.id ?? null;
   } else if (row.status === 'PENDING_APPROVAL') {
     id = row.id;
-    const [open] = await ctx.db
-      .select({ id: approvalProposals.id })
-      .from(approvalProposals)
-      .where(and(eq(approvalProposals.objectKind, 'user'), eq(approvalProposals.objectId, id), eq(approvalProposals.status, 'SUBMITTED')));
+    const open = await unfinishedProposal(ctx, 'user', id);
     proposalId = open?.id ?? (await ctx.services.users.update(admin, id, { approval: choice })).proposal?.id ?? null;
   } else {
     throw new Error(`${user.email} exists but is ${row.status.toLowerCase()}; the demo seed only runs on a fresh database`);
