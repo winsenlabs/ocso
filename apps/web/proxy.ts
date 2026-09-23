@@ -53,6 +53,6 @@ export const config = {
     // chat, the dev design preview, API-served public ingress (see
     // next.config.ts rewrites), the web chat embed loader, Next internals and
     // static assets. /api/auth IS matched (passed through to the API above).
-    '/((?!(?:login|setup|forgot-password|reset-password|invite|recover|webchat|_design|channels|public|oauth|\\.well-known|blobs|ocso-webchat\\.js)(?:/|$)|_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|woff2?)$).*)',
+    '/((?!(?:login|setup|forgot-password|reset-password|invite|recover|webchat|_design|channels|public|oauth|\\.well-known|blobs|ocso-webchat\\.js)(?:/|$)|_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|webmanifest|woff2?)$).*)',
   ],
 };
