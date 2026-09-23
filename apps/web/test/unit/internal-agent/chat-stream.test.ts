@@ -19,6 +19,7 @@ vi.mock('../../../lib/actions/internal-agent', () => ({ confirmAskOcsoAction: vi
 const THREAD = '01999999-0000-7000-8000-000000000001';
 const ACTION = '01999999-0000-7000-8000-0000000000a1';
 const AGENT = '01999999-0000-7000-8000-0000000000b2';
+const FUTURE = new Date(Date.now() + 15 * 60_000).toISOString();
 
 type Script = (w: UIMessageStreamWriter) => void;
 
@@ -96,7 +97,7 @@ describe('Ask OCSO stream → drawer', () => {
     expect(html).toContain('Evil');
   });
 
-  it('shows a proposed write as a confirmation card with exactly what changes', async () => {
+  it('shows an earlier-style proposal as a confirmation card with exactly what changes', async () => {
     const { chat } = setup([
       (w) => {
         w.write({ type: 'data-step', data: { label: 'update worker settings' }, transient: true });
@@ -107,7 +108,7 @@ describe('Ask OCSO stream → drawer', () => {
             tool: 'update_worker_settings',
             risk: 'HIGH_WRITE',
             description: 'Worker configuration · min warm workers 2 → 4',
-            expiresAt: '2026-09-22T10:15:00.000Z',
+            expiresAt: FUTURE,
             changes: [{ label: 'min warm workers', before: '2', after: '4' }],
           },
         });
@@ -118,13 +119,54 @@ describe('Ask OCSO stream → drawer', () => {
     ]);
     await chat.sendMessage({ text: 'Increase minimum warm workers from 2 to 4' });
     const html = render(chat.messages[1]!);
-    expect(html).toContain('confirm sensitive change');
+    expect(html).toContain('confirm change');
     expect(html).toContain('Worker configuration · min warm workers 2 → 4');
-    expect(html).toContain('min warm workers');
-    expect(html).toContain('2 → <b>4</b>');
+    expect(html).toContain('<th scope="row">min warm workers</th><td>2</td><td><b>4</b></td>');
     expect(html).toContain('>Confirm change</button>');
-    expect(html).toContain('>Reject</button>');
+    expect(html).toContain('>Cancel</button>');
     expect(html).toContain('attributed to Leo Lead');
+  });
+
+  it('shows a governed card from the stream with the checker picker, suggested first, and a required reason', async () => {
+    const { chat } = setup([
+      (w) => {
+        w.write({ type: 'data-step', data: { label: 'agents · update agent' }, transient: true });
+        w.write({
+          type: 'data-action',
+          data: {
+            id: ACTION,
+            tool: 'agents.update_agent',
+            title: 'Raise Maya\'s refund limit to ₹10,000',
+            summary: 'Maya may refund up to ₹10,000 without a human.',
+            kind: 'governed',
+            object: { kind: 'agent', id: AGENT, name: 'Maya', href: `/agents/${AGENT}` },
+            changes: [{ label: 'refund limit', before: '₹5,000', after: '₹10,000' }],
+            warnings: ['You are about to raise an agent\'s authority.'],
+            approval: {
+              objectKind: 'agent',
+              checkers: [
+                { id: '01999999-0000-7000-8000-0000000000c1', name: 'Asha Rao', role: 'Head', suggested: false },
+                { id: '01999999-0000-7000-8000-0000000000c2', name: 'Tomas Shetty', role: 'Tech', suggested: true },
+              ],
+              noEligibleChecker: false,
+            },
+            expiresAt: FUTURE,
+            status: 'PENDING',
+          },
+        });
+      },
+    ]);
+    await chat.sendMessage({ text: 'Raise Maya refund limit to 10000' });
+    const html = render(chat.messages[1]!);
+    expect(html).toContain('request approval');
+    expect(html).toContain('Needs approval');
+    expect(html).toContain(`href="/agents/${AGENT}">Maya</a>`);
+    expect(html).toContain('You are about to raise an agent&#x27;s authority.');
+    expect(html.indexOf('Tomas Shetty · Tech · suggested')).toBeLessThan(html.indexOf('Asha Rao · Head'));
+    expect(html).toContain('>Reason</label>');
+    expect(html).toMatch(/<textarea[^>]*required/);
+    expect(html).toContain('>Send for approval</button>');
+    expect(html).not.toContain('bootstrap');
   });
 
   it('explains a role refusal instead of answering around it', async () => {

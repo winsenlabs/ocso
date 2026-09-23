@@ -15,4 +15,8 @@ export * from './queue-analytics.js';
 export * from './home-exec.js';
 export * from './home-lead.js';
 export * from './home-admin.js';
+export * from './home-flow.js';
+export * from './home-needs-you.js';
+export * from './home-setup.js';
+export * from './home-tiles.js';
 export * from './home.js';

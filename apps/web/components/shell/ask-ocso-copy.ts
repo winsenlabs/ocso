@@ -30,7 +30,7 @@ export function askOcsoCopy(session: Session, userInitials: string): AskOcsoCopy
   if (has(P.SYSTEM_READ)) {
     return {
       ...common,
-      scopeLine: `scope · platform · ${session.user.deployment.region ?? session.user.deployment.label.toLowerCase()}`,
+      scopeLine: `scope · platform${session.user.deployment.region ? ` · ${session.user.deployment.region}` : ''}`,
       suggestions: ['Which MCP connection is causing failures?', 'Why did latency spike in the last hour?'],
     };
   }

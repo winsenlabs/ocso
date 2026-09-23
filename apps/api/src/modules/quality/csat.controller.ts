@@ -4,7 +4,7 @@ import { CsatInput, CsatService, SettingsService, assertConversationAccess, reco
 import { notFound } from '@ocso/domain';
 import type { Db } from '@ocso/db';
 import { z } from 'zod';
-import { Actor, CurrentPrincipal, Public, RequirePermission } from '../../common/decorators.js';
+import { Actor, Capability, CurrentPrincipal, Public, RequirePermission } from '../../common/decorators.js';
 import { DB } from '../../infrastructure/tokens.js';
 import { WebChatIdentityService } from '../webchat/webchat-identity.service.js';
 
@@ -19,6 +19,7 @@ export class ConversationCsatController {
     @Inject(CsatService) private readonly csat: CsatService,
   ) {}
 
+  @Capability({ name: 'quality.list_conversation_csat', summary: 'Customer satisfaction (CSAT) scores recorded for a conversation.', tags: ['csat', 'satisfaction', 'rating'] })
   @Get()
   @RequirePermission(Permission.CONVERSATIONS_READ)
   async list(@CurrentPrincipal() principal: Principal, @Param('conversationId', { schema: Id }) conversationId: string) {
@@ -26,6 +27,7 @@ export class ConversationCsatController {
     return this.csat.list(conversationId);
   }
 
+  @Capability({ name: 'quality.record_conversation_csat', summary: "Record a CSAT score for a conversation on the customer's behalf.", risk: 'LOW_WRITE', tags: ['csat', 'satisfaction', 'rating'] })
   @Post()
   @RequirePermission(Permission.CONVERSATIONS_REPLY)
   async record(@Actor() actor: ActorContext, @Param('conversationId', { schema: Id }) conversationId: string, @Body({ schema: CsatInput }) body: CsatInput) {

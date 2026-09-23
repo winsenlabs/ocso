@@ -5,7 +5,7 @@ import type { AuditStore } from '@ocso/application';
 import { auditEvents, type Db } from '@ocso/db';
 import type { QueueAdapter } from '@ocso/queue';
 import { Permission } from '@ocso/auth';
-import { Public, RequirePermission } from '../../common/decorators.js';
+import { Capability, Public, RequirePermission } from '../../common/decorators.js';
 import { AUDIT_STORE, DB, QUEUE } from '../../infrastructure/tokens.js';
 
 /**
@@ -41,6 +41,7 @@ export class HealthController {
   }
 
   /** Dependency latencies are operational detail: Tech admin only (load balancers use /health/ready). */
+  @Capability({ name: 'system.get_dependency_health', summary: "Health and latency of the platform's dependencies.", tags: ['health', 'status', 'dependencies'] })
   @Get('dependencies')
   @RequirePermission(Permission.SYSTEM_READ)
   async dependencies(): Promise<Record<string, { status: string; latencyMs?: number; driver?: string; lagSeconds?: number; unshipped?: number }>> {

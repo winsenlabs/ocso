@@ -6,7 +6,7 @@ import { createOwnershipFixture, type OwnershipFixture } from '../../application
 /**
  * Ask OCSO inherits team-scoped agent ownership (ADR-026): its tools call the
  * application services with the asking user's principal, so a Lead only
- * sees and changes the agents their teams own.
+ * sees the agents their teams own (changes go through the API routes, tested in apps/api).
  */
 
 let f: OwnershipFixture;
@@ -29,14 +29,6 @@ describe('internal agent tools and agent ownership', () => {
     const names = async (p: Principal) => ((await run(p, 'agent_performance', {})).data as Array<{ name: string }>).map((a) => a.name).sort();
     expect(await names(f.p.leadA)).toEqual(['Maya', 'Sana']);
     expect(await names(f.p.leadB)).toEqual(['Arjun', 'Sana']);
-  });
-
-  it('set_agent_status cannot preview or change another team’s agent', async () => {
-    const { tool, args } = registry.resolve(f.p.leadB, 'set_agent_status', { agentId: f.agent.maya, status: 'PAUSED' });
-    expect(await tool.preview!(ctx(f.p.leadB), args)).toEqual({ changes: [] });
-    await expect(tool.run(ctx(f.p.leadB), args)).rejects.toMatchObject({ category: 'not_found' });
-    const own = registry.resolve(f.p.leadA, 'set_agent_status', { agentId: f.agent.maya, status: 'PAUSED' });
-    expect((await own.tool.preview!(ctx(f.p.leadA), own.args)).changes).toEqual([{ label: 'Maya · status', before: 'DRAFT', after: 'PAUSED' }]);
   });
 
   it('list_conversations and attention_summary follow the lead’s conversation scope', async () => {

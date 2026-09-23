@@ -21,6 +21,18 @@ export interface Principal {
    * principals built without the database (seeds, tests): the preset applies.
    */
   readonly permissions?: ReadonlySet<Permission> | undefined;
+  /**
+   * Set when Ask OCSO runs an API route for this user (PM/research/12 §6, via = INTERNAL_AGENT): the thread and
+   * the confirmation card (a write) or the model's tool call (a read). Audit rows carry it.
+   */
+  readonly delegation?: InternalAgentDelegation | undefined;
+}
+
+/** Which Ask OCSO thread and card (or read call) a delegated request belongs to. */
+export interface InternalAgentDelegation {
+  readonly threadId: string;
+  readonly cardId?: string | undefined;
+  readonly callId?: string | undefined;
 }
 
 /** The principal's effective permissions. */

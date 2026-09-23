@@ -3,7 +3,7 @@ import { Permission, can, type Principal } from '@ocso/auth';
 import { ApprovalService, DestinationInput, DestinationPatch, NotificationDestinationService, WithApproval, requestStagedApproval, type ActorContext } from '@ocso/application';
 import type { Response } from 'express';
 import { z } from 'zod';
-import { Actor, Authenticated, CurrentPrincipal, RequireAnyPermission, RequirePermission } from '../../common/decorators.js';
+import { Actor, Authenticated, Capability, CurrentPrincipal, RequireAnyPermission, RequirePermission } from '../../common/decorators.js';
 import { approvalResponse } from '../approvals/approval-response.js';
 import { createDraft, proposeOnly, withApprovalState, OptionalApproval, type ApprovalBody } from '../settings/platform-approvals.js';
 
@@ -26,6 +26,7 @@ export class NotificationDestinationsController {
   ) {}
 
   /** Managers and rule editors (to attach destinations); configuration and approval state only for managers. */
+  @Capability({ name: 'alerts.list_notification_destinations', summary: 'List notification destinations (where alerts are sent).', tags: ['destination'] })
   @Get()
   @Authenticated()
   async list(@Actor() actor: ActorContext, @CurrentPrincipal() principal: Principal) {
@@ -37,12 +38,14 @@ export class NotificationDestinationsController {
    * Registered destination kinds: label, config form (JSON Schema), secret
    * field and the lifecycle events each receives. Same audience as the list.
    */
+  @Capability({ name: 'alerts.list_notification_destination_kinds', summary: 'List the kinds of notification destination this deployment supports.', tags: ['destination'] })
   @Get('kinds')
   @RequireAnyPermission(Permission.NOTIFICATION_DESTINATIONS_MANAGE, Permission.ALERT_RULES_TECHNICAL_MANAGE, Permission.ALERT_RULES_BUSINESS_MANAGE)
   kinds(@Actor() actor: ActorContext) {
     return this.destinations.kinds(actor);
   }
 
+  @Capability({ name: 'alerts.get_notification_destination', summary: 'Get one notification destination (its configuration, never its secret).', tags: ['destination'] })
   @Get(':id')
   @RequirePermission(Permission.NOTIFICATION_DESTINATIONS_MANAGE)
   async get(@Actor() actor: ActorContext, @CurrentPrincipal() principal: Principal, @Param('id', { schema: z.uuid() }) id: string) {
@@ -50,6 +53,7 @@ export class NotificationDestinationsController {
   }
 
   /** A disabled draft (201); `enabled: true` with `approval` also submits its activation (202). */
+  @Capability({ name: 'alerts.create_notification_destination', summary: 'Add a notification destination as a disabled draft (enabling needs approval; secrets are entered in the UI).', tags: ['destination'] })
   @Post()
   @RequirePermission(Permission.NOTIFICATION_DESTINATIONS_MANAGE)
   create(@Actor() actor: ActorContext, @Body({ schema: CreateBody }) body: CreateBody, @Res({ passthrough: true }) res: Response) {
@@ -58,6 +62,7 @@ export class NotificationDestinationsController {
   }
 
   /** `enabled: false` disables at once; `enabled: true` is an ACTIVATE proposal; other fields: draft direct, else UPDATE proposal. */
+  @Capability({ name: 'alerts.update_notification_destination', summary: 'Change a notification destination: disabling applies at once, enabling needs approval.', stopWhen: { enabled: false }, tags: ['destination'] })
   @Patch(':id')
   @RequirePermission(Permission.NOTIFICATION_DESTINATIONS_MANAGE)
   async update(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string, @Body({ schema: PatchBody }) body: PatchBody, @Res({ passthrough: true }) res: Response) {
@@ -78,6 +83,7 @@ export class NotificationDestinationsController {
   }
 
   /** Always a proposal (DELETE): 202 `{proposal}` with `approval`, else 409 approval_required. */
+  @Capability({ name: 'alerts.delete_notification_destination', summary: 'Delete a notification destination (always needs approval).', tags: ['destination'] })
   @Delete(':id')
   @RequirePermission(Permission.NOTIFICATION_DESTINATIONS_MANAGE)
   remove(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string, @Body({ schema: OptionalApproval }) body: ApprovalBody, @Res({ passthrough: true }) res: Response) {
@@ -85,6 +91,7 @@ export class NotificationDestinationsController {
   }
 
   /** Sends a synthetic alert immediately and reports the adapter result. */
+  @Capability({ name: 'alerts.test_notification_destination', summary: 'Send a test alert to a notification destination.', risk: 'LOW_WRITE', tags: ['destination', 'test'] })
   @Post(':id/test')
   @HttpCode(200)
   @RequirePermission(Permission.NOTIFICATION_DESTINATIONS_MANAGE)

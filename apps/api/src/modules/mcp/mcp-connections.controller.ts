@@ -15,7 +15,7 @@ import {
 } from '@ocso/application';
 import type { Response } from 'express';
 import { z } from 'zod';
-import { Actor, CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
+import { Actor, Capability, CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
 import { approvalResponse } from '../approvals/approval-response.js';
 import { proposeOnly, withApprovalState, OptionalApproval, type ApprovalBody } from '../settings/platform-approvals.js';
 
@@ -47,18 +47,21 @@ export class McpConnectionsController {
     @Inject(ApprovalService) private readonly approvals: ApprovalService,
   ) {}
 
+  @Capability({ name: 'mcp.list_connections', summary: 'List shared MCP tool connections with their status, health and approval state.' })
   @Get()
   @RequirePermission(Permission.MCP_READ)
   async list(@Actor() actor: ActorContext, @CurrentPrincipal() principal: Principal) {
     return withApprovalState(this.approvals, principal, 'mcp_connection', await this.connections.list(actor));
   }
 
+  @Capability({ name: 'mcp.create_connection', summary: 'Register a shared MCP connection by URL as a draft (a header token is set with mcp.set_connection_header_auth; OAuth sign-in happens on its Connections page).' })
   @Post()
   @RequirePermission(Permission.MCP_MANAGE)
   create(@Actor() actor: ActorContext, @Body({ schema: CreateConnectionInput }) body: CreateConnectionInput) {
     return this.connections.createDraft(actor, body);
   }
 
+  @Capability({ name: 'mcp.get_connection', summary: 'Get one MCP connection.' })
   @Get(':id')
   @RequirePermission(Permission.MCP_READ)
   async get(@Actor() actor: ActorContext, @CurrentPrincipal() principal: Principal, @Param('id', { schema: Id }) id: string) {
@@ -66,6 +69,7 @@ export class McpConnectionsController {
     return view.kind === 'PERSONAL' ? view : (await withApprovalState(this.approvals, principal, 'mcp_connection', [view]))[0];
   }
 
+  @Capability({ name: 'mcp.discover_connection_tools', summary: 'Discover the tools an MCP connection offers.', risk: 'LOW_WRITE' })
   @Post(':id/discover')
   @HttpCode(200)
   @RequirePermission(Permission.MCP_MANAGE)
@@ -73,6 +77,7 @@ export class McpConnectionsController {
     return this.connections.discover(actor, id);
   }
 
+  @Capability({ name: 'mcp.rediscover_connection_tools', summary: "Re-discover an MCP connection's tools after the server changed.", risk: 'LOW_WRITE' })
   @Post(':id/rediscover')
   @HttpCode(200)
   @RequirePermission(Permission.MCP_MANAGE)
@@ -80,6 +85,11 @@ export class McpConnectionsController {
     return this.connections.rediscover(actor, id);
   }
 
+  @Capability({
+    name: 'mcp.set_connection_header_auth',
+    summary: 'Set the header and token an MCP connection signs in with (the token is entered on the confirmation card).',
+    tags: ['auth', 'header', 'token', 'credential', 'sign in'],
+  })
   @Post(':id/auth/header')
   @HttpCode(200)
   @RequirePermission(Permission.MCP_MANAGE)
@@ -94,6 +104,7 @@ export class McpConnectionsController {
     );
   }
 
+  @Capability({ exclude: 'starts a browser OAuth flow (a redirect Ask OCSO cannot follow); authorize the connection on its Connections page (/connections)' })
   @Post(':id/oauth/begin')
   @HttpCode(200)
   @RequirePermission(Permission.MCP_MANAGE)
@@ -101,12 +112,14 @@ export class McpConnectionsController {
     return this.connections.beginOAuth(actor, id, body);
   }
 
+  @Capability({ name: 'mcp.list_connection_tools', summary: "List an MCP connection's tools and how they are classified." })
   @Get(':id/tools')
   @RequirePermission(Permission.MCP_READ)
   tools(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Query({ schema: ToolsQuery }) query: z.infer<typeof ToolsQuery>) {
     return this.connections.listTools(actor, id, { includeRemoved: query.includeRemoved === 'true' });
   }
 
+  @Capability({ name: 'mcp.classify_connection_tools', summary: "Classify an MCP connection's tools: risk class, approved, who may run them." })
   @Put(':id/tools')
   @RequirePermission(Permission.MCP_MANAGE)
   classify(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Body({ schema: ClassifyBody }) body: ClassifyBody, @Res({ passthrough: true }) res: Response) {
@@ -118,6 +131,7 @@ export class McpConnectionsController {
    * A draft: records the agent policy, then its activation is an ACTIVATE proposal (202 with `approval`,
    * else 409 approval_required — the policy is kept). Approved: a policy change is an UPDATE proposal.
    */
+  @Capability({ name: 'mcp.approve_connection', summary: "Set an MCP connection's agent policy and submit its activation (needs approval)." })
   @Post(':id/approve')
   @HttpCode(200)
   @RequirePermission(Permission.MCP_MANAGE)
@@ -131,6 +145,7 @@ export class McpConnectionsController {
     return proposeOnly(res, this.approvals, actor, { kind: 'mcp_connection', id, action: 'ACTIVATE' }, approval);
   }
 
+  @Capability({ name: 'mcp.disable_connection', summary: 'Disable an MCP connection (applies at once).', stop: true, tags: ['stop', 'turn off'] })
   @Post(':id/disable')
   @HttpCode(200)
   @RequirePermission(Permission.MCP_MANAGE)
@@ -138,6 +153,7 @@ export class McpConnectionsController {
     return this.connections.disable(actor, id);
   }
 
+  @Capability({ name: 'mcp.enable_connection', summary: 'Re-enable an MCP connection (needs approval).' })
   @Post(':id/enable')
   @HttpCode(200)
   @RequirePermission(Permission.MCP_MANAGE)
@@ -146,6 +162,7 @@ export class McpConnectionsController {
   }
 
   /** Shared connections and templates: always a proposal (DELETE). An admin revoking a personal connection: immediate (204). */
+  @Capability({ name: 'mcp.delete_connection', summary: 'Delete an MCP connection (always needs approval).' })
   @Delete(':id')
   @RequirePermission(Permission.MCP_MANAGE)
   async remove(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Body({ schema: OptionalApproval }) body: ApprovalBody, @Res({ passthrough: true }) res: Response) {
@@ -155,6 +172,7 @@ export class McpConnectionsController {
     return undefined;
   }
 
+  @Capability({ name: 'mcp.check_connection_health', summary: 'Run a health check on an MCP connection now.', risk: 'LOW_WRITE' })
   @Post(':id/health')
   @HttpCode(200)
   @RequirePermission(Permission.MCP_MANAGE)
@@ -162,6 +180,7 @@ export class McpConnectionsController {
     return this.connections.checkHealth(actor, id);
   }
 
+  @Capability({ name: 'mcp.get_connection_health_history', summary: "An MCP connection's recent health checks." })
   @Get(':id/health')
   @RequirePermission(Permission.MCP_READ)
   healthHistory(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Query({ schema: HistoryQuery }) query: z.infer<typeof HistoryQuery>) {

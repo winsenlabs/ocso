@@ -1,7 +1,5 @@
 import { Permission } from '@ocso/auth';
-import { and, eq, sql } from 'drizzle-orm';
-import { AgentService, agentSummaries, manageableAgentsSql } from '@ocso/application';
-import { virtualAgents } from '@ocso/db';
+import { AgentService, agentSummaries } from '@ocso/application';
 import { z } from 'zod';
 import type { InternalTool } from '../contract.js';
 
@@ -33,32 +31,5 @@ export const agentPerformance: InternalTool<{ windowDays: number }> = {
         status: (s?.escalationRate ?? 0) > 0.25 ? 'warn' : 'ok',
       })),
     };
-  },
-};
-
-export const setAgentStatus: InternalTool<{ agentId: string; status: 'LIVE' | 'PAUSED' }> = {
-  name: 'set_agent_status',
-  description:
-    'Pause a virtual agent (immediate once the user confirms), or ask to put it live — going live is a maker-checker change, so the API answers that it needs approval and the user submits it from the agent screen.',
-  input: z.object({ agentId: z.uuid(), status: z.enum(['LIVE', 'PAUSED']) }),
-  // Pausing is a stop and has its own permission; going live is refused with approval_required by the service.
-  permission: Permission.AGENTS_PAUSE,
-  risk: 'HIGH_WRITE',
-  describe: (a) => `${a.status === 'PAUSED' ? 'Pause' : 'Put live'} virtual agent ${a.agentId}. ${a.status === 'PAUSED' ? 'New customer messages will wait for humans.' : ''}`,
-  async preview(ctx, args) {
-    // Only agents the user's teams own; another team's agent previews like a missing one.
-    const [agent] = await ctx.db
-      .select({ name: virtualAgents.name, status: virtualAgents.status })
-      .from(virtualAgents)
-      .where(and(eq(virtualAgents.id, args.agentId), sql`${virtualAgents.id} IN (${manageableAgentsSql(ctx.principal)})`));
-    if (!agent) return { changes: [] };
-    return {
-      summary: `${args.status === 'PAUSED' ? `Pause ${agent.name}. New customer messages will wait for humans.` : `Put ${agent.name} live.`}`,
-      changes: [{ label: `${agent.name} · status`, before: agent.status, after: args.status }],
-    };
-  },
-  async run(ctx, args) {
-    const agent = await new AgentService(ctx.db).setStatus(ctx.actor, args.agentId, args.status);
-    return { data: { id: agent.id, name: agent.name, status: agent.status }, links: [{ label: agent.name, detail: `status ${agent.status}`, href: `/agents/${agent.id}` }] };
   },
 };

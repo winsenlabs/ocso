@@ -61,9 +61,22 @@ test('sign-in shows API errors, then the admin sees Platform navigation and not 
   expect(nav.groups).not.toContain('My work');
 
   await expect(page.locator('.greeting h1')).toContainText('Tara,');
-  await expect(page.getByText('E2E Bank · PROD'.toUpperCase())).toBeVisible();
-  // Nothing invented: metric tiles without an API say so.
-  await expect(page.locator('.tile.nodata').first()).toContainText('no data yet');
+  // One deployment, one environment: no scope box and no environment badge in the chrome.
+  await expect(page.locator('.scope-sw')).toHaveCount(0);
+  await expect(page.getByText(/E2E BANK · PROD/)).toHaveCount(0);
+  // A new deployment: Home shows what is left to set up instead of tiles with no data.
+  const setup = page.getByRole('region', { name: 'Set up OCSO' });
+  await expect(setup).toBeVisible();
+  await expect(setup.getByRole('link', { name: /Connect a model provider/ })).toHaveAttribute('href', '/connections?tab=providers');
+  await expect(setup).toContainText(/\d of \d done/);
+  // Tech cannot create agents: that step names who can instead of linking to a page Tech cannot act on.
+  await expect(setup.getByRole('link', { name: /Create your first agent/ })).toHaveCount(0);
+  await expect(setup.getByText('Create your first agent')).toContainText('waiting on Head');
+  await expect(page.getByRole('list', { name: /Key numbers/ })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Needs you' })).toBeVisible();
+  // Tech: the compact health strip, and no Ask OCSO bar until a model is chosen for it.
+  await expect(page.getByRole('list', { name: 'Platform health' })).toContainText('workers');
+  await expect(page.getByRole('search', { name: 'Ask OCSO a question' })).toHaveCount(0);
   // Worker limits are real (GET /v1/settings/workers).
   await expect(page.getByRole('region', { name: 'Capacity' })).toContainText('10 workers');
 
@@ -122,8 +135,18 @@ test('Service member sees My work only, cannot open Team, and returns to the req
   const nav = await navModel(page);
   expect(nav.groups).toEqual(['My work']);
   expect(nav.items).toEqual(['Home', 'Search', 'Conversations', 'Pickup queue', 'Customers', 'Alerts', 'My connections', 'Settings']);
-  await expect(page.locator('.scope-sw')).toContainText(TEAM);
   await expectNavLinksResolve(page);
+
+  // Service Home: needs you, take next (nothing waiting yet), my shift; team names are not in the chrome.
+  await page.goto('/');
+  await settled(page);
+  await expect(page.locator('.scope-sw')).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Needs you' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'My queue' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Take next conversation' })).toBeDisabled();
+  await expect(page.getByRole('region', { name: 'My shift' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Set up OCSO' })).toHaveCount(0);
+  await expect(page.getByText(TEAM)).toHaveCount(0);
 
   await page.goto('/team');
   await expect(page.getByText('Not available for your role')).toBeVisible();

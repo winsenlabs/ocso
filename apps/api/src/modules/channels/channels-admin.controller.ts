@@ -7,7 +7,7 @@ import { ChannelRuntime } from '@ocso/agent-runtime';
 import type { ChannelRegistry, ConnectionCheckResult } from '@ocso/channels';
 import { validation } from '@ocso/domain';
 import { z } from 'zod';
-import { Actor, CurrentPrincipal, RequireAnyPermission, RequirePermission } from '../../common/decorators.js';
+import { Actor, Capability, CurrentPrincipal, RequireAnyPermission, RequirePermission } from '../../common/decorators.js';
 import { CHANNEL_REGISTRY } from '../../infrastructure/tokens.js';
 import { approvalResponse } from '../approvals/approval-response.js';
 import { createDraft, proposeOnly, withApprovalState, OptionalApproval, type ApprovalBody } from '../settings/platform-approvals.js';
@@ -33,6 +33,7 @@ export class ChannelsAdminController {
     @Inject(ApprovalService) private readonly approvals: ApprovalService,
   ) {}
 
+  @Capability({ name: 'channels.list_channels', summary: 'List channels with their status and approval state.' })
   @Get()
   @RequirePermission(Permission.CHANNELS_READ)
   async list(@CurrentPrincipal() principal: Principal) {
@@ -46,12 +47,14 @@ export class ChannelsAdminController {
    * (no channel instances, no secrets), so every area that displays channels
    * may read it.
    */
+  @Capability({ name: 'channels.list_channel_kinds', summary: 'List the channel kinds this deployment supports.' })
   @Get('kinds')
   @RequireAnyPermission(Permission.CHANNELS_READ, Permission.CONVERSATIONS_READ, Permission.CONVERSATIONS_READ_TEAM, Permission.AGENTS_READ)
   kinds() {
     return this.registry.describeAll();
   }
 
+  @Capability({ name: 'channels.get_channel', summary: "Get one channel's configuration and approval state (never its secrets)." })
   @Get(':id')
   @RequirePermission(Permission.CHANNELS_READ)
   async get(@CurrentPrincipal() principal: Principal, @Param('id', { schema: Id }) id: string) {
@@ -59,6 +62,14 @@ export class ChannelsAdminController {
   }
 
   /** A draft (201); `status: 'ACTIVE'` with `approval` also submits its activation (202 `{…channel, proposal}`). */
+  @Capability({
+    name: 'channels.create_channel',
+    summary: 'Create a channel as a draft (its secrets are entered on the confirmation card; activating it needs approval).',
+    credentialSource: 'channel_kind',
+    revealResponse: 'revealedSecrets',
+    redactResponse: ['revealedSecrets'],
+    tags: ['add', 'new', 'twilio', 'connect'],
+  })
   @Post()
   @RequirePermission(Permission.CHANNELS_MANAGE)
   create(@Actor() actor: ActorContext, @Body({ schema: CreateBody }) body: CreateBody, @Res({ passthrough: true }) res: Response) {
@@ -81,6 +92,7 @@ export class ChannelsAdminController {
   }
 
   /** Always a proposal (DELETE): 202 `{proposal}` with `approval`, else 409 approval_required. */
+  @Capability({ name: 'channels.delete_channel', summary: 'Delete a channel (always needs approval).' })
   @Delete(':id')
   @RequirePermission(Permission.CHANNELS_MANAGE)
   remove(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Body({ schema: OptionalApproval }) body: ApprovalBody, @Res({ passthrough: true }) res: Response) {
@@ -88,6 +100,7 @@ export class ChannelsAdminController {
   }
 
   /** Read-only provider check with the stored credentials (e.g. Twilio: fetch the account); never sends a message. */
+  @Capability({ name: 'channels.test_channel', summary: "Check a channel's provider connection with its stored credentials (read-only).", risk: 'READ', tags: ['test', 'connection'] })
   @Post(':id/test')
   @HttpCode(200)
   @RequirePermission(Permission.CHANNELS_MANAGE)
@@ -115,6 +128,13 @@ export class ChannelsAdminController {
    * (a draft's other fields are saved first; an approved channel's must come separately). Name, settings and
    * secrets: written directly on a draft, an UPDATE proposal once approved (new secrets travel as refs).
    */
+  @Capability({
+    name: 'channels.update_channel',
+    summary: "Change a channel's name, settings or secrets (entered on the card): disabling applies at once, activating needs approval.",
+    stopWhen: { status: 'DISABLED' },
+    credentialSource: 'channel_kind',
+    tags: ['disable'],
+  })
   @Patch(':id')
   @RequirePermission(Permission.CHANNELS_MANAGE)
   async update(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Body({ schema: PatchBody }) body: PatchBody, @Res({ passthrough: true }) res: Response) {

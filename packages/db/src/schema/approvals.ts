@@ -92,6 +92,8 @@ export const approvalDecisions = pgTable(
     warnings: jsonb().$type<unknown[]>().notNull().default([]),
     bulkBatchId: uuid(),
     auditEventId: uuid(),
+    /** INTERNAL_AGENT when Ask OCSO ran the route for the actor ("submitted via Ask OCSO"); null for the UI and API (0034). */
+    via: text().$type<'INTERNAL_AGENT'>(),
     occurredAt: ts('occurred_at').notNull().defaultNow(),
   },
   (t) => [

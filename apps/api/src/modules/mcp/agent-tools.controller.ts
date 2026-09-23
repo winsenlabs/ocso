@@ -4,7 +4,7 @@ import { Permission } from '@ocso/auth';
 import { AgentToolGrantService, ApprovalService, SetAgentToolGrantsInput, TOOL_GRANT_KIND, WithApproval, requestApproval, withAppliedGrants, type ActorContext } from '@ocso/application';
 import { DomainError } from '@ocso/domain';
 import { z } from 'zod';
-import { Actor, RequirePermission } from '../../common/decorators.js';
+import { Actor, Capability, RequirePermission } from '../../common/decorators.js';
 
 const AgentId = z.uuid();
 const SetGrantsBody = SetAgentToolGrantsInput.extend(WithApproval.shape);
@@ -18,6 +18,7 @@ export class AgentToolsController {
     @Inject(ApprovalService) private readonly approvals: ApprovalService,
   ) {}
 
+  @Capability({ name: 'agents.list_agent_tools', summary: 'List the tools a virtual agent may use.', tags: ['tool', 'grant', 'agent'] })
   @Get(':agentId/tools')
   @RequirePermission(Permission.AGENTS_READ)
   list(@Actor() actor: ActorContext, @Param('agentId', { schema: AgentId }) agentId: string) {
@@ -29,6 +30,7 @@ export class AgentToolsController {
    * approved, removals and narrowing apply at once and what widens access is an `agent_tool_grant` proposal:
    * 202 `{ proposal, applied, ...tools }` with `approval`, else 409 approval_required (saying what already applied).
    */
+  @Capability({ name: 'agents.set_agent_tools', summary: 'Replace the tools a virtual agent may use (granting more needs approval).', tags: ['tool', 'grant', 'agent'] })
   @Put(':agentId/tools')
   @RequirePermission(Permission.AGENT_TOOLS_MANAGE)
   async set(@Actor() actor: ActorContext, @Param('agentId', { schema: AgentId }) agentId: string, @Body({ schema: SetGrantsBody }) body: SetGrantsBody, @Res({ passthrough: true }) res: Response) {

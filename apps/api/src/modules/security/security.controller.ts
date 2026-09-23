@@ -2,7 +2,7 @@ import { Controller, Get, Header, Inject, Post } from '@nestjs/common';
 import type { SecretStore } from '@ocso/secrets';
 import { Permission } from '@ocso/auth';
 import { CustomerClaimsIssuer, type ActorContext } from '@ocso/application';
-import { Actor, Public, RequirePermission } from '../../common/decorators.js';
+import { Actor, Capability, Public, RequirePermission } from '../../common/decorators.js';
 import { SECRET_STORE } from '../../infrastructure/tokens.js';
 
 /** Public verification keys for tool servers that receive customer claims. */
@@ -22,12 +22,14 @@ export class JwksController {
 export class SigningKeysController {
   constructor(@Inject(CustomerClaimsIssuer) private readonly claims: CustomerClaimsIssuer) {}
 
+  @Capability({ name: 'security.list_signing_keys', summary: 'List the keys that sign customer claims for tool servers (public parts only).', tags: ['key', 'jwks'] })
   @Get()
   @RequirePermission(Permission.SYSTEM_CONFIGURE)
   list() {
     return this.claims.listKeys();
   }
 
+  @Capability({ name: 'security.rotate_signing_key', summary: 'Rotate the customer-claims signing key.', tags: ['key', 'rotate'] })
   @Post('rotate')
   @RequirePermission(Permission.SYSTEM_CONFIGURE)
   rotate(@Actor() actor: ActorContext) {
@@ -40,6 +42,7 @@ export class SigningKeysController {
 export class SecretsController {
   constructor(@Inject(SECRET_STORE) private readonly secrets: SecretStore) {}
 
+  @Capability({ name: 'security.list_secrets', summary: 'Secrets inventory: names, owners and expiry (never the values).', tags: ['secret', 'credential', 'expiry'] })
   @Get()
   @RequirePermission(Permission.SECRETS_MANAGE)
   async list() {

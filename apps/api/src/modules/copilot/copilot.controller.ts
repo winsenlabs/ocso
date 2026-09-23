@@ -4,7 +4,7 @@ import { Permission, type Principal } from '@ocso/auth';
 import { COPILOT_STYLES, CopilotService } from '@ocso/agent-runtime';
 import type { ActorContext } from '@ocso/application';
 import { z } from 'zod';
-import { Actor, CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
+import { Actor, Capability, CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
 import { ConversationAccessService } from '../conversations/conversation-access.service.js';
 
 const Id = z.uuid();
@@ -21,6 +21,7 @@ export class CopilotController {
     @Inject(ConversationAccessService) private readonly access: ConversationAccessService,
   ) {}
 
+  @Capability({ name: 'copilot.draft_reply', summary: 'Draft a reply suggestion for a conversation (optionally from your text, in a tone).', risk: 'LOW_WRITE' })
   @Post('conversations/:id/copilot/draft')
   @RequirePermission(Permission.COPILOT_USE)
   async draft(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Body({ schema: DraftInput }) body: DraftInput) {
@@ -28,6 +29,7 @@ export class CopilotController {
     return this.copilot.draft(actor, id, body);
   }
 
+  @Capability({ name: 'copilot.get_latest_suggestion', summary: 'Get the latest copilot reply suggestion for a conversation.' })
   @Get('conversations/:id/copilot/latest')
   @RequirePermission(Permission.COPILOT_USE)
   async latest(@CurrentPrincipal() principal: Principal, @Param('id', { schema: Id }) id: string, @Res({ passthrough: true }) res: Response) {
@@ -37,6 +39,7 @@ export class CopilotController {
     return view ?? undefined;
   }
 
+  @Capability({ name: 'copilot.record_suggestion_outcome', summary: 'Record whether a copilot suggestion was inserted or dismissed.', risk: 'LOW_WRITE' })
   @Post('copilot-suggestions/:id/outcome')
   @HttpCode(204)
   @RequirePermission(Permission.COPILOT_USE)

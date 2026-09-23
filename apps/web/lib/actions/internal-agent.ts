@@ -3,55 +3,92 @@
 import { refresh } from 'next/cache';
 import { Permission } from '@ocso/auth';
 import { z } from 'zod';
-import type { MiniTableData, ObjectLink } from '@/components/internal-agent/types';
+import { afterTimeout, decisionFailure, fromAnswer, isTimeout, type ActionDecision, type CardStatusRead } from '@/components/internal-agent/decisions';
 import { ApiError, describeApiError } from '../api/errors';
-import { confirmInternalAgentAction, rejectInternalAgentAction, setInternalAgentProfile } from '../api/internal-agent';
+import { confirmInternalAgentAction, getInternalAgentAction, rejectInternalAgentAction, setInternalAgentProfile } from '../api/internal-agent';
 import { getSession } from '../session';
 
-/** Outcome of Confirm / Reject on an Ask OCSO action card. */
-export type ActionDecision =
-  | { ok: true; status: 'EXECUTED'; links: ObjectLink[]; table: MiniTableData | null }
-  | { ok: true; status: 'REJECTED' }
-  | { ok: false; message: string; settled: 'EXPIRED' | 'DECIDED' | null };
+export type { ActionDecision } from '@/components/internal-agent/decisions';
 
 const ActionId = z.uuid();
+const ConfirmSchema = z.object({
+  checkerId: z.uuid('Choose who approves this.').optional(),
+  reason: z.string().trim().min(3, 'Give a reason of at least 3 characters.').max(500, 'Keep the reason under 500 characters.').optional(),
+  credentials: z
+    .record(z.string().regex(/^[A-Za-z0-9_.-]{1,80}$/, 'Unknown credential field.'), z.string().max(16_000, 'A credential can be at most 16000 characters.'))
+    .refine((c) => Object.keys(c).length <= 20, 'Too many credential fields.')
+    .optional(),
+});
 
-function failure(err: unknown): ActionDecision {
-  if (err instanceof ApiError) {
-    if (err.code === 'action_not_pending') return { ok: false, message: `${err.message}.`, settled: 'DECIDED' };
-    if (err.isForbidden && /expired/i.test(err.message)) return { ok: false, message: 'The confirmation window has expired. Ask OCSO again to propose it anew.', settled: 'EXPIRED' };
-    if (err.isForbidden) return { ok: false, message: `Not allowed for your role: ${err.message}`, settled: null };
-    if (err.isUnauthenticated) return { ok: false, message: 'Your session has ended. Sign in again.', settled: null };
-  }
-  return { ok: false, message: describeApiError(err), settled: null };
+/** Typed credentials without blanks (a blank keeps or generates the value). Never logged. */
+function filledCredentials(credentials: Record<string, string> | undefined): Record<string, string> | undefined {
+  if (!credentials) return undefined;
+  const filled = Object.entries(credentials).filter(([, v]) => typeof v === 'string' && v.trim() !== '');
+  return filled.length ? Object.fromEntries(filled) : undefined;
 }
 
 /**
- * POST /v1/internal-agent/actions/:id/confirm. The API re-checks the user's
- * permission, executes through the same service the UI uses and audits it
- * (via = INTERNAL_AGENT). The current page is refreshed so it shows the change.
+ * POST /v1/internal-agent/actions/:id/confirm. The API re-checks the card and the user's permission, then runs
+ * the real route as them: it applies (direct, stop) or goes to the chosen checker (governed; `checkerId` + `reason`).
+ * The current page is refreshed so it shows the change.
  */
-export async function confirmAskOcsoAction(actionId: string): Promise<ActionDecision> {
+export async function confirmAskOcsoAction(actionId: string, input: { checkerId?: string; reason?: string; credentials?: Record<string, string> } = {}): Promise<ActionDecision> {
   const id = ActionId.safeParse(actionId);
   if (!id.success) return { ok: false, message: 'Unknown action.', settled: null };
+  const credentials = filledCredentials(input.credentials);
+  const parsed = ConfirmSchema.safeParse({ ...(input.checkerId ? { checkerId: input.checkerId } : {}), ...(input.reason?.trim() ? { reason: input.reason } : {}), ...(credentials ? { credentials } : {}) });
+  if (!parsed.success) {
+    // Messages name the problem, never a typed value.
+    const issue = parsed.error.issues[0];
+    const field = issue?.path[0] === 'checkerId' ? 'checkerId' : issue?.path[0] === 'credentials' ? 'credentials' : 'reason';
+    return { ok: false, message: issue?.message ?? 'Check the approval details.', settled: null, field };
+  }
   try {
-    const result = await confirmInternalAgentAction(id.data);
+    const answer = await confirmInternalAgentAction(id.data, parsed.data);
     refresh();
-    return { ok: true, status: 'EXECUTED', links: result.links ?? [], table: result.table ?? null };
+    return fromAnswer(answer, 'EXECUTED');
   } catch (err) {
-    return failure(err);
+    if (!isTimeout(err)) return decisionFailure(err);
+    // The API may still be applying it: show where the card really stands, never "failed".
+    const decision = afterTimeout(await readCard(id.data));
+    if (decision.ok) refresh();
+    return decision;
   }
 }
 
-/** POST /v1/internal-agent/actions/:id/reject — nothing changes; the rejection is audited. */
+/** The card as it stands now, or null when it cannot be read. */
+async function readCard(actionId: string): Promise<CardStatusRead> {
+  try {
+    return await getInternalAgentAction(actionId);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Re-read a card whose outcome is not known yet (UNKNOWN in the drawer). Answers the settled card once OCSO
+ * knows, or null while the confirm is still running or the card cannot be read.
+ */
+export async function checkAskOcsoAction(actionId: string): Promise<ActionDecision | null> {
+  const id = ActionId.safeParse(actionId);
+  if (!id.success) return null;
+  const decision = afterTimeout(await readCard(id.data));
+  if (!decision.ok) return null;
+  refresh();
+  return decision;
+}
+
+/** POST /v1/internal-agent/actions/:id/reject — nothing changes; the cancellation is audited. */
 export async function rejectAskOcsoAction(actionId: string): Promise<ActionDecision> {
   const id = ActionId.safeParse(actionId);
   if (!id.success) return { ok: false, message: 'Unknown action.', settled: null };
   try {
-    await rejectInternalAgentAction(id.data);
-    return { ok: true, status: 'REJECTED' };
+    return fromAnswer(await rejectInternalAgentAction(id.data), 'REJECTED');
   } catch (err) {
-    return failure(err);
+    if (!isTimeout(err)) return decisionFailure(err);
+    const read = await readCard(id.data);
+    if (read && !read.running && read.card.status !== 'PENDING') return { ok: true, card: read.card };
+    return { ok: false, message: 'OCSO did not answer in time. Try Cancel again.', settled: null };
   }
 }
 

@@ -48,3 +48,47 @@
 /* Composer */
 .ask-box textarea:disabled{cursor:not-allowed;opacity:.6}
 .ia-context.on{color:var(--accent);background:var(--accent-soft)}
+
+/* Action cards (PM/research/12 §5): kind badge, object, before → after, warnings, approval fields */
+.ia-card-head{align-items:center}
+.ia-card[data-kind="stop"]{border-color:var(--warn);background:var(--warn-soft)}
+.ia-card[data-kind="stop"] .cl{color:var(--warn)}
+.ia-card[data-status="EXPIRED"],.ia-card[data-status="REJECTED"],.ia-card[data-status="STALE"],.ia-card[data-status="DECIDED"]{border-color:var(--border-2);background:var(--bg-2)}
+.ia-card[data-status="EXPIRED"] .cl,.ia-card[data-status="REJECTED"] .cl,.ia-card[data-status="STALE"] .cl,.ia-card[data-status="DECIDED"] .cl{color:var(--ink-3)}
+.ia-object{font-size:12.5px;color:var(--ink-2);display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+.ia-object a,.ia-continue{color:var(--accent);text-decoration:none;font-weight:500}
+.ia-object a:hover,.ia-continue:hover{text-decoration:underline}
+.ia-object a:focus-visible,.ia-continue:focus-visible{outline:2px solid var(--accent-ring);outline-offset:2px;border-radius:2px}
+.ia-diff{width:100%;border-collapse:collapse;border-top:1px solid var(--accent-soft-2);font-size:12.5px;table-layout:auto}
+.ia-diff th,.ia-diff td{text-align:left;padding:5px 8px 4px 0;vertical-align:top;overflow-wrap:anywhere}
+.ia-diff thead th{font-family:var(--font-mono);font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-4);padding-top:7px}
+.ia-diff tbody th{font-weight:500;color:var(--ink-2)}
+.ia-diff td{font-family:var(--font-mono);font-size:11.5px;color:var(--ink-3)}
+.ia-diff td b{color:var(--ink);font-weight:600;white-space:pre-wrap}
+.ia-diff td.ia-none{color:var(--ink-4)}
+.ia-warnings{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.ia-warnings li{font-size:12.5px;line-height:1.45;color:var(--ink);border-left:3px solid var(--warn);background:var(--warn-soft);padding:5px 8px;border-radius:0 var(--radius-sm) var(--radius-sm) 0}
+.ia-card-form{display:grid;gap:8px}
+.ia-approval{display:grid;gap:8px}
+.ia-field{display:grid;gap:4px}
+.ia-field label{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-3)}
+.ia-reason{width:100%;box-sizing:border-box;resize:vertical;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 9px;font:inherit;font-size:12.5px;color:var(--ink)}
+.ia-reason:focus-visible{outline:none;border-color:var(--accent-2);box-shadow:0 0 0 3px var(--accent-ring)}
+.ia-reason[aria-invalid="true"],.ia-select[aria-invalid="true"]{border-color:var(--danger)}
+.ia-nobody{font-size:12.5px;line-height:1.5;color:var(--ink-2);border:1px dashed var(--border-2);background:var(--surface);border-radius:var(--radius-sm);padding:8px 10px}
+.ia-sugg{display:flex;flex-wrap:wrap;gap:5px}
+.ia-sugg button{border-radius:999px;padding:4px 10px;font-size:12px}
+.ia-sugg button:first-child{border-color:var(--accent-soft-2);color:var(--accent);background:var(--accent-soft)}
+.ia-sugg button[aria-disabled="true"]{opacity:.6;cursor:default}
+
+/* Credentials typed on the card (PM/research/12 §9) and secrets shown once after it ran. */
+.ia-credentials{display:grid;gap:8px;margin:0;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);min-width:0}
+.ia-credentials legend{padding:0 4px;font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-3)}
+.ia-cred-note,.ia-hint{font-size:11.5px;color:var(--ink-3)}
+.ia-req,.ia-opt{text-transform:none;letter-spacing:0}
+.ia-secret{flex:1;min-width:0;width:100%;box-sizing:border-box;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:5px 8px;font:inherit;font-size:12.5px;color:var(--ink)}
+.ia-secret.mono{font-family:var(--font-mono);font-size:12px}
+.ia-secret:focus-visible{outline:none;border-color:var(--accent-2);box-shadow:0 0 0 3px var(--accent-ring)}
+.ia-secret[aria-invalid="true"]{border-color:var(--danger)}
+.ia-reveal{display:grid;gap:8px;margin-top:8px;padding:8px 10px;border:1px solid var(--warn);border-radius:var(--radius-sm);background:var(--warn-soft)}
+.ia-reveal > b{font-size:12.5px;color:var(--ink)}

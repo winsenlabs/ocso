@@ -17,7 +17,7 @@ import {
 } from '@ocso/application';
 import type { Response } from 'express';
 import type { z } from 'zod';
-import { Actor, Authenticated, CurrentPrincipal, RequireAnyPermission, RequirePermission } from '../../common/decorators.js';
+import { Actor, Authenticated, Capability, CurrentPrincipal, RequireAnyPermission, RequirePermission } from '../../common/decorators.js';
 import { approvalResponse } from '../approvals/approval-response.js';
 
 const DeploymentBody = DeploymentSettingsInput.extend(WithApproval.shape);
@@ -39,12 +39,14 @@ export class SettingsController {
   ) {}
 
   /** The settings proposal that is open (or activating), for the Settings screens' pending badge. */
+  @Capability({ name: 'settings.get_settings_proposal', summary: 'The deployment-settings proposal that is open, if any.' })
   @Get('approval')
   @RequireAnyPermission(Permission.DEPLOYMENT_SETTINGS_MANAGE, Permission.SYSTEM_CONFIGURE)
   approval(@CurrentPrincipal() principal: Principal) {
     return this.approvals.objectState(principal, 'deployment_settings', SETTINGS_OBJECT_ID);
   }
 
+  @Capability({ name: 'settings.get_deployment_settings', summary: 'Get the deployment settings: organization, region, residency, provider allowlist, retention, internal agent.' })
   @Get('deployment')
   @Authenticated()
   deployment() {
@@ -52,12 +54,14 @@ export class SettingsController {
   }
 
   /** Retention classes with defaults, floors and the effective values (docs/15 §8). */
+  @Capability({ name: 'settings.get_retention', summary: 'Data retention classes: defaults, floors and the effective values.', tags: ['retention', 'data'] })
   @Get('retention')
   @Authenticated()
   async retention() {
     return describeRetention((await this.settings.deployment()).retention);
   }
 
+  @Capability({ name: 'settings.update_deployment_settings', summary: 'Change deployment settings (always needs approval).' })
   @Patch('deployment')
   @RequirePermission(Permission.DEPLOYMENT_SETTINGS_MANAGE)
   updateDeployment(@Actor() actor: ActorContext, @Body({ schema: DeploymentBody }) body: DeploymentBody, @Res({ passthrough: true }) res: Response) {
@@ -66,6 +70,7 @@ export class SettingsController {
   }
 
   /** Worker settings plus how far the deployment has applied them (ADR-023): applied / advisory / failed / pending. */
+  @Capability({ name: 'settings.get_worker_settings', summary: 'Worker settings (scaling, capacity, timeouts) and how far the deployment has applied them.', tags: ['worker', 'scaling', 'capacity'] })
   @Get('workers')
   @RequirePermission(Permission.SYSTEM_READ)
   async workers() {
@@ -73,6 +78,7 @@ export class SettingsController {
     return { ...settings, scaling: await this.scaling.workers(undefined, settings) };
   }
 
+  @Capability({ name: 'settings.update_worker_settings', summary: 'Change worker settings: scaling, capacity, timeouts (needs approval).', tags: ['worker', 'scaling', 'capacity'] })
   @Patch('workers')
   @RequirePermission(Permission.SYSTEM_CONFIGURE)
   updateWorkers(@Actor() actor: ActorContext, @Body({ schema: WorkersBody }) body: WorkersBody, @Res({ passthrough: true }) res: Response) {
@@ -89,6 +95,7 @@ export class SettingsController {
    * scalable target, policies, alarm), as last recorded by the worker leader —
    * the API itself holds no scaling permissions.
    */
+  @Capability({ name: 'settings.get_worker_deployment', summary: 'The worker service as the platform reports it: desired and running tasks, scaling policy.', tags: ['worker', 'scaling'] })
   @Get('workers/deployment')
   @RequirePermission(Permission.SYSTEM_READ)
   workerDeployment() {

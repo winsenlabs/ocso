@@ -41,7 +41,10 @@ export async function updateRetentionAction(_prev: FormState, formData: FormData
   return outcomeMessage(res, 'Retention saved · applied by the worker within the hour · recorded in the audit log');
 }
 
-/** PATCH /v1/settings/deployment { internalAgentProfileId, internalAgentConfirmLowWrites }. */
+/**
+ * PATCH /v1/settings/deployment { internalAgentProfileId, askOcsoWrites? }. The writes switch is sent only when it
+ * changed, so a profile change does not also propose (or re-propose) the kill switch.
+ */
 export async function updateAssistantAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const denied = await requireManager();
   if (denied) return denied;
@@ -50,7 +53,9 @@ export async function updateAssistantAction(_prev: FormState, formData: FormData
   if (!approval.ok) return approval.state;
   let res: unknown;
   try {
-    res = await updateGovernance({ internalAgentProfileId: profile || null, internalAgentConfirmLowWrites: formData.get('internalAgentConfirmLowWrites') === 'on', approval: approval.approval });
+    const writes = formData.get('askOcsoWrites') === 'on';
+    const writesBefore = formData.get('askOcsoWritesBefore') !== 'false';
+    res = await updateGovernance({ internalAgentProfileId: profile || null, ...(writes !== writesBefore ? { askOcsoWrites: writes } : {}), approval: approval.approval });
   } catch (err) {
     return { status: 'error', message: describeApiError(err) };
   }

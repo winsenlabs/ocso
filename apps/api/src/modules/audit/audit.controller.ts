@@ -17,7 +17,7 @@ import {
   type AuditStore,
 } from '@ocso/application';
 import type { Db } from '@ocso/db';
-import { Actor, CurrentPrincipal, RequireAnyPermission, RequirePermission } from '../../common/decorators.js';
+import { Actor, Capability, CurrentPrincipal, RequireAnyPermission, RequirePermission } from '../../common/decorators.js';
 import { AUDIT_SIGNER, AUDIT_STORE, DB, ENV } from '../../infrastructure/tokens.js';
 
 const VerifyInput = z
@@ -49,6 +49,7 @@ export class AuditController {
   ) {}
 
   /** Tech reads the whole log; others what concerns them and their teams (auditScope). */
+  @Capability({ name: 'audit.list_audit_events', summary: 'Search the audit log: who changed what and when (by target, actor, action or time).', tags: ['who changed', 'change log'] })
   @Get()
   @RequirePermission(Permission.AUDIT_READ)
   async list(@CurrentPrincipal() principal: Principal, @Query({ schema: AuditQuery }) q: AuditQuery, @Res({ passthrough: true }) res: Response) {
@@ -60,6 +61,7 @@ export class AuditController {
   }
 
   /** The public keys checkpoints, exports and exception reports verify against (not secret). */
+  @Capability({ name: 'audit.list_audit_keys', summary: 'List the public keys audit checkpoints, exports and exception reports verify against.' })
   @Get('keys')
   @RequireAnyPermission(Permission.AUDIT_READ, Permission.AUDIT_VERIFY)
   keys() {
@@ -67,6 +69,7 @@ export class AuditController {
   }
 
   /** Audit store health, shipping lag, sealing, checkpoints, exports and open incidents (System screen). */
+  @Capability({ name: 'audit.get_audit_store_status', summary: 'Audit store health: shipping lag, sealing, checkpoints, exports and open incidents.' })
   @Get('store')
   @RequireAnyPermission(Permission.SYSTEM_READ, Permission.AUDIT_VERIFY)
   status() {
@@ -78,6 +81,7 @@ export class AuditController {
    * Records that a chain break (a CHAIN_BROKEN incident) was investigated: resolves it with who,
    * when and why; audited. Nothing in the store changes; later verifications report the range as known.
    */
+  @Capability({ name: 'audit.acknowledge_audit_incident', summary: 'Record that an audit chain-break incident was investigated (resolves it).', tags: ['incident'] })
   @Post('incidents/:id/acknowledge')
   @HttpCode(200)
   @RequirePermission(Permission.AUDIT_VERIFY)
@@ -86,6 +90,7 @@ export class AuditController {
   }
 
   /** Re-verifies a range of the hash chain (default: the latest 10 000 entries); audited. */
+  @Capability({ name: 'audit.verify_audit_chain', summary: 'Re-verify a range of the audit hash chain.', risk: 'LOW_WRITE', tags: ['verify', 'integrity'] })
   @Post('verify')
   @HttpCode(200)
   @RequirePermission(Permission.AUDIT_VERIFY)

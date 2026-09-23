@@ -1,12 +1,9 @@
 import { Permission } from '@ocso/auth';
-import { AuditQuery, QueueService, SettingsService, WorkerSettingsInput, auditScope, queryAudit } from '@ocso/application';
+import { AuditQuery, QueueService, SettingsService, auditScope, queryAudit } from '@ocso/application';
 import { workers } from '@ocso/db';
 import { desc } from 'drizzle-orm';
 import { z } from 'zod';
 import type { InternalTool } from '../contract.js';
-
-/** minWarmWorkers → "min warm workers". */
-const humanize = (key: string) => key.replace(/([A-Z])/g, ' $1').toLowerCase();
 
 export const workerCapacity: InternalTool<Record<string, never>> = {
   name: 'worker_capacity',
@@ -24,30 +21,6 @@ export const workerCapacity: InternalTool<Record<string, never>> = {
       table: { columns: ['Worker', 'Status', 'Convs', 'Memory'], rows: live.map((w) => [w.id, w.status.toLowerCase(), `${w.activeLeases} / ${w.capacity}`, `${w.memoryMb ?? '—'} MB`]) },
       links: [{ label: `Worker pool · ${live.filter((w) => w.status === 'HEALTHY').length} of ${config.maxWorkers} healthy`, detail: `${used} of ${slots} slots used · min warm ${config.minWarmWorkers}`, href: '/system/workers' }],
     };
-  },
-};
-
-export const updateWorkerSettings: InternalTool<z.infer<typeof WorkerSettingsInput>> = {
-  name: 'update_worker_settings',
-  description:
-    'Change worker scaling configuration (minWarmWorkers, maxWorkers, conversationsPerWorker, targetUtilization, scaleOutQueueAgeSeconds, scaleInCooldownSeconds, turnTimeoutSeconds, leaseDurationSeconds, heartbeatIntervalSeconds). Sensitive: requires confirmation.',
-  input: WorkerSettingsInput,
-  permission: Permission.SYSTEM_CONFIGURE,
-  risk: 'HIGH_WRITE',
-  describe: (a) => `Worker configuration · ${Object.entries(a).map(([k, v]) => `${k} → ${String(v)}`).join(', ')}`,
-  async preview(ctx, args) {
-    const before = await new SettingsService(ctx.db).workers();
-    const changes = Object.entries(args).flatMap(([key, value]) => {
-      if (value === undefined) return [];
-      const current = (before as Record<string, unknown>)[key];
-      return [{ label: humanize(key), before: current === undefined || current === null ? null : String(current), after: String(value) }];
-    });
-    return { summary: `Worker configuration · ${changes.map((c) => `${c.label} ${c.before ?? '—'} → ${c.after}`).join(', ')}`, changes };
-  },
-  // Maker–checker (PM/research/11 §4): settings change only through an approved proposal — this surfaces the
-  // 409 approval_required and the person submits the change from System → Workers with a named checker.
-  async run(ctx, args) {
-    return new SettingsService(ctx.db).updateWorkers(ctx.actor, args);
   },
 };
 

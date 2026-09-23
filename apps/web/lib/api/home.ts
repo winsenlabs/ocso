@@ -1,6 +1,6 @@
 import 'server-only';
 import { z } from 'zod';
-import { api } from './client';
+import { api, type ApiCallOptions } from './client';
 import { PrivilegedChangeSchema, UptimeSchema } from './telemetry';
 
 /**
@@ -134,11 +134,62 @@ export type ExecHomeData = z.infer<typeof ExecSchema>;
 
 const User = z.object({ id: s, name: s });
 
+/* ── Shared across roles (HOME contract): one ranked "needs you" list, trend tiles, the service flow, setup ── */
+
+const NeedsYouSchema = z.object({
+  id: s,
+  /** Unknown kinds from a newer API still render (as a generic item). */
+  kind: z.string(),
+  severity: z.enum(['critical', 'high', 'normal']).catch('normal'),
+  title: s,
+  detail: z.string().nullish(),
+  at: s,
+  href: s,
+  askOcso: z.string().nullish(),
+});
+export type NeedsYouItem = z.infer<typeof NeedsYouSchema>;
+
+const TrendTileSchema = z.object({
+  key: s,
+  label: s,
+  value: nn,
+  unit: z.enum(['%', 'ms', 's', 'count', 'score']).nullish(),
+  previous: nn,
+  betterWhen: z.enum(['up', 'down', 'none']).catch('none'),
+  /** What `value` covers ('today', '7d', 'now'); the comparison window follows from it. */
+  period: z.string().nullish(),
+  href: z.string().nullish(),
+});
+export type TrendTileData = z.infer<typeof TrendTileSchema>;
+
+const FlowSchema = z.object({
+  channels: z.array(z.object({ id: s, name: s, kind: s, status: s, conversations24h: n, problem: z.string().nullish() })),
+  routers: z.array(z.object({ id: s, name: s, status: s, channelIds: z.array(s), routed24h: n, stuck: n })),
+  queues: z.array(z.object({ id: s, name: s, routerIds: z.array(s), agentId: sn, waiting: n, oldestWaitSeconds: nn, slaAtRisk: n })),
+  agents: z.array(z.object({ id: s, name: s, status: s, queueIds: z.array(s), conversations24h: n, containment: nn, escalations24h: n })),
+});
+export type FlowData = z.infer<typeof FlowSchema>;
+
+const SetupSchema = z.object({ complete: z.boolean(), steps: z.array(z.object({ key: s, label: s, done: z.boolean(), href: s })) });
+export type SetupData = z.infer<typeof SetupSchema>;
+
+/** Service extras: whether "take next" has something to claim now. Shift and queue come from `exec`. */
+const ServiceSchema = z
+  .object({
+    nextAvailable: z.boolean(),
+    /** What take next claims (POST /v1/conversations/:id/claim); null when nothing unassigned waits. */
+    next: z.object({ conversationId: s }).loose().nullish(),
+  })
+  .loose();
+
+/** The fields every role surface carries; defaults keep an older API (without them) rendering. */
+const Common = { generatedAt: s, user: User, needsYou: z.array(NeedsYouSchema).default([]), tiles: z.array(TrendTileSchema).default([]), flow: FlowSchema.nullish(), setup: SetupSchema.nullish() };
+
 export const HomeSchema = z.discriminatedUnion('role', [
-  z.object({ role: z.literal('TECH'), generatedAt: s, user: User, admin: AdminSchema }),
-  z.object({ role: z.literal('HEAD'), generatedAt: s, user: User, lead: LeadSchema }),
-  z.object({ role: z.literal('SERVICE'), generatedAt: s, user: User, exec: ExecSchema }),
+  z.object({ role: z.literal('TECH'), ...Common, admin: AdminSchema }),
+  z.object({ role: z.literal('HEAD'), ...Common, lead: LeadSchema }),
+  z.object({ role: z.literal('SERVICE'), ...Common, exec: ExecSchema, service: ServiceSchema.nullish() }),
 ]);
 export type HomeData = z.infer<typeof HomeSchema>;
 
-export const loadHome = () => api.get('/v1/home', HomeSchema);
+export const loadHome = (options?: ApiCallOptions) => api.get('/v1/home', HomeSchema, options);

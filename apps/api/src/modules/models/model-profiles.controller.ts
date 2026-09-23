@@ -3,7 +3,7 @@ import { Permission, can, type Principal } from '@ocso/auth';
 import { ApprovalService, ProfileInput, ProfilePatch, ProfileService, WithApproval, requestApproval, type ActorContext } from '@ocso/application';
 import type { Response } from 'express';
 import { z } from 'zod';
-import { Actor, Authenticated, CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
+import { Actor, Authenticated, Capability, CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
 import { approvalResponse } from '../approvals/approval-response.js';
 import { proposeOnly, withApprovalState, OptionalApproval, type ApprovalBody } from '../settings/platform-approvals.js';
 
@@ -23,6 +23,7 @@ export class ModelProfilesController {
   ) {}
 
   /** providers.read OR agents.read (Leads pick profiles for agents); checked in the service. */
+  @Capability({ name: 'models.list_profiles', summary: 'List model profiles (the model, settings and fallbacks an agent uses).', tags: ['profile'] })
   @Get()
   @Authenticated()
   async list(@Actor() actor: ActorContext, @CurrentPrincipal() principal: Principal) {
@@ -31,6 +32,7 @@ export class ModelProfilesController {
   }
 
   /** Dry-run policy check for the profile dialog (residency, allowlist, fallback rules). */
+  @Capability({ name: 'models.validate_profile', summary: 'Check a model profile against policy (residency, allowlist, fallbacks) without saving it.', risk: 'READ', tags: ['profile', 'check'] })
   @Post('validate')
   @HttpCode(200)
   @RequirePermission(Permission.MODEL_PROFILES_MANAGE)
@@ -38,6 +40,7 @@ export class ModelProfilesController {
     return this.profiles.validate(actor, body);
   }
 
+  @Capability({ name: 'models.get_profile', summary: 'Get one model profile.', tags: ['profile'] })
   @Get(':id')
   @Authenticated()
   async get(@Actor() actor: ActorContext, @CurrentPrincipal() principal: Principal, @Param('id', { schema: z.uuid() }) id: string) {
@@ -45,12 +48,14 @@ export class ModelProfilesController {
     return can(principal, Permission.PROVIDERS_READ) ? (await withApprovalState(this.approvals, principal, 'model_profile', [row]))[0] : row;
   }
 
+  @Capability({ name: 'models.create_profile', summary: 'Create a model profile as a draft (approving it for use needs approval).', tags: ['profile'] })
   @Post()
   @RequirePermission(Permission.MODEL_PROFILES_MANAGE)
   create(@Actor() actor: ActorContext, @Body({ schema: ProfileInput }) body: ProfileInput) {
     return this.profiles.create(actor, body);
   }
 
+  @Capability({ name: 'models.update_profile', summary: "Change a model profile (an approved profile's change needs approval).", tags: ['profile'] })
   @Patch(':id')
   @RequirePermission(Permission.MODEL_PROFILES_MANAGE)
   update(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string, @Body({ schema: PatchBody }) body: PatchBody, @Res({ passthrough: true }) res: Response) {
@@ -59,6 +64,7 @@ export class ModelProfilesController {
   }
 
   /** "Approve for use": always a proposal (ACTIVATE). */
+  @Capability({ name: 'models.activate_profile', summary: 'Approve a model profile for use (always needs approval).', tags: ['profile'] })
   @Post(':id/activate')
   @HttpCode(202)
   @RequirePermission(Permission.MODEL_PROFILES_MANAGE)
@@ -67,6 +73,7 @@ export class ModelProfilesController {
   }
 
   /** Always a proposal (DELETE): 202 `{proposal}` with `approval`, else 409 approval_required. */
+  @Capability({ name: 'models.delete_profile', summary: 'Delete a model profile (always needs approval).', tags: ['profile'] })
   @Delete(':id')
   @RequirePermission(Permission.MODEL_PROFILES_MANAGE)
   remove(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string, @Body({ schema: OptionalApproval }) body: ApprovalBody, @Res({ passthrough: true }) res: Response) {

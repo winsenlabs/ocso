@@ -1,3 +1,4 @@
+import type { Principal } from '@ocso/auth';
 import { auditEvents, uuidv7, type DbOrTx } from '@ocso/db';
 import { sanitizeForAudit, sanitizeSettingsForAudit } from '@ocso/tools';
 import type { ActorContext } from '../shared/context.js';
@@ -48,10 +49,17 @@ export async function recordAudit(tx: DbOrTx, actor: ActorContext, entry: AuditE
     summary: entry.summary,
     before: entry.before === undefined ? null : redact(entry.before),
     after: entry.after === undefined ? null : redact(entry.after),
-    confirmation: entry.confirmation ?? null,
+    confirmation: withDelegation(entry.confirmation, principal?.delegation),
     correlationId: actor.correlationId,
     ip: actor.ip ?? null,
     teamIds,
   });
   return id;
+}
+
+/** An Ask OCSO request (PM/research/12 §5) records its thread and card beside any confirmation the entry carries. */
+function withDelegation(confirmation: Record<string, unknown> | undefined, delegation: Principal['delegation']): Record<string, unknown> | null {
+  if (!delegation) return confirmation ?? null;
+  const internalAgent = { threadId: delegation.threadId, ...(delegation.cardId ? { cardId: delegation.cardId } : {}), ...(delegation.callId ? { callId: delegation.callId } : {}) };
+  return { ...(confirmation ?? {}), internalAgent };
 }

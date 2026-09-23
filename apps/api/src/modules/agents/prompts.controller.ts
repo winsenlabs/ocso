@@ -18,7 +18,7 @@ import { notFound } from '@ocso/domain';
 import { COMPONENT_DESCRIPTORS, compilePrompt, estimateTokens, type PromptComponents } from '@ocso/prompt-compiler';
 import { eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
-import { Actor, CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
+import { Actor, Capability, CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
 import { CHANNEL_REGISTRY, DB } from '../../infrastructure/tokens.js';
 import { approvalResponse } from '../approvals/approval-response.js';
 
@@ -46,6 +46,7 @@ export class PromptsController {
     @Inject(ApprovalService) private readonly approvals: ApprovalService,
   ) {}
 
+  @Capability({ name: 'agents.get_agent_prompt', summary: "Get a virtual agent's prompt: the draft, the active version and the version history.", tags: ['prompt', 'instructions'] })
   @Get('prompt')
   @RequirePermission(Permission.AGENTS_READ)
   async prompt(@CurrentPrincipal() principal: Principal, @Param('agentId', { schema: Id }) agentId: string) {
@@ -71,6 +72,7 @@ export class PromptsController {
    * per layer. The channel block is one of the agent's own channels
    * (`?channelId=`, default the first attached); none when it has no channel.
    */
+  @Capability({ name: 'agents.preview_agent_prompt', summary: "Preview a virtual agent's compiled prompt for a channel, with token estimates per layer.", tags: ['prompt'] })
   @Get('prompt/preview')
   @RequirePermission(Permission.AGENTS_READ)
   async preview(@CurrentPrincipal() principal: Principal, @Param('agentId', { schema: Id }) agentId: string, @Query({ schema: PreviewQuery }) q: PreviewQuery) {
@@ -95,6 +97,7 @@ export class PromptsController {
     return { system: compiled.system, tokenEstimate: compiled.tokenEstimate, hashes: compiled.hashes };
   }
 
+  @Capability({ name: 'agents.save_prompt_draft', summary: "Edit a virtual agent's prompt draft (identity, objective, behavior, policies, escalation…).", tags: ['prompt', 'instructions', 'edit'] })
   @Put('prompt/draft')
   @HttpCode(204)
   @RequirePermission(Permission.PROMPTS_EDIT)
@@ -102,6 +105,7 @@ export class PromptsController {
     await this.prompts.saveDraft(actor, agentId, body);
   }
 
+  @Capability({ name: 'agents.discard_prompt_draft', summary: "Throw away a virtual agent's prompt draft.", tags: ['prompt'] })
   @Delete('prompt/draft')
   @HttpCode(204)
   @RequirePermission(Permission.PROMPTS_EDIT)
@@ -109,6 +113,7 @@ export class PromptsController {
     await this.prompts.discardDraft(actor, agentId);
   }
 
+  @Capability({ name: 'agents.create_prompt_version', summary: "Freeze a virtual agent's prompt draft into a new version, with a reason.", tags: ['prompt', 'version'] })
   @Post('prompt/versions')
   @RequirePermission(Permission.PROMPTS_EDIT)
   createVersion(@Actor() actor: ActorContext, @Param('agentId', { schema: Id }) agentId: string, @Body({ schema: CreateVersionInput }) body: CreateVersionInput) {
@@ -120,6 +125,7 @@ export class PromptsController {
    * approved, activation is a proposal (kind prompt_version): 202 `{proposal}`
    * with `approval`, else 409 approval_required.
    */
+  @Capability({ name: 'agents.activate_prompt_version', summary: "Make a prompt version the virtual agent's active prompt (needs approval once the agent is approved).", tags: ['prompt', 'version', 'publish'] })
   @Post('prompt/versions/:versionId/activate')
   @HttpCode(204)
   @RequirePermission(Permission.PROMPTS_ACTIVATE)
@@ -135,6 +141,7 @@ export class PromptsController {
     return outcome ?? undefined;
   }
 
+  @Capability({ name: 'agents.diff_prompt_versions', summary: "Compare two versions of a virtual agent's prompt.", tags: ['prompt', 'version', 'compare'] })
   @Get('prompt/diff')
   @RequirePermission(Permission.AGENTS_READ)
   diff(@CurrentPrincipal() principal: Principal, @Param('agentId', { schema: Id }) agentId: string, @Query({ schema: DiffQuery }) q: DiffQuery) {

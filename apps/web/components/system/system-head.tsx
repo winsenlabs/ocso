@@ -5,5 +5,5 @@ import { requireSession } from '@/lib/session';
 export async function SystemHead({ title, tail }: { title: string; tail: string }) {
   const { user } = await requireSession();
   const d = user.deployment;
-  return <PageHead title={title} sub={[d.orgName, 'single-tenant deployment', d.label, d.region ?? 'region not set', tail].join(' · ')} />;
+  return <PageHead title={title} sub={[d.orgName, 'single-tenant deployment', d.region ?? 'region not set', tail].join(' · ')} />;
 }

@@ -1,10 +1,10 @@
 'use client';
 
-import type { ActionDecision } from '../../lib/actions/internal-agent';
+import type { ActionDecision } from './decisions';
 import { ActionCard } from './action-card';
 import { AnswerText } from './answer-text';
 import { DeniedNotice, LinkCards, MiniTable, StepsLine } from './parts';
-import type { AskOcsoMessage, MiniTableData, ObjectLink, PendingAction } from './types';
+import type { ActionPart, AskOcsoMessage, MiniTableData, ObjectLink } from './types';
 
 /** Conversation turns in the Ask OCSO drawer (design/05 `.aturn`). */
 
@@ -36,7 +36,7 @@ interface Grouped {
   text: string;
   tables: MiniTableData[];
   links: ObjectLink[];
-  actions: PendingAction[];
+  actions: ActionPart[];
   denied: string[];
 }
 

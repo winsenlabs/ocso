@@ -90,6 +90,42 @@ async function conversationRows(db: Db, where: SQL, order: SQL, limit: number) {
   return rows;
 }
 
+/** Distinct conversations I resolved in [from, to] (audit conversation.resolve). */
+export async function myResolvedCount(db: Db, me: string, from: Date, to: Date): Promise<number> {
+  const { rows } = await db.execute<{ n: number }>(sql`
+    SELECT count(DISTINCT e.target_id)::int AS n FROM audit_events e
+     WHERE e.actor_id = ${me} AND e.action = 'conversation.resolve' AND e.occurred_at >= ${at(from)} AND e.occurred_at <= ${at(to)}`);
+  return int(rows[0]?.n);
+}
+
+/** Median seconds from my pickup (claim, accept, take over) in [from, to] to my first customer-visible message (DEFINITIONS.myFirstResponse). */
+export async function myFirstResponseMedian(db: Db, me: string, from: Date, to: Date): Promise<number | null> {
+  const { rows } = await db.execute<{ median: number | null }>(sql`
+    WITH pickups AS MATERIALIZED (
+      SELECT e.target_id, e.occurred_at FROM audit_events e
+       WHERE e.actor_id = ${me} AND e.action IN ('conversation.claim', 'conversation.accept_assignment', 'conversation.take_over')
+         AND e.occurred_at >= ${at(from)} AND e.occurred_at <= ${at(to)}
+    )
+    SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM r.created_at - p.occurred_at)) AS median
+      FROM pickups p
+      CROSS JOIN LATERAL (
+        SELECT i.created_at FROM interactions i
+         WHERE i.conversation_id = p.target_id::uuid AND i.actor_type = 'HUMAN' AND i.actor_id = ${me} AND i.kind = 'MESSAGE'
+           AND i.visibility = 'CUSTOMER' AND i.created_at >= p.occurred_at
+         ORDER BY i.seq LIMIT 1) r`);
+  const median = num(rows[0]?.median);
+  return median === null ? null : Math.round(median);
+}
+
+/** Mean customer rating received in [from, to] on conversations I wrote to (DEFINITIONS.myCsat). */
+export async function myCsat(db: Db, me: string, from: Date, to: Date): Promise<{ average: number | null; responses: number }> {
+  const { rows } = await db.execute<{ avg: number | null; n: number }>(sql`
+    SELECT avg(r.score)::float8 AS avg, count(*)::int AS n FROM csat_responses r
+     WHERE r.agent_id IN (SELECT id FROM virtual_agents) AND r.received_at >= ${at(from)} AND r.received_at <= ${at(to)}
+       AND EXISTS (SELECT 1 FROM interactions i WHERE i.conversation_id = r.conversation_id AND i.actor_type = 'HUMAN' AND i.actor_id = ${me} AND i.kind = 'MESSAGE')`);
+  return { average: num(rows[0]?.avg), responses: int(rows[0]?.n) };
+}
+
 /**
  * Service member home (design/06 exec): assigned work, the pickup queue of the exec's
  * team queues, SLA risk, personal throughput and satisfaction. Only
@@ -99,33 +135,17 @@ export async function execHome(db: Db, principal: Principal, queueIds: readonly 
   const me = principal.userId;
   const weekAgo = new Date(now.getTime() - 7 * 86_400_000);
   const inMyQueues = queueIds.length ? sql`c.queue_id = ANY(${uuidList(queueIds)})` : sql`false`;
-  const [counts, firstResponse, csat, pickup, assigned, user, queues, alerts, resolved] = await Promise.all([
-    db.execute<{ assigned: number; waiting: number; breached: number; resolved_today: number }>(sql`
+  const [counts, resolvedToday, median, csat, pickup, assigned, user, queues, alerts, resolved] = await Promise.all([
+    db.execute<{ assigned: number; waiting: number; breached: number }>(sql`
       SELECT count(*) FILTER (WHERE c.assigned_user_id = ${me}::uuid AND c.control_state IN ${OPEN})::int AS assigned,
              count(*) FILTER (WHERE c.control_state = 'WAITING_FOR_HUMAN' AND ${inMyQueues})::int AS waiting,
              count(*) FILTER (WHERE c.control_state IN ('ESCALATION_REQUESTED', 'WAITING_FOR_HUMAN') AND c.sla_due_at < ${at(now)}
-                               AND (${inMyQueues} OR c.assigned_user_id = ${me}::uuid))::int AS breached,
-             (SELECT count(DISTINCT e.target_id)::int FROM audit_events e
-               WHERE e.actor_id = ${me} AND e.action = 'conversation.resolve' AND e.occurred_at >= ${at(dayStart)} AND e.occurred_at <= ${at(now)}) AS resolved_today
+                               AND (${inMyQueues} OR c.assigned_user_id = ${me}::uuid))::int AS breached
         FROM conversations c
        WHERE c.control_state IN ${OPEN} AND (c.assigned_user_id = ${me}::uuid OR ${inMyQueues})`),
-    db.execute<{ median: number | null }>(sql`
-      WITH pickups AS MATERIALIZED (
-        SELECT e.target_id, e.occurred_at FROM audit_events e
-         WHERE e.actor_id = ${me} AND e.action IN ('conversation.claim', 'conversation.accept_assignment', 'conversation.take_over')
-           AND e.occurred_at >= ${at(weekAgo)} AND e.occurred_at <= ${at(now)}
-      )
-      SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM r.created_at - p.occurred_at)) AS median
-        FROM pickups p
-        CROSS JOIN LATERAL (
-          SELECT i.created_at FROM interactions i
-           WHERE i.conversation_id = p.target_id::uuid AND i.actor_type = 'HUMAN' AND i.actor_id = ${me} AND i.kind = 'MESSAGE'
-             AND i.visibility = 'CUSTOMER' AND i.created_at >= p.occurred_at
-           ORDER BY i.seq LIMIT 1) r`),
-    db.execute<{ avg: number | null; n: number }>(sql`
-      SELECT avg(r.score)::float8 AS avg, count(*)::int AS n FROM csat_responses r
-       WHERE r.agent_id IN (SELECT id FROM virtual_agents) AND r.received_at >= ${at(weekAgo)} AND r.received_at <= ${at(now)}
-         AND EXISTS (SELECT 1 FROM interactions i WHERE i.conversation_id = r.conversation_id AND i.actor_type = 'HUMAN' AND i.actor_id = ${me} AND i.kind = 'MESSAGE')`),
+    myResolvedCount(db, me, dayStart, now),
+    myFirstResponseMedian(db, me, weekAgo, now),
+    myCsat(db, me, weekAgo, now),
     queueIds.length ? conversationRows(db, sql`c.control_state = 'WAITING_FOR_HUMAN' AND ${inMyQueues}`, sql`c.priority, c.waiting_since NULLS LAST`, 20) : Promise.resolve([]),
     conversationRows(db, sql`c.assigned_user_id = ${me}::uuid AND c.control_state IN ${OPEN}`, sql`c.last_interaction_at DESC`, 20),
     db.execute<{ availability: string; max_concurrent: number; languages: string[]; skills: string[]; active: number }>(sql`
@@ -167,15 +187,14 @@ export async function execHome(db: Db, principal: Principal, queueIds: readonly 
   });
   const c = counts.rows[0];
   const u = user.rows[0];
-  const median = num(firstResponse.rows[0]?.median);
   return {
     tiles: {
       assignedToMe: int(c?.assigned),
       waitingForHuman: int(c?.waiting),
       slaBreached: int(c?.breached),
-      resolvedToday: int(c?.resolved_today),
-      myFirstResponseMedianSeconds: median === null ? null : Math.round(median),
-      myCsat7d: { average: num(csat.rows[0]?.avg), responses: int(csat.rows[0]?.n) },
+      resolvedToday,
+      myFirstResponseMedianSeconds: median,
+      myCsat7d: csat,
     },
     pickupQueue: pickup.map(toPickup),
     assigned: assigned.map((r) => ({

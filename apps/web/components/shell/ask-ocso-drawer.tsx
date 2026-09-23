@@ -4,6 +4,7 @@ import '@/app/styles/internal-agent.css';
 import { useChat } from '@ai-sdk/react';
 import { usePathname } from 'next/navigation';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { CapabilitiesAnswer, introText } from '@/components/internal-agent/capabilities';
 import { classifyChatError, type ChatProblem } from '@/components/internal-agent/chat-errors';
 import { Composer } from '@/components/internal-agent/composer';
 import { contextObjectLabel, pageContext } from '@/components/internal-agent/page-context';
@@ -16,6 +17,7 @@ import { AgentPortrait } from '@/components/ui/brand-mark';
 import { Drawer } from '@/components/ui/drawer';
 import { areaLabel } from '@/lib/nav-active';
 import type { AskOcsoCopy } from './ask-ocso-copy';
+import type { AskOcsoRequest } from './ask-ocso-context';
 
 /**
  * Ask OCSO drawer (design/05, docs/12). Questions stream through
@@ -23,11 +25,29 @@ import type { AskOcsoCopy } from './ask-ocso-copy';
  * this user's permissions: answers carry step lines, object links, tables,
  * role refusals and confirmation cards for writes. Threads persist per user.
  */
-export function AskOcsoDrawer({ id, copy, session, onClose }: { id: string; copy: AskOcsoCopy; session: AskOcsoSession; onClose: () => void }) {
+export function AskOcsoDrawer({
+  id,
+  copy,
+  session,
+  onClose,
+  request = null,
+  onRequestHandled,
+}: {
+  id: string;
+  copy: AskOcsoCopy;
+  session: AskOcsoSession;
+  onClose: () => void;
+  /** A question from the page: sent once the drawer knows it can answer, else left in the ask box. */
+  request?: AskOcsoRequest | null;
+  onRequestHandled?: (requestId: number) => void;
+}) {
   const pathname = usePathname();
   const { messages, status, error, stop } = useChat({ chat: session.chat });
   const [showHistory, setShowHistory] = useState(false);
   const [attachContext, setAttachContext] = useState(true);
+  /** "What can you do?" answered from the catalog; it gives way to the next question. */
+  const [showCapabilities, setShowCapabilities] = useState(false);
+  const [prefill, setPrefill] = useState<{ id: number; text: string } | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const { refresh } = session;
@@ -46,10 +66,29 @@ export function AskOcsoDrawer({ id, copy, session, onClose }: { id: string; copy
   const objectLabel = contextObjectLabel(context);
   const contextLabel = `${areaLabel(pathname)}${objectLabel ? ` · ${objectLabel}` : ''}`;
   const last = messages.at(-1);
+  const areas = load.status === 'ready' ? load.data.areas : null;
+  const writesOn = load.status === 'ready' ? load.data.writesOn : true;
 
   useEffect(() => {
     if (problem?.kind === 'not_configured') void refresh();
   }, [problem?.kind, refresh]);
+
+  // A question handed over from the page: wait until the drawer knows whether it can answer, then send it
+  // (or, when asked to prefill, when blocked or while another answer streams, leave it in the ask box).
+  const { send } = session;
+  useEffect(() => {
+    if (!request || load.status === 'loading') return;
+    onRequestHandled?.(request.id);
+    if (request.send && !blocked && !working) {
+      setShowCapabilities(false);
+      send(request.text, attachContext ? context : null);
+    } else {
+      setPrefill({ id: request.id, text: request.text });
+      inputRef.current?.focus();
+    }
+    // The request is handled exactly once, when it arrives or when loading ends; later changes to the rest must not resend it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [request?.id, load.status]);
 
   // Follow the answer while it streams, unless the user scrolled up to read.
   useLayoutEffect(() => {
@@ -61,11 +100,13 @@ export function AskOcsoDrawer({ id, copy, session, onClose }: { id: string; copy
   async function openThread(threadId: string) {
     if (await session.openThread(threadId)) {
       setShowHistory(false);
+      setShowCapabilities(false);
       inputRef.current?.focus();
     }
   }
 
   function newThread() {
+    setShowCapabilities(false);
     session.newThread();
     setShowHistory(false);
     inputRef.current?.focus();
@@ -87,14 +128,19 @@ export function AskOcsoDrawer({ id, copy, session, onClose }: { id: string; copy
       id={id}
       inputRef={inputRef}
       roleChip={copy.roleChip}
-      suggestions={copy.suggestions}
+      suggestions={load.status === 'ready' && load.data.suggestions?.length ? load.data.suggestions : copy.suggestions.map((q) => ({ label: q, prompt: q }))}
       disabled={blocked}
       working={working}
       attachContext={attachContext}
       contextLabel={contextLabel}
       onToggleContext={() => setAttachContext((v) => !v)}
-      onSend={(text) => session.send(text, attachContext ? context : null)}
+      onSend={(text) => {
+        setShowCapabilities(false);
+        session.send(text, attachContext ? context : null);
+      }}
       onStop={() => void stop()}
+      onWhatCanYouDo={areas?.length ? () => setShowCapabilities(true) : undefined}
+      prefill={prefill}
     />
   );
 
@@ -122,10 +168,7 @@ export function AskOcsoDrawer({ id, copy, session, onClose }: { id: string; copy
         <div className="aturn">
           <OcsoAvatar />
           <span className="bd">
-            <span className="ans ia-intro">
-              Ask about conversations, agents, queues or configuration. OCSO answers from live data with exactly your permissions, and changes only
-              happen after you confirm them.
-            </span>
+            <span className="ans ia-intro">{introText(writesOn)}</span>
           </span>
         </div>
       ) : null}
@@ -146,6 +189,7 @@ export function AskOcsoDrawer({ id, copy, session, onClose }: { id: string; copy
             />
           ),
         )}
+        {showCapabilities && areas?.length ? <CapabilitiesAnswer areas={areas} writesOn={writesOn} /> : null}
         {working && last?.role !== 'assistant' ? (
           <AssistantTurn message={null} streaming durationMs={null} stopped={false} decisions={session.decisions} onDecided={session.decide} userName={copy.userName} />
         ) : null}

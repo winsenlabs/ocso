@@ -62,12 +62,27 @@ export const SPIKE_MIN_CONVERSATIONS = 20;
  * Counts and labels only.
  */
 export async function leadHome(db: Db, principal: Principal, now: Date, timezone: string, days = 7): Promise<LeadHome> {
+  return (await leadHomeWithTrend(db, principal, now, timezone, days)).lead;
+}
+
+/** The same tile figures over the window just before (for the home's trend tiles). */
+export interface LeadPrevious {
+  conversations: number;
+  containmentRate: number | null;
+  escalationRate: number | null;
+  slaBreaches: number;
+  csat: number | null;
+}
+
+/** leadHome plus the previous window's tile figures (one extra CSAT query; the KPIs of the previous window are already read). */
+export async function leadHomeWithTrend(db: Db, principal: Principal, now: Date, timezone: string, days = 7): Promise<{ lead: LeadHome; previous: LeadPrevious }> {
   const scope = readableAgentsSql(principal);
   const w = windowOf(null, days, now, timezone, scope);
-  const [kpis, prevKpis, csat, summaries, reasons, corrections, queues, agents, alerts] = await Promise.all([
+  const [kpis, prevKpis, csat, prevCsat, summaries, reasons, corrections, queues, agents, alerts] = await Promise.all([
     conversationKpis(db, w, now),
     conversationKpis(db, previousWindow(w), now),
     csatStats(db, w),
+    csatStats(db, previousWindow(w)),
     agentSummaries(db, days),
     escalationReasons(db, w, 6),
     correctionOpportunities(db, null, 200, scope),
@@ -128,7 +143,9 @@ export async function leadHome(db: Db, principal: Principal, now: Date, timezone
   }
 
   const k = kpis.total;
-  return {
+  const p = prevKpis.total;
+  const previous: LeadPrevious = { conversations: p.conversations, containmentRate: p.containmentRate, escalationRate: p.escalationRate, slaBreaches: p.slaBreaches, csat: prevCsat.total.average };
+  const lead: LeadHome = {
     window: { from: w.from.toISOString(), to: w.to.toISOString(), days },
     tiles: {
       conversations: k.conversations,
@@ -153,4 +170,5 @@ export async function leadHome(db: Db, principal: Principal, now: Date, timezone
       agentCards: 'Agent card KPIs come from agentSummaries (same containment/escalation/CSAT formulas over the last 7 days).',
     },
   };
+  return { lead, previous };
 }

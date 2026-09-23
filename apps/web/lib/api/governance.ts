@@ -15,7 +15,8 @@ export const RetentionClassSchema = z.object({
 });
 export type RetentionClass = z.infer<typeof RetentionClassSchema>;
 
-const AssistantSettingsSchema = z.object({ internalAgentProfileId: z.string().nullable(), internalAgentConfirmLowWrites: z.boolean() });
+/** Ask OCSO settings: its model profile and the writes kill switch (`askOcsoWrites`, default on; reads always work). */
+const AssistantSettingsSchema = z.object({ internalAgentProfileId: z.string().nullable(), askOcsoWrites: z.boolean().optional().default(true) });
 export type AssistantSettings = z.infer<typeof AssistantSettingsSchema>;
 
 export const getRetention = () => api.get('/v1/settings/retention', z.array(RetentionClassSchema));
@@ -24,5 +25,5 @@ export const getRetention = () => api.get('/v1/settings/retention', z.array(Rete
 export const getAssistantSettings = () => api.get('/v1/settings/deployment', AssistantSettingsSchema);
 
 /** A settings change is a proposal (202) naming its checker (PM/research/11 §4). */
-export const updateGovernance = (patch: { retention?: Record<string, number>; internalAgentProfileId?: string | null; internalAgentConfirmLowWrites?: boolean; approval: { checkerId: string; reason: string } | { bootstrap: true; reason: string } }) =>
+export const updateGovernance = (patch: { retention?: Record<string, number>; internalAgentProfileId?: string | null; askOcsoWrites?: boolean; approval: { checkerId: string; reason: string } | { bootstrap: true; reason: string } }) =>
   api.patch('/v1/settings/deployment', patch, z.union([ProposedSchema, z.unknown()]));

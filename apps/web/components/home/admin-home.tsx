@@ -1,71 +1,68 @@
 import Link from 'next/link';
 import { Permission } from '@ocso/auth';
 import { ChangesCard } from '@/components/system/changes-card';
-import { AlertBanner } from '@/components/ui/alert-banner';
 import { SecHead } from '@/components/ui/sec-head';
-import { Tile, Tiles } from '@/components/ui/tile';
-import type { AdminHomeData } from '@/lib/api/home';
-import { firstName, formatCompact, formatLatency, formatNumber, formatPercent, formatTime } from '@/lib/format';
+import type { HomeData } from '@/lib/api/home';
+import { firstName, formatCompact, formatLatency, formatNumber, formatPercent } from '@/lib/format';
 import { hasPermission, type Session } from '@/lib/session';
+import type { AskChip } from './ask-ocso-bar';
 import { CapacityCard, ConnectionsCard } from './admin-rail';
 import { AlertsTable } from './alerts-table';
-import { Greeting } from './greeting';
+import { HomeFrame } from './home-frame';
 import { adminTail } from './home-copy';
+import { periodLabel } from './home-model';
+import { ServiceFlow } from './service-flow';
 
-/** Tech admin home (design/06): uptime, capacity, incidents, connections, privileged changes — no conversation content. */
-export function AdminHome({ session, data }: { session: Session; data: AdminHomeData }) {
+type TechHome = Extract<HomeData, { role: 'TECH' }>;
+
+interface HealthItem {
+  key: string;
+  label: string;
+  value: string;
+  ok: boolean | null;
+  href: string;
+}
+
+/** Tech Home (HOME decision 3): what needs you, a compact health strip, then incidents and capacity; never conversation content. */
+export function AdminHome({ session, home, ask, now }: { session: Session; home: TechHome; ask: AskChip[] | null; now: Date }) {
+  const data = home.admin;
   const { tiles, incidents, capacity, connections } = data;
   const tz = session.user.deployment.timezone;
-  const d = session.user.deployment;
-  const critical = incidents.items.find((a) => a.severity === 'CRITICAL');
+  const region = session.user.deployment.region;
+  const workers = tiles.healthyWorkers;
   const tail = adminTail({
-    healthy: tiles.healthyWorkers.healthy,
-    minWarm: tiles.healthyWorkers.minWarm,
+    healthy: workers.healthy,
+    minWarm: workers.minWarm,
     openIncidents: incidents.open,
     critical: incidents.critical,
     providersDegraded: connections.providers.degraded,
     mcpDegraded: connections.mcp.degraded,
   });
-  const strip = [
-    'Single-tenant',
-    d.region ?? 'region not set',
-    d.label,
-    `${tiles.healthyWorkers.healthy} worker${tiles.healthyWorkers.healthy === 1 ? '' : 's'}`,
-    `${incidents.open} open incident${incidents.open === 1 ? '' : 's'}`,
+  const strip = [region ?? '', `${workers.healthy} worker${workers.healthy === 1 ? '' : 's'}`, `${incidents.open} open incident${incidents.open === 1 ? '' : 's'}`];
+  const degraded = connections.providers.degraded + connections.mcp.degraded;
+  const health: HealthItem[] = [
+    { key: 'uptime', label: 'uptime 30d', value: data.uptime.ratio === null ? '—' : formatPercent(data.uptime.ratio, 2), ok: data.uptime.ratio === null ? null : data.uptime.ratio >= 0.999, href: '/system' },
+    { key: 'workers', label: 'workers', value: `${workers.healthy} of ${workers.max}`, ok: workers.healthy >= workers.minWarm && workers.healthy > 0, href: '/system/workers' },
+    { key: 'active', label: 'active conv', value: formatNumber(tiles.activeConversations), ok: null, href: '/system/queues' },
+    { key: 'ttft', label: 'ttft p95', value: tiles.ttftP95Ms === null ? '—' : formatLatency(tiles.ttftP95Ms), ok: null, href: '/system/telemetry' },
+    { key: 'tokens', label: 'tokens today', value: formatCompact(tiles.tokensToday), ok: null, href: '/system/telemetry' },
+    { key: 'connections', label: 'connections', value: degraded ? `${degraded} degraded` : 'all healthy', ok: degraded === 0, href: '/connections?tab=providers' },
   ];
 
   return (
-    <>
-      <Greeting name={firstName(session.user.name)} tail={tail} strip={strip} />
-      <Tiles>
-        <Tile label="uptime 30d" value={data.uptime.ratio === null ? null : formatPercent(data.uptime.ratio, 2)} />
-        <Tile
-          label="healthy workers"
-          value={`${tiles.healthyWorkers.healthy} of ${tiles.healthyWorkers.max}`}
-          {...(tiles.healthyWorkers.healthy < tiles.healthyWorkers.minWarm ? { tone: 'warn' as const } : {})}
-        />
-        <Tile label="active conversations" value={formatNumber(tiles.activeConversations)} />
-        <Tile label="ttft p95" value={tiles.ttftP95Ms === null ? null : formatLatency(tiles.ttftP95Ms)} />
-        <Tile label="tokens today" value={formatCompact(tiles.tokensToday)} />
-        <Tile label="open incidents" value={formatNumber(tiles.openIncidents)} {...(tiles.openIncidents > 0 ? { tone: 'warn' as const } : {})} />
-      </Tiles>
-
-      {critical ? (
-        <AlertBanner
-          tone="error"
-          title={critical.title}
-          action={
-            <Link className="btn tiny" href="/system">
-              Open control center
-            </Link>
-          }
-        >
-          opened {formatTime(critical.openedAt, tz)}
-          {critical.value ? ` · ${critical.value}` : ''} · {critical.source}
-          {critical.occurrences > 1 ? ` · seen ${critical.occurrences}×` : ''}
-        </AlertBanner>
-      ) : null}
-
+    <HomeFrame
+      name={firstName(session.user.name)}
+      tail={tail}
+      strip={strip}
+      ask={ask}
+      needsYou={home.needsYou}
+      tiles={home.tiles}
+      period={periodLabel('TECH')}
+      setup={home.setup}
+      permissions={session.permissions}
+      now={now}
+      lead={<HealthStrip items={health} />}
+    >
       <div className="row2">
         <div>
           <SecHead
@@ -85,6 +82,35 @@ export function AdminHome({ session, data }: { session: Session; data: AdminHome
           <ChangesCard changes={data.recentChanges} timeZone={tz} canAudit={hasPermission(session, Permission.AUDIT_READ)} />
         </div>
       </div>
-    </>
+      {home.flow ? (
+        <ServiceFlow
+          flow={home.flow}
+          links={{
+            channels: hasPermission(session, Permission.CHANNELS_READ),
+            routers: hasPermission(session, Permission.ROUTERS_READ),
+            queues: hasPermission(session, Permission.QUEUES_MANAGE),
+            agents: hasPermission(session, Permission.AGENTS_READ),
+          }}
+        />
+      ) : null}
+    </HomeFrame>
+  );
+}
+
+/** One line of platform health: each fact links to where it is managed. */
+function HealthStrip({ items }: { items: HealthItem[] }) {
+  return (
+    <ul className="health-strip" aria-label="Platform health">
+      {items.map((h) => (
+        <li key={h.key}>
+          <Link href={h.href} className={h.ok === false ? 'hs-item bad' : 'hs-item'}>
+            {h.ok === null ? null : <span className={h.ok ? 'okdot' : 'okdot d'} aria-hidden="true" />}
+            <span className="hs-k">{h.label}</span>
+            <span className="hs-v">{h.value}</span>
+            {h.ok === false ? <span className="sr-only"> (needs attention)</span> : null}
+          </Link>
+        </li>
+      ))}
+    </ul>
   );
 }

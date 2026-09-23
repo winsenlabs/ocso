@@ -46,6 +46,8 @@ export interface DecisionView {
   reason: string | null;
   contentHash: string;
   bulkBatchId: string | null;
+  /** INTERNAL_AGENT: made through Ask OCSO for the actor ("submitted via Ask OCSO"); null otherwise. */
+  via: 'INTERNAL_AGENT' | null;
   occurredAt: string;
 }
 
@@ -120,6 +122,7 @@ export async function decisionsOf(tx: DbOrTx, proposalId: string): Promise<Decis
     reason: r.reason,
     contentHash: r.contentHash,
     bulkBatchId: r.bulkBatchId,
+    via: r.via ?? null,
     occurredAt: r.occurredAt.toISOString(),
   }));
 }

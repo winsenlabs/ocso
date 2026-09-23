@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Query, Res }
 import type { Response } from 'express';
 import { AlertRuleInput, AlertRuleListQuery, AlertRulePatch, AlertRuleService, ApprovalService, WithApproval, alertRuleObjectKind, requestApproval, submitOrDiscard, type ActorContext } from '@ocso/application';
 import { z } from 'zod';
-import { Actor, Authenticated } from '../../common/decorators.js';
+import { Actor, Authenticated, Capability } from '../../common/decorators.js';
 import { approvalResponse } from '../approvals/approval-response.js';
 
 const CreateBody = AlertRuleInput.extend(WithApproval.shape);
@@ -27,6 +27,7 @@ export class AlertRulesController {
     @Inject(ApprovalService) private readonly approvals: ApprovalService,
   ) {}
 
+  @Capability({ name: 'alerts.list_alert_rules', summary: 'List the alert rules you can see (business and technical).', tags: ['rule'] })
   @Get()
   @Authenticated()
   list(@Actor() actor: ActorContext, @Query({ schema: AlertRuleListQuery }) query: AlertRuleListQuery) {
@@ -34,12 +35,14 @@ export class AlertRulesController {
   }
 
   /** Evaluator catalogue: condition, kinds, method and params JSON schema. */
+  @Capability({ name: 'alerts.list_alert_conditions', summary: 'List the conditions an alert rule can watch, with their parameters.', tags: ['rule', 'condition'] })
   @Get('conditions')
   @Authenticated()
   conditions(@Actor() actor: ActorContext) {
     return this.rules.conditions(actor);
   }
 
+  @Capability({ name: 'alerts.get_alert_rule', summary: 'Get one alert rule.', tags: ['rule'] })
   @Get(':id')
   @Authenticated()
   get(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string) {
@@ -47,6 +50,7 @@ export class AlertRulesController {
   }
 
   /** 201 the draft (off). With `approval`, turning it on is proposed in the same call: 202 `{ rule, proposal }`. */
+  @Capability({ name: 'alerts.create_alert_rule', summary: 'Create an alert rule (it starts off; turning it on needs approval).', approvalKind: 'alert_rule', tags: ['rule'] })
   @Post()
   @Authenticated()
   async create(@Actor() actor: ActorContext, @Body({ schema: CreateBody }) body: CreateBody, @Res({ passthrough: true }) res: Response) {
@@ -61,6 +65,7 @@ export class AlertRulesController {
   }
 
   /** `enabled` goes alone: false is an immediate stop (200); true is ACTIVATE (202/409). Other fields: 200 for a draft, else 202/409. */
+  @Capability({ name: 'alerts.update_alert_rule', summary: 'Change an alert rule: turning it off applies at once; turning it on, or editing an approved rule, needs approval.', stopWhen: { enabled: false }, approvalKind: 'alert_rule', tags: ['rule', 'disable', 'mute'] })
   @Patch(':id')
   @Authenticated()
   async update(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string, @Body({ schema: PatchBody }) body: PatchBody, @Res({ passthrough: true }) res: Response) {
@@ -82,6 +87,7 @@ export class AlertRulesController {
   }
 
   /** Deleting is always a proposal (it resolves the rule's open alerts once approved): 202 `{proposal}`, else 409. */
+  @Capability({ name: 'alerts.delete_alert_rule', summary: 'Delete an alert rule (always needs approval).', approvalKind: 'alert_rule', tags: ['rule'] })
   @Delete(':id')
   @Authenticated()
   async remove(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string, @Body({ schema: WithApproval.optional() }) body: ApprovalBody | undefined, @Res({ passthrough: true }) res: Response) {

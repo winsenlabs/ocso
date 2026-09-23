@@ -22,18 +22,6 @@ export interface ToolAnswer {
   table?: { columns: string[]; rows: Array<Array<string | number>> } | undefined;
 }
 
-/** One field a write would change, shown on the confirmation card (docs/12 §4). */
-export interface ActionChange {
-  label: string;
-  before: string | null;
-  after: string;
-}
-
-export interface ActionPreview {
-  summary?: string | undefined;
-  changes: ActionChange[];
-}
-
 /**
  * Where the user is in the OCSO UI when asking (design/05 "context · …").
  * Only a hint for resolving "this conversation"; tools still authorize access.
@@ -54,24 +42,16 @@ export interface ToolContext {
 }
 
 /**
- * An internal tool is a thin adapter over an existing application service,
- * gated by exactly one permission and classified by risk. The model only
- * sees tools the current user may use; execution re-checks the permission.
+ * An insight tool (`insight.<name>` in the capability catalog): a read that aggregates across application
+ * services, run in-process with the asking user's principal. Gated by one permission; always READ — every
+ * change goes through its API route and a confirmation card instead.
  */
 export interface InternalTool<I = unknown> {
   name: string;
   description: string;
   input: z.ZodType<I>;
   permission: Permission;
-  risk: InternalRisk;
-  /** Human-readable description of a write for the confirmation card. */
-  describe?: ((args: I) => string) | undefined;
-  /**
-   * Current → proposed values for the confirmation card, and optionally a
-   * clearer one-line summary than `describe` (e.g. names instead of ids).
-   * Read-only; never writes.
-   */
-  preview?: ((ctx: ToolContext, args: I) => Promise<ActionPreview>) | undefined;
+  risk: 'READ';
   run(ctx: ToolContext, args: I): Promise<ToolAnswer>;
 }
 

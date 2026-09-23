@@ -27,8 +27,6 @@ export interface SidebarGroup {
 
 export interface SidebarProps {
   region?: string | null | undefined;
-  /** Deployment scope: organization + deployment label, and what the user is scoped to. */
-  scope: { org: string; label: string; path: string };
   /** The Ask OCSO trigger (interactive, supplied by the shell). */
   ask?: ReactNode;
   groups: SidebarGroup[];
@@ -42,8 +40,8 @@ const BADGE_STYLE: Record<'warn' | 'danger', { background: string; color: string
   danger: { background: 'var(--danger-soft)', color: 'var(--danger)' },
 };
 
-/** OCSONav: brand, deployment scope, Ask OCSO, role-specific groups, user footer. */
-export function Sidebar({ region, scope, ask, groups, user, footerAction }: SidebarProps) {
+/** OCSONav: brand, Ask OCSO, role-specific groups, user footer. */
+export function Sidebar({ region, ask, groups, user, footerAction }: SidebarProps) {
   return (
     <aside className="sidebar" aria-label="OCSO">
       <div className="sb-brand" style={{ justifyContent: 'space-between', gap: 8 }}>
@@ -54,27 +52,6 @@ export function Sidebar({ region, scope, ask, groups, user, footerAction }: Side
           <div className="a-word">OCSO</div>
         </div>
         {region ? <span className="region">{region}</span> : null}
-      </div>
-
-      <div className="scope-sw" title="Deployment · single tenant">
-        <div className="sw-org">
-          {scope.org.toUpperCase()} · {scope.label.toUpperCase()}
-        </div>
-        <div className="sw-path">
-          <span className="sw-proj">{scope.path}</span>
-          <svg
-            style={{ width: 12, height: 12, marginLeft: 'auto', color: 'var(--ink-4)' }}
-            viewBox="0 0 20 20"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M7 8l3-3 3 3M7 12l3 3 3-3" />
-          </svg>
-        </div>
       </div>
 
       {ask}

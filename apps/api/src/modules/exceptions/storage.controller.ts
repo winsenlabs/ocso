@@ -2,7 +2,7 @@ import { Controller, Get, Inject } from '@nestjs/common';
 import { Permission } from '@ocso/auth';
 import { storageReport, type AuditStore } from '@ocso/application';
 import type { Db } from '@ocso/db';
-import { RequirePermission } from '../../common/decorators.js';
+import { Capability, RequirePermission } from '../../common/decorators.js';
 import { AUDIT_STORE, DB } from '../../infrastructure/tokens.js';
 
 /**
@@ -16,6 +16,7 @@ export class StorageController {
     @Inject(AUDIT_STORE) private readonly store: AuditStore,
   ) {}
 
+  @Capability({ name: 'system.get_storage', summary: 'Storage use of the database and audit store.', tags: ['storage', 'disk', 'database'] })
   @Get('storage')
   @RequirePermission(Permission.SYSTEM_READ)
   storage() {

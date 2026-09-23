@@ -178,6 +178,11 @@ test('Tech admin adds an in-app destination, sees the seeded rules and creates a
   await settled(page);
   await expect(page.locator('.greeting h1')).toContainText('Tara,');
   await expect(page.getByRole('region', { name: 'Recent privileged changes' })).toContainText('E2E token spike');
+  // Tech Home: needs you, the health strip, incidents, capacity and the service flow.
+  await expect(page.getByRole('region', { name: 'Needs you' })).toBeVisible();
+  await expect(page.getByRole('list', { name: 'Platform health' }).getByRole('link', { name: /workers/ })).toHaveAttribute('href', '/system/workers');
+  await expect(page.getByRole('heading', { name: 'Open incidents and alerts' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Service flow' })).toBeVisible();
 });
 
 test('Tech admin opens a real technical alert, sees its deliveries, acknowledges and resolves it', async ({ page }) => {
@@ -235,9 +240,18 @@ test('Lead sees only business alerts and rules, and the lead home', async ({ pag
   await login(page, USERS.lead);
   await settled(page);
   await expect(page.locator('.greeting h1')).toContainText('Sana,');
-  await expect(page.locator('.tile').filter({ hasText: 'conversations 7d' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Virtual agents', exact: true })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Needs a decision' })).toBeVisible();
+  // Head Home: needs you first, then the live service flow (empty deployment) and agent quality.
+  await expect(page.getByRole('region', { name: 'Needs you' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Service flow' })).toContainText('No channel, router or queue yet');
+  await expect(page.getByRole('heading', { name: 'Agent quality' })).toBeVisible();
+  // Nothing is live yet (no channel): the setup checklist stands in for tiles with no data.
+  const setup = page.getByRole('region', { name: 'Set up OCSO' });
+  await expect(setup).toBeVisible();
+  await expect(page.getByRole('list', { name: /Key numbers/ })).toHaveCount(0);
+  // Steps a Lead cannot do are not links: choosing the Ask OCSO model is Tech's.
+  await expect(setup.getByRole('link', { name: /Ask OCSO runs on/ })).toHaveCount(0);
+  await expect(setup.getByRole('link', { name: /Open a channel/ })).toHaveCount(0);
+  await expect(page.getByRole('list', { name: 'Platform health' })).toHaveCount(0);
   await expect(page.getByText('uptime 30d')).toHaveCount(0);
 
   await page.goto('/alerts');
@@ -262,9 +276,15 @@ test('Service member sees the exec home', async ({ page }) => {
   await settled(page);
   await expect(page.locator('.greeting h1')).toContainText('Omar,');
   await expect(page.locator('.greeting h1')).toContainText('nobody is waiting on a human.');
-  await expect(page.locator('.tile').filter({ hasText: 'assigned to me' })).toContainText('0');
-  await expect(page.getByRole('heading', { name: 'Pickup queue' })).toBeVisible();
+  await expect(page.locator('.greeting-strip')).toContainText('0 assigned');
+  await expect(page.getByRole('region', { name: 'Needs you' })).toBeVisible();
+  // Small stats with trends, each linking to where the number comes from.
+  const numbers = page.getByRole('list', { name: /Key numbers/ });
+  await expect(numbers.getByRole('link', { name: /Resolved today/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'My queue' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Take next conversation' })).toBeDisabled();
   await expect(page.getByRole('region', { name: 'My shift' }).getByRole('group', { name: 'Availability' })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'For you' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Service flow' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Set up OCSO' })).toHaveCount(0);
   await expect(page.getByText('open incidents')).toHaveCount(0);
 });

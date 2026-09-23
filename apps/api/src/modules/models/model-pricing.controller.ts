@@ -3,7 +3,7 @@ import { Permission, type Principal } from '@ocso/auth';
 import { ApprovalService, CatalogPriceInput, PricingInput, PricingPatch, PricingService, WithApproval, requestApproval, type ActorContext } from '@ocso/application';
 import type { Response } from 'express';
 import { z } from 'zod';
-import { Actor, CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
+import { Actor, Capability, CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
 import { approvalResponse } from '../approvals/approval-response.js';
 import { createDraft, proposeOnly, withApprovalState, OptionalApproval, type ApprovalBody } from '../settings/platform-approvals.js';
 
@@ -24,6 +24,7 @@ export class ModelPricingController {
     @Inject(ApprovalService) private readonly approvals: ApprovalService,
   ) {}
 
+  @Capability({ name: 'models.list_prices', summary: 'List model prices used for cost reporting.', tags: ['price', 'cost', 'pricing'] })
   @Get()
   @RequirePermission(Permission.PRICING_MANAGE)
   async list(@Actor() actor: ActorContext, @CurrentPrincipal() principal: Principal) {
@@ -31,6 +32,7 @@ export class ModelPricingController {
   }
 
   /** Models in use (profiles, last 30 days of usage) that no row prices, with the catalog's offer. */
+  @Capability({ name: 'models.list_missing_prices', summary: "Models in use that have no price, with the catalog's price.", tags: ['price', 'cost'] })
   @Get('missing')
   @RequirePermission(Permission.PRICING_MANAGE)
   missing(@Actor() actor: ActorContext) {
@@ -38,6 +40,7 @@ export class ModelPricingController {
   }
 
   /** Add the model catalog's price for one model as a catalog-origin row. */
+  @Capability({ name: 'models.add_price_from_catalog', summary: "Add the model catalog's price for one model.", tags: ['price'] })
   @Post('from-catalog')
   @RequirePermission(Permission.PRICING_MANAGE)
   fromCatalog(@Actor() actor: ActorContext, @Body({ schema: CatalogPriceInput }) body: CatalogPriceInput) {
@@ -45,6 +48,7 @@ export class ModelPricingController {
   }
 
   /** A draft row (201); with `approval` its activation is submitted too (202 `{…row, proposal}`). */
+  @Capability({ name: 'models.create_price', summary: 'Add a model price as a draft (applying it needs approval).', tags: ['price'] })
   @Post()
   @RequirePermission(Permission.PRICING_MANAGE)
   create(@Actor() actor: ActorContext, @Body({ schema: CreateBody }) body: CreateBody, @Res({ passthrough: true }) res: Response) {
@@ -52,6 +56,7 @@ export class ModelPricingController {
     return createDraft(res, { approvals: this.approvals, actor, kind: 'model_pricing', live: approval !== undefined, approval, create: () => this.pricing.create(actor, input) });
   }
 
+  @Capability({ name: 'models.update_price', summary: "Change a model price (an applied price's change needs approval).", tags: ['price'] })
   @Patch(':id')
   @RequirePermission(Permission.PRICING_MANAGE)
   update(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string, @Body({ schema: PatchBody }) body: PatchBody, @Res({ passthrough: true }) res: Response) {
@@ -60,6 +65,7 @@ export class ModelPricingController {
   }
 
   /** Make a draft price apply: always a proposal (ACTIVATE). */
+  @Capability({ name: 'models.activate_price', summary: 'Make a draft model price apply (always needs approval).', tags: ['price'] })
   @Post(':id/activate')
   @HttpCode(202)
   @RequirePermission(Permission.PRICING_MANAGE)
@@ -68,6 +74,7 @@ export class ModelPricingController {
   }
 
   /** Always a proposal (DELETE): 202 `{proposal}` with `approval`, else 409 approval_required. */
+  @Capability({ name: 'models.delete_price', summary: 'Delete a model price (always needs approval).', tags: ['price'] })
   @Delete(':id')
   @RequirePermission(Permission.PRICING_MANAGE)
   remove(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string, @Body({ schema: OptionalApproval }) body: ApprovalBody, @Res({ passthrough: true }) res: Response) {

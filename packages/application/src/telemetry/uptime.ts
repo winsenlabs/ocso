@@ -71,12 +71,14 @@ export async function uptime(db: DbOrTx, now: Date, windowDays = 30): Promise<Up
       ) verdict`);
   const r = rows[0];
   // Hours older than the raw window come from the hourly roll-ups (health-rollups.ts): the
-  // availability row of every whole hour in the window that ends before the first raw sample.
+  // availability row of every whole hour in the window that ends before the first raw sample and by `now`
+  // (a past `now`, e.g. Home's previous-week tile, must not count hours after it).
   const { rows: rolled } = await db.execute<{ minutes: number; up_minutes: number; last_down: Date | null; has_workers: boolean }>(sql`
     SELECT coalesce(sum(minutes), 0)::int AS minutes, coalesce(sum(up_minutes), 0)::int AS up_minutes, max(last_down_at) AS last_down,
-           EXISTS (SELECT 1 FROM health_sample_rollups WHERE component = 'workers' AND hour > ${at(now)} - make_interval(days => ${windowDays})) AS has_workers
+           EXISTS (SELECT 1 FROM health_sample_rollups WHERE component = 'workers' AND hour > ${at(now)} - make_interval(days => ${windowDays}) AND hour < ${at(now)}) AS has_workers
       FROM health_sample_rollups
      WHERE component = 'availability' AND hour >= ${at(now)} - make_interval(days => ${windowDays})
+       AND hour + interval '1 hour' <= ${at(now)}
        AND hour + interval '1 hour' <= coalesce((SELECT min(sampled_at) FROM health_samples WHERE component = 'database'), ${at(now)})`);
   const h = rolled[0];
   const minutes = int(r?.minutes) + int(h?.minutes);

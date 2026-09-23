@@ -139,6 +139,7 @@ export function ApprovalDrawer({
                 <b>{d.kind.toLowerCase().replace(/_/g, ' ')}</b> · {d.actorName}
                 {d.reason ? ` — ${d.reason}` : ''}
                 {d.bulkBatchId ? <span className="mono-sm"> (bulk)</span> : null}
+                {d.via === 'INTERNAL_AGENT' ? <span className="mono-sm"> via Ask OCSO</span> : null}
               </span>
             </li>
           ))}
