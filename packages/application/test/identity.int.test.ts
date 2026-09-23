@@ -49,7 +49,7 @@ describe('user management', () => {
 
   beforeAll(async () => {
     const [row] = (await t.db.execute(sql`SELECT id, name FROM users WHERE email = 'tejas@meridian.test'`)).rows as [{ id: string; name: string }];
-    admin = { userId: row.id, role: 'PLATFORM_TECH_ADMIN', displayName: row.name, teamIds: [], via: 'UI' };
+    admin = { userId: row.id, role: 'TECH', displayName: row.name, teamIds: [], via: 'UI' };
   });
 
   it('stores emails in lower case with an OCSO scrypt credential account (Better Auth model)', async () => {
@@ -57,27 +57,27 @@ describe('user management', () => {
     expect(rows).toEqual([{ email: 'tejas@meridian.test', email_verified: true, provider_id: 'credential', password: expect.stringMatching(/^scrypt\$15\$8\$1\$/) }]);
   });
 
-  it('lets a CS Lead manage only CS Execs, and revokes sessions on role change', async () => {
+  it('lets a Lead manage only Service members, and revokes sessions on role change', async () => {
     const users = new UserService(t.db, { allowInitialPasswords: true });
-    const team = await new TeamService(t.db).create(ctx({ ...admin, role: 'CS_LEAD' }), { name: 'Cards & EMI', description: null });
+    const team = await new TeamService(t.db).create(ctx({ ...admin, role: 'HEAD' }), { name: 'Cards & EMI', description: null });
     const lead = await users.create(ctx(admin), {
-      email: 'anjali@meridian.test', name: 'Anjali Rao', role: 'CS_LEAD', password: 'lead password 1234',
+      email: 'anjali@meridian.test', name: 'Anjali Rao', role: 'HEAD', password: 'lead password 1234',
       teamIds: [team.id], languages: [], skills: [], maxConcurrent: 8,
     });
     // A lead places new execs only in teams they belong to (ADR-026).
-    const leadP: Principal = { userId: lead.id, role: 'CS_LEAD', displayName: lead.name, teamIds: [team.id], via: 'UI' };
+    const leadP: Principal = { userId: lead.id, role: 'HEAD', displayName: lead.name, teamIds: [team.id], via: 'UI' };
     const exec = await users.create(ctx(leadP), {
-      email: 'nikhil@meridian.test', name: 'Nikhil Menon', role: 'CS_EXEC', password: 'exec password 1234',
+      email: 'nikhil@meridian.test', name: 'Nikhil Menon', role: 'SERVICE', password: 'exec password 1234',
       teamIds: [team.id], languages: ['en', 'mr'], skills: ['cards'], maxConcurrent: 8,
     });
     expect(exec.teamIds).toEqual([team.id]);
     expect(exec.invite.status).toBe('none');
     await expect(
-      users.create(ctx(leadP), { email: 'x@y.test', name: 'X', role: 'PLATFORM_TECH_ADMIN', password: 'some password 123', teamIds: [], languages: [], skills: [], maxConcurrent: 8 }),
+      users.create(ctx(leadP), { email: 'x@y.test', name: 'X', role: 'TECH', password: 'some password 123', teamIds: [], languages: [], skills: [], maxConcurrent: 8 }),
     ).rejects.toMatchObject({ category: 'authorization' });
 
     await t.pool.query(`INSERT INTO auth_sessions (id, token, user_id, expires_at) VALUES (gen_random_uuid(), 'tok-exec', $1, now() + interval '1 day')`, [exec.id]);
-    await users.update(ctx(admin), exec.id, { role: 'CS_LEAD' });
+    await users.update(ctx(admin), exec.id, { role: 'HEAD' });
     expect((await t.pool.query(`SELECT count(*)::int AS n FROM auth_sessions WHERE user_id = $1`, [exec.id])).rows[0].n).toBe(0);
 
     const { rows } = await t.pool.query(`SELECT action FROM audit_events WHERE target_id = $1 ORDER BY occurred_at`, [exec.id]);
@@ -86,7 +86,7 @@ describe('user management', () => {
 
   it('refuses admin-set passwords when invites can be emailed', async () => {
     const users = new UserService(t.db, { allowInitialPasswords: false });
-    await expect(users.create(ctx(admin), { email: 'p@meridian.test', name: 'P', role: 'CS_EXEC', password: 'some password 123' })).rejects.toMatchObject({ code: 'initial_password_not_allowed' });
+    await expect(users.create(ctx(admin), { email: 'p@meridian.test', name: 'P', role: 'SERVICE', password: 'some password 123' })).rejects.toMatchObject({ code: 'initial_password_not_allowed' });
   });
 
   it('validates worker settings bounds', async () => {
@@ -94,7 +94,7 @@ describe('user management', () => {
     await expect(settings.updateWorkers(ctx(admin), { minWarmWorkers: 20 })).rejects.toThrow();
     const updated = await settings.updateWorkers(ctx(admin), { minWarmWorkers: 4 });
     expect(updated.minWarmWorkers).toBe(4);
-    await expect(settings.updateWorkers(ctx({ ...admin, role: 'CS_LEAD' }), { minWarmWorkers: 3 })).rejects.toMatchObject({
+    await expect(settings.updateWorkers(ctx({ ...admin, role: 'HEAD' }), { minWarmWorkers: 3 })).rejects.toMatchObject({
       category: 'authorization',
     });
     const [{ n }] = (await t.db.execute(sql`SELECT count(*)::int AS n FROM outbox_events WHERE type = 'config.changed'`)).rows as [{ n: number }];

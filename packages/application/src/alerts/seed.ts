@@ -7,7 +7,7 @@ import type { AlertRuleRow } from './views.js';
 
 type SeedRule = Pick<AlertRuleRow, 'name' | 'kind' | 'condition' | 'params' | 'windowSeconds' | 'severity' | 'audienceRoles' | 'dedupeWindowSeconds'>;
 
-const TECH = ['PLATFORM_TECH_ADMIN'];
+const TECH = ['TECH'];
 
 /** Sensible defaults (docs/11 §6 technical + business examples). Thresholds are editable afterwards. */
 export const DEFAULT_ALERT_RULES: readonly SeedRule[] = [
@@ -17,8 +17,8 @@ export const DEFAULT_ALERT_RULES: readonly SeedRule[] = [
   { name: 'MCP connection unhealthy', kind: 'TECHNICAL', condition: 'mcp_unhealthy', params: {}, windowSeconds: 300, severity: 'WARNING', audienceRoles: TECH, dedupeWindowSeconds: 1800 },
   { name: 'Time to first token p95 above 3s', kind: 'TECHNICAL', condition: 'ttft_p95_above', params: { thresholdMs: 3000, minRequests: 10 }, windowSeconds: 600, severity: 'WARNING', audienceRoles: TECH, dedupeWindowSeconds: 1800 },
   { name: 'Database degraded', kind: 'TECHNICAL', condition: 'database_degraded', params: {}, windowSeconds: 300, severity: 'CRITICAL', audienceRoles: TECH, dedupeWindowSeconds: 900 },
-  { name: 'Escalation rate above 25%', kind: 'BUSINESS', condition: 'escalation_rate_above', params: { thresholdPercent: 25, minConversations: 20 }, windowSeconds: 3600, severity: 'WARNING', audienceRoles: ['CS_LEAD'], dedupeWindowSeconds: 3600 },
-  { name: 'SLA breaches', kind: 'BUSINESS', condition: 'sla_breaches_above', params: { threshold: 0 }, windowSeconds: 900, severity: 'WARNING', audienceRoles: ['CS_LEAD', 'CS_EXEC'], dedupeWindowSeconds: 900 },
+  { name: 'Escalation rate above 25%', kind: 'BUSINESS', condition: 'escalation_rate_above', params: { thresholdPercent: 25, minConversations: 20 }, windowSeconds: 3600, severity: 'WARNING', audienceRoles: ['HEAD', 'LEAD'], dedupeWindowSeconds: 3600 },
+  { name: 'SLA breaches', kind: 'BUSINESS', condition: 'sla_breaches_above', params: { threshold: 0 }, windowSeconds: 900, severity: 'WARNING', audienceRoles: ['HEAD', 'LEAD', 'SERVICE'], dedupeWindowSeconds: 900 },
 ];
 
 export const DEFAULT_IN_APP_DESTINATION = 'In-app notifications';

@@ -89,7 +89,7 @@ export async function RulesTab({ session, params }: { session: Session; params: 
             <SecHead
               title={kind === 'TECHNICAL' ? 'Technical rules' : 'Business rules'}
               count={list.length}
-              desc={kind === 'TECHNICAL' ? 'platform health · audience Tech Admin' : 'agent and queue outcomes · audience CS Lead / CS Exec'}
+              desc={kind === 'TECHNICAL' ? 'platform health · audience Tech admin' : 'agent and queue outcomes · audience Lead / Service member'}
               actions={
                 canManage ? (
                   <Link className="btn tiny" href={alertsHref({ tab: 'rules', rule: 'new', kind })} scroll={false}>

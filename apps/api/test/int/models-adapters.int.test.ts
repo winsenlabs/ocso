@@ -17,7 +17,7 @@ let source: CachedProviderAdapterSource;
 const sentKeys: Array<string | null> = [];
 
 const admin: ActorContext = {
-  principal: { userId: uuidv7(), role: 'PLATFORM_TECH_ADMIN', displayName: 'Admin', teamIds: [], via: 'UI' },
+  principal: { userId: uuidv7(), role: 'TECH', displayName: 'Admin', teamIds: [], via: 'UI' },
   correlationId: 'adapters',
 };
 

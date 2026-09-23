@@ -5,7 +5,7 @@ import { SettingsService, type WorkerSettings } from '../settings/settings.js';
 import type { Db } from '../shared/context.js';
 
 /**
- * What the Tech Admin sees next to the worker settings: "applied",
+ * What the Tech admin sees next to the worker settings: "applied",
  * "advisory" (with the exact operator command) or "failed: reason", and
  * PENDING while the newest change has not been applied yet.
  */

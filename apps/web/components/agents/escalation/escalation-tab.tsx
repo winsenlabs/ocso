@@ -40,7 +40,7 @@ export async function EscalationTab({ data }: { data: AgentPageData }) {
           <EmptyState title="No escalation rules">
             {can.escalation
               ? 'Add a rule for handoffs that must always happen — a refund above an amount, hardship language, repeated tool failures.'
-              : 'A CS Lead adds rules for handoffs that must always happen.'}
+              : 'A Lead adds rules for handoffs that must always happen.'}
           </EmptyState>
         }
         columns={[

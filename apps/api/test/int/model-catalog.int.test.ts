@@ -45,13 +45,13 @@ beforeAll(async () => {
   h = await startApi();
   admin = await completeSetup(h);
   for (const [email, role] of [
-    ['lead@ocso.test', 'CS_LEAD'],
-    ['exec@ocso.test', 'CS_EXEC'],
+    ['lead@ocso.test', 'HEAD'],
+    ['exec@ocso.test', 'SERVICE'],
   ] as const) {
     await h.http().post('/v1/users').set(auth(admin)).send({ email, name: role, role, password: `${role} password 1234` }).expect(201);
   }
-  lead = await h.loginAs('lead@ocso.test', 'CS_LEAD password 1234');
-  exec = await h.loginAs('exec@ocso.test', 'CS_EXEC password 1234');
+  lead = await h.loginAs('lead@ocso.test', 'HEAD password 1234');
+  exec = await h.loginAs('exec@ocso.test', 'SERVICE password 1234');
   const snapshot = buildSnapshot('models.dev', CATALOG, new Date('2026-09-20T00:00:00Z'));
   await h.db.db.insert(modelCatalogSnapshots).values({
     source: 'models.dev',

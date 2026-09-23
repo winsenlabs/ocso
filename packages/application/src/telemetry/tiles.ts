@@ -96,7 +96,7 @@ export async function worstToolFailure(db: DbOrTx, from: Date, to: Date): Promis
   return { toolName: r.tool_name, connectionName: r.connection_name, finished: int(r.finished), failed: int(r.failed), failureRate: int(r.failed) / int(r.finished) };
 }
 
-/** Tech Admin tiles (design/03 tile row), windowed to the last `windowMinutes` except "today" figures. */
+/** Tech admin tiles (design/03 tile row), windowed to the last `windowMinutes` except "today" figures. */
 export async function telemetryTiles(
   db: DbOrTx,
   now: Date,

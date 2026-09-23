@@ -11,7 +11,7 @@ import { api } from './client';
 export const ALERT_KINDS = ['TECHNICAL', 'BUSINESS'] as const;
 export const ALERT_SEVERITIES = ['INFO', 'WARNING', 'CRITICAL'] as const;
 export const ALERT_STATUSES = ['OPEN', 'ACKNOWLEDGED', 'RESOLVED'] as const;
-export const AUDIENCE_ROLES = ['PLATFORM_TECH_ADMIN', 'CS_LEAD', 'CS_EXEC'] as const;
+export const AUDIENCE_ROLES = ['TECH', 'HEAD', 'LEAD', 'SERVICE'] as const;
 
 export type AlertKind = (typeof ALERT_KINDS)[number];
 export type AlertSeverity = (typeof ALERT_SEVERITIES)[number];

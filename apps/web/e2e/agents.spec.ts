@@ -5,11 +5,11 @@ import { login, logout, settled } from './helpers';
 /**
  * Virtual agent overview & configuration (design/02) against the real API:
  * seeded through the API (setup → users → scripted model provider/profile →
- * queue → a second agent), then a CS Lead creates an agent, takes it live,
+ * queue → a second agent), then a Lead creates an agent, takes it live,
  * edits a prompt component (the compiled prefix hash changes), creates and
  * activates a version, diffs and rolls back, and adds an escalation rule. A CS
  * Exec then sees the same agent read-only. Agents are owned by teams (ADR-026):
- * a second lead in another team cannot see Maya until the Tech Admin makes
+ * a second lead in another team cannot see Maya until the Tech admin makes
  * that team a co-owner from the agent's Settings tab.
  */
 test.describe.configure({ mode: 'serial' });
@@ -41,16 +41,16 @@ test.beforeAll(async ({ playwright }) => {
     await call('POST', '/v1/setup', null, { setupToken: E2E.setupToken, orgName: 'E2E Bank', adminName: ACCOUNTS.admin.name, adminEmail: ACCOUNTS.admin.email, adminPassword: ACCOUNTS.admin.password, timezone: 'Asia/Kolkata' });
   }
   tok.admin = await loginApi(ACCOUNTS.admin.email, ACCOUNTS.admin.password);
-  const lead = await call<{ id: string }>('POST', '/v1/users', tok.admin, { name: LEAD.name, email: LEAD.email, role: 'CS_LEAD', password: LEAD.password, teamIds: [], languages: [], maxConcurrent: 5 });
+  const lead = await call<{ id: string }>('POST', '/v1/users', tok.admin, { name: LEAD.name, email: LEAD.email, role: 'HEAD', password: LEAD.password, teamIds: [], languages: [], maxConcurrent: 5 });
   tok.lead = await loginApi(LEAD.email, LEAD.password);
-  // Agents belong to teams: each lead creates a team and the Tech Admin puts them in it.
+  // Agents belong to teams: each lead creates a team and the Tech admin puts them in it.
   ids.cards = (await call<{ id: string }>('POST', '/v1/teams', tok.lead, { name: 'AG Cards' })).id;
   await call('PATCH', `/v1/users/${lead.id}`, tok.admin, { teamIds: [ids.cards] });
-  const lead2 = await call<{ id: string }>('POST', '/v1/users', tok.admin, { name: LEAD2.name, email: LEAD2.email, role: 'CS_LEAD', password: LEAD2.password, teamIds: [], languages: [], maxConcurrent: 5 });
+  const lead2 = await call<{ id: string }>('POST', '/v1/users', tok.admin, { name: LEAD2.name, email: LEAD2.email, role: 'HEAD', password: LEAD2.password, teamIds: [], languages: [], maxConcurrent: 5 });
   tok.lead2 = await loginApi(LEAD2.email, LEAD2.password);
   ids.loans = (await call<{ id: string }>('POST', '/v1/teams', tok.lead2, { name: 'AG Loans' })).id;
   await call('PATCH', `/v1/users/${lead2.id}`, tok.admin, { teamIds: [ids.loans] });
-  await call('POST', '/v1/users', tok.lead, { name: EXEC.name, email: EXEC.email, role: 'CS_EXEC', password: EXEC.password, teamIds: [ids.cards], languages: [], maxConcurrent: 5 });
+  await call('POST', '/v1/users', tok.lead, { name: EXEC.name, email: EXEC.email, role: 'SERVICE', password: EXEC.password, teamIds: [ids.cards], languages: [], maxConcurrent: 5 });
   const provider = await call<{ id: string }>('POST', '/v1/model-providers', tok.admin, { kind: 'DEV_SCRIPTED', name: 'AG Scripted', settings: { latencyMs: 50, chunkDelayMs: 15 } });
   ids.profile = (await call<{ id: string }>('POST', '/v1/model-profiles', tok.admin, { name: 'ag-support', providerId: provider.id, model: 'scripted-1', retries: 0 })).id;
   ids.queue = (await call<{ id: string }>('POST', '/v1/queues', tok.lead, { name: 'AG Cards & EMI · Tier 2' })).id;
@@ -64,7 +64,7 @@ test.afterAll(async () => {
   await api?.dispose();
 });
 
-test('a CS Lead creates a virtual agent and takes it live', async ({ page }) => {
+test('a Lead creates a virtual agent and takes it live', async ({ page }) => {
   await login(page, LEAD);
   await page.goto('/agents');
   await expect(page.getByRole('heading', { name: 'Virtual agents', level: 1 })).toBeVisible();
@@ -227,7 +227,7 @@ test('sets human business hours; an invalid span shows the API error inline', as
   await logout(page);
 });
 
-test('a CS Exec reads the agent without edit controls', async ({ page }) => {
+test('a Service member reads the agent without edit controls', async ({ page }) => {
   await login(page, EXEC);
   await page.goto(`/agents/${ids.agent}`);
   await expect(header(page).getByRole('heading', { name: 'Maya — Customer Support' })).toBeVisible();
@@ -258,7 +258,7 @@ test('a CS Exec reads the agent without edit controls', async ({ page }) => {
   await logout(page);
 });
 
-test('a lead in another team cannot see Maya until the Tech Admin makes their team a co-owner', async ({ page }) => {
+test('a lead in another team cannot see Maya until the Tech admin makes their team a co-owner', async ({ page }) => {
   await login(page, LEAD2);
   await page.goto('/agents');
   const list = page.getByRole('table', { name: 'Virtual agents' });
@@ -279,7 +279,7 @@ test('a lead in another team cannot see Maya until the Tech Admin makes their te
   await owners.getByRole('button', { name: 'Save owning teams' }).click();
   await expect(owners).toContainText('Owning teams saved');
   await expect(header(page)).toContainText('AG Cards · AG Loans');
-  // Governance only: the Tech Admin cannot edit the agent's business settings.
+  // Governance only: the Tech admin cannot edit the agent's business settings.
   await expect(page.getByRole('button', { name: 'Save settings' })).toHaveCount(0);
   await logout(page);
 

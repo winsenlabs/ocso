@@ -108,7 +108,7 @@ export class EvaluationRunService {
     return view(row.r, row.createdByName, row.baselineVersion);
   }
 
-  /** Per-case results. Contains customer text: evaluations.run (CS Lead) only. */
+  /** Per-case results. Contains customer text: evaluations.run (Lead) only. */
   async results(principal: Principal, id: string, q: EvaluationResultsQuery) {
     await this.get(principal, id);
     const rows = await this.db

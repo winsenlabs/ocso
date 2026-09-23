@@ -4,12 +4,12 @@ import { alertRules, auditEvents, conversations, escalationRules, evaluationRuns
 import { readableAgentsSql } from '../agents/access.js';
 import { conversationScope, type VisibilityPolicy } from '../conversations/access.js';
 
-/** Shared operational configuration every CS Lead may see changes to. */
+/** Shared operational configuration every Lead may see changes to. */
 const SHARED_TARGETS = ['queue', 'sla_policy', 'team'];
 
 /**
  * Which audit events a reader may see (docs/15 §7, ADR-026). `audit.read_all`
- * (Tech Admin) sees everything. Everyone else sees: their own and their
+ * (Tech admin) sees everything. Everyone else sees: their own and their
  * teammates' actions; changes to agents they can read and to those agents'
  * prompts, escalation rules, corrections, evaluations and business alert
  * rules; events on conversations they can open; changes to users in their

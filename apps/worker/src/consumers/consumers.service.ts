@@ -11,7 +11,7 @@ import { TASK_PROTECTION } from '../scaling/scaling.module.js';
 
 /**
  * Queue consumers owned by this worker. Turn concurrency = conversations per
- * worker (docs/10 §5); resubscribed when the Tech Admin changes it.
+ * worker (docs/10 §5); resubscribed when the Tech admin changes it.
  */
 @Injectable()
 export class ConsumersService {

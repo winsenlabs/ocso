@@ -19,12 +19,12 @@ const DeploymentForm = z.object({
 
 const TEXT_FIELDS = ['orgName', 'deploymentLabel', 'regionLabel', 'timezone', 'residencyZone'] as const;
 
-/** PATCH /v1/settings/deployment (deployment_settings.manage — Platform Tech Admin). */
+/** PATCH /v1/settings/deployment (deployment_settings.manage — Tech admin). */
 export async function updateDeploymentAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const session = await getSession();
   if (!session) redirect('/login');
   if (!session.permissions.has(Permission.DEPLOYMENT_SETTINGS_MANAGE)) {
-    return { status: 'error', message: 'Only a Platform Tech Admin can change deployment settings.' };
+    return { status: 'error', message: 'Only a Tech admin can change deployment settings.' };
   }
   const values = Object.fromEntries(TEXT_FIELDS.map((k) => [k, field(formData, k)])) as Record<(typeof TEXT_FIELDS)[number], string>;
   const parsed = DeploymentForm.safeParse(values);

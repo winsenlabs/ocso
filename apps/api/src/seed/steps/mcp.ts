@@ -7,7 +7,7 @@ export const MCP_CONNECTION_NAME = 'meridian-core';
 
 type Risk = 'READ' | 'WRITE' | 'SENSITIVE';
 
-/** Tool classification the Tech Admin approves (examples/mcp-bank-demo README). */
+/** Tool classification the Tech admin approves (examples/mcp-bank-demo README). */
 const CLASSIFICATION: Record<string, Risk> = {
   'crm.get_customer': 'READ',
   'cards.list_transactions': 'READ',
@@ -18,7 +18,7 @@ const CLASSIFICATION: Record<string, Risk> = {
   'payments.reverse_transaction': 'SENSITIVE',
 };
 
-/** What the CS Lead grants Maya: every read tool plus two write tools. */
+/** What the Lead grants Maya: every read tool plus two write tools. */
 const MAYA_GRANTS = new Set(['crm.get_customer', 'cards.list_transactions', 'emi.get_schedule', 'knowledge.search_policy', 'disputes.raise_case', 'payments.reverse_transaction']);
 
 /**
@@ -67,7 +67,7 @@ async function connectAndApprove(ctx: SeedContext, admin: ActorContext, connecti
       toolId: t.id,
       riskClass: CLASSIFICATION[t.name]!,
       approved: true,
-      ...(CLASSIFICATION[t.name] === 'SENSITIVE' ? { humanRoles: ['CS_EXEC', 'CS_LEAD'] as Array<'CS_EXEC' | 'CS_LEAD'> } : {}),
+      ...(CLASSIFICATION[t.name] === 'SENSITIVE' ? { humanRoles: ['SERVICE', 'HEAD'] as Array<'SERVICE' | 'HEAD'> } : {}),
     }));
   const missing = Object.keys(CLASSIFICATION).filter((name) => !discovered.some((t) => t.name === name));
   if (missing.length) ctx.log(`warning: demo MCP server did not list ${missing.join(', ')}`);

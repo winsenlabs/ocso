@@ -11,8 +11,8 @@ import { getSession } from '../session';
 
 /**
  * Message template management (docs/07 §3): create = submit for the
- * provider's review, and delete. `message_templates.manage` (CS Lead for
- * their teams' channels, Tech Admin); the API enforces the channel scope.
+ * provider's review, and delete. `message_templates.manage` (Lead for
+ * their teams' channels, Tech admin); the API enforces the channel scope.
  */
 
 const Id = z.uuid();

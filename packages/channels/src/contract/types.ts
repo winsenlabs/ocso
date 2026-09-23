@@ -181,7 +181,7 @@ export interface ConnectionCheckResult {
 /**
  * What an adapter gets from the composition root. `fetch` is the only way an
  * adapter reaches the network: the composition root passes the SSRF-guarded
- * egress fetch (public https hosts plus the Tech Admin's internal allowlist);
+ * egress fetch (public https hosts plus the Tech admin's internal allowlist);
  * tests pass a stub. Adapters never call the global fetch.
  */
 export interface ChannelAdapterDeps {

@@ -34,7 +34,7 @@ export interface RealtimePayloads {
   'alert.updated': { alertId: string; status: 'OPEN' | 'ACKNOWLEDGED' | 'RESOLVED' };
   'alert.resolved': { alertId: string };
   'config.changed': { area: string; entityId: string | null };
-  /** A message template's review result changed (sent to the submitter and Tech Admins). */
+  /** A message template's review result changed (sent to the submitter and Tech admins). */
   'message_template.status_changed': { templateId: string; channelId: string; name: string; language: string; status: string; previousStatus: string; submittedBy: string | null };
 }
 

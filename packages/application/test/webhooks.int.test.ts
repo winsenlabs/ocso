@@ -13,7 +13,7 @@ let t: TestDatabase;
 let secrets: LocalSecretStore;
 const queue = new MemoryQueue();
 const as = (role: Principal['role']): ActorContext => ({ principal: { userId: uuidv7(), role, displayName: role, teamIds: [], via: 'UI' }, correlationId: 'c' });
-const admin = as('PLATFORM_TECH_ADMIN');
+const admin = as('TECH');
 let service: WebhookService;
 const sent: Array<{ url: string; headers: Record<string, string>; body: string }> = [];
 let respond: () => Response = () => new Response('ok', { status: 200 });
@@ -42,7 +42,7 @@ const emit = (type: 'alert.opened' | 'config.changed' | 'tool.failed'): Promise<
 
 describe('outbound event webhooks (E8.10)', () => {
   it('validates subscriptions and returns the signing secret exactly once', async () => {
-    await expect(service.create(as('CS_LEAD'), { name: 'crm', url: 'https://crm.example.com/hook', events: ['alert.*'] })).rejects.toMatchObject({ category: 'authorization' });
+    await expect(service.create(as('HEAD'), { name: 'crm', url: 'https://crm.example.com/hook', events: ['alert.*'] })).rejects.toMatchObject({ category: 'authorization' });
     const { WebhookInput } = await import('../src/index.js');
     expect(WebhookInput.safeParse({ name: 'x', url: 'http://plain.example.com', events: ['alert.*'] }).success).toBe(false);
     expect(WebhookInput.safeParse({ name: 'x', url: 'https://a.example.com', events: ['config.changed'] }).success).toBe(false);

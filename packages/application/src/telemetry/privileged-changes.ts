@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import type { DbOrTx } from '@ocso/db';
 import { iso } from '../analytics/values.js';
 
-/** Platform (control-plane) audit target types shown to the Tech Admin. Conversation/business operations are excluded. */
+/** Platform (control-plane) audit target types shown to the Tech admin. Conversation/business operations are excluded. */
 export const PLATFORM_AUDIT_TARGETS = [
   'worker_settings',
   'deployment',

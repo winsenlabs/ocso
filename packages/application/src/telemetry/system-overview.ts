@@ -48,7 +48,7 @@ export interface WorkersView {
 }
 
 /**
- * Platform Tech Admin control center (design/03, docs/11 §2). Technical
+ * Tech admin control center (design/03, docs/11 §2). Technical
  * telemetry only: ids, counts, timings, tokens — never conversation content.
  * Every method requires telemetry.technical.read.
  */

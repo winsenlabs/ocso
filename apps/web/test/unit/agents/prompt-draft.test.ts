@@ -3,7 +3,7 @@ import type { PromptComponent } from '../../../components/agents/data/agent-sche
 import { diffStats, lineDiff } from '../../../components/agents/lib/line-diff';
 import { componentState, draftChanges, draftTexts, effectiveEdits, estimateTokens, mergeEdits } from '../../../components/agents/lib/prompt-draft';
 
-const comp = (key: string, text: string | null): PromptComponent => ({ key, label: key, owner: key === 'runtime_contract' ? 'PLATFORM' : 'CS_LEAD', tag: key, help: '', text, tokens: text === null ? null : estimateTokens(text) });
+const comp = (key: string, text: string | null): PromptComponent => ({ key, label: key, owner: key === 'runtime_contract' ? 'PLATFORM' : 'HEAD', tag: key, help: '', text, tokens: text === null ? null : estimateTokens(text) });
 const components = [comp('runtime_contract', null), comp('identity', 'You are Maya.'), comp('behavior', '• Be brief.'), comp('policies', '')];
 
 describe('prompt draft state', () => {

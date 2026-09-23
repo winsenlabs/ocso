@@ -21,13 +21,13 @@ beforeAll(async () => {
   h = await startApi();
   admin = await completeSetup(h);
   for (const [email, role] of [
-    ['lead@ocso.test', 'CS_LEAD'],
-    ['exec@ocso.test', 'CS_EXEC'],
+    ['lead@ocso.test', 'HEAD'],
+    ['exec@ocso.test', 'SERVICE'],
   ] as const) {
     await h.http().post('/v1/users').set(auth(admin)).send({ email, name: role, role, password: `${role} password 1234` }).expect(201);
   }
-  lead = await h.loginAs('lead@ocso.test', 'CS_LEAD password 1234');
-  exec = await h.loginAs('exec@ocso.test', 'CS_EXEC password 1234');
+  lead = await h.loginAs('lead@ocso.test', 'HEAD password 1234');
+  exec = await h.loginAs('exec@ocso.test', 'SERVICE password 1234');
 });
 afterAll(async () => {
   await h?.close();
@@ -147,7 +147,7 @@ describe('model profiles API', () => {
 });
 
 describe('model administration RBAC', () => {
-  it('lets a CS Lead read providers and profiles but change nothing', async () => {
+  it('lets a Lead read providers and profiles but change nothing', async () => {
     const profiles = await h.http().get('/v1/model-profiles').set(auth(lead)).expect(200);
     expect(profiles.body.map((p: { name: string }) => p.name)).toContain('support-primary');
     expect(profiles.body[0].stats24h).not.toBeNull();
@@ -162,7 +162,7 @@ describe('model administration RBAC', () => {
     await h.http().get('/v1/model-pricing').set(auth(lead)).expect(403);
   });
 
-  it('denies CS Execs provider access; profile listing carries no technical telemetry', async () => {
+  it('denies Service members provider access; profile listing carries no technical telemetry', async () => {
     await h.http().get('/v1/model-providers').set(auth(exec)).expect(403);
     await h.http().get('/v1/model-providers/kinds').set(auth(exec)).expect(403);
     await h.http().post('/v1/model-providers').set(auth(exec)).send({ kind: 'DEV_SCRIPTED', name: 'Exec dev' }).expect(403);
@@ -175,7 +175,7 @@ describe('model administration RBAC', () => {
     expect(profiles.body.every((p: { stats24h: unknown }) => p.stats24h === null)).toBe(true);
   });
 
-  it('gives the Tech Admin full pricing control', async () => {
+  it('gives the Tech admin full pricing control', async () => {
     const created = await h
       .http()
       .post('/v1/model-pricing')
@@ -192,7 +192,7 @@ describe('model administration RBAC', () => {
     await h.http().delete(`/v1/model-pricing/${created.body.id}`).set(auth(admin)).expect(204);
   });
 
-  it('lets the Tech Admin delete an unused profile and provider', async () => {
+  it('lets the Tech admin delete an unused profile and provider', async () => {
     await h.http().delete(`/v1/model-profiles/${profileId}`).set(auth(admin)).expect(204);
     await h.http().delete(`/v1/model-providers/${anthropicId}`).set(auth(admin)).expect(204);
     const left = await h.db.db.execute(sql`SELECT count(*)::int AS n FROM secrets`);

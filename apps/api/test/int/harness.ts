@@ -82,7 +82,7 @@ export async function completeSetup(h: ApiHarness): Promise<string> {
  * A user with a password, written straight to the database (no invite email):
  * for tests whose email driver is a real provider, where the API only invites.
  */
-export async function addUserWithPassword(h: ApiHarness, user: { email: string; name: string; role: 'PLATFORM_TECH_ADMIN' | 'CS_LEAD' | 'CS_EXEC'; password: string }): Promise<string> {
+export async function addUserWithPassword(h: ApiHarness, user: { email: string; name: string; role: 'TECH' | 'HEAD' | 'SERVICE'; password: string }): Promise<string> {
   const { hashPassword, setPasswordCredential } = await import('@ocso/application');
   const { users, uuidv7 } = await import('@ocso/db');
   const id = uuidv7();

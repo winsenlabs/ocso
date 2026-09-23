@@ -7,7 +7,7 @@ import { createSsoProvider, deleteSsoProvider, saveAuthPolicy, updateSsoProvider
 import { describeApiError } from '../api/errors';
 import { field, fieldErrorsFrom, type FormState } from './form-state';
 
-/** "Require MFA for roles" (Tech Admin; the API enforces who may change it). */
+/** "Require MFA for roles" (Tech admin; the API enforces who may change it). */
 export async function saveMfaPolicyAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const roles = formData.getAll('requireMfaRoles').filter((r): r is (typeof ROLES)[number] => typeof r === 'string' && (ROLES as readonly string[]).includes(r));
   try {
@@ -71,7 +71,7 @@ export async function setAutoProvisionAction(providerId: string, autoProvision: 
     return { ok: false, message: describeApiError(err) };
   }
   refresh();
-  return { ok: true, message: autoProvision ? 'Unknown users are now created as CS Execs.' : 'Only invited users can sign in with this provider.' };
+  return { ok: true, message: autoProvision ? 'Unknown users are now created as Service members.' : 'Only invited users can sign in with this provider.' };
 }
 
 export async function deleteSsoProviderAction(providerId: string): Promise<SsoActionResult> {

@@ -11,7 +11,7 @@ import type { FormState } from './form-state';
 async function requireManager(): Promise<FormState | null> {
   const session = await getSession();
   if (!session) redirect('/login');
-  return session.permissions.has(Permission.DEPLOYMENT_SETTINGS_MANAGE) ? null : { status: 'error', message: 'Only a Platform Tech Admin can change these settings.' };
+  return session.permissions.has(Permission.DEPLOYMENT_SETTINGS_MANAGE) ? null : { status: 'error', message: 'Only a Tech admin can change these settings.' };
 }
 
 /** PATCH /v1/settings/deployment { retention } — the API enforces per-class floors. */

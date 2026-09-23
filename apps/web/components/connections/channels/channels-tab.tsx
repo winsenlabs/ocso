@@ -73,7 +73,7 @@ export async function ChannelsTab({ session, params }: { session: Session; param
         <EmptyState title="No channels configured yet">
           {canManage
             ? `Add a channel: ${kinds.map((k) => k.label ?? k.kind).join(', ') || 'no channel kinds are installed'}. Each asks for exactly what its provider needs.`
-            : 'A Platform Tech Admin adds channels; each appears here with its status, inbound path, credentials (by name) and default agent.'}
+            : 'A Tech admin adds channels; each appears here with its status, inbound path, credentials (by name) and default agent.'}
         </EmptyState>
       ) : (
         <div className="g g3 conn-grid" role="list" aria-label="Channels">

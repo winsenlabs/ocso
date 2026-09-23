@@ -111,7 +111,7 @@ export const authPasskeys = pgTable(
 );
 
 /**
- * SSO identity providers (OIDC or SAML 2.0), managed by the Tech Admin through
+ * SSO identity providers (OIDC or SAML 2.0), managed by the Tech admin through
  * OCSO's API. `domain` is a comma-separated list of email domains.
  */
 export const authSsoProviders = pgTable(
@@ -127,7 +127,7 @@ export const authSsoProviders = pgTable(
     domain: text().notNull(),
     /** Display name on the sign-in page. */
     name: text().notNull().default('Single sign-on'),
-    /** Create unknown users (as CS Exec) on first sign-in; default: invited users only. */
+    /** Create unknown users (as Service member) on first sign-in; default: invited users only. */
     autoProvision: boolean().notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -147,7 +147,7 @@ export const authRateLimits = pgTable(
   (t) => [uniqueIndex('auth_rate_limits_key_uq').on(t.key), index('auth_rate_limits_last_idx').on(t.lastRequest)],
 );
 
-/** Singleton (id = 1): authentication policy the Tech Admin controls in Settings. */
+/** Singleton (id = 1): authentication policy the Tech admin controls in Settings. */
 export const authPolicy = pgTable('auth_policy', {
   id: smallint().primaryKey().default(1),
   /** Roles that must use a second factor (TOTP, passkey or SSO) to reach the app. */

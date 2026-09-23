@@ -27,7 +27,7 @@ export interface EmailTestResult {
 
 /**
  * Read-only view of the deployment email configuration (bootstrap env, never
- * the database) plus a test send for the Platform Tech Admin. The view is
+ * the database) plus a test send for the Tech admin. The view is
  * secret-free by construction (EmailStatus has no credential fields).
  */
 export class EmailSettingsService {
@@ -56,7 +56,7 @@ export class EmailSettingsService {
       heading: 'Email delivery works',
       preheader: 'Test message from your OCSO deployment.',
       blocks: [
-        { kind: 'text', text: `${actor.principal?.displayName ?? 'A Platform Tech Admin'} sent this test from the OCSO Settings page to check the deployment's email configuration.` },
+        { kind: 'text', text: `${actor.principal?.displayName ?? 'A Tech admin'} sent this test from the OCSO Settings page to check the deployment's email configuration.` },
         { kind: 'facts', rows: [['Driver', this.sender.driver], ['From', this.sender.from]] },
         { kind: 'note', text: 'No action is needed.' },
       ],

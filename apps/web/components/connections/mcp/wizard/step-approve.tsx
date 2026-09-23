@@ -24,7 +24,7 @@ export function StepApprove({ connection, tools, agents, api }: { connection: Co
   const who = template
     ? 'no virtual agent (user-scoped connections serve only the person who connects)'
     : anyAgent
-      ? 'any agent a CS Lead enables it for'
+      ? 'any agent a Lead enables it for'
       : chosen.length
         ? agents
             .filter((a) => chosen.includes(a.id))
@@ -80,7 +80,7 @@ export function StepApprove({ connection, tools, agents, api }: { connection: Co
           <legend style={{ fontSize: 12, color: 'var(--ink-2)', fontWeight: 500, padding: 0, marginBottom: 5 }}>Agents allowed to use this connection</legend>
           <label className="toggle-row">
             <input type="checkbox" checked={anyAgent} onChange={(e) => setAnyAgent(e.target.checked)} />
-            Any agent a CS Lead enables it for (per-agent tool grants still apply)
+            Any agent a Lead enables it for (per-agent tool grants still apply)
           </label>
           {!anyAgent ? (
             agents.length ? (

@@ -70,7 +70,7 @@ export const ThreadSummarySchema = z.object({
 });
 export type ThreadSummary = z.infer<typeof ThreadSummarySchema>;
 
-/** A model profile a Tech Admin can pick for Ask OCSO. */
+/** A model profile a Tech admin can pick for Ask OCSO. */
 export const ProfileOptionSchema = z.object({
   id: z.string(),
   name: z.string(),

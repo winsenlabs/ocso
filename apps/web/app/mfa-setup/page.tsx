@@ -12,7 +12,7 @@ import '../styles/auth.css';
 export const metadata: Metadata = { title: 'Set up two-factor authentication' };
 
 /**
- * Forced enrolment (ADR-025): the Tech Admin requires MFA for this user's role
+ * Forced enrolment (ADR-025): the Tech admin requires MFA for this user's role
  * and the session has no second factor yet. Nothing else in the app is
  * reachable until an authenticator app is set up.
  */

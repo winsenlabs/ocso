@@ -16,7 +16,7 @@ seedConnectionsStack({ mcpDemo: true });
 
 const card = (page: Page, name: string) => page.getByRole('list', { name: 'Model providers' }).getByRole('listitem', { name, exact: true });
 
-test('Tech Admin configures providers: every kind is listed, credentials stay write-only, tests report cleanly', async ({ page }) => {
+test('Tech admin configures providers: every kind is listed, credentials stay write-only, tests report cleanly', async ({ page }) => {
   await login(page, ACCOUNTS.admin);
   await page.goto('/connections?tab=providers');
   await settled(page);
@@ -75,7 +75,7 @@ test('Tech Admin configures providers: every kind is listed, credentials stay wr
   expect(await page.content()).not.toContain(FAKE_KEY);
 });
 
-test('Tech Admin creates a profile with a fallback after the policy check, and sees caching per target', async ({ page }) => {
+test('Tech admin creates a profile with a fallback after the policy check, and sees caching per target', async ({ page }) => {
   await login(page, ACCOUNTS.admin);
   await page.goto('/connections?tab=providers');
   await page.getByRole('link', { name: 'New model profile' }).click();
@@ -118,7 +118,7 @@ test('Tech Admin creates a profile with a fallback after the policy check, and s
   await expect(card(page, 'OpenAI')).toContainText('fallback for support-primary');
 });
 
-test('Tech Admin adds a model price and overrides a catalog price', async ({ page }) => {
+test('Tech admin adds a model price and overrides a catalog price', async ({ page }) => {
   await login(page, ACCOUNTS.admin);
   await page.goto('/connections?tab=providers');
   const table = page.getByRole('table', { name: 'Model pricing' });
@@ -150,7 +150,7 @@ test('Tech Admin adds a model price and overrides a catalog price', async ({ pag
   await expect(table.getByRole('row', { name: /gpt-5\.5/ })).toContainText('manual');
 });
 
-test('Tech Admin adds the example MCP server: discover → authenticate → classify → approve → healthy', async ({ page }) => {
+test('Tech admin adds the example MCP server: discover → authenticate → classify → approve → healthy', async ({ page }) => {
   await login(page, ACCOUNTS.admin);
   await page.goto('/connections?tab=mcp');
   await page.getByRole('link', { name: 'Add MCP server' }).first().click();
@@ -173,7 +173,7 @@ test('Tech Admin adds the example MCP server: discover → authenticate → clas
   for (const box of await wizard.getByRole('checkbox', { name: /^Approve / }).all()) await box.check();
   await wizard.getByRole('button', { name: 'Review approval' }).click();
 
-  await expect(wizard).toContainText('This grants any agent a CS Lead enables it for access to 7 meridian-core tools.');
+  await expect(wizard).toContainText('This grants any agent a Lead enables it for access to 7 meridian-core tools.');
   await wizard.getByRole('button', { name: 'Approve and connect' }).click();
   await expect(wizard.getByRole('heading', { name: 'meridian-core is active' })).toBeVisible();
   await wizard.getByRole('button', { name: 'Run health check now' }).click();
@@ -219,7 +219,7 @@ test('connection details: health history, disable/enable with confirmation, OAut
   await expect(page.getByRole('status').filter({ hasText: 'Authorization complete for meridian-core.' })).toBeVisible();
 });
 
-test('CS Exec sees only My connections; CS Lead reads providers and MCP without admin controls', async ({ page }) => {
+test('Service member sees only My connections; Lead reads providers and MCP without admin controls', async ({ page }) => {
   await login(page, USERS.exec);
   await page.goto('/connections?tab=providers');
   await settled(page);
@@ -250,7 +250,7 @@ test('CS Exec sees only My connections; CS Lead reads providers and MCP without 
   await expect(page.getByRole('link', { name: 'Add MCP server' })).toHaveCount(0);
 });
 
-test('Tech Admin deletes the MCP connection after typing its name', async ({ page }) => {
+test('Tech admin deletes the MCP connection after typing its name', async ({ page }) => {
   await login(page, ACCOUNTS.admin);
   await page.goto('/connections?tab=mcp');
   await page.getByRole('link', { name: 'Open meridian-core' }).click();
@@ -263,7 +263,7 @@ test('Tech Admin deletes the MCP connection after typing its name', async ({ pag
   await expect(page.getByText('No MCP servers connected yet')).toBeVisible();
 });
 
-test('Tech Admin adds a webhook (secret shown once) and sees every credential by reference only', async ({ page }) => {
+test('Tech admin adds a webhook (secret shown once) and sees every credential by reference only', async ({ page }) => {
   await login(page, ACCOUNTS.admin);
   await page.goto('/connections?tab=webhooks');
   await page.getByRole('link', { name: 'Add endpoint' }).click();

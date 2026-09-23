@@ -61,9 +61,9 @@ beforeAll(async () => {
 
   h = await startApi();
   admin = await completeSetup(h);
-  // Channel adapters reach only public https hosts unless the Tech Admin allowlists an internal one (ADR-021).
+  // Channel adapters reach only public https hosts unless the Tech admin allowlists an internal one (ADR-021).
   await h.http().patch('/v1/settings/deployment').set(auth(admin)).send({ egressAllowedInternalHosts: ['127.0.0.1'] }).expect(200);
-  const leadId = (await h.http().post('/v1/users').set(auth(admin)).send({ email: 'lead@ocso.test', name: 'lead', role: 'CS_LEAD', password: 'a password 12345' }).expect(201)).body.id as string;
+  const leadId = (await h.http().post('/v1/users').set(auth(admin)).send({ email: 'lead@ocso.test', name: 'lead', role: 'HEAD', password: 'a password 12345' }).expect(201)).body.id as string;
   const lead = await h.loginAs('lead@ocso.test', 'a password 12345');
   const team = (await h.http().post('/v1/teams').set(auth(lead)).send({ name: 'Cards' }).expect(201)).body.id;
   // Agents are owned by teams (ADR-026): the lead must belong to the owning team.
@@ -151,7 +151,7 @@ describe('Twilio webhook', () => {
 });
 
 describe('connection test', () => {
-  it('reaches a private provider host only when the Tech Admin allowlisted it (SSRF-guarded channel egress)', async () => {
+  it('reaches a private provider host only when the Tech admin allowlisted it (SSRF-guarded channel egress)', async () => {
     // Same stub, addressed as `localhost`: not on the allowlist, so the adapter's injected fetch refuses it.
     const unlisted = await h
       .http()

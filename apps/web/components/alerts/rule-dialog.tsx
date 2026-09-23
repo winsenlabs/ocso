@@ -12,8 +12,8 @@ import { CheckList, ParamInputs } from './rule-fields';
 import { buildParams, initialParamText, paramFields } from './rule-params';
 
 /** Roles that can read each kind (packages/auth): the API rejects an audience that could not see the alert. */
-const AUDIENCE: Record<AlertKind, AudienceRole[]> = { TECHNICAL: ['PLATFORM_TECH_ADMIN'], BUSINESS: ['CS_LEAD', 'CS_EXEC'] };
-const DEFAULT_AUDIENCE: Record<AlertKind, AudienceRole[]> = { TECHNICAL: ['PLATFORM_TECH_ADMIN'], BUSINESS: ['CS_LEAD'] };
+const AUDIENCE: Record<AlertKind, AudienceRole[]> = { TECHNICAL: ['TECH'], BUSINESS: ['HEAD', 'LEAD', 'SERVICE'] };
+const DEFAULT_AUDIENCE: Record<AlertKind, AudienceRole[]> = { TECHNICAL: ['TECH'], BUSINESS: ['HEAD', 'LEAD'] };
 const SEVERITIES: AlertSeverity[] = ['CRITICAL', 'WARNING', 'INFO'];
 
 export interface DestinationOption {

@@ -1,5 +1,5 @@
 /**
- * Display rules for the Tech Admin control center (design/03). Pure and
+ * Display rules for the Tech admin control center (design/03). Pure and
  * client-safe; every tone follows the API's own status, never a guess.
  */
 import type { StatusTone } from '@/components/ui/status-chip';

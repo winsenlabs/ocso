@@ -9,12 +9,12 @@ import { loadWorkerSettings, updateWorkerSettings } from '../api/system';
 import { getSession } from '../session';
 import { field, type FormState } from './form-state';
 
-/** PATCH /v1/settings/workers (system.configure — Platform Tech Admin). Bounds are the API's; its messages land on the fields. */
+/** PATCH /v1/settings/workers (system.configure — Tech admin). Bounds are the API's; its messages land on the fields. */
 export async function updateWorkerSettingsAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const session = await getSession();
   if (!session) redirect('/login');
   if (!session.permissions.has(Permission.SYSTEM_CONFIGURE)) {
-    return { status: 'error', message: 'Only a Platform Tech Admin can change the worker configuration.' };
+    return { status: 'error', message: 'Only a Tech admin can change the worker configuration.' };
   }
   const raw = Object.fromEntries(WORKER_FORM_FIELDS.map((f) => [f.name, field(formData, f.name)]));
   const values = { ...raw, autoscalingEnabled: formData.get('autoscalingEnabled') === 'on' ? 'on' : '' };

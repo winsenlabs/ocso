@@ -34,7 +34,7 @@ export const mfaPending = (state: MfaState): boolean => state.required && !state
 const CACHE_MS = 15_000;
 
 /**
- * Authentication policy set by the Tech Admin (auth_policy singleton). Cached
+ * Authentication policy set by the Tech admin (auth_policy singleton). Cached
  * briefly per process; every instance sees a change within 15 s.
  */
 export class AuthPolicyService {

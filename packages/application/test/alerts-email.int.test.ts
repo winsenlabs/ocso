@@ -34,8 +34,8 @@ const registry = createDefaultDeliveryRegistry({ fetch: noFetch, emailSender: se
 
 const ctx = (principal: Principal): ActorContext => ({ principal, correlationId: 'test' });
 const principal = (role: Principal['role']): Principal => ({ userId: uuidv7(), role, displayName: role, teamIds: [], via: 'UI' });
-const admin = principal('PLATFORM_TECH_ADMIN');
-const lead = principal('CS_LEAD');
+const admin = principal('TECH');
+const lead = principal('HEAD');
 const destinations = () => new NotificationDestinationService(t.db, secrets, registry, { baseUrl: 'https://ocso.test' });
 const deliveries = () => new AlertDeliveryService({ db: t.db, secrets, registry, baseUrl: 'https://ocso.test', maxAttempts: 3 });
 
@@ -84,7 +84,7 @@ describe('EMAIL destinations · deployment sender', () => {
   it('delivers alerts idempotently per delivery; retries transient sender errors, fails permanent ones', async () => {
     const dest = await destinations().create(ctx(admin), { name: 'Ops email', kind: 'EMAIL', config: { to: ['ops@meridian.test'] }, enabled: true });
     const alertId = uuidv7();
-    await t.db.insert(alerts).values({ id: alertId, fingerprint: `f-${alertId}`, kind: 'TECHNICAL', severity: 'CRITICAL', title: 'Provider down', body: 'All requests failing', audienceRoles: ['PLATFORM_TECH_ADMIN'], source: 'Provider · X' });
+    await t.db.insert(alerts).values({ id: alertId, fingerprint: `f-${alertId}`, kind: 'TECHNICAL', severity: 'CRITICAL', title: 'Provider down', body: 'All requests failing', audienceRoles: ['TECH'], source: 'Provider · X' });
     const delivery = async () => {
       const id = uuidv7();
       await t.db.insert(alertDeliveries).values({ id, alertId, destinationId: dest.id, event: 'OPENED' });
@@ -110,7 +110,7 @@ describe('EmailSettingsService', () => {
   const status = { driver: 'resend', label: 'Resend', from: sender.from, replyTo: null, configured: true, warnings: [] };
   const service = () => new EmailSettingsService(t.db, sender, status);
 
-  it('shows the status to the Tech Admin only', () => {
+  it('shows the status to the Tech admin only', () => {
     expect(service().status(ctx(admin))).toEqual(status);
     expect(() => service().status(ctx(lead))).toThrow();
   });

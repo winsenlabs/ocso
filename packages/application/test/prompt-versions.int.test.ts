@@ -12,9 +12,9 @@ let agentId: string;
 // Everyone is in the team that owns Maya (ADR-026); only the role decides who may edit.
 const TEAM = uuidv7();
 const person = (role: Principal['role'], name: string): ActorContext => ({ principal: { userId: uuidv7(), role, displayName: name, teamIds: [TEAM], via: 'UI' }, correlationId: 'c' });
-const lead = person('CS_LEAD', 'Anjali Rao');
-const exec = person('CS_EXEC', 'Nikhil Menon');
-const admin = person('PLATFORM_TECH_ADMIN', 'Dev Admin');
+const lead = person('HEAD', 'Anjali Rao');
+const exec = person('SERVICE', 'Nikhil Menon');
+const admin = person('TECH', 'Dev Admin');
 
 beforeAll(async () => {
   t = await createTestDatabase();

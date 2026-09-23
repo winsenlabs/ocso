@@ -116,9 +116,9 @@ async function seed() {
   id.exec = uuidv7();
   id.admin = uuidv7();
   await db.insert(users).values([
-    { id: id.lead, email: 'lead@x.test', name: 'Anjali Rao', role: 'CS_LEAD' },
-    { id: id.exec, email: 'exec@x.test', name: 'Nikhil Menon', role: 'CS_EXEC', availability: 'AVAILABLE', languages: ['en', 'mr'] },
-    { id: id.admin, email: 'admin@x.test', name: 'T. Shetty', role: 'PLATFORM_TECH_ADMIN' },
+    { id: id.lead, email: 'lead@x.test', name: 'Anjali Rao', role: 'HEAD' },
+    { id: id.exec, email: 'exec@x.test', name: 'Nikhil Menon', role: 'SERVICE', availability: 'AVAILABLE', languages: ['en', 'mr'] },
+    { id: id.admin, email: 'admin@x.test', name: 'T. Shetty', role: 'TECH' },
   ]);
   id.team = uuidv7();
   await db.insert(teams).values({ id: id.team, name: 'Cards' });
@@ -134,9 +134,9 @@ async function seed() {
   ]);
   await db.insert(queueTeams).values({ queueId: id.q1, teamId: id.team });
   // The lead's team owns both agents (ADR-026); scoping itself is covered in agent-ownership.int.test.ts.
-  lead = P(id.lead, 'CS_LEAD', [id.team]);
-  exec = P(id.exec, 'CS_EXEC', [id.team]);
-  admin = P(id.admin, 'PLATFORM_TECH_ADMIN');
+  lead = P(id.lead, 'HEAD', [id.team]);
+  exec = P(id.exec, 'SERVICE', [id.team]);
+  admin = P(id.admin, 'TECH');
 
   id.maya = uuidv7();
   id.arjun = uuidv7();
@@ -227,8 +227,8 @@ async function seed() {
   const audit = (action: string, key: string, at: Date) => ({ id: uuidv7(), occurredAt: at, actorType: 'USER' as const, actorId: id.exec!, actorName: 'Nikhil Menon', via: 'UI' as const, action, targetType: 'conversation', targetId: id[key]!, summary: action });
   await db.insert(auditEvents).values([audit('conversation.claim', 'c2', plus(ago(20 * MIN), 90 * SEC)), audit('conversation.resolve', 'c2', new Date(Math.max(ago(5 * MIN).getTime(), dayStartUtc.getTime() + SEC)))]);
   await db.insert(alerts).values([
-    { id: uuidv7(), fingerprint: 'esc-maya', kind: 'BUSINESS', severity: 'WARNING', title: 'Escalation rate above 25% · Maya', body: 'b', audienceRoles: ['CS_LEAD', 'CS_EXEC'], source: 'Agent · Maya', context: { agentId: id.maya } },
-    { id: uuidv7(), fingerprint: 'ttft', kind: 'TECHNICAL', severity: 'CRITICAL', title: 'TTFT above SLO', body: 'b', audienceRoles: ['PLATFORM_TECH_ADMIN'], source: 'AWS Bedrock' },
+    { id: uuidv7(), fingerprint: 'esc-maya', kind: 'BUSINESS', severity: 'WARNING', title: 'Escalation rate above 25% · Maya', body: 'b', audienceRoles: ['HEAD', 'SERVICE'], source: 'Agent · Maya', context: { agentId: id.maya } },
+    { id: uuidv7(), fingerprint: 'ttft', kind: 'TECHNICAL', severity: 'CRITICAL', title: 'TTFT above SLO', body: 'b', audienceRoles: ['TECH'], source: 'AWS Bedrock' },
   ]);
 }
 
@@ -344,8 +344,8 @@ describe('queue analytics', () => {
 describe('home', () => {
   it('gives execs their queue, work and personal stats — no technical telemetry', async () => {
     const home = await new HomeService(t.db, {}, () => now).home(exec);
-    expect(home.role).toBe('CS_EXEC');
-    if (home.role !== 'CS_EXEC') return;
+    expect(home.role).toBe('SERVICE');
+    if (home.role !== 'SERVICE') return;
     expect(home.exec.tiles).toEqual({ assignedToMe: 1, waitingForHuman: 1, slaBreached: 1, resolvedToday: 1, myFirstResponseMedianSeconds: 10, myCsat7d: { average: 3, responses: 1 } });
     expect(home.exec.pickupQueue).toEqual([expect.objectContaining({ conversationId: id.c3, customerName: 'Farida Sheikh', reason: 'customer asked for a human', priority: 'P1', queueName: 'Cards & EMI' })]);
     expect(home.exec.pickupQueue[0]!.identity).not.toMatch(/\d{8}/);
@@ -360,7 +360,7 @@ describe('home', () => {
 
   it('gives leads agent cards, queues and decisions', async () => {
     const home = await new HomeService(t.db, {}, () => now).home(lead);
-    if (home.role !== 'CS_LEAD') throw new Error('expected lead home');
+    if (home.role !== 'HEAD') throw new Error('expected lead home');
     expect(home.lead.tiles).toMatchObject({ conversations: 9, slaBreaches: 2, correctionsOpen: 2, correctionsStaged: 1 });
     expect(home.lead.tiles.escalationRate).toBeCloseTo(3 / 9);
     const maya = home.lead.agents.find((a) => a.name === 'Maya')!;
@@ -377,7 +377,7 @@ describe('home', () => {
 
   it('gives tech admins platform health only — no conversation content', async () => {
     const home = await new HomeService(t.db, {}, () => now).home(admin);
-    if (home.role !== 'PLATFORM_TECH_ADMIN') throw new Error('expected admin home');
+    if (home.role !== 'TECH') throw new Error('expected admin home');
     expect(home.admin.tiles).toMatchObject({ activeConversations: 4, openIncidents: 1 }); // c3, c4, c5, c11
     expect(home.admin.incidents).toMatchObject({ open: 1, critical: 1, items: [expect.objectContaining({ title: 'TTFT above SLO' })] });
     expect(home.admin.connections.channels).toEqual({ channels: 2, active: 2, failedDeliveries1h: 0 });

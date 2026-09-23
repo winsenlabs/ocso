@@ -14,7 +14,7 @@ import { seededContent, startTwilioStub, type TwilioStub } from './twilio-stub.j
  * local Twilio stub (Messages + Content API): the workspace list (cached),
  * the adapter's 24-hour window on the conversation and on free-form replies,
  * sending an approved template (validation, holder rule, idempotency,
- * reopen-and-send, delivery through the adapter), and the CS Lead create →
+ * reopen-and-send, delivery through the adapter), and the Lead create →
  * review → approved → sendable loop.
  */
 
@@ -56,13 +56,13 @@ beforeAll(async () => {
   ]);
   h = await startApi();
   tokens.admin = await completeSetup(h);
-  // Channel adapters reach only public https hosts unless the Tech Admin allowlists an internal one (the stub is on loopback).
+  // Channel adapters reach only public https hosts unless the Tech admin allowlists an internal one (the stub is on loopback).
   await api().patch('/v1/settings/deployment').set(auth(tokens.admin)).send({ egressAllowedInternalHosts: ['127.0.0.1'] }).expect(200);
   const mk = async (email: string, role: string) => (await api().post('/v1/users').set(auth(tokens.admin)).send({ email, name: email.split('@')[0], role, password: 'a password 12345' }).expect(201)).body.id as string;
-  const leadId = await mk('lead@ocso.test', 'CS_LEAD');
-  const otherLeadId = await mk('other-lead@ocso.test', 'CS_LEAD');
-  const execId = await mk('exec@ocso.test', 'CS_EXEC');
-  const exec2Id = await mk('exec2@ocso.test', 'CS_EXEC');
+  const leadId = await mk('lead@ocso.test', 'HEAD');
+  const otherLeadId = await mk('other-lead@ocso.test', 'HEAD');
+  const execId = await mk('exec@ocso.test', 'SERVICE');
+  const exec2Id = await mk('exec2@ocso.test', 'SERVICE');
   for (const [key, email] of [['lead', 'lead@ocso.test'], ['otherLead', 'other-lead@ocso.test'], ['exec', 'exec@ocso.test'], ['exec2', 'exec2@ocso.test']] as const) tokens[key] = await h.loginAs(email, 'a password 12345');
   ids.team = (await api().post('/v1/teams').set(auth(tokens.lead)).send({ name: 'Cards' }).expect(201)).body.id;
   ids.otherTeam = (await api().post('/v1/teams').set(auth(tokens.otherLead)).send({ name: 'Loans' }).expect(201)).body.id;
@@ -212,7 +212,7 @@ describe('sending a template', () => {
   });
 });
 
-describe('creating templates (CS Lead) and the review loop', () => {
+describe('creating templates (Lead) and the review loop', () => {
   const draft = {
     name: 'card_blocked_update',
     language: 'en',

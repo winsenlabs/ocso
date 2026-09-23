@@ -15,10 +15,10 @@ export interface ProvisioningFacts {
 /**
  * The SSO provisioning policy (ADR-025), as a pure decision:
  * - the email must be on one of the provider's domains (an IdP cannot vouch
- *   for addresses outside what the Tech Admin bound it to);
+ *   for addresses outside what the Tech admin bound it to);
  * - an existing, active OCSO user with that email is linked (invited users
  *   accept their invite by signing in with SSO);
- * - an unknown email is created as a CS Exec only when the provider's
+ * - an unknown email is created as a Service member only when the provider's
  *   auto-provision option is on (default off); otherwise it is refused.
  */
 export function decideProvisioning(facts: ProvisioningFacts): SSOUserResolution {

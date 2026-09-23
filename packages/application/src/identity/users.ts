@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, isNotNull, ne, sql } from 'drizzle-orm';
-import { Permission, ROLE_LABELS, Role, assertCan, can } from '@ocso/auth';
+import { Permission, ROLES, ROLE_LABELS, ROLE_PERMISSIONS, Role, assertCan, can, rightsWithin } from '@ocso/auth';
 import { DomainError, conflict, forbidden, notFound, validation } from '@ocso/domain';
 import { authAccounts, authPasskeys, teamMembers, teams, users, uuidv7, type Db, type DbOrTx } from '@ocso/db';
 import { z } from 'zod';
@@ -15,7 +15,7 @@ export { type InviteStatus, type UserView } from './user-view.js';
 export const CreateUserInput = z.object({
   email: z.email().max(320),
   name: z.string().trim().min(1).max(200),
-  role: z.enum(['PLATFORM_TECH_ADMIN', 'CS_LEAD', 'CS_EXEC']),
+  role: z.enum(ROLES),
   /** Admin-set initial password: only when invites cannot be emailed (EMAIL_DRIVER=log). */
   password: z.string().min(12).max(256).optional(),
   teamIds: z.array(z.uuid()).default([]),
@@ -27,7 +27,7 @@ export type CreateUserInput = z.input<typeof CreateUserInput>;
 
 export const UpdateUserInput = z.object({
   name: z.string().trim().min(1).max(200).optional(),
-  role: z.enum(['PLATFORM_TECH_ADMIN', 'CS_LEAD', 'CS_EXEC']).optional(),
+  role: z.enum(ROLES).optional(),
   status: z.enum(['ACTIVE', 'DISABLED']).optional(),
   teamIds: z.array(z.uuid()).optional(),
   languages: z.array(z.string().max(20)).max(20).optional(),
@@ -54,7 +54,7 @@ export const DEFAULT_INVITE_TTL_HOURS = 72;
 export const ADMIN_RESET_TTL_HOURS = 24;
 
 /**
- * Users and roles. Tech Admin manages every role; a CS Lead may manage CS Execs
+ * Users and roles. Tech admin manages every role; a Lead may manage Service members
  * only (docs/09 §6). New users are invited by email (ADR-025): they choose
  * their own password through a single-use link.
  */
@@ -77,7 +77,8 @@ export class UserService {
     const p = actor.principal;
     if (!p) throw forbidden('users.manage', 'no principal');
     if (can(p, Permission.USERS_MANAGE)) return;
-    if (can(p, Permission.USERS_MANAGE_EXECS) && targetRole === Role.CS_EXEC) return;
+    // Team managers shape only colleagues whose rights fit inside their own (PM/research/11 §3.4).
+    if (can(p, Permission.USERS_MANAGE_TEAM) && rightsWithin(ROLE_PERMISSIONS[targetRole], p)) return;
     throw forbidden('users.manage', `cannot manage ${targetRole} users`);
   }
 
@@ -99,7 +100,7 @@ export class UserService {
     } else if (!this.options.mailer) {
       throw validation('invites_unavailable', 'Invites are not available here: set an initial password');
     }
-    // Same rule as edits: a CS Lead can place a new exec only in teams they belong to.
+    // Same rule as edits: a Lead can place a new exec only in teams they belong to.
     if (input.teamIds.length && !can(actor.principal!, Permission.USERS_MANAGE)) this.assertOwnTeams(actor, [], input.teamIds);
     const id = uuidv7();
     const passwordHash = input.password !== undefined ? await hashPassword(input.password) : null;
@@ -156,7 +157,7 @@ export class UserService {
   }
 
   /**
-   * A Tech Admin (any role) or CS Lead (CS Execs) sends a user a single-use
+   * A Tech admin (any role) or Lead (Service members) sends a user a single-use
    * set-password link, e.g. after they lost access. Their sessions end when
    * they use it. With the log email driver the link comes back to hand over.
    */
@@ -191,7 +192,7 @@ export class UserService {
     const roleChanged = input.role !== undefined && input.role !== before.role;
     const disabling = input.status === 'DISABLED' && before.status !== 'DISABLED';
     await this.db.transaction(async (tx) => {
-      if (before.role === Role.PLATFORM_TECH_ADMIN && (roleChanged || disabling)) await this.assertBreakGlassRemains(tx, id);
+      if (before.role === Role.TECH && (roleChanged || disabling)) await this.assertBreakGlassRemains(tx, id);
       await tx
         .update(users)
         .set({
@@ -232,15 +233,15 @@ export class UserService {
     return toUserView(row, memberships.map((m) => m.teamId));
   }
 
-  /** A CS Lead may move people only in and out of teams they belong to themselves. */
+  /** A Lead may move people only in and out of teams they belong to themselves. */
   private assertOwnTeams(actor: ActorContext, before: readonly string[], after: readonly string[]): void {
     const own = new Set(actor.principal?.teamIds ?? []);
     const changed = [...after.filter((t) => !before.includes(t)), ...before.filter((t) => !after.includes(t))];
-    if (changed.some((t) => !own.has(t))) throw forbidden('users.manage_execs', 'CS Leads change memberships of their own teams only');
+    if (changed.some((t) => !own.has(t))) throw forbidden('users.manage_team', 'Leads change memberships of their own teams only');
   }
 
   /**
-   * Break-glass guarantee: at least one active Platform Tech Admin keeps
+   * Break-glass guarantee: at least one active Tech admin keeps
    * password sign-in (plus MFA when required), so SSO or IdP trouble can never
    * lock the deployment out. Serialized so two admins cannot race past it.
    */
@@ -250,9 +251,9 @@ export class UserService {
       .select({ n: sql<number>`count(*)::int` })
       .from(users)
       .innerJoin(authAccounts, and(eq(authAccounts.userId, users.id), eq(authAccounts.providerId, CREDENTIAL_PROVIDER), isNotNull(authAccounts.password)))
-      .where(and(eq(users.role, Role.PLATFORM_TECH_ADMIN), eq(users.status, 'ACTIVE'), ne(users.id, excludingUserId)));
+      .where(and(eq(users.role, Role.TECH), eq(users.status, 'ACTIVE'), ne(users.id, excludingUserId)));
     if ((row?.n ?? 0) === 0) {
-      throw conflict('last_password_admin', 'At least one active Platform Tech Admin must keep password sign-in. Add or enable another one first.');
+      throw conflict('last_password_admin', 'At least one active Tech admin must keep password sign-in. Add or enable another one first.');
     }
   }
 

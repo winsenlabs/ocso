@@ -5,19 +5,19 @@ import { conversations, type DbOrTx } from '@ocso/db';
 import { agentsOwnedBy, queuesServedBy } from '../agents/access.js';
 
 export interface VisibilityPolicy {
-  /** Deployment setting: may CS Execs see conversations the AI is handling? */
+  /** Deployment setting: may Service members see conversations the AI is handling? */
   execsCanViewAiActive: boolean;
 }
 
 /**
  * Which conversations a principal may see (docs/09 §2, docs/15 §2, ADR-026).
- * - conversations.read_team (CS Lead): conversations assigned to them, of
+ * - conversations.read_team (Lead): conversations assigned to them, of
  *   virtual agents their teams own, or routed to queues their teams serve —
  *   in any control state. Other teams' agents stay invisible.
- * - conversations.read (CS Exec): conversations assigned to them, plus
+ * - conversations.read (Service member): conversations assigned to them, plus
  *   conversations in queues served by their teams (AI-active ones only when
  *   the deployment allows).
- * - Neither (Tech Admin): no conversation content (technical debugging uses
+ * - Neither (Tech admin): no conversation content (technical debugging uses
  *   traces/usage).
  * Returns a SQL predicate on `conversations`; every principal is scoped (the
  * `null` = unrestricted case is kept for callers but no role has it today).

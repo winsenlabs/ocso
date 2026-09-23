@@ -8,7 +8,7 @@ import { ORG, TEAMS, USERS, type DemoUser, type LeadKey, type TeamKey } from '..
 export interface SeededPeople {
   admin: ActorContext;
   lead: ActorContext;
-  /** Both CS Leads, with their team memberships (agents are managed through them). */
+  /** Both Leads, with their team memberships (agents are managed through them). */
   leads: Record<LeadKey, ActorContext>;
   ids: Record<DemoUser['key'], string>;
   teamIds: Record<TeamKey, string>;
@@ -24,7 +24,7 @@ async function userIdByEmail(ctx: SeedContext, email: string): Promise<string | 
 }
 
 /**
- * First Tech Admin through the real first-run setup (ADR-010). The one-time
+ * First Tech admin through the real first-run setup (ADR-010). The one-time
  * token is generated in-process and never leaves it. Refuses to touch a
  * deployment that a person already set up.
  */
@@ -40,7 +40,7 @@ async function ensureAdmin(ctx: SeedContext): Promise<string> {
     { setupToken: token, orgName: ORG.orgName, adminName: adminUser.name, adminEmail: adminUser.email, adminPassword: ctx.config.password, timezone: ORG.timezone },
     ctx.correlationId,
   );
-  ctx.log(`created Tech Admin ${adminUser.email} via first-run setup`);
+  ctx.log(`created Tech admin ${adminUser.email} via first-run setup`);
   return userId;
 }
 
@@ -71,7 +71,7 @@ async function ensureTeams(ctx: SeedContext, lead: ActorContext): Promise<Record
   return ids;
 }
 
-/** Organization identity, the five demo people (all three roles, two CS Leads) and their teams. */
+/** Organization identity, the five demo people (all three roles, two Leads) and their teams. */
 export async function seedOrganization(ctx: SeedContext): Promise<SeededPeople> {
   const adminId = await ensureAdmin(ctx);
   const admin = actorFor(ctx, { id: adminId, name: adminUser.name, role: adminUser.role });
@@ -83,7 +83,7 @@ export async function seedOrganization(ctx: SeedContext): Promise<SeededPeople> 
     residencyZone: ORG.residencyZone,
   });
 
-  // The CS Lead manages teams, so she exists before them and joins them after.
+  // The Lead manages teams, so she exists before them and joins them after.
   const leadId = await ensureUser(ctx, admin, leadUser, []);
   const lead0 = actorFor(ctx, { id: leadId, name: leadUser.name, role: leadUser.role });
   const teamIds = await ensureTeams(ctx, lead0);
@@ -96,7 +96,7 @@ export async function seedOrganization(ctx: SeedContext): Promise<SeededPeople> 
   const lead2 = actorFor(ctx, { id: salesLeadId, name: salesLeadUser.name, role: salesLeadUser.role, teamIds: salesTeams });
 
   const ids = { admin: adminId, lead: leadId, lead2: salesLeadId } as Record<DemoUser['key'], string>;
-  for (const user of USERS.filter((u) => u.role === 'CS_EXEC')) {
+  for (const user of USERS.filter((u) => u.role === 'SERVICE')) {
     ids[user.key] = await ensureUser(ctx, admin, user, user.teams.map((t) => teamIds[t]));
   }
   return { admin, lead, leads: { lead, lead2 }, ids, teamIds };

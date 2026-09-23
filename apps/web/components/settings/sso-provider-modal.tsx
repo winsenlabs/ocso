@@ -70,7 +70,7 @@ export function SsoProviderModal({ onClose }: { onClose: () => void }) {
           </>
         )}
         <label className="mono-sm" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <input type="checkbox" name="autoProvision" /> Create unknown users on first sign-in (as CS Exec). Off: only invited users.
+          <input type="checkbox" name="autoProvision" /> Create unknown users on first sign-in (as Service member). Off: only invited users.
         </label>
       </form>
     </Modal>

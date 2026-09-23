@@ -75,7 +75,7 @@ test.beforeAll(async ({ playwright }) => {
     expect((await api.post('/v1/setup', { data: setup })).status()).toBe(201);
   }
   await signIn('admin');
-  for (const [who, role] of [['lead', 'CS_LEAD'], ['exec', 'CS_EXEC']] as const) {
+  for (const [who, role] of [['lead', 'HEAD'], ['exec', 'SERVICE']] as const) {
     const res = await api.post('/v1/users', { headers: auth('admin'), data: { email: ACCOUNTS[who].email, name: ACCOUNTS[who].name, role, password: ACCOUNTS[who].password } });
     expect([201, 409], `create ${who}`).toContain(res.status());
     await signIn(who);
@@ -101,11 +101,11 @@ test.afterAll(async () => {
   await api?.dispose();
 });
 
-test('without a model profile nothing is sent, and only a Tech Admin can choose one', async ({ page }) => {
+test('without a model profile nothing is sent, and only a Tech admin can choose one', async ({ page }) => {
   await login(page, ACCOUNTS.exec);
   await openDrawer(page);
   await expect(drawer(page)).toContainText('Ask OCSO is not set up yet.');
-  await expect(drawer(page)).toContainText('a Platform Tech Admin chooses');
+  await expect(drawer(page)).toContainText('a Tech admin chooses');
   await expect(drawer(page).getByLabel('Model profile for Ask OCSO')).toHaveCount(0);
   await expect(drawer(page).getByLabel('Ask about this deployment')).toBeDisabled();
   // The API refuses before streaming, with a code the drawer turns into this state.
@@ -127,7 +127,7 @@ test('without a model profile nothing is sent, and only a Tech Admin can choose 
   expect(settings.internalAgentProfileId).toBe(ids.profile);
 });
 
-test('CS Lead gets a streamed answer, can stop one, and the thread is kept', async ({ page }) => {
+test('Lead gets a streamed answer, can stop one, and the thread is kept', async ({ page }) => {
   await login(page, ACCOUNTS.lead);
   await settled(page);
   await page.getByRole('button', { name: /Ask OCSO/ }).first().click();
@@ -179,7 +179,7 @@ test('CS Lead gets a streamed answer, can stop one, and the thread is kept', asy
   await expect(log(page)).toContainText('You said: "And which agent needs attention?"');
 });
 
-test('CS Lead confirms a proposed change: applied through the API, audited, never offered again', async ({ page }) => {
+test('Lead confirms a proposed change: applied through the API, audited, never offered again', async ({ page }) => {
   const title = 'Pause Maya for now';
   const { actionId } = seedProposal(ids.lead!, title, {
     tool: 'set_agent_status',
@@ -217,7 +217,7 @@ test('CS Lead confirms a proposed change: applied through the API, audited, neve
   await expect(drawer(page).getByRole('button', { name: 'Confirm change' })).toHaveCount(0);
 });
 
-test('CS Exec cannot confirm a lead-only change: the API re-checks the role and nothing changes', async ({ page }) => {
+test('Service member cannot confirm a lead-only change: the API re-checks the role and nothing changes', async ({ page }) => {
   const title = 'Put Maya live';
   seedProposal(
     ids.exec!,

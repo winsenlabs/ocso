@@ -47,7 +47,7 @@ export function assertCanManageKind(actor: ActorContext, kind: AlertKind): Princ
 
 /**
  * Alerts about a virtual agent (context.agentId) are visible only to people who
- * can read that agent (ADR-026): a CS Lead sees alerts of their teams' agents
+ * can read that agent (ADR-026): a Lead sees alerts of their teams' agents
  * and alerts that concern no agent. A platform-wide rule's alert that names an
  * agent follows the agent.
  */

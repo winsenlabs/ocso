@@ -9,7 +9,7 @@ import { Actor, Authenticated, RequirePermission } from '../../common/decorators
 export class ModelProfilesController {
   constructor(@Inject(ProfileService) private readonly profiles: ProfileService) {}
 
-  /** providers.read OR agents.read (CS Leads pick profiles for agents); checked in the service. */
+  /** providers.read OR agents.read (Leads pick profiles for agents); checked in the service. */
   @Get()
   @Authenticated()
   list(@Actor() actor: ActorContext) {

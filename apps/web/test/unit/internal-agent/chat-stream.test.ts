@@ -133,7 +133,7 @@ describe('Ask OCSO stream → drawer', () => {
         w.write({ type: 'data-step', data: { label: 'latency breakdown' }, transient: true });
         w.write({ type: 'data-denied', data: { message: 'Not available for your role: latency breakdown.' } });
         w.write({ type: 'text-start', id: 't' });
-        w.write({ type: 'text-delta', id: 't', delta: 'That needs the Platform Tech Admin.' });
+        w.write({ type: 'text-delta', id: 't', delta: 'That needs the Tech admin.' });
         w.write({ type: 'text-end', id: 't' });
       },
     ]);

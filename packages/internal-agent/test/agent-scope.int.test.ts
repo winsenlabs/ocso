@@ -5,7 +5,7 @@ import { createOwnershipFixture, type OwnershipFixture } from '../../application
 
 /**
  * Ask OCSO inherits team-scoped agent ownership (ADR-026): its tools call the
- * application services with the asking user's principal, so a CS Lead only
+ * application services with the asking user's principal, so a Lead only
  * sees and changes the agents their teams own.
  */
 

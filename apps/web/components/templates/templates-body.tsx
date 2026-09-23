@@ -24,7 +24,7 @@ const termsOf = (channel: TemplateChannel) => channel.templates ?? { reviewer: '
 
 /**
  * Message templates page (docs/07 §3, docs/09 §6): the channels with
- * templates that a CS Lead's teams use (every one for a Tech Admin), each
+ * templates that a Lead's teams use (every one for a Tech admin), each
  * channel's templates with review status and rejection reasons, and the
  * builder that submits new ones for the provider's review.
  */
@@ -37,7 +37,7 @@ export async function TemplatesBody({ searchParams }: { searchParams: Promise<Pa
       <EmptyState title="No channel with message templates to manage">
         {hasPermission(session, Permission.CHANNELS_MANAGE)
           ? 'Add a channel whose provider reviews templates (e.g. WhatsApp) under Connections → Channels; its templates appear here.'
-          : 'Templates belong to channels used by your teams’ virtual agents whose provider reviews templates (e.g. WhatsApp). None is attached yet — a Platform Tech Admin adds channels and a CS Lead attaches them to an agent.'}
+          : 'Templates belong to channels used by your teams’ virtual agents whose provider reviews templates (e.g. WhatsApp). None is attached yet — a Tech admin adds channels and a Lead attaches them to an agent.'}
       </EmptyState>
     );
   }

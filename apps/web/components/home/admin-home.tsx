@@ -12,7 +12,7 @@ import { AlertsTable } from './alerts-table';
 import { Greeting } from './greeting';
 import { adminTail } from './home-copy';
 
-/** Platform Tech Admin home (design/06): uptime, capacity, incidents, connections, privileged changes — no conversation content. */
+/** Tech admin home (design/06): uptime, capacity, incidents, connections, privileged changes — no conversation content. */
 export function AdminHome({ session, data }: { session: Session; data: AdminHomeData }) {
   const { tiles, incidents, capacity, connections } = data;
   const tz = session.user.deployment.timezone;

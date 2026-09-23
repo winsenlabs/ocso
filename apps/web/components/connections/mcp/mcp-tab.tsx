@@ -114,7 +114,7 @@ export async function McpTab({ session, params }: { session: Session; params: Pa
         />
       ) : null}
       {open && !showWizard && !showDrawer ? (
-        <AlertBanner title={`${open.name} is not approved yet.`}>A Platform Tech Admin finishes its setup; its tools are not available until then.</AlertBanner>
+        <AlertBanner title={`${open.name} is not approved yet.`}>A Tech admin finishes its setup; its tools are not available until then.</AlertBanner>
       ) : null}
     </>
   );

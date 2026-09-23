@@ -29,9 +29,9 @@ const as = (role: Principal['role']): ActorContext => ({
   principal: { userId: uuidv7(), role, displayName: role, teamIds: [], via: 'UI' },
   correlationId: `test-${role}`,
 });
-const admin = as('PLATFORM_TECH_ADMIN');
-const lead = as('CS_LEAD');
-const exec = as('CS_EXEC');
+const admin = as('TECH');
+const lead = as('HEAD');
+const exec = as('SERVICE');
 
 const dev = (name: string, region: string, residencyZone: string): ProviderInput => ({
   kind: 'DEV_SCRIPTED',

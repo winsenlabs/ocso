@@ -13,7 +13,7 @@ type EmailsQuery = z.infer<typeof EmailsQuery>;
 /**
  * Test-only: emails the log driver captured, so end-to-end tests can follow
  * invite and password-reset links. Answers 404 unless OCSO_ENABLE_TEST_HOOKS
- * is on (refused in production at start-up), and only for a Tech Admin.
+ * is on (refused in production at start-up), and only for a Tech admin.
  */
 @Controller('v1/test-hooks')
 export class TestHooksController {

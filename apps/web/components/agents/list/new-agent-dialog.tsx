@@ -118,7 +118,7 @@ function NewAgentDialog({ profiles, queues, channels, ownerTeams, onClose }: Pro
               </label>
             ))}
           </div>
-          <span className="hint">{ownersProblem ?? 'only CS Leads of the owning teams see and manage this agent'}</span>
+          <span className="hint">{ownersProblem ?? 'only Leads of the owning teams see and manage this agent'}</span>
         </fieldset>
         <div className="fld">
           <label htmlFor="na-purpose">Purpose</label>
@@ -140,7 +140,7 @@ function NewAgentDialog({ profiles, queues, channels, ownerTeams, onClose }: Pro
                 </option>
               ))}
             </select>
-            <span className="hint">{profiles?.length ? 'required before the agent goes live' : 'no model profiles yet — a Tech Admin adds them under Connections'}</span>
+            <span className="hint">{profiles?.length ? 'required before the agent goes live' : 'no model profiles yet — a Tech admin adds them under Connections'}</span>
           </div>
           <div className="fld">
             <label htmlFor="na-queue">Default queue</label>

@@ -19,7 +19,7 @@ export async function seedWebChat(baseUrl, setupToken, { latencyMs = 1500, worke
   const api = client(baseUrl);
   await api.post('/v1/setup', { setupToken, orgName: 'Resilience Test', adminName: 'Admin', adminEmail: 'admin@res.test', adminPassword: 'resilience admin 1234', timezone: 'UTC' });
   const admin = (await api.post('/v1/auth/login', { email: 'admin@res.test', password: 'resilience admin 1234' })).token;
-  await api.post('/v1/users', { email: 'lead@res.test', name: 'Lead', role: 'CS_LEAD', password: 'resilience lead 1234' }, { token: admin });
+  await api.post('/v1/users', { email: 'lead@res.test', name: 'Lead', role: 'HEAD', password: 'resilience lead 1234' }, { token: admin });
   const lead = (await api.post('/v1/auth/login', { email: 'lead@res.test', password: 'resilience lead 1234' })).token;
   if (Object.keys(workerSettings).length) await api.patch('/v1/settings/workers', workerSettings, { token: admin });
   const provider = await api.post('/v1/model-providers', { kind: 'DEV_SCRIPTED', name: 'Scripted', settings: { latencyMs, chunkDelayMs: 10 }, maxConcurrency: 500 }, { token: admin });

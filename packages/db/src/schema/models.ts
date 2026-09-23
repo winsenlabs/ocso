@@ -77,7 +77,7 @@ export interface PriceTierColumn {
  * Price table for cost metadata (micro-units per 1M tokens), the costing
  * source of truth (ADR-027). `origin = 'catalog'` rows were pre-filled from
  * the open-source model catalog (source + fetch date) and follow catalog
- * refreshes; `manual` rows are the Tech Admin's and are never overwritten.
+ * refreshes; `manual` rows are the Tech admin's and are never overwritten.
  */
 export const modelPricing = pgTable('model_pricing', {
   id: id(),

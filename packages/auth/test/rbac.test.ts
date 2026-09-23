@@ -31,39 +31,39 @@ describe('role permission matrix', () => {
   });
 
   it.each([
-    [Role.CS_EXEC, P.CONVERSATIONS_REPLY, true],
-    [Role.CS_EXEC, P.CONVERSATIONS_CLAIM, true],
-    [Role.CS_EXEC, P.TOOLS_CONFIRM_SENSITIVE, true],
-    [Role.CS_EXEC, P.PROMPTS_EDIT, false],
-    [Role.CS_EXEC, P.PROVIDERS_MANAGE, false],
-    [Role.CS_EXEC, P.SECRETS_MANAGE, false],
-    [Role.CS_EXEC, P.TELEMETRY_TECHNICAL_READ, false],
-    [Role.CS_EXEC, P.CONVERSATIONS_READ_TEAM, false],
-    [Role.CS_EXEC, P.AGENTS_MANAGE, false],
-    [Role.CS_EXEC, P.AGENTS_READ_ALL, false],
-    [Role.CS_LEAD, P.CONVERSATIONS_READ_TEAM, true],
-    [Role.CS_LEAD, P.AGENTS_MANAGE, true],
-    [Role.CS_LEAD, P.AGENTS_READ_ALL, false],
-    [Role.CS_LEAD, P.AGENTS_ASSIGN_OWNER, false],
-    [Role.PLATFORM_TECH_ADMIN, P.AGENTS_READ_ALL, true],
-    [Role.PLATFORM_TECH_ADMIN, P.AGENTS_ASSIGN_OWNER, true],
-    [Role.PLATFORM_TECH_ADMIN, P.AGENTS_MANAGE, false],
-    [Role.CS_LEAD, P.PROMPTS_ACTIVATE, true],
-    [Role.CS_LEAD, P.QUEUES_MANAGE, true],
-    [Role.CS_LEAD, P.ANALYTICS_BUSINESS_READ, true],
-    [Role.CS_LEAD, P.SYSTEM_CONFIGURE, false],
-    [Role.CS_LEAD, P.TELEMETRY_TECHNICAL_READ, false],
-    [Role.CS_LEAD, P.PROVIDERS_MANAGE, false],
-    [Role.CS_LEAD, P.USERS_MANAGE, false],
-    [Role.PLATFORM_TECH_ADMIN, P.SYSTEM_CONFIGURE, true],
-    [Role.PLATFORM_TECH_ADMIN, P.MCP_MANAGE, true],
-    [Role.PLATFORM_TECH_ADMIN, P.SECRETS_MANAGE, true],
-    [Role.PLATFORM_TECH_ADMIN, P.CONVERSATIONS_READ, false],
-    [Role.PLATFORM_TECH_ADMIN, P.PROMPTS_EDIT, false],
-    [Role.PLATFORM_TECH_ADMIN, P.ANALYTICS_BUSINESS_READ, false],
-    [Role.CS_LEAD, P.MESSAGE_TEMPLATES_MANAGE, true],
-    [Role.PLATFORM_TECH_ADMIN, P.MESSAGE_TEMPLATES_MANAGE, true],
-    [Role.CS_EXEC, P.MESSAGE_TEMPLATES_MANAGE, false],
+    [Role.SERVICE, P.CONVERSATIONS_REPLY, true],
+    [Role.SERVICE, P.CONVERSATIONS_CLAIM, true],
+    [Role.SERVICE, P.TOOLS_CONFIRM_SENSITIVE, true],
+    [Role.SERVICE, P.PROMPTS_EDIT, false],
+    [Role.SERVICE, P.PROVIDERS_MANAGE, false],
+    [Role.SERVICE, P.SECRETS_MANAGE, false],
+    [Role.SERVICE, P.TELEMETRY_TECHNICAL_READ, false],
+    [Role.SERVICE, P.CONVERSATIONS_READ_TEAM, false],
+    [Role.SERVICE, P.AGENTS_MANAGE, false],
+    [Role.SERVICE, P.AGENTS_READ_ALL, false],
+    [Role.HEAD, P.CONVERSATIONS_READ_TEAM, true],
+    [Role.HEAD, P.AGENTS_MANAGE, true],
+    [Role.HEAD, P.AGENTS_READ_ALL, false],
+    [Role.HEAD, P.AGENTS_ASSIGN_OWNER, false],
+    [Role.TECH, P.AGENTS_READ_ALL, true],
+    [Role.TECH, P.AGENTS_ASSIGN_OWNER, true],
+    [Role.TECH, P.AGENTS_MANAGE, false],
+    [Role.HEAD, P.PROMPTS_ACTIVATE, true],
+    [Role.HEAD, P.QUEUES_MANAGE, true],
+    [Role.HEAD, P.ANALYTICS_BUSINESS_READ, true],
+    [Role.HEAD, P.SYSTEM_CONFIGURE, false],
+    [Role.HEAD, P.TELEMETRY_TECHNICAL_READ, false],
+    [Role.HEAD, P.PROVIDERS_MANAGE, false],
+    [Role.HEAD, P.USERS_MANAGE, false],
+    [Role.TECH, P.SYSTEM_CONFIGURE, true],
+    [Role.TECH, P.MCP_MANAGE, true],
+    [Role.TECH, P.SECRETS_MANAGE, true],
+    [Role.TECH, P.CONVERSATIONS_READ, false],
+    [Role.TECH, P.PROMPTS_EDIT, false],
+    [Role.TECH, P.ANALYTICS_BUSINESS_READ, false],
+    [Role.HEAD, P.MESSAGE_TEMPLATES_MANAGE, true],
+    [Role.TECH, P.MESSAGE_TEMPLATES_MANAGE, true],
+    [Role.SERVICE, P.MESSAGE_TEMPLATES_MANAGE, false],
   ] as const)('%s → %s = %s', (role, permission, expected) => {
     expect(can(principal(role), permission)).toBe(expected);
   });
@@ -73,16 +73,16 @@ describe('role permission matrix', () => {
   });
 
   it('assertCan throws a typed authorization error', () => {
-    expect(() => assertCan(principal(Role.CS_EXEC), P.SYSTEM_CONFIGURE)).toThrowError(/system.configure/);
+    expect(() => assertCan(principal(Role.SERVICE), P.SYSTEM_CONFIGURE)).toThrowError(/system.configure/);
     try {
-      assertCan(principal(Role.CS_EXEC), P.SYSTEM_CONFIGURE);
+      assertCan(principal(Role.SERVICE), P.SYSTEM_CONFIGURE);
     } catch (e) {
       expect((e as { category: string }).category).toBe('authorization');
     }
   });
 
   it('internal agent actions keep the same user and RBAC', () => {
-    const exec = viaInternalAgent(principal(Role.CS_EXEC));
+    const exec = viaInternalAgent(principal(Role.SERVICE));
     expect(exec.via).toBe('INTERNAL_AGENT');
     expect(can(exec, P.PROVIDERS_MANAGE)).toBe(false);
     expect(can(exec, P.CONVERSATIONS_REPLY)).toBe(true);

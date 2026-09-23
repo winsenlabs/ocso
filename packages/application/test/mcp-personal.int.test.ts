@@ -9,13 +9,13 @@ import { startDemo, type DemoServer } from '../../mcp/test/helpers/demo-server.j
 import { createTeam, ownAgents } from './support/ownership.js';
 
 const TOKEN = 'ops-desk-shared-bearer-token-771';
-// Everyone but the Tech Admin is in the team that owns Maya (ADR-026).
+// Everyone but the Tech admin is in the team that owns Maya (ADR-026).
 const TEAM = uuidv7();
-const user = (role: Principal['role'], name: string): Principal => ({ userId: uuidv7(), role, displayName: name, teamIds: role === 'PLATFORM_TECH_ADMIN' ? [] : [TEAM], via: 'UI' });
-const admin = user('PLATFORM_TECH_ADMIN', 'Tejas Shetty');
-const lead = user('CS_LEAD', 'Anjali Rao');
-const ravi = user('CS_EXEC', 'Ravi Kumar');
-const meera = user('CS_EXEC', 'Meera Iyer');
+const user = (role: Principal['role'], name: string): Principal => ({ userId: uuidv7(), role, displayName: name, teamIds: role === 'TECH' ? [] : [TEAM], via: 'UI' });
+const admin = user('TECH', 'Tejas Shetty');
+const lead = user('HEAD', 'Anjali Rao');
+const ravi = user('SERVICE', 'Ravi Kumar');
+const meera = user('SERVICE', 'Meera Iyer');
 const actor = (p: Principal): ActorContext => ({ principal: p, correlationId: 'test-personal' });
 
 let t: TestDatabase;
@@ -57,7 +57,7 @@ describe('USER-scope templates and personal connections', () => {
     await svc.classifyTools(actor(admin), template.id, {
       tools: [
         { toolId: pick('crm.get_customer'), riskClass: 'READ', approved: true },
-        { toolId: pick('disputes.raise_case'), riskClass: 'WRITE', approved: true, humanRoles: ['CS_EXEC', 'CS_LEAD'] },
+        { toolId: pick('disputes.raise_case'), riskClass: 'WRITE', approved: true, humanRoles: ['SERVICE', 'HEAD'] },
       ],
     });
     await expect(svc.approve(actor(admin), template.id, { allowedAgentIds: '*' })).rejects.toMatchObject({ code: 'mcp_user_scope_agents' });
@@ -73,7 +73,7 @@ describe('USER-scope templates and personal connections', () => {
     expect(mine).toMatchObject({ kind: 'PERSONAL', ownerUserId: ravi.userId, templateId: template.id, status: 'PENDING', name: 'ops-desk', allowedAgentIds: [] });
     await expect(personal.create(actor(ravi), { templateId: template.id })).rejects.toMatchObject({ code: 'mcp_personal_connection_exists' });
 
-    // Only the owner may use their credentials — not another exec, not even the Tech Admin.
+    // Only the owner may use their credentials — not another exec, not even the Tech admin.
     await expect(svc.discover(actor(meera), mine.id)).rejects.toMatchObject({ code: 'forbidden' });
     await expect(svc.setHeaderAuth(actor(admin), mine.id, { headerName: 'Authorization', token: TOKEN })).rejects.toMatchObject({ code: 'forbidden' });
     await expect(svc.classifyTools(actor(admin), mine.id, { tools: [{ toolId: uuidv7(), riskClass: 'READ', approved: true }] })).rejects.toMatchObject({ code: 'forbidden' });

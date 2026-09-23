@@ -91,7 +91,7 @@ async function conversationRows(db: Db, where: SQL, order: SQL, limit: number) {
 }
 
 /**
- * CS Exec home (design/06 exec): assigned work, the pickup queue of the exec's
+ * Service member home (design/06 exec): assigned work, the pickup queue of the exec's
  * team queues, SLA risk, personal throughput and satisfaction. Only
  * conversations the exec may see (assigned, or waiting in their team queues).
  */
@@ -135,7 +135,7 @@ export async function execHome(db: Db, principal: Principal, queueIds: readonly 
     queueIds.length ? db.execute<{ id: string; name: string }>(sql`SELECT id, name FROM queues WHERE id = ANY(${uuidList(queueIds)}) ORDER BY name`) : Promise.resolve({ rows: [] }),
     db.execute<{ id: string; title: string; severity: string; opened_at: Date }>(sql`
       SELECT id, title, severity, opened_at FROM alerts
-       WHERE status IN ('OPEN', 'ACKNOWLEDGED') AND kind = 'BUSINESS' AND 'CS_EXEC' = ANY(audience_roles)
+       WHERE status IN ('OPEN', 'ACKNOWLEDGED') AND kind = 'BUSINESS' AND 'SERVICE' = ANY(audience_roles)
        ORDER BY opened_at DESC LIMIT 5`),
     db.execute<{ id: string; resolved_at: Date; disposition: string | null; csat_score: number | null; customer_name: string | null; topic: string | null }>(sql`
       WITH mine AS MATERIALIZED (

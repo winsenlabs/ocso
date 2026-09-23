@@ -45,7 +45,7 @@ function forYou(item: ForYouItem): RailAlert {
   }
 }
 
-/** CS Exec home (design/06): tiles, shift and "for you" from GET /v1/home; the conversation tables from the inbox API. */
+/** Service member home (design/06): tiles, shift and "for you" from GET /v1/home; the conversation tables from the inbox API. */
 export async function ExecHome({ session, data }: { session: Session; data: ExecHomeData }) {
   const [pickup, assigned, resolved] = await Promise.all([
     loadPickupQueue().catch(() => null),

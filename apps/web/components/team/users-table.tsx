@@ -9,7 +9,7 @@ import { AVAILABILITY, ROLE_TONE } from './labels';
 import { UserAccess } from './user-access';
 import { UserTeams } from './user-teams';
 
-/** Who the viewer may manage (Tech Admin: every role; CS Lead: CS Execs), and who they are. */
+/** Who the viewer may manage (Tech admin: every role; Lead: Service members), and who they are. */
 export interface Viewer {
   id: string;
   manageable: readonly Role[];
@@ -58,7 +58,7 @@ export function UsersTable({ users, timeZone, viewer }: { users: User[]; timeZon
       rows={users}
       rowKey={(u) => u.id}
       template="minmax(0,1.2fr) 130px minmax(0,1.2fr) 100px 80px 112px minmax(150px,0.9fr)"
-      empty={<EmptyState title="No users yet">Invite the first CS Lead or CS Exec.</EmptyState>}
+      empty={<EmptyState title="No users yet">Invite the first Lead or Service member.</EmptyState>}
     />
   );
 }

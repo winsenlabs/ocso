@@ -11,8 +11,8 @@ import { login, settled } from './helpers';
 test.describe.configure({ mode: 'serial' });
 
 const USERS = {
-  lead: { name: 'Sana Lead', email: 'sana.lead@e2e.ocso.test', password: 'correct-horse-battery-slead', role: 'CS_LEAD' },
-  exec: { name: 'Omar Exec', email: 'omar.exec@e2e.ocso.test', password: 'correct-horse-battery-sexec', role: 'CS_EXEC' },
+  lead: { name: 'Sana Lead', email: 'sana.lead@e2e.ocso.test', password: 'correct-horse-battery-slead', role: 'HEAD' },
+  exec: { name: 'Omar Exec', email: 'omar.exec@e2e.ocso.test', password: 'correct-horse-battery-sexec', role: 'SERVICE' },
 } as const;
 
 async function call(method: string, path: string, body?: unknown, token?: string): Promise<Response> {
@@ -45,7 +45,7 @@ test.beforeAll(async () => {
 
 const field = (page: Page, label: string) => page.getByRole('form', { name: 'Edit worker configuration' }).getByLabel(label, { exact: false });
 
-test('Tech Admin sees the control center built from real (empty) telemetry', async ({ page }) => {
+test('Tech admin sees the control center built from real (empty) telemetry', async ({ page }) => {
   await login(page, ACCOUNTS.admin);
   await page.goto('/system');
   await settled(page);
@@ -74,7 +74,7 @@ test('Tech Admin sees the control center built from real (empty) telemetry', asy
   await expect(page.getByText('not reported by the telemetry API yet')).toHaveCount(0);
 });
 
-test('Tech Admin changes a worker setting; it persists, and an invalid value shows the API error inline', async ({ page }) => {
+test('Tech admin changes a worker setting; it persists, and an invalid value shows the API error inline', async ({ page }) => {
   await login(page, ACCOUNTS.admin);
   await page.goto('/system/workers');
   await settled(page);
@@ -102,7 +102,7 @@ test('Tech Admin changes a worker setting; it persists, and an invalid value sho
   await expect(field(page, 'Max workers')).toHaveValue('12');
 });
 
-test('Tech Admin adds an in-app destination, sees the seeded rules and creates a technical rule', async ({ page }) => {
+test('Tech admin adds an in-app destination, sees the seeded rules and creates a technical rule', async ({ page }) => {
   await login(page, ACCOUNTS.admin);
   await page.goto('/alerts?tab=destinations');
   await settled(page);
@@ -143,7 +143,7 @@ test('Tech Admin adds an in-app destination, sees the seeded rules and creates a
   await expect(page.getByRole('region', { name: 'Recent privileged changes' })).toContainText('E2E token spike');
 });
 
-test('Tech Admin opens a real technical alert, sees its deliveries, acknowledges and resolves it', async ({ page }) => {
+test('Tech admin opens a real technical alert, sees its deliveries, acknowledges and resolves it', async ({ page }) => {
   test.setTimeout(150_000);
   await login(page, ACCOUNTS.admin);
   // One e2e worker against min warm workers 2: the seeded rule fires on the worker's next evaluation.
@@ -156,7 +156,7 @@ test('Tech Admin opens a real technical alert, sees its deliveries, acknowledges
 
   await row.click();
   const drawer = page.getByRole('dialog', { name: 'Healthy workers below minimum' });
-  await expect(drawer).toContainText('Tech Admin');
+  await expect(drawer).toContainText('Tech admin');
   await expect(drawer.getByRole('table', { name: 'Deliveries' })).toContainText('In-app notifications');
   await drawer.getByLabel(/note/).fill('Only one e2e worker is running.');
   await drawer.getByRole('button', { name: 'Acknowledge' }).click();
@@ -194,7 +194,7 @@ test('the audit log shows those changes with a before/after view', async ({ page
   await expect(diff.getByRole('row', { name: 'maxWorkers changed' })).toContainText('12');
 });
 
-test('CS Lead sees only business alerts and rules, and the lead home', async ({ page }) => {
+test('Lead sees only business alerts and rules, and the lead home', async ({ page }) => {
   await login(page, USERS.lead);
   await settled(page);
   await expect(page.locator('.greeting h1')).toContainText('Sana,');
@@ -220,7 +220,7 @@ test('CS Lead sees only business alerts and rules, and the lead home', async ({ 
   await expect(page.getByRole('link', { name: 'New business rule' })).toBeVisible();
 });
 
-test('CS Exec sees the exec home', async ({ page }) => {
+test('Service member sees the exec home', async ({ page }) => {
   await login(page, USERS.exec);
   await settled(page);
   await expect(page.locator('.greeting h1')).toContainText('Omar,');

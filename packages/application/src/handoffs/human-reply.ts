@@ -19,7 +19,7 @@ export const HumanReplyInput = z.object({
 export type HumanReplyInput = z.infer<typeof HumanReplyInput>;
 
 /**
- * A human reply to the customer (docs/09 §6 CS Exec "customer reply"). Allowed
+ * A human reply to the customer (docs/09 §6 Service member "customer reply"). Allowed
  * only while HUMAN_ACTIVE and only for the handling human (or a lead). On
  * channels with a customer-service window (WhatsApp) a free-form reply after
  * the window closed is refused with 409 `session_window_closed` before

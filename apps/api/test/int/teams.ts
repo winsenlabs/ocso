@@ -3,8 +3,8 @@ import type { ApiHarness } from './harness.js';
 const auth = (token: string) => ({ authorization: `Bearer ${token}` });
 
 /**
- * Team fixtures for team-scoped agent ownership (ADR-026): a CS Lead creates
- * the team (teams.manage) and the Tech Admin puts people in it (a lead cannot
+ * Team fixtures for team-scoped agent ownership (ADR-026): a Lead creates
+ * the team (teams.manage) and the Tech admin puts people in it (a lead cannot
  * change their own memberships). Memberships are read on every request, so
  * existing tokens pick them up.
  */

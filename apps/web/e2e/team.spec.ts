@@ -4,9 +4,9 @@ import { login, logout } from './helpers';
 
 /**
  * Team membership (ADR-026) through the Team page against the real API: a CS
- * Lead creates a team (and is its first member), adds a CS Exec from the team
+ * Lead creates a team (and is its first member), adds a Service member from the team
  * drawer but is never offered another lead; the exec then works in that team;
- * the Tech Admin moves the lead to another team from the People table (the
+ * the Tech admin moves the lead to another team from the People table (the
  * confirmation names the agent they lose) and the lead's agent list follows;
  * a lead leaving their last agent-owning team is warned first.
  */
@@ -45,9 +45,9 @@ test.beforeAll(async ({ playwright }) => {
     await call('POST', '/v1/setup', null, { setupToken: E2E.setupToken, orgName: 'E2E Bank', adminName: ACCOUNTS.admin.name, adminEmail: ACCOUNTS.admin.email, adminPassword: ACCOUNTS.admin.password, timezone: 'Asia/Kolkata' });
   }
   tok.admin = await loginApi(ACCOUNTS.admin.email, ACCOUNTS.admin.password);
-  await call('POST', '/v1/users', tok.admin, user(LEAD, 'CS_LEAD'));
-  await call('POST', '/v1/users', tok.admin, user(LEAD2, 'CS_LEAD'));
-  await call('POST', '/v1/users', tok.admin, user(EXEC, 'CS_EXEC'));
+  await call('POST', '/v1/users', tok.admin, user(LEAD, 'HEAD'));
+  await call('POST', '/v1/users', tok.admin, user(LEAD2, 'HEAD'));
+  await call('POST', '/v1/users', tok.admin, user(EXEC, 'SERVICE'));
   tok.lead = await loginApi(LEAD.email, LEAD.password);
   tok.lead2 = await loginApi(LEAD2.email, LEAD2.password);
   // Owen's team and its agent: Nina cannot see either agent of the other team.
@@ -59,7 +59,7 @@ test.afterAll(async () => {
   await api?.dispose();
 });
 
-test('a CS Lead creates a team, is its first member, and adds a CS Exec (never another lead)', async ({ page }) => {
+test('a Lead creates a team, is its first member, and adds a Service member (never another lead)', async ({ page }) => {
   await login(page, LEAD);
   await page.goto('/team');
   await page.getByRole('button', { name: 'New team' }).click();
@@ -71,13 +71,13 @@ test('a CS Lead creates a team, is its first member, and adds a CS Exec (never a
   const members = drawer.getByRole('list', { name: 'Members' });
   await expect(members.getByRole('listitem')).toHaveCount(1);
   await expect(members).toContainText(LEAD.name);
-  await expect(members).toContainText('CS Lead');
+  await expect(members).toContainText('Lead');
   await expect(members).toContainText('added ');
 
-  // Only CS Execs are offered: no lead, no admin.
+  // Only Service members are offered: no lead, no admin.
   const search = drawer.getByLabel('Add member');
   const picker = drawer.getByRole('list', { name: 'People you can add' });
-  await expect(drawer.getByText('CS Leads add CS Execs. A Platform Tech Admin adds other leads.')).toBeVisible();
+  await expect(drawer.getByText('Leads add Service members. A Tech admin adds other leads.')).toBeVisible();
   for (const other of ['owen', 'tara.admin']) {
     await search.fill(other);
     await expect(drawer.getByText('Nobody matches that search.')).toBeVisible();
@@ -96,7 +96,7 @@ test('a CS Lead creates a team, is its first member, and adds a CS Exec (never a
   await drawer.getByRole('button', { name: 'Close' }).click();
   await expect(drawer).toBeHidden();
 
-  // People table: the lead edits CS Exec teams (and their own), never another lead's.
+  // People table: the lead edits Service member teams (and their own), never another lead's.
   const people = page.getByRole('table', { name: 'People' });
   await expect(people.getByRole('button', { name: `Edit teams of ${EXEC.name}` })).toBeVisible();
   await expect(people.getByRole('button', { name: `Edit teams of ${LEAD2.name}` })).toHaveCount(0);
@@ -110,12 +110,12 @@ test('a CS Lead creates a team, is its first member, and adds a CS Exec (never a
   await logout(page);
 });
 
-test('the CS Exec now works in the team', async ({ page }) => {
+test('the Service member now works in the team', async ({ page }) => {
   await login(page, EXEC);
   await expect(page.locator('.scope-sw')).toContainText(CARDS);
 });
 
-test('the Tech Admin moves the lead to another team and the lead’s agents follow', async ({ page }) => {
+test('the Tech admin moves the lead to another team and the lead’s agents follow', async ({ page }) => {
   const teams = await call<Array<{ id: string; name: string }>>('GET', '/v1/teams', tok.lead);
   const cards = teams.find((t) => t.name === CARDS)!.id;
   await call('POST', '/v1/agents', tok.lead, { name: 'Pixel', slug: 'pixel-tm', purpose: 'card disputes', conversationType: 'SUPPORT', teamIds: [cards] });
@@ -135,7 +135,7 @@ test('the Tech Admin moves the lead to another team and the lead’s agents foll
   await edit.getByRole('button', { name: 'Save teams' }).click();
   const confirm = page.getByRole('dialog', { name: 'Change teams' });
   await expect(confirm).toContainText(`${LEAD.name} will no longer manage Pixel: no other team of theirs owns it.`);
-  await expect(confirm).toContainText(`${CARDS} will have no CS Lead left to manage its agents.`);
+  await expect(confirm).toContainText(`${CARDS} will have no Lead left to manage its agents.`);
   await confirm.getByRole('button', { name: 'Save teams' }).click();
   await expect(confirm).toBeHidden();
   const row = page.getByRole('table', { name: 'People' }).getByRole('row').filter({ hasText: LEAD.email });
@@ -161,7 +161,7 @@ test('a lead leaving their last agent-owning team is told what they lose first',
   const confirm = page.getByRole('dialog', { name: `Leave ${LOANS}` });
   await expect(confirm).toContainText('Access will be lost');
   await expect(confirm).toContainText('You will lose access to Nova: none of your remaining teams owns it.');
-  await expect(confirm).toContainText('Only a Platform Tech Admin can add you back.');
+  await expect(confirm).toContainText('Only a Tech admin can add you back.');
   await confirm.getByRole('button', { name: 'Cancel' }).click();
   await expect(confirm).toBeHidden();
   await expect(drawer.getByRole('list', { name: 'Members' })).toContainText(LEAD.name);

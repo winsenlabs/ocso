@@ -73,7 +73,7 @@ describe('model catalog service', () => {
     const service = new ModelCatalogService({ db: t.db, fetch: f.fetch, now: () => NOW });
 
     const result = await service.refresh(actor).catch((e: unknown) => e);
-    // A system actor has no permissions: the on-demand path is for Tech Admins; the worker uses refreshIfStale.
+    // A system actor has no permissions: the on-demand path is for Tech admins; the worker uses refreshIfStale.
     expect(result).toMatchObject({ code: 'forbidden' });
     const run = await service.refreshIfStale(actor);
     expect(f.calls).toEqual([CATALOG_URLS['models.dev'], CATALOG_URLS.litellm]);
@@ -121,7 +121,7 @@ describe('model catalog service', () => {
     expect(run2?.sources[0]?.error).toMatch(/^catalog_too_small/);
     const rows = await t.db.select().from(modelCatalogSnapshots);
     expect(rows.find((r) => r.source === 'models.dev')).toMatchObject({ entryCount: 62, lastError: expect.stringMatching(/^catalog_too_small/) });
-    const status = await down.status({ principal: { userId: uuidv7(), role: 'PLATFORM_TECH_ADMIN', displayName: 'Admin', teamIds: [], via: 'UI' }, correlationId: 'status' });
+    const status = await down.status({ principal: { userId: uuidv7(), role: 'TECH', displayName: 'Admin', teamIds: [], via: 'UI' }, correlationId: 'status' });
     expect(status.sources[0]).toMatchObject({ source: 'models.dev', origin: 'database', entries: 62, lastError: expect.stringMatching(/^catalog_too_small/) });
   });
 

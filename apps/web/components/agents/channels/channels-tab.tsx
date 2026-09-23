@@ -17,7 +17,7 @@ import { ChannelAssignment, type ChannelRow } from './channel-assignment';
 export async function ChannelsTab({ data }: { data: AgentPageData }) {
   const { agent, options, can } = data;
   const channels = options.channelRows;
-  if (!channels) return <EmptyState title="Channels are not available for your role">A CS Lead or Tech Admin can see which channels this agent answers on.</EmptyState>;
+  if (!channels) return <EmptyState title="Channels are not available for your role">A Lead or Tech admin can see which channels this agent answers on.</EmptyState>;
   const [analytics, agents, kinds] = await Promise.all([can.analytics ? optional(getAgentAnalytics(agent.id, 7)) : Promise.resolve(null), optional(listAgents()), loadChannelKinds()]);
   const names = new Map((agents ?? []).map((a) => [a.id, a.name]));
   const byChannel = new Map((analytics?.channels.items ?? []).map((c) => [c.channelId, c]));
@@ -40,7 +40,7 @@ export async function ChannelsTab({ data }: { data: AgentPageData }) {
     <>
       <SecHead title="Channels" count={`${agent.channelIds.length} assigned`} desc="what customers reach this agent on · a channel answers as one agent · metrics: last 7 days" />
       {rows.length === 0 ? (
-        <EmptyState title="No channels configured">A Tech Admin adds channels (web chat, WhatsApp…) under Connections; assign them to this agent here.</EmptyState>
+        <EmptyState title="No channels configured">A Tech admin adds channels (web chat, WhatsApp…) under Connections; assign them to this agent here.</EmptyState>
       ) : (
         <ChannelAssignment key={agent.channelIds.join()} agentId={agent.id} rows={rows} assigned={agent.channelIds} canEdit={can.manage} />
       )}

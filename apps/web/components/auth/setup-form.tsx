@@ -8,7 +8,7 @@ import { AuthField } from './auth-field';
 
 /**
  * First-run setup: setup token from the API log, organization, the first
- * Platform Tech Admin and the deployment timezone.
+ * Tech admin and the deployment timezone.
  */
 export function SetupForm({ timezones }: { timezones: string[] }) {
   const [state, action, pending] = useActionState(setupAction, IDLE);

@@ -70,7 +70,7 @@ export function rubricScore(rubric: Record<RubricCriterion, number>): number {
 }
 
 /**
- * Conversation reviews by CS Leads (design/02 "Latest reviewed conversations").
+ * Conversation reviews by Leads (design/02 "Latest reviewed conversations").
  * A lead reviews and reads reviews of the agents their teams own (ADR-026);
  * other conversations and agents are not found.
  */

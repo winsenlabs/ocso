@@ -8,8 +8,8 @@ export type ChannelRow = typeof channels.$inferSelect;
 
 /**
  * Who may manage a channel's message templates (docs/09 §6): templates are
- * business content, so `message_templates.manage` (CS Lead, Tech Admin).
- * A Tech Admin (channels.manage) manages every channel; a CS Lead only
+ * business content, so `message_templates.manage` (Lead, Tech admin).
+ * A Tech admin (channels.manage) manages every channel; a Lead only
  * channels used by a virtual agent one of their teams owns (the channel's
  * default agent or an agent the channel is attached to). Out of scope is
  * reported as not found so other teams' channels do not leak.

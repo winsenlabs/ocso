@@ -12,7 +12,7 @@ import { field, fieldErrorsFrom, type FormState } from './form-state';
 
 /**
  * Team membership (ADR-026). The API decides who may change which membership
- * (Tech Admin: all; CS Lead: CS Execs and themselves on teams they belong to);
+ * (Tech admin: all; Lead: Service members and themselves on teams they belong to);
  * these actions only forward, and hand its refusals back to show inline.
  */
 export type MembershipResult = { ok: true; message: string } | { ok: false; message: string };
@@ -46,7 +46,7 @@ export async function removeTeamMemberAction(teamId: string, userId: string, nam
 
 /**
  * Replace a user's teams from the People table. PATCH /v1/users/:id is atomic
- * but manages other people only; a CS Lead's own memberships go through the
+ * but manages other people only; a Lead's own memberships go through the
  * team member endpoints (they may leave their teams, not join others).
  */
 export async function saveUserTeamsAction(userId: string, before: string[], after: string[]): Promise<MembershipResult> {
@@ -68,7 +68,7 @@ const TeamForm = z.object({
   description: z.string().trim().max(500, 'At most 500 characters'),
 });
 
-/** PATCH /v1/teams/:id (CS Leads, on teams they belong to). */
+/** PATCH /v1/teams/:id (Leads, on teams they belong to). */
 export async function updateTeamAction(_prev: FormState, formData: FormData): Promise<FormState> {
   if (!(await getSession())) redirect('/login');
   const values = { id: field(formData, 'id'), name: field(formData, 'name'), description: field(formData, 'description') };

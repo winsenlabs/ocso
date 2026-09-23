@@ -24,12 +24,12 @@ beforeAll(async () => {
   toolId = (await h.t.pool.query(
     `INSERT INTO tools (id, connection_id, name, model_name, description, input_schema, schema_hash, suggested_risk, risk_class, approved, human_roles)
      VALUES (gen_random_uuid(), $1, 'payments.reverse_transaction', 'core-cards__payments_reverse_transaction', 'Reverse a settled debit',
-       '{"type":"object","properties":{"txnId":{"type":"string"},"card":{"type":"string"},"amount":{"type":"number"}},"required":["txnId","amount"]}', 'h', 'SENSITIVE', 'SENSITIVE', true, '{CS_EXEC,CS_LEAD}') RETURNING id`,
+       '{"type":"object","properties":{"txnId":{"type":"string"},"card":{"type":"string"},"amount":{"type":"number"}},"required":["txnId","amount"]}', 'h', 'SENSITIVE', 'SENSITIVE', true, '{SERVICE,HEAD}') RETURNING id`,
     [connectionId],
   )).rows[0].id as string;
   await h.t.pool.query(`INSERT INTO agent_tool_grants (agent_id, tool_id) VALUES ($1, $2)`, [h.agentId, toolId]);
-  const execId = (await h.t.pool.query(`INSERT INTO users (id, email, name, role) VALUES (gen_random_uuid(), 'nikhil@x.test', 'Nikhil Menon', 'CS_EXEC') RETURNING id`)).rows[0].id;
-  exec = { userId: execId, role: 'CS_EXEC', displayName: 'Nikhil Menon', teamIds: [], via: 'UI' };
+  const execId = (await h.t.pool.query(`INSERT INTO users (id, email, name, role) VALUES (gen_random_uuid(), 'nikhil@x.test', 'Nikhil Menon', 'SERVICE') RETURNING id`)).rows[0].id;
+  exec = { userId: execId, role: 'SERVICE', displayName: 'Nikhil Menon', teamIds: [], via: 'UI' };
   service = new HumanToolService(
     h.t.db,
     createToolProviderRegistry(
@@ -77,11 +77,11 @@ describe('sensitive tool confirmation (docs/08 §7)', () => {
 
   it('refuses confirmation from a role not allowed to run the tool', async () => {
     const id = await proposeReversal();
-    await h.t.pool.query(`UPDATE tools SET human_roles = '{CS_LEAD}' WHERE id = $1`, [toolId]);
+    await h.t.pool.query(`UPDATE tools SET human_roles = '{HEAD}' WHERE id = $1`, [toolId]);
     try {
       await expect(service.confirm({ principal: exec, correlationId: 'c' }, id)).rejects.toMatchObject({ category: 'policy_denied' });
     } finally {
-      await h.t.pool.query(`UPDATE tools SET human_roles = '{CS_EXEC,CS_LEAD}' WHERE id = $1`, [toolId]);
+      await h.t.pool.query(`UPDATE tools SET human_roles = '{SERVICE,HEAD}' WHERE id = $1`, [toolId]);
     }
     // Still pending: a refused confirmation does not consume the proposal.
     const [row] = await h.t.db.select().from(toolCalls).where(eq(toolCalls.id, id));

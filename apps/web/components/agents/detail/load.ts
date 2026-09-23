@@ -8,7 +8,7 @@ import { loadAgentOptions, type AgentOptions } from '../data/options';
 /** What every agent tab may do, from the session's permissions (the API enforces the same). */
 export interface AgentCan {
   manage: boolean;
-  /** Reassign owning teams across any team (Tech Admin, ADR-026). */
+  /** Reassign owning teams across any team (Tech admin, ADR-026). */
   assignOwner: boolean;
   editPrompt: boolean;
   activate: boolean;

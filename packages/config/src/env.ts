@@ -113,7 +113,7 @@ export const ApiEnv = z.object({
   OCSO_AUTH_TRUSTED_ORIGINS: blank(z.string().max(4000)),
   /** Better Auth's database-backed rate limiter (default on); off only for load tests. */
   OCSO_AUTH_RATE_LIMIT: blank(bool),
-  /** Break-glass: while set (≥ 32 chars), /recover resets one Tech Admin's password — each value works once. */
+  /** Break-glass: while set (≥ 32 chars), /recover resets one Tech admin's password — each value works once. */
   OCSO_RECOVERY_TOKEN: blank(z.string().min(32).max(512)),
   /** How often long-lived streams (staff SSE, Ask OCSO) re-check their session; they close when it ended. */
   SESSION_STREAM_RECHECK_SECONDS: z.coerce.number().int().min(1).max(300).default(60),

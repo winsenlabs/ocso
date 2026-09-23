@@ -33,12 +33,12 @@ export async function AgentsHead() {
   return <PageHead title={PAGE_TITLE} sub={PAGE_SUB} actions={<NewAgentButton profiles={options.profiles} queues={options.queues} channels={options.channels} ownerTeams={ownerTeams} />} />;
 }
 
-/** A CS Lead outside every team manages no agent: point them at the Team page. */
+/** A Lead outside every team manages no agent: point them at the Team page. */
 function NoTeam() {
   return (
     <EmptyState title="Join or create a team to create agents">
-      Virtual agents belong to teams, and CS Leads manage the agents their teams own. Create a team on the{' '}
-      <Link href="/team">Team page</Link> and ask your Platform Tech Admin to add you to it.
+      Virtual agents belong to teams, and Leads manage the agents their teams own. Create a team on the{' '}
+      <Link href="/team">Team page</Link> and ask your Tech admin to add you to it.
     </EmptyState>
   );
 }
@@ -59,7 +59,7 @@ export async function AgentsList() {
       <EmptyState title="No virtual agents yet">
         {manages
           ? 'Create a virtual agent for one of your teams, give it a model profile and a channel, then take it live.'
-          : 'A CS Lead creates virtual agents. Agents your teams own or that route to your queues appear here with their prompt, tools and 7-day performance.'}
+          : 'A Lead creates virtual agents. Agents your teams own or that route to your queues appear here with their prompt, tools and 7-day performance.'}
       </EmptyState>
     );
   }

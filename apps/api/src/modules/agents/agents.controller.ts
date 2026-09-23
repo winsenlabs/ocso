@@ -21,7 +21,7 @@ export class AgentsController {
     @Inject(AgentStatsService) private readonly stats: AgentStatsService,
   ) {}
 
-  /** Only the agents the caller can read (their teams' agents; every agent for the Tech Admin). */
+  /** Only the agents the caller can read (their teams' agents; every agent for the Tech admin). */
   @Get()
   @RequirePermission(Permission.AGENTS_READ)
   async list(@CurrentPrincipal() principal: Principal) {
@@ -49,8 +49,8 @@ export class AgentsController {
   }
 
   /**
-   * Replace the owning teams. Tech Admin (agents.assign_owner): any teams, for
-   * governance. CS Lead (agents.manage): only within their own teams. Audited.
+   * Replace the owning teams. Tech admin (agents.assign_owner): any teams, for
+   * governance. Lead (agents.manage): only within their own teams. Audited.
    */
   @Put(':id/owners')
   @RequireAnyPermission(Permission.AGENTS_ASSIGN_OWNER, Permission.AGENTS_MANAGE)

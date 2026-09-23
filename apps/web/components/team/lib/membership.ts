@@ -1,22 +1,25 @@
 import type { Role } from '@ocso/auth';
 
+/** Heads and Leads manage their teams' agents (the presets that hold agents.manage). */
+const managesAgents = (role: string): boolean => role === 'HEAD' || role === 'LEAD';
+
 /**
  * Team membership rules (ADR-026), mirrored from TeamService / UserService so
  * the UI only offers what the API accepts. The API stays the enforcement
  * point and its errors are still shown. Client-safe.
  *
- * - Tech Admin (users.manage): every membership, via either endpoint.
- * - CS Lead (teams.manage): on teams they belong to, CS Execs and themselves.
+ * - Tech admin (users.manage): every membership, via either endpoint.
+ * - Lead (teams.manage): on teams they belong to, Service members and themselves.
  *   A lead cannot join a team they are not in, so leaving one is undone only
- *   by a Tech Admin.
- * - Team name/description: CS Leads, on teams they belong to.
+ *   by a Tech admin.
+ * - Team name/description: Leads, on teams they belong to.
  */
 
 export interface MembershipViewer {
   id: string;
-  /** users.manage (Tech Admin). */
+  /** users.manage (Tech admin). */
   manageAll: boolean;
-  /** teams.manage (CS Lead). */
+  /** teams.manage (Lead). */
   manageTeams: boolean;
   teamIds: readonly string[];
 }
@@ -48,7 +51,7 @@ export function managesTeam(viewer: MembershipViewer, teamId: string): boolean {
 export function canChangeMembership(viewer: MembershipViewer, teamId: string, person: Pick<Person, 'id' | 'role'>): boolean {
   if (viewer.manageAll) return true;
   if (!viewer.manageTeams || !viewer.teamIds.includes(teamId)) return false;
-  return person.id === viewer.id || person.role === 'CS_EXEC';
+  return person.id === viewer.id || person.role === 'SERVICE';
 }
 
 export function canEditTeamDetails(viewer: MembershipViewer, teamId: string): boolean {
@@ -72,7 +75,7 @@ export function teamEditMode(viewer: MembershipViewer, person: Pick<Person, 'id'
   if (viewer.manageAll) return 'admin';
   if (!viewer.manageTeams || !viewer.teamIds.length) return null;
   if (person.id === viewer.id) return 'self';
-  return person.role === 'CS_EXEC' ? 'exec' : null;
+  return person.role === 'SERVICE' ? 'exec' : null;
 }
 
 export interface TeamChoice {
@@ -84,7 +87,7 @@ export interface TeamChoice {
 }
 
 /**
- * Checkbox rows for a person's teams. Admin: every team. Lead for a CS Exec:
+ * Checkbox rows for a person's teams. Admin: every team. Lead for a Service member:
  * the lead's teams, plus the exec's other teams locked. Lead for themselves:
  * only the teams they are in (they can leave, not join).
  */
@@ -105,12 +108,12 @@ export interface RemovalEffect {
   name: string;
   role: Role;
   self: boolean;
-  /** CS Lead: agents no remaining team of theirs owns (they stop managing them). */
+  /** Lead: agents no remaining team of theirs owns (they stop managing them). */
   lostAgents: string[];
   /** Queues none of their remaining teams serve (routing and conversation scope). */
   lostQueues: string[];
   noTeamsLeft: boolean;
-  /** Teams left without any CS Lead while they own agents. */
+  /** Teams left without any Lead while they own agents. */
   leaderless: string[];
 }
 
@@ -134,12 +137,12 @@ export function removalEffect({ person, viewerId, removed, added = [], agents, q
   const gone = new Set(removed);
   const remaining = new Set([...person.teamIds.filter((t) => !gone.has(t)), ...added]);
   const lost = (bound: readonly TeamBound[]) => bound.filter((b) => touches(b, gone) && !touches(b, remaining)).sort(byName).map((b) => b.name);
-  const isAdmin = person.role === 'PLATFORM_TECH_ADMIN';
-  const lead = person.role === 'CS_LEAD';
+  const isAdmin = person.role === 'TECH';
+  const lead = managesAgents(person.role);
   const leaderless = lead
     ? teams
         .filter((t) => gone.has(t.id) && agents.some((a) => a.teamIds.includes(t.id)))
-        .filter((t) => !people.some((p) => p.id !== person.id && p.role === 'CS_LEAD' && p.teamIds.includes(t.id)))
+        .filter((t) => !people.some((p) => p.id !== person.id && managesAgents(p.role) && p.teamIds.includes(t.id)))
         .map((t) => t.name)
     : [];
   return {
@@ -157,16 +160,16 @@ const list = (names: readonly string[]) => (names.length <= 1 ? (names[0] ?? '')
 
 /** Plain-language consequences for the confirm dialog, and whether they deserve a warning. */
 export function describeRemoval(e: RemovalEffect): { warn: boolean; lines: string[] } {
-  if (e.role === 'PLATFORM_TECH_ADMIN') return { warn: false, lines: ['Tech Admins read every agent whatever their teams: their access does not change.'] };
+  if (e.role === 'TECH') return { warn: false, lines: ['Tech admins read every agent whatever their teams: their access does not change.'] };
   const lines: string[] = [];
   const who = e.self ? 'You' : e.name;
   if (e.lostAgents.length) {
     lines.push(e.self ? `You will lose access to ${list(e.lostAgents)}: none of your remaining teams owns ${e.lostAgents.length === 1 ? 'it' : 'them'}.` : `${e.name} will no longer manage ${list(e.lostAgents)}: no other team of theirs owns ${e.lostAgents.length === 1 ? 'it' : 'them'}.`);
   }
   if (e.lostQueues.length) lines.push(`${who} will no longer get work from, or see conversations in, ${list(e.lostQueues)}.`);
-  if (e.noTeamsLeft) lines.push(e.self ? 'This is your last team: you will manage no agents until a Platform Tech Admin adds you to one.' : `${e.name} will be in no team${e.role === 'CS_LEAD' ? ' and will manage no agents' : ': no queue will route work to them'}.`);
-  for (const team of e.leaderless) lines.push(`${team} will have no CS Lead left to manage its agents.`);
-  if (e.self && e.role === 'CS_LEAD') lines.push('Only a Platform Tech Admin can add you back.');
+  if (e.noTeamsLeft) lines.push(e.self ? 'This is your last team: you will manage no agents until a Tech admin adds you to one.' : `${e.name} will be in no team${managesAgents(e.role) ? ' and will manage no agents' : ': no queue will route work to them'}.`);
+  for (const team of e.leaderless) lines.push(`${team} will have no Lead left to manage its agents.`);
+  if (e.self && managesAgents(e.role)) lines.push('Only a Tech admin can add you back.');
   if (!lines.length) lines.push(`${e.self ? 'Your' : `${e.name}’s`} access to agents and queues does not change.`);
   return { warn: e.lostAgents.length > 0 || e.leaderless.length > 0 || (e.self && e.noTeamsLeft), lines };
 }
@@ -184,7 +187,7 @@ export interface TeamScope {
   /** Agents visible to the viewer; null when they could not be read. */
   agents: AgentRef[] | null;
   queues: TeamBound[] | null;
-  /** agents.read_all (Tech Admin); otherwise only agents of the viewer's teams are visible. */
+  /** agents.read_all (Tech admin); otherwise only agents of the viewer's teams are visible. */
   allAgentsVisible: boolean;
 }
 
@@ -193,6 +196,6 @@ export function removalFor(scope: TeamScope, person: RemovalInput['person'], rem
   const result = describeRemoval(
     removalEffect({ person, viewerId: scope.viewer.id, removed, added, agents: scope.agents ?? [], queues: scope.queues ?? [], people: scope.people, teams: scope.teams }),
   );
-  if ((scope.agents && scope.queues) || person.role === 'PLATFORM_TECH_ADMIN') return result;
+  if ((scope.agents && scope.queues) || person.role === 'TECH') return result;
   return { warn: true, lines: [...result.lines.filter((l) => !l.endsWith('does not change.')), 'Agents and queues could not be loaded, so the effect on access is unknown.'] };
 }

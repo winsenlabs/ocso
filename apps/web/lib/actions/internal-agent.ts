@@ -57,12 +57,12 @@ export async function rejectAskOcsoAction(actionId: string): Promise<ActionDecis
 
 export type ProfileChoice = { ok: true } | { ok: false; message: string };
 
-/** Tech Admin: choose the model profile Ask OCSO runs on (deployment setting, audited by the API). */
+/** Tech admin: choose the model profile Ask OCSO runs on (deployment setting, audited by the API). */
 export async function chooseAskOcsoProfile(profileId: string): Promise<ProfileChoice> {
   const session = await getSession();
   if (!session) return { ok: false, message: 'Your session has ended. Sign in again.' };
   if (!session.permissions.has(Permission.DEPLOYMENT_SETTINGS_MANAGE)) {
-    return { ok: false, message: 'Only a Platform Tech Admin can choose the model for Ask OCSO.' };
+    return { ok: false, message: 'Only a Tech admin can choose the model for Ask OCSO.' };
   }
   const id = ActionId.safeParse(profileId);
   if (!id.success) return { ok: false, message: 'Choose a model profile.' };

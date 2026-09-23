@@ -11,7 +11,7 @@ const hardship = { id: 'team-hardship', name: 'Hardship' };
 const all = [loans, cards, hardship];
 
 describe('owner choices', () => {
-  it('offers the Tech Admin every team, sorted, with current owners checked', () => {
+  it('offers the Tech admin every team, sorted, with current owners checked', () => {
     expect(ownerChoices('admin', all, [loans], [])).toEqual([
       { id: 'team-cards', name: 'Cards', checked: false, locked: false },
       { id: 'team-hardship', name: 'Hardship', checked: false, locked: false },
@@ -44,11 +44,11 @@ describe('owner choices', () => {
 });
 
 describe('ownership permissions', () => {
-  it('lets only the Tech Admin reassign owners across teams; leads manage within theirs', () => {
-    expect(permissionsForRole('PLATFORM_TECH_ADMIN')).toEqual(expect.arrayContaining([Permission.AGENTS_ASSIGN_OWNER, Permission.AGENTS_READ_ALL]));
-    expect(permissionsForRole('CS_LEAD')).not.toContain(Permission.AGENTS_ASSIGN_OWNER);
-    expect(permissionsForRole('CS_LEAD')).toEqual(expect.arrayContaining([Permission.AGENTS_MANAGE, Permission.CONVERSATIONS_READ_TEAM]));
-    expect(permissionsForRole('CS_EXEC')).not.toContain(Permission.CONVERSATIONS_READ_TEAM);
+  it('lets only the Tech admin reassign owners across teams; leads manage within theirs', () => {
+    expect(permissionsForRole('TECH')).toEqual(expect.arrayContaining([Permission.AGENTS_ASSIGN_OWNER, Permission.AGENTS_READ_ALL]));
+    expect(permissionsForRole('HEAD')).not.toContain(Permission.AGENTS_ASSIGN_OWNER);
+    expect(permissionsForRole('HEAD')).toEqual(expect.arrayContaining([Permission.AGENTS_MANAGE, Permission.CONVERSATIONS_READ_TEAM]));
+    expect(permissionsForRole('SERVICE')).not.toContain(Permission.CONVERSATIONS_READ_TEAM);
   });
 
   it('requires the owning teams on agent responses', () => {

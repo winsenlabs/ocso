@@ -6,7 +6,7 @@ import { PrivilegedChangeSchema, UptimeSchema } from './telemetry';
 /**
  * Role-aware home (GET /v1/home, packages/application/src/analytics/home*.ts).
  * The API returns exactly one surface for the caller's role: execs never get
- * technical telemetry, Tech Admins never get conversation content.
+ * technical telemetry, Tech admins never get conversation content.
  */
 
 const n = z.number();
@@ -135,9 +135,9 @@ export type ExecHomeData = z.infer<typeof ExecSchema>;
 const User = z.object({ id: s, name: s });
 
 export const HomeSchema = z.discriminatedUnion('role', [
-  z.object({ role: z.literal('PLATFORM_TECH_ADMIN'), generatedAt: s, user: User, admin: AdminSchema }),
-  z.object({ role: z.literal('CS_LEAD'), generatedAt: s, user: User, lead: LeadSchema }),
-  z.object({ role: z.literal('CS_EXEC'), generatedAt: s, user: User, exec: ExecSchema }),
+  z.object({ role: z.literal('TECH'), generatedAt: s, user: User, admin: AdminSchema }),
+  z.object({ role: z.literal('HEAD'), generatedAt: s, user: User, lead: LeadSchema }),
+  z.object({ role: z.literal('SERVICE'), generatedAt: s, user: User, exec: ExecSchema }),
 ]);
 export type HomeData = z.infer<typeof HomeSchema>;
 

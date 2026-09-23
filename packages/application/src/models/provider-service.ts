@@ -38,7 +38,7 @@ const auditSnapshot = (r: Pick<ProviderRow, 'kind' | 'name' | 'region' | 'reside
   credentialKeys: Object.keys(r.secretRefs),
 });
 
-/** Model provider administration (docs/06, ADR-006, ADR-012). Tech Admin owns writes. */
+/** Model provider administration (docs/06, ADR-006, ADR-012). Tech admin owns writes. */
 export class ProviderService {
   private readonly credentials: ProviderCredentialStore;
   private readonly adapterDeps: AdapterDeps;

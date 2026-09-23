@@ -30,7 +30,7 @@ const agents = () => new AgentService(f.t.db);
 const names = async (who: keyof OwnershipFixture['p']) => (await agents().list(f.p[who])).map((a) => a.name);
 
 describe('reading agents', () => {
-  it('lists only the agents of the caller’s teams; the Tech Admin reads every agent, orphans included', async () => {
+  it('lists only the agents of the caller’s teams; the Tech admin reads every agent, orphans included', async () => {
     expect(await names('leadA')).toEqual(['Maya', 'Sana']);
     expect(await names('leadB')).toEqual(['Arjun', 'Sana']);
     expect(await names('admin')).toEqual(['Arjun', 'Legacy', 'Maya', 'Sana']);
@@ -45,7 +45,7 @@ describe('reading agents', () => {
     expect((await agents().get(f.p.admin, f.agent.orphan)).teams).toEqual([]);
   });
 
-  it('lets a CS Exec read their teams’ agents and agents that route to their queues, without manage rights', async () => {
+  it('lets a Service member read their teams’ agents and agents that route to their queues, without manage rights', async () => {
     expect(await names('execA')).toEqual(['Maya', 'Sana']);
     // Maya is owned by Cards, but one of her escalation rules targets the Loans queue Meera works.
     expect(await names('execB')).toEqual(['Arjun', 'Maya', 'Sana']);
@@ -93,7 +93,7 @@ describe('managing agents', () => {
     expect((await grants.list(b, f.agent.shared)).tools).toEqual([]);
   });
 
-  it('keeps the Tech Admin out of business configuration', async () => {
+  it('keeps the Tech admin out of business configuration', async () => {
     const admin = actor(f.p.admin);
     await expect(agents().update(admin, f.agent.maya, { purpose: 'x' })).rejects.toMatchObject({ category: 'authorization' });
     const draft = await new PromptService(f.t.db).draft(f.p.admin, f.agent.maya);
@@ -108,7 +108,7 @@ describe('owning-team changes', () => {
     const a = actor(f.p.leadA);
     await expect(agents().setOwners(a, f.agent.maya, [f.team.cards, f.team.loans])).rejects.toMatchObject({ code: 'owner_team_not_member' });
     await expect(agents().update(a, f.agent.maya, { teamIds: [f.team.cards, f.team.loans] })).rejects.toMatchObject({ code: 'owner_team_not_member' });
-    // Removing Loans' ownership of the shared agent is Loans' (or the Tech Admin's) call.
+    // Removing Loans' ownership of the shared agent is Loans' (or the Tech admin's) call.
     await expect(agents().setOwners(a, f.agent.shared, [f.team.cards])).rejects.toMatchObject({ code: 'owner_team_not_member' });
     await expect(agents().setOwners(actor(f.p.leadB), f.agent.maya, [f.team.loans])).rejects.toMatchObject(notFound);
     expect(AgentOwnersInput.safeParse({ teamIds: [] }).success).toBe(false);
@@ -122,7 +122,7 @@ describe('owning-team changes', () => {
     await expect(agents().get(f.p.leadB, f.agent.shared)).rejects.toMatchObject(notFound);
   });
 
-  it('lets the Tech Admin reassign any agent (orphans included), audited', async () => {
+  it('lets the Tech admin reassign any agent (orphans included), audited', async () => {
     const admin = actor(f.p.admin);
     const view = await agents().setOwners(admin, f.agent.orphan, [f.team.loans]);
     expect(view.teams.map((t) => t.name)).toEqual(['Loans']);
@@ -133,6 +133,6 @@ describe('owning-team changes', () => {
     const { rows } = await f.t.db.execute<{ summary: string; actor_id: string }>(
       sql`SELECT summary, actor_id FROM audit_events WHERE action = 'agent.owners_change' AND target_id = ${f.agent.orphan}`,
     );
-    expect(rows).toEqual([{ summary: 'Owning teams of Legacy: none → Loans (reassigned by Tech Admin)', actor_id: f.p.admin.userId }]);
+    expect(rows).toEqual([{ summary: 'Owning teams of Legacy: none → Loans (reassigned by Tech admin)', actor_id: f.p.admin.userId }]);
   });
 });

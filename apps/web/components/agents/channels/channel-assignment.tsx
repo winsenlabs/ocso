@@ -25,7 +25,7 @@ export interface ChannelRow {
 const STATUS_TONE: Readonly<Record<string, StatusTone>> = { ACTIVE: 'good', DRAFT: 'muted', DISABLED: 'warn' };
 const TEMPLATE = 'minmax(0,1.3fr) 84px 92px minmax(0,1fr) 84px 96px 70px';
 
-/** Which channels this agent answers on (agent_channels); the channel's default agent is set by the Tech Admin. */
+/** Which channels this agent answers on (agent_channels); the channel's default agent is set by the Tech admin. */
 export function ChannelAssignment({ agentId, rows, assigned, canEdit }: { agentId: string; rows: ChannelRow[]; assigned: string[]; canEdit: boolean }) {
   const [picked, setPicked] = useState<string[]>(assigned);
   const action = useAgentAction();

@@ -11,7 +11,7 @@ export const metadata: Metadata = { title: 'System control center' };
 
 const TITLE = 'System control center';
 
-/** Platform Tech Admin control center (design/03). */
+/** Tech admin control center (design/03). */
 export default function SystemPage() {
   return (
     <>

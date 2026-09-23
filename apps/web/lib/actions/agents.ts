@@ -97,8 +97,8 @@ export async function updateBusinessHoursAction(id: string, hours: BusinessHours
 }
 
 /**
- * Replace an agent's owning teams (PUT /v1/agents/:id/owners). A CS Lead may
- * change only teams they belong to; the Tech Admin (agents.assign_owner) may
+ * Replace an agent's owning teams (PUT /v1/agents/:id/owners). A Lead may
+ * change only teams they belong to; the Tech admin (agents.assign_owner) may
  * reassign any team. The API enforces the rules and audits the change.
  */
 export async function setAgentOwnersAction(id: string, teamIds: string[]): Promise<ActionResult> {

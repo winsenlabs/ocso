@@ -14,10 +14,10 @@ import { startDemo, type DemoServer } from '../../mcp/test/helpers/demo-server.j
 const TOKEN = 'meridian-demo-bearer-token-5f1c2a';
 // Lead and exec belong to the team that owns both agents (ADR-026).
 const TEAM = uuidv7();
-const user = (role: Principal['role'], name: string): Principal => ({ userId: uuidv7(), role, displayName: name, teamIds: role === 'PLATFORM_TECH_ADMIN' ? [] : [TEAM], via: 'UI' });
-const admin = user('PLATFORM_TECH_ADMIN', 'Tejas Shetty');
-const lead = user('CS_LEAD', 'Anjali Rao');
-const exec = user('CS_EXEC', 'Ravi Kumar');
+const user = (role: Principal['role'], name: string): Principal => ({ userId: uuidv7(), role, displayName: name, teamIds: role === 'TECH' ? [] : [TEAM], via: 'UI' });
+const admin = user('TECH', 'Tejas Shetty');
+const lead = user('HEAD', 'Anjali Rao');
+const exec = user('SERVICE', 'Ravi Kumar');
 const as = (p: Principal): ActorContext => ({ principal: p, correlationId: `test-${p.role}` });
 
 let t: TestDatabase;
@@ -134,7 +134,7 @@ describe('MCP connection wizard against the bearer-mode demo server', () => {
     const classify = {
       tools: [
         { toolId: byName['crm.get_customer']!.id, riskClass: 'READ' as const, approved: true },
-        { toolId: byName['payments.reverse_transaction']!.id, riskClass: 'SENSITIVE' as const, approved: true, humanRoles: ['CS_LEAD' as const] },
+        { toolId: byName['payments.reverse_transaction']!.id, riskClass: 'SENSITIVE' as const, approved: true, humanRoles: ['HEAD' as const] },
       ],
     };
     await expect(svc.classifyTools(as(lead), conn.id, classify)).rejects.toMatchObject({ code: 'forbidden' });

@@ -7,7 +7,7 @@ import { login, logout } from './helpers';
 test.describe.configure({ mode: 'serial' });
 seedConnectionsStack({ mcpDemo: false });
 
-test('Tech Admin adds WhatsApp (API problems inline, generated verify token, real Meta handshake) and web chat channels', async ({ page, baseURL }) => {
+test('Tech admin adds WhatsApp (API problems inline, generated verify token, real Meta handshake) and web chat channels', async ({ page, baseURL }) => {
   await login(page, ACCOUNTS.admin);
   await page.goto('/connections?tab=channels');
   await page.getByRole('link', { name: 'Add channel' }).click();

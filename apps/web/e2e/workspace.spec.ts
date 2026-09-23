@@ -64,14 +64,14 @@ test.beforeAll(async ({ playwright }) => {
     await call('POST', '/v1/setup', null, { setupToken: E2E.setupToken, orgName: 'E2E Bank', adminName: ACCOUNTS.admin.name, adminEmail: ACCOUNTS.admin.email, adminPassword: ACCOUNTS.admin.password, timezone: 'Asia/Kolkata' });
   }
   tok.admin = await loginApi(ACCOUNTS.admin.email, ACCOUNTS.admin.password);
-  const lead = await call<{ id: string }>('POST', '/v1/users', tok.admin, { name: LEAD.name, email: LEAD.email, role: 'CS_LEAD', password: LEAD.password, teamIds: [], languages: [], maxConcurrent: 5 });
+  const lead = await call<{ id: string }>('POST', '/v1/users', tok.admin, { name: LEAD.name, email: LEAD.email, role: 'HEAD', password: LEAD.password, teamIds: [], languages: [], maxConcurrent: 5 });
   tok.lead = await loginApi(LEAD.email, LEAD.password);
   ids.team = (await call<{ id: string }>('POST', '/v1/teams', tok.lead, { name: 'WS Cards & EMI' })).id;
   // The lead manages the agent through an owning team of their own, outside the queue's team (ADR-026).
   const owners = (await call<{ id: string }>('POST', '/v1/teams', tok.lead, { name: 'WS Agent owners' })).id;
   await call('PATCH', `/v1/users/${lead.id}`, tok.admin, { teamIds: [owners] });
-  // The exec's team is not one of the lead's, so the Tech Admin creates them (a lead creates execs only into their own teams).
-  await call('POST', '/v1/users', tok.admin, { name: EXEC.name, email: EXEC.email, role: 'CS_EXEC', password: EXEC.password, teamIds: [ids.team], languages: [], maxConcurrent: 5 });
+  // The exec's team is not one of the lead's, so the Tech admin creates them (a lead creates execs only into their own teams).
+  await call('POST', '/v1/users', tok.admin, { name: EXEC.name, email: EXEC.email, role: 'SERVICE', password: EXEC.password, teamIds: [ids.team], languages: [], maxConcurrent: 5 });
   tok.exec = await loginApi(EXEC.email, EXEC.password);
   ids.queue = (await call<{ id: string }>('POST', '/v1/queues', tok.lead, { name: 'WS Cards & EMI · Tier 2', teamIds: [ids.team] })).id;
 
@@ -104,7 +104,7 @@ test('a web-chat customer reaches the AI, then asks for a human', async () => {
   await waitForState(ids.conversation, 'WAITING_FOR_HUMAN');
 });
 
-test('Tech Admin gets a clean forbidden state instead of conversation content', async ({ page }) => {
+test('Tech admin gets a clean forbidden state instead of conversation content', async ({ page }) => {
   await login(page, ACCOUNTS.admin);
   await page.goto(`/conversations/${ids.conversation}`);
   await expect(page.getByRole('heading', { name: 'Conversations' })).toBeVisible();
@@ -282,7 +282,7 @@ test('a sensitive action the AI proposed is confirmed from the timeline', async 
   mcp = startMeridianDemo();
   await expect.poll(async () => (await fetch(`http://127.0.0.1:${MCP_PORT}/healthz`).then((r) => r.status).catch(() => 0)), { timeout: 20_000 }).toBe(200);
 
-  // Tech Admin connects the external MCP server and classifies the policy search as sensitive.
+  // Tech admin connects the external MCP server and classifies the policy search as sensitive.
   await call('PATCH', '/v1/settings/deployment', tok.admin, { egressAllowedInternalHosts: ['127.0.0.1'] });
   const conn = await call<{ id: string }>('POST', '/v1/mcp/connections', tok.admin, { name: 'refund-desk', url: `http://127.0.0.1:${MCP_PORT}/mcp`, network: 'INTERNAL' });
   await call('POST', `/v1/mcp/connections/${conn.id}/discover`, tok.admin);

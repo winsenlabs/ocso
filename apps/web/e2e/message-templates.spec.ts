@@ -99,13 +99,13 @@ test.beforeAll(async ({ playwright }) => {
     await call('POST', '/v1/setup', null, { setupToken: E2E.setupToken, orgName: 'E2E Bank', adminName: ACCOUNTS.admin.name, adminEmail: ACCOUNTS.admin.email, adminPassword: ACCOUNTS.admin.password, timezone: 'Asia/Kolkata' });
   }
   tok.admin = await loginApi(ACCOUNTS.admin.email, ACCOUNTS.admin.password);
-  // Channel adapters reach only public https hosts unless the Tech Admin allowlists an internal one (the stub is on loopback).
+  // Channel adapters reach only public https hosts unless the Tech admin allowlists an internal one (the stub is on loopback).
   await call('PATCH', '/v1/settings/deployment', tok.admin, { egressAllowedInternalHosts: ['127.0.0.1'] });
-  const lead = await call<{ id: string }>('POST', '/v1/users', tok.admin, { name: LEAD.name, email: LEAD.email, role: 'CS_LEAD', password: LEAD.password, teamIds: [], languages: [], maxConcurrent: 5 });
+  const lead = await call<{ id: string }>('POST', '/v1/users', tok.admin, { name: LEAD.name, email: LEAD.email, role: 'HEAD', password: LEAD.password, teamIds: [], languages: [], maxConcurrent: 5 });
   tok.lead = await loginApi(LEAD.email, LEAD.password);
   const team = (await call<{ id: string }>('POST', '/v1/teams', tok.lead, { name: 'TPL Cards' })).id;
   await call('PATCH', `/v1/users/${lead.id}`, tok.admin, { teamIds: [team] });
-  ids.execId = (await call<{ id: string }>('POST', '/v1/users', tok.lead, { name: EXEC.name, email: EXEC.email, role: 'CS_EXEC', password: EXEC.password, teamIds: [team], languages: [], maxConcurrent: 5 })).id;
+  ids.execId = (await call<{ id: string }>('POST', '/v1/users', tok.lead, { name: EXEC.name, email: EXEC.email, role: 'SERVICE', password: EXEC.password, teamIds: [team], languages: [], maxConcurrent: 5 })).id;
   tok.exec = await loginApi(EXEC.email, EXEC.password);
   ids.queue = (await call<{ id: string }>('POST', '/v1/queues', tok.lead, { name: 'TPL Cards', teamIds: [team] })).id;
   const provider = (await call<{ id: string }>('POST', '/v1/model-providers', tok.admin, { kind: 'DEV_SCRIPTED', name: 'TPL Scripted', settings: { latencyMs: 20 } })).id;
@@ -162,7 +162,7 @@ test('after 24 hours the exec reaches the customer with an approved template', a
   await expect.poll(() => sent.find((m) => m['ContentSid'] === APPROVED)?.['ContentVariables'] ?? null, { timeout: 30_000 }).toBe('{"1":"Priya","2":"C-2291"}');
 });
 
-test('a CS Lead writes a template, submits it, and is told when WhatsApp approves it', async ({ page }) => {
+test('a Lead writes a template, submits it, and is told when WhatsApp approves it', async ({ page }) => {
   test.setTimeout(90_000);
   await login(page, LEAD);
   await page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'Message templates' }).click();

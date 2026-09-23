@@ -54,7 +54,7 @@ export interface EcsDeploymentOptions {
 }
 
 /**
- * ECS Fargate (ADR-022/023): Tech Admin settings → the worker service's
+ * ECS Fargate (ADR-022/023): Tech admin settings → the worker service's
  * scalable target (min/max), a target-tracking policy on slot demand per
  * worker, and a step policy fired by the queue-age alarm. Reconcile-style:
  * reads current state first and writes only what differs, by fixed names.

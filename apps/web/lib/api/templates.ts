@@ -42,7 +42,7 @@ export function loadChannelTemplates(channelId: string, refresh = false): Promis
   return api.get(`/v1/channels/${encodeURIComponent(channelId)}/templates${refresh ? '?refresh=true' : ''}`, TemplateListSchema, { timeoutMs: 30_000 });
 }
 
-/** Channels whose templates this user may manage (message_templates.manage, team-scoped for CS Leads). */
+/** Channels whose templates this user may manage (message_templates.manage, team-scoped for Leads). */
 export function loadTemplateChannels(): Promise<TemplateChannel[]> {
   return api.get('/v1/message-templates/channels', z.array(TemplateChannelSchema));
 }

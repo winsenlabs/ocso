@@ -6,7 +6,7 @@ import { Actor, RequirePermission } from '../../common/decorators.js';
 
 const AgentId = z.uuid();
 
-/** Per-agent tool grants with argument rules (CS Lead). */
+/** Per-agent tool grants with argument rules (Lead). */
 @Controller('v1/agents')
 export class AgentToolsController {
   constructor(@Inject(AgentToolGrantService) private readonly grants: AgentToolGrantService) {}

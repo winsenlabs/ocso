@@ -6,7 +6,7 @@ const NO_INTERNAL: EgressPolicy = { allowedInternalHosts: [], allowInsecureHttpH
 
 /**
  * Outbound policy for one connection (docs/15 §5, ADR-021). Only INTERNAL
- * connections may reach the Tech Admin's allowlisted private hosts; those
+ * connections may reach the Tech admin's allowlisted private hosts; those
  * hosts may also use plain http (Compose service names have no TLS). Every
  * other destination is public https only.
  */

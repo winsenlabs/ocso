@@ -25,7 +25,7 @@ export interface ConnectionToolProviders {
 
 /**
  * A registered family of tools. The connection-backed source (MCP) serves
- * tools a Tech Admin approved into the `tools` table, one provider per
+ * tools a Tech admin approved into the `tools` table, one provider per
  * connection; first-party sources ship a fixed tool list and one provider.
  */
 export interface ToolProviderSource {

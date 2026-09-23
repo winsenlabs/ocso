@@ -17,7 +17,7 @@ import { QueuePicker } from './queue-picker';
 export async function RoutingTab({ data }: { data: AgentPageData }) {
   const { agent, options, can } = data;
   const queues = options.queueRows;
-  if (!queues) return <EmptyState title="Queues are not available for your role">A CS Lead manages queues and SLA policies.</EmptyState>;
+  if (!queues) return <EmptyState title="Queues are not available for your role">A Lead manages queues and SLA policies.</EmptyState>;
   const queue = queues.find((q) => q.id === agent.defaultQueueId) ?? null;
   const policies = await optional(listSlaPolicies());
   const sla = queue?.slaPolicyId ? (policies?.find((p) => p.id === queue.slaPolicyId) ?? null) : null;

@@ -32,7 +32,7 @@ export interface ProviderDefinition<S = unknown, C = unknown> {
    * enabled, and their usage is never priced (it costs nothing).
    */
   readonly devOnly: boolean;
-  /** Non-secret settings the Tech Admin enters (validated at save time and on create). */
+  /** Non-secret settings the Tech admin enters (validated at save time and on create). */
   readonly settingsSchema: z.ZodType<S>;
   /** Secret fields, resolved from SecretStore by trusted code only. */
   readonly credentialsSchema: z.ZodType<C>;

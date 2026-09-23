@@ -50,7 +50,7 @@ export const AgentSchema = z.object({
   avatarTone: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
-  /** Owning teams (ADR-026): only their CS Leads manage the agent. Empty = unowned (Tech Admin assigns). */
+  /** Owning teams (ADR-026): only their Leads manage the agent. Empty = unowned (Tech admin assigns). */
   teams: z.array(z.object({ id: z.string(), name: z.string() })),
   stats: AgentStatsSchema.nullable(),
 });

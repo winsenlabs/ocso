@@ -8,7 +8,7 @@ export const users = pgTable(
     id: id(),
     email: text().notNull(),
     name: text().notNull(),
-    role: text().$type<'PLATFORM_TECH_ADMIN' | 'CS_LEAD' | 'CS_EXEC'>().notNull(),
+    role: text().$type<'TECH' | 'HEAD' | 'LEAD' | 'SERVICE'>().notNull(),
     status: text().$type<'ACTIVE' | 'DISABLED'>().notNull().default('ACTIVE'),
     /** Better Auth fields (ADR-025). An accepted invite or SSO sign-in verifies the address. */
     emailVerified: boolean().notNull().default(false),

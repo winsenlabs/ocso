@@ -26,7 +26,7 @@ async function RecoverContent() {
     <AuthCard
       wide
       title="Account recovery"
-      sub="For a Platform Tech Admin who cannot sign in: resets the password, removes the authenticator app and ends every session. Audited."
+      sub="For a Tech admin who cannot sign in: resets the password, removes the authenticator app and ends every session. Audited."
       foot={<a className="auth-link" href="/login">back to sign-in</a>}
     >
       {status?.recovery ? (

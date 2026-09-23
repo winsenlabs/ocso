@@ -90,7 +90,7 @@ export function SettingsForm({ agent, profiles }: { agent: AgentDetail; profiles
           </div>
         </fieldset>
         <fieldset className="agent-fieldset">
-          <legend>Model profiles · owned by the Tech Admin</legend>
+          <legend>Model profiles · owned by the Tech admin</legend>
           <ProfileSelect id="st-model" name="modelProfileId" label="Conversation model" hint="answers customers · required to go live" value={agent.modelProfileId} profiles={profiles} />
           <ProfileSelect id="st-summarizer" name="summarizerProfileId" label="Summarizer" hint="rolling summaries and handover notes" value={agent.summarizerProfileId} profiles={profiles} />
           <ProfileSelect id="st-copilot" name="copilotProfileId" label="Copilot" hint="suggestions for humans handling this agent's conversations" value={agent.copilotProfileId} profiles={profiles} />

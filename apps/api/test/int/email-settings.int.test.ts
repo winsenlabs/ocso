@@ -27,7 +27,7 @@ beforeAll(async () => {
   h = await startApi();
   tokens.admin = await completeSetup(h);
   // Email is configured here, so the API only invites (ADR-025); the lead gets a password directly.
-  await addUserWithPassword(h, { email: 'lead@ocso.test', name: 'Lead', role: 'CS_LEAD', password: 'correct password 1234' });
+  await addUserWithPassword(h, { email: 'lead@ocso.test', name: 'Lead', role: 'HEAD', password: 'correct password 1234' });
   tokens.lead = await h.loginAs('lead@ocso.test', 'correct password 1234');
 });
 afterAll(async () => {
@@ -36,7 +36,7 @@ afterAll(async () => {
 });
 
 describe('GET /v1/settings/email', () => {
-  it('shows the Tech Admin driver, from and reply-to — never the key', async () => {
+  it('shows the Tech admin driver, from and reply-to — never the key', async () => {
     const res = await h.http().get('/v1/settings/email').set(as('admin')).expect(200);
     expect(res.body).toEqual({ driver: 'resend', label: 'Resend', from: FROM, replyTo: 'help@meridian.test', configured: true, warnings: [] });
     expect(JSON.stringify(res.body)).not.toContain(API_KEY);

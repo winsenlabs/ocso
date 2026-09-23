@@ -7,7 +7,7 @@ import type { ProfileOption } from './types';
 
 /**
  * Ask OCSO has no model yet (deployment setting `internalAgentProfileId`).
- * A Tech Admin can choose a profile right here; everyone else is told who
+ * A Tech admin can choose a profile right here; everyone else is told who
  * can. Questions are never sent anywhere until it is configured.
  */
 export function SetupState({ canConfigure, profiles, onConfigured }: { canConfigure: boolean; profiles: ProfileOption[] | null; onConfigured: () => void }) {
@@ -16,7 +16,7 @@ export function SetupState({ canConfigure, profiles, onConfigured }: { canConfig
       <b style={{ color: 'var(--ink-2)' }}>Ask OCSO is not set up yet.</b>{' '}
       {canConfigure
         ? 'It needs a model profile to run on. Choose one below; you can change it later from here or through the deployment settings API.'
-        : 'It needs a model profile, which a Platform Tech Admin chooses (they are shown the choice when they open Ask OCSO). Until then, nothing you type is sent to a model.'}
+        : 'It needs a model profile, which a Tech admin chooses (they are shown the choice when they open Ask OCSO). Until then, nothing you type is sent to a model.'}
       {canConfigure ? <ProfilePicker profiles={profiles ?? []} onConfigured={onConfigured} /> : null}
     </div>
   );

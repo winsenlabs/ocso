@@ -52,7 +52,7 @@ function firstPartyEntry(tool: FirstPartyTool, agentId: string): CatalogEntry {
  * Effective tools for a virtual agent (docs/08 §3): first-party tools (the
  * built-ins unless the registry's list is passed) plus approved, enabled
  * tools on usable SHARED connections that the connection allows for this
- * agent AND the CS Lead granted to this agent. Personal (USER) connections
+ * agent AND the Lead granted to this agent. Personal (USER) connections
  * are never exposed to agents. An MCP tool can never shadow a first-party name.
  */
 export async function loadAgentToolCatalog(db: DbOrTx, agentId: string, firstParty: readonly FirstPartyTool[] = BUILTIN_TOOLS): Promise<AgentToolCatalog> {

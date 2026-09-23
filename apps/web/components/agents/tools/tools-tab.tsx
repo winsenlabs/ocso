@@ -12,7 +12,7 @@ import { ToolGrantsEditor } from './tool-grants-editor';
 export function ToolsTab({ data }: { data: AgentPageData }) {
   const { agent, tools, can } = data;
   if (tools === null) {
-    return <EmptyState title="Tools are not available for your role">A CS Lead manages which approved tools this agent may call.</EmptyState>;
+    return <EmptyState title="Tools are not available for your role">A Lead manages which approved tools this agent may call.</EmptyState>;
   }
   const enabled = tools.filter((t) => t.grant?.enabled).length;
   return (
@@ -33,7 +33,7 @@ export function ToolsTab({ data }: { data: AgentPageData }) {
             ) : undefined
           }
         >
-          Tools come from shared MCP connections a Tech Admin has approved and opened to this agent. Once there are some, enable them here.
+          Tools come from shared MCP connections a Tech admin has approved and opened to this agent. Once there are some, enable them here.
         </EmptyState>
       ) : (
         <ToolGrantsEditor key={JSON.stringify(tools.map((t) => [t.toolId, t.grant]))} agentId={agent.id} tools={tools} canEdit={can.tools} />

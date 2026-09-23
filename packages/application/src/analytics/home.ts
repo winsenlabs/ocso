@@ -10,9 +10,9 @@ import { leadHome, type LeadHome } from './home-lead.js';
 import { startOfDay } from './values.js';
 
 export type HomeView =
-  | { role: 'CS_EXEC'; generatedAt: string; user: { id: string; name: string }; exec: ExecHome }
-  | { role: 'CS_LEAD'; generatedAt: string; user: { id: string; name: string }; lead: LeadHome }
-  | { role: 'PLATFORM_TECH_ADMIN'; generatedAt: string; user: { id: string; name: string }; admin: AdminHome };
+  | { role: 'SERVICE'; generatedAt: string; user: { id: string; name: string }; exec: ExecHome }
+  | { role: 'HEAD'; generatedAt: string; user: { id: string; name: string }; lead: LeadHome }
+  | { role: 'TECH'; generatedAt: string; user: { id: string; name: string }; admin: AdminHome };
 
 /**
  * Role-aware home (design/06, build rule §15). Each role receives exactly one
@@ -31,16 +31,17 @@ export class HomeService {
     const generatedAt = now.toISOString();
     const user = { id: principal.userId, name: principal.displayName };
     const { timezone } = await new SettingsService(this.db).deployment();
-    if (principal.role === 'PLATFORM_TECH_ADMIN' && can(principal, Permission.TELEMETRY_TECHNICAL_READ)) {
+    if (principal.role === 'TECH' && can(principal, Permission.TELEMETRY_TECHNICAL_READ)) {
       const dayStart = await startOfDay(this.db, now, timezone);
-      return { role: 'PLATFORM_TECH_ADMIN', generatedAt, user, admin: await adminHome(this.db, now, dayStart, this.options.queueStats) };
+      return { role: 'TECH', generatedAt, user, admin: await adminHome(this.db, now, dayStart, this.options.queueStats) };
     }
-    if (principal.role === 'CS_LEAD' && can(principal, Permission.ANALYTICS_BUSINESS_READ)) {
-      return { role: 'CS_LEAD', generatedAt, user, lead: await leadHome(this.db, principal, now, timezone) };
+    // The lead home serves Heads and Leads alike.
+    if ((principal.role === 'HEAD' || principal.role === 'LEAD') && can(principal, Permission.ANALYTICS_BUSINESS_READ)) {
+      return { role: 'HEAD', generatedAt, user, lead: await leadHome(this.db, principal, now, timezone) };
     }
-    if (principal.role === 'CS_EXEC' && can(principal, Permission.CONVERSATIONS_READ)) {
+    if (principal.role === 'SERVICE' && can(principal, Permission.CONVERSATIONS_READ)) {
       const [dayStart, queueIds] = await Promise.all([startOfDay(this.db, now, timezone), new QueueService(this.db).queuesForTeams(principal.teamIds)]);
-      return { role: 'CS_EXEC', generatedAt, user, exec: await execHome(this.db, principal, queueIds, now, dayStart) };
+      return { role: 'SERVICE', generatedAt, user, exec: await execHome(this.db, principal, queueIds, now, dayStart) };
     }
     throw forbidden('home', `role ${principal.role} has no home surface`);
   }

@@ -56,7 +56,7 @@ export const SPIKE_MIN_POINTS = 0.05;
 export const SPIKE_MIN_CONVERSATIONS = 20;
 
 /**
- * CS Lead home (design/06 lead): 7-day tiles, agent cards, queues, decisions,
+ * Lead home (design/06 lead): 7-day tiles, agent cards, queues, decisions,
  * escalation reasons — all over the agents the lead's teams own (ADR-026).
  * Counts and labels only.
  */

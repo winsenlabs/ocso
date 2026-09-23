@@ -36,7 +36,7 @@ const adapter: Adapter = {
 beforeAll(async () => {
   h = await startApi();
   tokens.admin = await completeSetup(h);
-  await h.http().post('/v1/users').set(as('admin')).send({ email: 'lead@ocso.test', name: 'Lead', role: 'CS_LEAD', password: 'correct password 1234' }).expect(201);
+  await h.http().post('/v1/users').set(as('admin')).send({ email: 'lead@ocso.test', name: 'Lead', role: 'HEAD', password: 'correct password 1234' }).expect(201);
   tokens.lead = await h.loginAs('lead@ocso.test', 'correct password 1234');
 });
 afterAll(async () => {

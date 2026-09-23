@@ -8,11 +8,11 @@ import { agentTeams, escalationRules, queueTeams, teams, virtualAgents, type DbO
  * (`agent_teams`); people reach agents only through team membership
  * (`principal.teamIds`).
  *
- * - Manage (CS Lead: agents.manage, prompts.*, agent_tools.manage,
+ * - Manage (Lead: agents.manage, prompts.*, agent_tools.manage,
  *   escalation.manage, reviews/corrections/evaluations): the permission AND
  *   membership of one of the agent's owning teams.
- * - Read: agents.read_all (Tech Admin) → every agent. Otherwise agents.read →
- *   agents owned by your teams; principals who cannot manage agents (CS Execs)
+ * - Read: agents.read_all (Tech admin) → every agent. Otherwise agents.read →
+ *   agents owned by your teams; principals who cannot manage agents (Service members)
  *   additionally read agents reachable through their teams' queues (the agent's
  *   default queue, or one of its escalation rules targets the queue), so the
  *   workspace can show them.

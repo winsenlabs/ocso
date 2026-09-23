@@ -37,7 +37,7 @@ describe('customer claims keys (docs/08 §4)', () => {
     expect(res.body.keys[0]).not.toHaveProperty('d');
   });
 
-  it('lets a tool server verify claims across a key rotation; rotation is Tech Admin only', async () => {
+  it('lets a tool server verify claims across a key rotation; rotation is Tech admin only', async () => {
     const issuer = h.app.get(CustomerClaimsIssuer);
     const customerId = uuidv7();
     await h.db.db.insert(customers).values({ id: customerId, externalRef: 'CIF-88214' });
@@ -60,7 +60,7 @@ describe('customer claims keys (docs/08 §4)', () => {
     await h.http().post('/v1/security/signing-keys/rotate').expect(401);
   });
 
-  it('lists secret metadata for Tech Admins without ever returning values', async () => {
+  it('lists secret metadata for Tech admins without ever returning values', async () => {
     const res = await h.http().get('/v1/secrets').set('authorization', `Bearer ${admin}`).expect(200);
     const claimsKey = res.body.find((s: { kind: string }) => s.kind === 'SIGNING_KEY');
     expect(claimsKey).toMatchObject({ usedBy: 'customer identity claims', state: 'ok' });

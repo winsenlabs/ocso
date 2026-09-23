@@ -34,7 +34,7 @@ export class RealtimeAccess {
       return readable && (await this.agentAllowed(event.agentId));
     }
     if (event.type === 'message_template.status_changed') {
-      // The submitter's in-app notice; Tech Admins see every channel's review results. Others get config.changed.
+      // The submitter's in-app notice; Tech admins see every channel's review results. Others get config.changed.
       const submittedBy = (event.payload as { submittedBy?: string | null }).submittedBy;
       return submittedBy === this.principal.userId || can(this.principal, Permission.CHANNELS_MANAGE);
     }

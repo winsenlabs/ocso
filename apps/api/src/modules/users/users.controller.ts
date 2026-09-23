@@ -23,36 +23,36 @@ export class UsersController {
     return this.users.list(actor);
   }
 
-  /** Permission is resolved in the service: Tech Admin → any role, CS Lead → CS Execs only. */
+  /** Permission is resolved in the service: Tech admin → any role, Lead → Service members only. */
   @Post('users')
-  @RequireAnyPermission(Permission.USERS_MANAGE, Permission.USERS_MANAGE_EXECS)
+  @RequireAnyPermission(Permission.USERS_MANAGE, Permission.USERS_MANAGE_TEAM)
   create(@Actor() actor: ActorContext, @Body({ schema: CreateUserInput }) body: CreateUserInput) {
     return this.users.create(actor, body);
   }
 
   /** How new users get their first sign-in here: emailed invites, or links/passwords handed over (log driver). */
   @Get('users/onboarding')
-  @RequireAnyPermission(Permission.USERS_MANAGE, Permission.USERS_MANAGE_EXECS)
+  @RequireAnyPermission(Permission.USERS_MANAGE, Permission.USERS_MANAGE_TEAM)
   onboarding() {
     return { emailDelivery: this.mailer.delivers ? 'email' : 'log', inviteTtlHours: this.users.inviteTtlHours, allowInitialPasswords: this.users.allowInitialPasswords };
   }
 
   @Post('users/:id/invite')
-  @RequireAnyPermission(Permission.USERS_MANAGE, Permission.USERS_MANAGE_EXECS)
+  @RequireAnyPermission(Permission.USERS_MANAGE, Permission.USERS_MANAGE_TEAM)
   @HttpCode(200)
   resendInvite(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string) {
     return this.users.resendInvite(actor, id);
   }
 
   @Post('users/:id/password-reset')
-  @RequireAnyPermission(Permission.USERS_MANAGE, Permission.USERS_MANAGE_EXECS)
+  @RequireAnyPermission(Permission.USERS_MANAGE, Permission.USERS_MANAGE_TEAM)
   @HttpCode(200)
   sendPasswordReset(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string) {
     return this.users.sendPasswordReset(actor, id);
   }
 
   @Patch('users/:id')
-  @RequireAnyPermission(Permission.USERS_MANAGE, Permission.USERS_MANAGE_EXECS)
+  @RequireAnyPermission(Permission.USERS_MANAGE, Permission.USERS_MANAGE_TEAM)
   update(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string, @Body({ schema: UpdateUserInput }) body: UpdateUserInput) {
     return this.users.update(actor, id, body);
   }
@@ -83,7 +83,7 @@ export class UsersController {
     return this.teams.create(actor, body);
   }
 
-  /** Tech Admin: any membership. CS Lead: CS Execs and themselves, on teams they belong to (enforced in TeamService). */
+  /** Tech admin: any membership. Lead: Service members and themselves, on teams they belong to (enforced in TeamService). */
   @Post('teams/:id/members')
   @RequireAnyPermission(Permission.USERS_MANAGE, Permission.TEAMS_MANAGE)
   @HttpCode(204)
@@ -98,7 +98,7 @@ export class UsersController {
     await this.teams.removeMember(actor, id, userId);
   }
 
-  /** Rename / describe: CS Leads, on teams they belong to (enforced in TeamService). */
+  /** Rename / describe: Leads, on teams they belong to (enforced in TeamService). */
   @Patch('teams/:id')
   @RequirePermission(Permission.TEAMS_MANAGE)
   async updateTeam(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string, @Body({ schema: TeamInput }) body: TeamInput) {

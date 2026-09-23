@@ -11,15 +11,15 @@ let t: TestDatabase;
 let channelId: string;
 const deleted: string[] = [];
 const blobs = { delete: async (key: string) => void deleted.push(key) };
-const admin: Principal = { userId: uuidv7(), role: 'PLATFORM_TECH_ADMIN', displayName: 'Dev', teamIds: [], via: 'UI' };
+const admin: Principal = { userId: uuidv7(), role: 'TECH', displayName: 'Dev', teamIds: [], via: 'UI' };
 const ctx = (principal: Principal | null): ActorContext => ({ principal, correlationId: 'test' });
 const DAY = 24 * 3600 * 1000;
 
 beforeAll(async () => {
   t = await createTestDatabase();
-  await t.pool.query(`INSERT INTO users (id, email, name, role) VALUES ($1, 'admin@x.test', 'Dev', 'PLATFORM_TECH_ADMIN')`, [admin.userId]);
+  await t.pool.query(`INSERT INTO users (id, email, name, role) VALUES ($1, 'admin@x.test', 'Dev', 'TECH')`, [admin.userId]);
   const owners = await createTeam(t.db);
-  const agent = await new AgentService(t.db).create(ctx({ ...admin, role: 'CS_LEAD', teamIds: [owners] }), { name: 'Maya', purpose: 'support', conversationType: 'SUPPORT', description: '', teamIds: [owners] });
+  const agent = await new AgentService(t.db).create(ctx({ ...admin, role: 'HEAD', teamIds: [owners] }), { name: 'Maya', purpose: 'support', conversationType: 'SUPPORT', description: '', teamIds: [owners] });
   await t.db.update(virtualAgents).set({ status: 'LIVE' }).where(eq(virtualAgents.id, agent.id));
   channelId = uuidv7();
   await t.db.insert(channels).values({ id: channelId, kind: 'WHATSAPP', name: 'WhatsApp', status: 'ACTIVE', publicKey: 'pk-ret', defaultAgentId: agent.id });

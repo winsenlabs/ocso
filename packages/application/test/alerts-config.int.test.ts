@@ -37,10 +37,10 @@ const registry = createDefaultDeliveryRegistry({ fetch: fetchFake });
 const ctx = (principal: Principal | null): ActorContext => ({ principal, correlationId: 'test' });
 // The lead's team owns Maya, so the lead may target her in agent-scoped rules (ADR-026).
 const TEAM = uuidv7();
-const principal = (role: Principal['role']): Principal => ({ userId: uuidv7(), role, displayName: role, teamIds: role === 'CS_LEAD' ? [TEAM] : [], via: 'UI' });
-const admin = principal('PLATFORM_TECH_ADMIN');
-const lead = principal('CS_LEAD');
-const exec = principal('CS_EXEC');
+const principal = (role: Principal['role']): Principal => ({ userId: uuidv7(), role, displayName: role, teamIds: role === 'HEAD' ? [TEAM] : [], via: 'UI' });
+const admin = principal('TECH');
+const lead = principal('HEAD');
+const exec = principal('SERVICE');
 let agentId: string;
 
 beforeAll(async () => {
@@ -66,7 +66,7 @@ const input = (o: Partial<AlertRuleInput>): AlertRuleInput => ({
   agentId: null,
   windowSeconds: 3600,
   severity: 'WARNING',
-  audienceRoles: ['CS_LEAD'],
+  audienceRoles: ['HEAD'],
   destinationIds: [],
   dedupeWindowSeconds: 3600,
   autoResolve: true,
@@ -76,7 +76,7 @@ const input = (o: Partial<AlertRuleInput>): AlertRuleInput => ({
 
 describe('alert rules', () => {
   it('requires the manage permission for the rule kind', async () => {
-    await expect(rules().create(ctx(lead), input({ kind: 'TECHNICAL', condition: 'workers_below_min', audienceRoles: ['PLATFORM_TECH_ADMIN'] }))).rejects.toMatchObject({
+    await expect(rules().create(ctx(lead), input({ kind: 'TECHNICAL', condition: 'workers_below_min', audienceRoles: ['TECH'] }))).rejects.toMatchObject({
       category: 'authorization',
     });
     await expect(rules().create(ctx(admin), input({}))).rejects.toMatchObject({ category: 'authorization' });
@@ -96,17 +96,17 @@ describe('alert rules', () => {
       [{ params: { unknownKey: 1 } }, 'invalid_alert_params'],
       [{ agentId: uuidv7() }, 'unknown_agent'],
       [{ destinationIds: [uuidv7()] }, 'unknown_destination'],
-      [{ audienceRoles: ['CS_LEAD', 'PLATFORM_TECH_ADMIN'] }, 'audience_cannot_read_kind'],
+      [{ audienceRoles: ['HEAD', 'TECH'] }, 'audience_cannot_read_kind'],
     ];
     for (const [patch, code] of cases) await expect(svc.create(ctx(lead), input(patch)), code).rejects.toMatchObject({ code });
     await expect(
-      svc.create(ctx(admin), input({ kind: 'TECHNICAL', condition: 'workers_below_min', agentId, audienceRoles: ['PLATFORM_TECH_ADMIN'] })),
+      svc.create(ctx(admin), input({ kind: 'TECHNICAL', condition: 'workers_below_min', agentId, audienceRoles: ['TECH'] })),
     ).rejects.toMatchObject({ code: 'condition_not_agent_scoped' });
-    await expect(svc.create(ctx(admin), input({ kind: 'TECHNICAL', condition: 'workers_below_min', audienceRoles: ['CS_EXEC'] }))).rejects.toMatchObject({
+    await expect(svc.create(ctx(admin), input({ kind: 'TECHNICAL', condition: 'workers_below_min', audienceRoles: ['SERVICE'] }))).rejects.toMatchObject({
       code: 'audience_cannot_read_kind',
     });
     // tool_failure_rate_above may be either kind.
-    expect((await svc.create(ctx(admin), input({ kind: 'TECHNICAL', condition: 'tool_failure_rate_above', audienceRoles: ['PLATFORM_TECH_ADMIN'] }))).kind).toBe('TECHNICAL');
+    expect((await svc.create(ctx(admin), input({ kind: 'TECHNICAL', condition: 'tool_failure_rate_above', audienceRoles: ['TECH'] }))).kind).toBe('TECHNICAL');
   });
 
   it('lists and describes only what the role may see; exposes each method', async () => {
@@ -133,7 +133,7 @@ describe('alert rules', () => {
     expect((await svc.update(ctx(lead), rule.id, { condition: 'sla_breaches_above' })).params).toEqual({ threshold: 0 });
 
     const alertId = uuidv7();
-    await t.db.insert(alerts).values({ id: alertId, ruleId: rule.id, fingerprint: `f-${alertId}`, kind: 'BUSINESS', severity: 'WARNING', title: 'x', body: 'b', audienceRoles: ['CS_LEAD'], source: 's' });
+    await t.db.insert(alerts).values({ id: alertId, ruleId: rule.id, fingerprint: `f-${alertId}`, kind: 'BUSINESS', severity: 'WARNING', title: 'x', body: 'b', audienceRoles: ['HEAD'], source: 's' });
     await svc.delete(ctx(lead), rule.id);
     const [alert] = await t.db.select().from(alerts).where(eq(alerts.id, alertId));
     expect(alert).toMatchObject({ status: 'RESOLVED', resolution: 'Resolved: alert rule deleted', ruleId: null });
@@ -203,7 +203,7 @@ describe('alert delivery service', () => {
 
   beforeAll(async () => {
     alertId = uuidv7();
-    await t.db.insert(alerts).values({ id: alertId, fingerprint: `f-${alertId}`, kind: 'TECHNICAL', severity: 'CRITICAL', title: 'Provider down', body: 'b', audienceRoles: ['PLATFORM_TECH_ADMIN'], source: 'Provider · X' });
+    await t.db.insert(alerts).values({ id: alertId, fingerprint: `f-${alertId}`, kind: 'TECHNICAL', severity: 'CRITICAL', title: 'Provider down', body: 'b', audienceRoles: ['TECH'], source: 'Provider · X' });
     hookId = (await destinations().create(ctx(admin), { name: 'Delivery hook', kind: 'WEBHOOK', config: { url: 'https://ops.example.com/d' }, secret: WEBHOOK_SECRET, enabled: true })).id;
   });
 

@@ -3,7 +3,7 @@ import { ROLES } from '@ocso/auth';
 import { z } from 'zod';
 import { api } from './client';
 
-/** Tech Admin authentication settings (ADR-025): MFA policy and SSO providers. */
+/** Tech admin authentication settings (ADR-025): MFA policy and SSO providers. */
 const AuthPolicy = z.object({ requireMfaRoles: z.array(z.enum(ROLES)), updatedAt: z.string().nullable() });
 export type AuthPolicy = z.infer<typeof AuthPolicy>;
 

@@ -17,7 +17,7 @@ const ToolsQuery = z.object({ includeRemoved: z.enum(['true', 'false']).optional
 const HistoryQuery = z.object({ limit: z.coerce.number().int().min(1).max(1_000).optional() });
 
 /**
- * Shared MCP connections and USER-scope templates (Tech Admin). The wizard:
+ * Shared MCP connections and USER-scope templates (Tech admin). The wizard:
  * create → discover → auth/header | oauth/begin → tools (classify) → approve.
  * Route permissions are the coarse gate; the service re-checks per resource.
  */

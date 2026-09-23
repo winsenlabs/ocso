@@ -9,7 +9,7 @@ const ProviderId = z.string().regex(/^[a-z0-9][a-z0-9-]{1,62}$/);
 const actingSession = (req: OcsoRequest) => ({ headers: new Headers({ authorization: `Bearer ${req.authSession?.bearer ?? ''}` }) });
 
 /**
- * Authentication settings for the Platform Tech Admin (ADR-025): which roles
+ * Authentication settings for the Tech admin (ADR-025): which roles
  * must use MFA, and the SSO identity providers. Secrets are write-only.
  */
 @Controller('v1/settings')

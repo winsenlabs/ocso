@@ -10,7 +10,7 @@ const pct = (v: number | null) => (v === null ? '—' : `${(v * 100).toFixed(1)}
 export const agentPerformance: InternalTool<{ windowDays: number }> = {
   name: 'agent_performance',
   description:
-    'KPIs per virtual agent the user can see (a CS Lead: the agents their teams own) over a window: conversations, AI containment, escalation rate, CSAT, open and waiting conversations. Use it for "which agent escalates most" and agent comparisons. Definitions: containment = conversations without a handoff / all; escalation = conversations with a handoff / all.',
+    'KPIs per virtual agent the user can see (a Lead: the agents their teams own) over a window: conversations, AI containment, escalation rate, CSAT, open and waiting conversations. Use it for "which agent escalates most" and agent comparisons. Definitions: containment = conversations without a handoff / all; escalation = conversations with a handoff / all.',
   input: z.object({ windowDays: z.number().int().min(1).max(90).default(7) }),
   permission: Permission.AGENTS_READ,
   risk: 'READ',

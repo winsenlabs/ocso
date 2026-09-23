@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { api } from './client';
 
 /**
- * Tech Admin telemetry (GET /v1/telemetry/*, packages/application/src/telemetry).
+ * Tech admin telemetry (GET /v1/telemetry/*, packages/application/src/telemetry).
  * Technical telemetry only — ids, counts, timings, tokens; never conversation
  * content. Every figure the API cannot compute is `null` and renders as "—".
  */

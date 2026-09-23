@@ -194,7 +194,7 @@ export function Composer({ conversationId, customerName, channelLabel, agentName
                 pass to {agentName} on return
               </label>
             ) : null}
-            <span className="mono-sm">{isNote ? 'visible to CS Lead and CS Exec only' : 'shift + enter for a new line'}</span>
+            <span className="mono-sm">{isNote ? 'visible to Lead and Service member only' : 'shift + enter for a new line'}</span>
             <span className="sp" style={{ flex: 1 }} />
             {error || files.error ? (
               <span className="err" role="alert">

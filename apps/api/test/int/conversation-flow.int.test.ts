@@ -38,11 +38,11 @@ beforeAll(async () => {
   admin = await completeSetup(h);
   const mk = async (email: string, role: string, extra: Record<string, unknown> = {}) =>
     h.http().post('/v1/users').set(auth(admin)).send({ email, name: email.split('@')[0], role, password: 'a password 12345', ...extra }).expect(201);
-  const leadId = (await mk('lead@ocso.test', 'CS_LEAD')).body.id;
+  const leadId = (await mk('lead@ocso.test', 'HEAD')).body.id;
   lead = await h.loginAs('lead@ocso.test', 'a password 12345');
   ids.team = (await h.http().post('/v1/teams').set(auth(lead)).send({ name: 'Cards' }).expect(201)).body.id;
   await setTeams(h, admin, leadId, [ids.team!]); // the lead's team owns Maya (ADR-026)
-  await mk('exec@ocso.test', 'CS_EXEC', { teamIds: [ids.team] });
+  await mk('exec@ocso.test', 'SERVICE', { teamIds: [ids.team] });
   exec = await h.loginAs('exec@ocso.test', 'a password 12345');
   await h.http().put('/v1/me/availability').set(auth(exec)).send({ availability: 'AVAILABLE' }).expect(200);
   ids.queue = (await h.http().post('/v1/queues').set(auth(lead)).send({ name: 'Cards & EMI · Tier 2', teamIds: [ids.team] }).expect(201)).body.id;

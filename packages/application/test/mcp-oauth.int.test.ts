@@ -12,8 +12,8 @@ import { startDemo, type DemoServer } from '../../mcp/test/helpers/demo-server.j
 const PUBLIC_URL = 'http://localhost:3000';
 const REDIRECT = `${PUBLIC_URL}/oauth/mcp/callback`;
 const user = (role: Principal['role'], name: string): Principal => ({ userId: uuidv7(), role, displayName: name, teamIds: [], via: 'UI' });
-const admin = user('PLATFORM_TECH_ADMIN', 'Tejas Shetty');
-const exec = user('CS_EXEC', 'Ravi Kumar');
+const admin = user('TECH', 'Tejas Shetty');
+const exec = user('SERVICE', 'Ravi Kumar');
 const actor = (p: Principal): ActorContext => ({ principal: p, correlationId: 'test-oauth' });
 
 let t: TestDatabase;

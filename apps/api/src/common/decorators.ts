@@ -26,7 +26,7 @@ export const Authenticated = (options: { allowPendingMfa?: boolean } = {}) =>
 export const RequirePermission = (permission: Permission) =>
   SetMetadata(ACCESS_KEY, { kind: 'permission', permission } satisfies AccessRule);
 
-/** At least one of the permissions; the service applies the finer rule (e.g. which roles a CS Lead may manage). */
+/** At least one of the permissions; the service applies the finer rule (e.g. which roles a Lead may manage). */
 export const RequireAnyPermission = (...permissions: Permission[]) =>
   SetMetadata(ACCESS_KEY, { kind: 'anyPermission', permissions } satisfies AccessRule);
 

@@ -3,7 +3,7 @@ import { TEMPLATE_CATEGORIES, type MessageTemplate, type TemplateCategory, type 
 import { placeholdersIn, templateValueKey } from './render.js';
 
 /**
- * A template a CS Lead writes in OCSO and submits to the provider for
+ * A template a Lead writes in OCSO and submits to the provider for
  * WhatsApp approval (Twilio Content API + ApprovalRequests, or Meta
  * message_templates). Deliberately the common subset both providers accept:
  * numbered body variables with examples, a static text or media header, a

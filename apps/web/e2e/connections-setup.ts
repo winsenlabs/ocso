@@ -10,8 +10,8 @@ export const DEMO_PORT = Number(process.env['E2E_MCP_DEMO_PORT'] ?? E2E.apiPort 
 export const DEMO_TOKEN = 'e2e-meridian-demo-token-0123456789';
 export const FAKE_KEY = 'sk-e2e-not-a-real-key-0123456789';
 export const USERS = {
-  exec: { name: 'Cora Exec', email: 'cora.exec@e2e.ocso.test', password: 'correct-horse-battery-cexec', role: 'CS_EXEC' },
-  lead: { name: 'Lina Lead', email: 'lina.lead@e2e.ocso.test', password: 'correct-horse-battery-clead', role: 'CS_LEAD' },
+  exec: { name: 'Cora Exec', email: 'cora.exec@e2e.ocso.test', password: 'correct-horse-battery-cexec', role: 'SERVICE' },
+  lead: { name: 'Lina Lead', email: 'lina.lead@e2e.ocso.test', password: 'correct-horse-battery-clead', role: 'HEAD' },
 } as const;
 
 let demo: ChildProcess | null = null;

@@ -19,10 +19,10 @@ const at = (seconds: number) => new Date(T0.getTime() + seconds * 1000);
 const ctx = (principal: Principal | null): ActorContext => ({ principal, correlationId: 'test' });
 // Lead and exec share the team that owns the agent the business alert is about (ADR-026).
 const TEAM = uuidv7();
-const principal = (role: Principal['role']): Principal => ({ userId: uuidv7(), role, displayName: role, teamIds: role === 'PLATFORM_TECH_ADMIN' ? [] : [TEAM], via: 'UI' });
-const admin = principal('PLATFORM_TECH_ADMIN');
-const lead = principal('CS_LEAD');
-const exec = principal('CS_EXEC');
+const principal = (role: Principal['role']): Principal => ({ userId: uuidv7(), role, displayName: role, teamIds: role === 'TECH' ? [] : [TEAM], via: 'UI' });
+const admin = principal('TECH');
+const lead = principal('HEAD');
+const exec = principal('SERVICE');
 const dest: Record<'inApp' | 'webhook' | 'slack', string> = { inApp: uuidv7(), webhook: uuidv7(), slack: uuidv7() };
 
 beforeAll(async () => {
@@ -51,7 +51,7 @@ async function authRule(extra: Partial<AlertRuleRow> = {}): Promise<AlertRuleRow
       params: { threshold: 0 },
       windowSeconds: 300,
       dedupeWindowSeconds: 1800,
-      audienceRoles: ['PLATFORM_TECH_ADMIN'],
+      audienceRoles: ['TECH'],
       destinationIds: [dest.inApp, dest.webhook, dest.slack],
       ...extra,
     })
@@ -77,7 +77,7 @@ describe('alert engine lifecycle', () => {
     const first = await engine.evaluate(T0, { ruleIds: [r.id] });
     expect(first).toMatchObject({ rules: 1, opened: 1, deliveriesQueued: 3, failed: [] });
     let [alert] = await rowsFor(r.id);
-    expect(alert).toMatchObject({ status: 'OPEN', occurrences: 1, kind: 'TECHNICAL', severity: 'WARNING', audienceRoles: ['PLATFORM_TECH_ADMIN'] });
+    expect(alert).toMatchObject({ status: 'OPEN', occurrences: 1, kind: 'TECHNICAL', severity: 'WARNING', audienceRoles: ['TECH'] });
     const opened = await deliveriesFor(alert!.id);
     expect(opened.map((d) => d.destinationId).sort()).toEqual([dest.inApp, dest.webhook, dest.slack].sort());
     expect(opened.every((d) => d.event === 'OPENED' && d.status === 'PENDING')).toBe(true);
@@ -150,18 +150,18 @@ describe('alert inbox: audience scoping, acknowledge, resolve', () => {
   beforeAll(async () => {
     const [r] = await t.db
       .insert(alertRules)
-      .values({ id: uuidv7(), name: 'SLA', kind: 'BUSINESS', condition: 'sla_breaches_above', audienceRoles: ['CS_LEAD', 'CS_EXEC'], destinationIds: [dest.webhook, dest.slack] })
+      .values({ id: uuidv7(), name: 'SLA', kind: 'BUSINESS', condition: 'sla_breaches_above', audienceRoles: ['HEAD', 'SERVICE'], destinationIds: [dest.webhook, dest.slack] })
       .returning();
     businessRule = r!.id;
     await t.db.insert(virtualAgents).values({ id: agentId, name: 'Maya', slug: 'maya-lifecycle', conversationType: 'SUPPORT' });
     await ownAgents(t.db, TEAM, agentId);
     const base = { title: 'x', body: 'b', source: 's', severity: 'WARNING' as const, openedAt: T0, lastSeenAt: T0 };
     await t.db.insert(alerts).values([
-      { ...base, id: ids.technical, fingerprint: `f-${ids.technical}`, kind: 'TECHNICAL', audienceRoles: ['PLATFORM_TECH_ADMIN'], title: 'Provider down', severity: 'CRITICAL' },
-      { ...base, id: ids.business, ruleId: businessRule, fingerprint: `f-${ids.business}`, kind: 'BUSINESS', audienceRoles: ['CS_LEAD', 'CS_EXEC'], title: 'SLA breaches · Maya', context: { agentId } },
-      { ...base, id: ids.leadOnly, fingerprint: `f-${ids.leadOnly}`, kind: 'BUSINESS', audienceRoles: ['CS_LEAD'], title: 'Escalation rate' },
-      // Audience includes the Tech Admin, but Tech Admin cannot read BUSINESS alerts.
-      { ...base, id: ids.sharedBusiness, fingerprint: `f-${ids.sharedBusiness}`, kind: 'BUSINESS', audienceRoles: ['CS_LEAD', 'PLATFORM_TECH_ADMIN'], title: 'Tool failing', severity: 'CRITICAL' },
+      { ...base, id: ids.technical, fingerprint: `f-${ids.technical}`, kind: 'TECHNICAL', audienceRoles: ['TECH'], title: 'Provider down', severity: 'CRITICAL' },
+      { ...base, id: ids.business, ruleId: businessRule, fingerprint: `f-${ids.business}`, kind: 'BUSINESS', audienceRoles: ['HEAD', 'SERVICE'], title: 'SLA breaches · Maya', context: { agentId } },
+      { ...base, id: ids.leadOnly, fingerprint: `f-${ids.leadOnly}`, kind: 'BUSINESS', audienceRoles: ['HEAD'], title: 'Escalation rate' },
+      // Audience includes the Tech admin, but Tech admin cannot read BUSINESS alerts.
+      { ...base, id: ids.sharedBusiness, fingerprint: `f-${ids.sharedBusiness}`, kind: 'BUSINESS', audienceRoles: ['HEAD', 'TECH'], title: 'Tool failing', severity: 'CRITICAL' },
     ]);
   });
 

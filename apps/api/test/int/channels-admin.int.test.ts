@@ -35,8 +35,8 @@ describe('channel administration (design/04 Channels)', () => {
       await h.http().post('/v1/users').set(auth(admin)).send({ email, name: email.split('@')[0], role, password: 'a password 12345' }).expect(201);
       return h.loginAs(email, 'a password 12345');
     };
-    const exec = await mk('kinds-exec@ocso.test', 'CS_EXEC');
-    const lead = await mk('kinds-lead@ocso.test', 'CS_LEAD');
+    const exec = await mk('kinds-exec@ocso.test', 'SERVICE');
+    const lead = await mk('kinds-lead@ocso.test', 'HEAD');
     const kinds = await h.http().get('/v1/channels/kinds').set(auth(exec)).expect(200);
     expect(kinds.body.map((k: { kind: string }) => k.kind)).toEqual(['TWILIO_WHATSAPP', 'WHATSAPP', 'WEBCHAT']);
     await h.http().get('/v1/channels/kinds').set(auth(lead)).expect(200);

@@ -25,7 +25,7 @@ export function SsoProviders({ providers }: { providers: SsoProvider[] }) {
           <div className="sec-row" key={p.providerId} style={{ alignItems: 'flex-start' }}>
             <div className="sec-main">
               <b>
-                {p.name} <StatusChip tone="accent">{p.type.toUpperCase()}</StatusChip> {p.autoProvision ? <StatusChip tone="warn">auto-provisions CS Execs</StatusChip> : null}
+                {p.name} <StatusChip tone="accent">{p.type.toUpperCase()}</StatusChip> {p.autoProvision ? <StatusChip tone="warn">auto-provisions Service members</StatusChip> : null}
               </b>
               <span className="mono-sm">domains: {p.domains.join(', ')}</span>
               <span className="mono-sm">{p.type === 'oidc' ? 'redirect URI' : 'ACS URL'}: {p.callbackUrl}</span>

@@ -1,4 +1,4 @@
-/* CS Lead operations pages (analytics, queues, SLA, escalation reasons,
+/* Lead operations pages (analytics, queues, SLA, escalation reasons,
    reviews, corrections, customers). Composed from design/shared classes;
    only what those screens need beyond them lives here. Imported by each
    page under app/(app)/{analytics,queues,sla,escalation-reasons,reviews,corrections,customers}. */

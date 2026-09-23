@@ -16,7 +16,7 @@ import { QueuesTable } from './queues-table';
 
 const warn = (on: boolean) => (on ? { tone: 'warn' as const } : {});
 
-/** CS Lead home (design/06): 7-day business tiles, virtual agents, queues, decisions and escalation reasons. */
+/** Lead home (design/06): 7-day business tiles, virtual agents, queues, decisions and escalation reasons. */
 export function LeadHome({ session, data, alerts }: { session: Session; data: LeadHomeData; alerts: Alert[] | null }) {
   const t = data.tiles;
   const spike = data.decisions.find((d) => d.kind === 'escalation_spike');

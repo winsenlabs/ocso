@@ -12,7 +12,7 @@ export class AuditController {
     @Inject(SettingsService) private readonly settings: SettingsService,
   ) {}
 
-  /** Tech Admins read the whole log; others only what concerns their teams (auditScope). */
+  /** Tech admins read the whole log; others only what concerns their teams (auditScope). */
   @Get()
   @RequirePermission(Permission.AUDIT_READ)
   async list(@CurrentPrincipal() principal: Principal, @Query({ schema: AuditQuery }) q: AuditQuery) {

@@ -66,7 +66,7 @@ beforeAll(async () => {
   const hash = await hashPassword(PASSWORD);
   ids.team = uuidv7();
   await db.db.insert(teams).values({ id: ids.team, name: 'Cards' });
-  for (const [key, role, name] of [['admin', 'PLATFORM_TECH_ADMIN', 'T. Shetty'], ['lead', 'CS_LEAD', 'Anjali Rao'], ['exec', 'CS_EXEC', 'Nikhil Menon']] as const) {
+  for (const [key, role, name] of [['admin', 'TECH', 'T. Shetty'], ['lead', 'HEAD', 'Anjali Rao'], ['exec', 'SERVICE', 'Nikhil Menon']] as const) {
     ids[key] = uuidv7();
     await db.db.insert(users).values({ id: ids[key]!, email: `${key}@ocso.test`, name, role, emailVerified: true, availability: 'AVAILABLE' });
     await setPasswordCredential(db.db, ids[key]!, hash);
@@ -79,7 +79,7 @@ beforeAll(async () => {
     { teamId: ids.team, userId: ids.exec! },
     { teamId: ids.team, userId: ids.lead! },
   ]);
-  const principal = (key: 'admin' | 'lead'): Principal => ({ userId: ids[key]!, role: key === 'admin' ? 'PLATFORM_TECH_ADMIN' : 'CS_LEAD', displayName: key, teamIds: key === 'lead' ? [ids.team!] : [], via: 'UI' });
+  const principal = (key: 'admin' | 'lead'): Principal => ({ userId: ids[key]!, role: key === 'admin' ? 'TECH' : 'HEAD', displayName: key, teamIds: key === 'lead' ? [ids.team!] : [], via: 'UI' });
   ids.agent = (await new AgentService(db.db).create({ principal: principal('lead'), correlationId: 't' }, { name: 'Maya', purpose: 'customer support', conversationType: 'SUPPORT', description: '', teamIds: [ids.team!] })).id;
   ids.secret = randomBytes(32).toString('hex');
   const channel = await app.get(ChannelService).create({ principal: principal('admin'), correlationId: 't' }, { kind: 'WEBCHAT', name: 'Web chat', status: 'ACTIVE', settings: {}, secrets: { visitorTokenSecret: ids.secret }, defaultAgentId: ids.agent });
@@ -99,7 +99,7 @@ afterAll(async () => {
   await db?.drop();
 });
 
-describe('telemetry API (Tech Admin only)', () => {
+describe('telemetry API (Tech admin only)', () => {
   it('serves the control center to tech admins', async () => {
     const overview = await http().get('/v1/telemetry/overview').set(auth(tokens.admin)).expect(200);
     expect(overview.body.status.chips.map((c: { key: string }) => c.key)).toEqual(['api', 'runtime', 'database', 'queue', 'providers', 'mcp', 'channels', 'webhooks']);
@@ -136,15 +136,15 @@ describe('analytics and home API', () => {
 
   it('returns one role surface per user and never leaks content to tech admins', async () => {
     const exec = await http().get('/v1/home').set(auth(tokens.exec)).expect(200);
-    expect(exec.body.role).toBe('CS_EXEC');
+    expect(exec.body.role).toBe('SERVICE');
     expect(exec.body.admin).toBeUndefined();
     expect(exec.body.exec.tiles.assignedToMe).toBe(1);
     expect(exec.body.exec.assigned[0]).toMatchObject({ customerName: 'Priya Deshmukh', controlState: 'HUMAN_ACTIVE' });
     const lead = await http().get('/v1/home').set(auth(tokens.lead)).expect(200);
-    expect(lead.body.role).toBe('CS_LEAD');
+    expect(lead.body.role).toBe('HEAD');
     expect(lead.body.lead.agents[0]).toMatchObject({ name: 'Maya', promptVersion: 1, conversations: 1 });
     const admin = await http().get('/v1/home').set(auth(tokens.admin)).expect(200);
-    expect(admin.body.role).toBe('PLATFORM_TECH_ADMIN');
+    expect(admin.body.role).toBe('TECH');
     expect(admin.body.admin.tiles.activeConversations).toBe(1);
     const json = JSON.stringify(admin.body);
     expect(json).not.toContain('SECRET-TRANSCRIPT');

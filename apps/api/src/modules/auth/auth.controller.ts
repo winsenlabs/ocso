@@ -1,5 +1,5 @@
 import { Body, Controller, Get, HttpCode, Inject, Post, Req } from '@nestjs/common';
-import { permissionsForRole, type Principal } from '@ocso/auth';
+import { effectivePermissions, type Principal } from '@ocso/auth';
 import { RecoveryInput, RecoveryService, SettingsService, SetupInput, SetupService, hasPasswordCredential, loadPrincipal } from '@ocso/application';
 import { SsoProviderService, type AuthServer } from '@ocso/application/auth-server';
 import type { ApiEnv } from '@ocso/config';
@@ -108,7 +108,7 @@ export class AuthController {
       name: principal.displayName,
       role: principal.role,
       teamIds: principal.teamIds,
-      permissions: permissionsForRole(principal.role),
+      permissions: [...effectivePermissions(principal)],
       deployment: { orgName: settings.orgName, label: settings.deploymentLabel, region: settings.regionLabel, timezone: settings.timezone },
     };
   }

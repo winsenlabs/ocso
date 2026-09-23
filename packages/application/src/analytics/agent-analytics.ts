@@ -62,9 +62,9 @@ export interface AgentAnalytics {
 const tile = <T>(value: T, previous: T, definition: string): Tile<T> => ({ value, previous, definition });
 
 /**
- * CS Lead agent analytics (design/02 Overview + Analytics tabs). Every number
+ * Lead agent analytics (design/02 Overview + Analytics tabs). Every number
  * is a documented formula over explicit rows — no composite quality score.
- * agentId = null aggregates every agent the principal can read (a CS Lead's
+ * agentId = null aggregates every agent the principal can read (a Lead's
  * teams' agents, ADR-026); another team's agent is not found.
  */
 export class AgentAnalyticsService {

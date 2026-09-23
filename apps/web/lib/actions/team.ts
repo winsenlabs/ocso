@@ -39,8 +39,8 @@ export async function createUserAction(_prev: InviteState, formData: FormData): 
   if (!parsed.success) return { status: 'error', fieldErrors: fieldErrorsFrom(parsed.error.issues), values };
 
   const canManageAll = session.permissions.has(Permission.USERS_MANAGE);
-  if (!canManageAll && parsed.data.role !== 'CS_EXEC') {
-    return { status: 'error', fieldErrors: { role: 'CS Leads can create CS Exec accounts only.' }, values };
+  if (!canManageAll && parsed.data.role !== 'SERVICE') {
+    return { status: 'error', fieldErrors: { role: 'Leads can create Service member accounts only.' }, values };
   }
   let created;
   try {

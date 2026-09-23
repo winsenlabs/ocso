@@ -14,7 +14,7 @@ import { AgentService, IngressService, type ActorContext, type IngressMessage } 
 let t: TestDatabase;
 const queue = new MemoryQueue();
 const TEAM = uuidv7();
-const lead: Principal = { userId: '00000000-0000-7000-8000-0000000000b1', role: 'CS_LEAD', displayName: 'Anjali Rao', teamIds: [TEAM], via: 'UI' };
+const lead: Principal = { userId: '00000000-0000-7000-8000-0000000000b1', role: 'HEAD', displayName: 'Anjali Rao', teamIds: [TEAM], via: 'UI' };
 const ctx: ActorContext = { principal: lead, correlationId: 'test' };
 let maya: string;
 let ava: string;
@@ -37,7 +37,7 @@ const attachedTo = async (id: string) => (await t.db.select({ a: agentChannels.a
 
 beforeAll(async () => {
   t = await createTestDatabase();
-  await t.pool.query(`INSERT INTO users (id, email, name, role) VALUES ($1, 'lead@routing.test', 'Anjali Rao', 'CS_LEAD')`, [lead.userId]);
+  await t.pool.query(`INSERT INTO users (id, email, name, role) VALUES ($1, 'lead@routing.test', 'Anjali Rao', 'HEAD')`, [lead.userId]);
   await t.db.insert(teams).values({ id: TEAM, name: 'Cards' });
   const service = new AgentService(t.db);
   maya = (await service.create(ctx, { name: 'Maya', purpose: 'support', conversationType: 'SUPPORT', description: '', teamIds: [TEAM] })).id;

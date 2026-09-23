@@ -18,9 +18,9 @@ interface Props {
   onChange: (text: string) => void;
 }
 
-const OWNER: Readonly<Record<string, string>> = { PLATFORM: 'owned by platform · read only', CS_LEAD: 'cs lead' };
+const OWNER: Readonly<Record<string, string>> = { PLATFORM: 'owned by platform · read only', HEAD: 'cs lead' };
 
-/** One versioned prompt component (.pcomp), editable in place by the CS Lead (docs/05 §1). */
+/** One versioned prompt component (.pcomp), editable in place by the Lead (docs/05 §1). */
 export function ComponentCard({ index, component, text, tokens, state, editing, canEdit, onEdit, onDone, onRevert, onChange }: Props) {
   const platform = component.owner === 'PLATFORM';
   const id = `pc-${component.key}`;

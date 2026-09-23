@@ -1,7 +1,8 @@
 import { ALERT_KINDS, ALERT_SEVERITIES } from '@ocso/alerts';
+import { ROLES } from '@ocso/auth';
 import { z } from 'zod';
 
-const RoleSchema = z.enum(['PLATFORM_TECH_ADMIN', 'CS_LEAD', 'CS_EXEC']);
+const RoleSchema = z.enum(ROLES);
 const DAY = 86_400;
 
 /** Field schemas without defaults (shared by create and patch). */

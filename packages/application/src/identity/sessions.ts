@@ -1,5 +1,5 @@
 import { and, eq, gt } from 'drizzle-orm';
-import type { Principal } from '@ocso/auth';
+import { ROLE_PERMISSIONS, type Principal } from '@ocso/auth';
 import { authSessions, teamMembers, users, type DbOrTx } from '@ocso/db';
 
 /**
@@ -44,6 +44,8 @@ export async function loadPrincipal(db: DbOrTx, userId: string, via: Principal['
     teamIds: teamRows.map((t) => t.teamId),
     via,
     sessionId,
+    // Per-user grants and revokes join here (PM/research/11 §3.3); until then the preset applies.
+    permissions: ROLE_PERMISSIONS[user.role],
   };
 }
 

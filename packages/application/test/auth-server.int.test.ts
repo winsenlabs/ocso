@@ -70,9 +70,9 @@ describe('Better Auth server (ADR-025)', () => {
 
   it('accepts an invite through reset-password and signs in with the new password', async () => {
     const [admin] = await t.db.select().from(users).where(eq(users.email, 'tejas@meridian.test'));
-    const actor: ActorContext = { principal: { userId: admin!.id, role: 'PLATFORM_TECH_ADMIN', displayName: 'Tejas', teamIds: [], via: 'UI' }, correlationId: 'c' };
+    const actor: ActorContext = { principal: { userId: admin!.id, role: 'TECH', displayName: 'Tejas', teamIds: [], via: 'UI' }, correlationId: 'c' };
     const mailer = new AuthMailer({ db: t.db, sender, publicUrl: ORIGIN });
-    const created = await new UserService(t.db, { mailer, allowInitialPasswords: false }).create(actor, { email: 'Lead@Meridian.test', name: 'Lead', role: 'CS_LEAD' });
+    const created = await new UserService(t.db, { mailer, allowInitialPasswords: false }).create(actor, { email: 'Lead@Meridian.test', name: 'Lead', role: 'HEAD' });
     expect(created.invite.status).toBe('pending');
     const mail = sender.sent.at(-1)!;
     expect(mail.to).toBe('lead@meridian.test');

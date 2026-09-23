@@ -6,7 +6,7 @@ import { hasPermission, requireSession } from '@/lib/session';
 import { AssistantForm } from './assistant-form';
 import { RetentionForm } from './retention-form';
 
-/** Data retention for everyone to read; retention and Ask OCSO edits for the Platform Tech Admin. */
+/** Data retention for everyone to read; retention and Ask OCSO edits for the Tech admin. */
 export async function GovernanceSection() {
   const session = await requireSession();
   const canEdit = hasPermission(session, Permission.DEPLOYMENT_SETTINGS_MANAGE);
@@ -18,7 +18,7 @@ export async function GovernanceSection() {
   return (
     <div className="row2" style={{ marginTop: 24 }}>
       <div>
-        <SecHead title="Data retention" desc={canEdit ? 'Platform Tech Admin' : 'read only · managed by the Platform Tech Admin'} />
+        <SecHead title="Data retention" desc={canEdit ? 'Tech admin' : 'read only · managed by the Tech admin'} />
         <RetentionForm rows={retention} editable={canEdit} />
       </div>
       {assistant ? (

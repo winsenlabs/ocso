@@ -5,7 +5,7 @@ import { completeSetup, startApi, type ApiHarness } from './harness.js';
 import { MiniIdp } from './mini-idp.js';
 
 /**
- * SSO (ADR-025): Tech Admin-only provider management, and the provisioning
+ * SSO (ADR-025): Tech admin-only provider management, and the provisioning
  * policy end to end against a local OIDC provider — invited users link,
  * strangers are refused unless auto-provisioning is on, and an IdP cannot
  * vouch for addresses outside its domains.
@@ -44,8 +44,8 @@ afterAll(async () => {
 });
 
 describe('SSO providers', () => {
-  it('only the Tech Admin manages providers; client secrets are write-only', async () => {
-    await h.http().post('/v1/users').set(bearer(admin)).send({ email: 'lead@ocso.test', name: 'Lead', role: 'CS_LEAD', password: 'lead password 12345' }).expect(201);
+  it('only the Tech admin manages providers; client secrets are write-only', async () => {
+    await h.http().post('/v1/users').set(bearer(admin)).send({ email: 'lead@ocso.test', name: 'Lead', role: 'HEAD', password: 'lead password 12345' }).expect(201);
     const lead = await h.loginAs('lead@ocso.test', 'lead password 12345');
     await h.http().get('/v1/settings/sso-providers').set(bearer(lead)).expect(403);
     const body = { providerId: 'corp', name: 'Corp SSO', type: 'oidc', domains: ['corp.test'], oidc: { issuer: idp.issuer, clientId: idp.clientId, clientSecret: SECRET } };
@@ -63,17 +63,17 @@ describe('SSO providers', () => {
   });
 
   it('links an invited user by email and accepts their invite', async () => {
-    await h.http().post('/v1/users').set(bearer(admin)).send({ email: 'ana@corp.test', name: 'Ana', role: 'CS_EXEC' }).expect(201);
+    await h.http().post('/v1/users').set(bearer(admin)).send({ email: 'ana@corp.test', name: 'Ana', role: 'SERVICE' }).expect(201);
     const result = await ssoSignIn('ana@corp.test');
     expect(result.status).toBe(302);
     expect(result.token).toBeTruthy();
     const me = await h.http().get('/v1/auth/me').set(bearer(result.token!)).expect(200);
-    expect(me.body).toMatchObject({ role: 'CS_EXEC', session: { method: 'sso' } });
+    expect(me.body).toMatchObject({ role: 'SERVICE', session: { method: 'sso' } });
     const [ana] = await h.db.db.select().from(users).where(eq(users.email, 'ana@corp.test'));
     expect(ana).toMatchObject({ emailVerified: true, inviteExpiresAt: null });
   });
 
-  it('refuses unknown users unless auto-provisioning is on, then creates them as CS Exec', async () => {
+  it('refuses unknown users unless auto-provisioning is on, then creates them as Service member', async () => {
     const refused = await ssoSignIn('bob@corp.test');
     expect(refused.token).toBeUndefined();
     expect(await h.db.db.select().from(users).where(eq(users.email, 'bob@corp.test'))).toHaveLength(0);
@@ -81,7 +81,7 @@ describe('SSO providers', () => {
     const provisioned = await ssoSignIn('bob@corp.test');
     expect(provisioned.token).toBeTruthy();
     const [bob] = await h.db.db.select().from(users).where(eq(users.email, 'bob@corp.test'));
-    expect(bob).toMatchObject({ role: 'CS_EXEC', status: 'ACTIVE' });
+    expect(bob).toMatchObject({ role: 'SERVICE', status: 'ACTIVE' });
   });
 
   it('refuses an IdP assertion for an address outside the provider domains', async () => {

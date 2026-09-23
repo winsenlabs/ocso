@@ -6,7 +6,7 @@ import { Authenticated, CurrentPrincipal } from '../../common/decorators.js';
 /**
  * Role-aware home (design/06). Any signed-in user; HomeService returns exactly
  * one role surface gated by permission (execs never get technical telemetry,
- * Tech Admins never get conversation content).
+ * Tech admins never get conversation content).
  */
 @Controller('v1/home')
 export class HomeController {

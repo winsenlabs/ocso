@@ -13,7 +13,7 @@ export { SsoProviderInput, SsoProviderPatch, type SsoProviderView } from './sso-
 
 /**
  * SSO identity providers (OIDC, SAML 2.0) for the whole deployment, managed by
- * the Platform Tech Admin through OCSO's API (ADR-025). Better Auth stores and
+ * the Tech admin through OCSO's API (ADR-025). Better Auth stores and
  * uses them; its own provider-management endpoints are closed over HTTP, and
  * its per-owner access rule is satisfied by making the acting admin the owner.
  * Client secrets are write-only: they never leave the API.
@@ -96,7 +96,7 @@ export class SsoProviderService {
       action: 'sso.provider_create',
       targetType: 'sso_provider',
       targetId: input.providerId,
-      summary: `Added ${input.type.toUpperCase()} SSO provider ${input.name} for ${input.domains.join(', ')}${input.autoProvision ? ' (auto-provisions CS Execs)' : ''}`,
+      summary: `Added ${input.type.toUpperCase()} SSO provider ${input.name} for ${input.domains.join(', ')}${input.autoProvision ? ' (auto-provisions Service members)' : ''}`,
       after: { ...view, oidc: view.oidc ? { ...view.oidc, clientSecret: '[write-only]' } : null },
     });
     return view;
@@ -125,7 +125,7 @@ export class SsoProviderService {
   async remove(actor: ActorContext, providerId: string, session: { headers: Headers }): Promise<void> {
     this.assertAdmin(actor);
     const before = await this.get(providerId);
-    // Better Auth lets only the provider's owner delete it; any Tech Admin may, so take ownership first.
+    // Better Auth lets only the provider's owner delete it; any Tech admin may, so take ownership first.
     await this.db.update(authSsoProviders).set({ userId: actor.principal!.userId }).where(eq(authSsoProviders.providerId, providerId));
     await this.call(() => this.auth.deleteSsoProvider(session.headers, providerId));
     await recordAudit(this.db, actor, { action: 'sso.provider_delete', targetType: 'sso_provider', targetId: providerId, summary: `Removed SSO provider ${before.name}`, before });

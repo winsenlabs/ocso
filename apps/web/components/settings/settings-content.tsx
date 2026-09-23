@@ -6,7 +6,7 @@ import { formatDateTime } from '@/lib/format';
 import { hasPermission, requireSession } from '@/lib/session';
 import { DeploymentForm } from './deployment-form';
 
-/** Deployment settings (editable by the Tech Admin, read-only otherwise) and the user's account. */
+/** Deployment settings (editable by the Tech admin, read-only otherwise) and the user's account. */
 export async function SettingsContent() {
   const [session, settings] = await Promise.all([requireSession(), getDeploymentSettings()]);
   const canEdit = hasPermission(session, Permission.DEPLOYMENT_SETTINGS_MANAGE);
@@ -14,7 +14,7 @@ export async function SettingsContent() {
   return (
     <div className="row2">
       <div>
-        <SecHead title="Deployment" desc={canEdit ? 'Platform Tech Admin' : 'read only · managed by the Platform Tech Admin'} />
+        <SecHead title="Deployment" desc={canEdit ? 'Tech admin' : 'read only · managed by the Tech admin'} />
         {canEdit ? (
           <DeploymentForm
             timezones={Intl.supportedValuesOf('timeZone')}

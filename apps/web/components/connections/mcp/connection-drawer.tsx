@@ -27,7 +27,7 @@ interface Props {
 
 function agentsText(c: Connection, agents: AgentLite[]): string {
   if (c.kind === 'TEMPLATE') return 'none — user-scoped';
-  if (c.allowedAgentIds === '*') return 'any agent a CS Lead enables';
+  if (c.allowedAgentIds === '*') return 'any agent a Lead enables';
   if (!c.allowedAgentIds.length) return 'none yet';
   return c.allowedAgentIds.map((id) => agents.find((a) => a.id === id)?.name ?? 'unknown agent').join(', ');
 }

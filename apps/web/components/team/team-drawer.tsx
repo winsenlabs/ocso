@@ -51,7 +51,7 @@ export function TeamDrawer({ team, scope, timeZone }: { team: TeamDetail | null;
         {managesTeam(scope.viewer, team.id) ? (
           <AddMember teamId={team.id} teamName={team.name} memberIds={team.members.map((m) => m.userId)} />
         ) : (
-          <p className="mono-sm">{scope.viewer.manageTeams ? 'Only members of this team change its memberships. A Platform Tech Admin can add you.' : 'You cannot change memberships.'}</p>
+          <p className="mono-sm">{scope.viewer.manageTeams ? 'Only members of this team change its memberships. A Tech admin can add you.' : 'You cannot change memberships.'}</p>
         )}
       </section>
 
@@ -69,7 +69,7 @@ export function TeamDrawer({ team, scope, timeZone }: { team: TeamDetail | null;
             ))}
           </ul>
         ) : (
-          <p className="mono-sm">{scope.allAgentsVisible || isMember ? 'This team owns no agents. Its CS Leads manage the agents it owns.' : 'No agents you can see. Agents of teams you are not in are hidden.'}</p>
+          <p className="mono-sm">{scope.allAgentsVisible || isMember ? 'This team owns no agents. Its Leads manage the agents it owns.' : 'No agents you can see. Agents of teams you are not in are hidden.'}</p>
         )}
         {agents.length && !scope.allAgentsVisible && !isMember ? <p className="mono-sm">Only agents shared with your teams are shown.</p> : null}
       </section>

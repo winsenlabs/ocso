@@ -118,7 +118,7 @@ export class ModelCatalogService {
     };
   }
 
-  /** On-demand refresh by a Tech Admin. */
+  /** On-demand refresh by a Tech admin. */
   async refresh(actor: ActorContext): Promise<CatalogRefreshResult> {
     authorizeAny(actor, [Permission.PRICING_MANAGE, Permission.PROVIDERS_MANAGE]);
     if (!this.deps.fetch) throw validation('catalog_refresh_disabled', 'Model catalog refresh is not available in this process');

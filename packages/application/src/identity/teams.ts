@@ -1,5 +1,5 @@
 import { and, asc, eq, ne, sql } from 'drizzle-orm';
-import { Permission, Role, assertCan, can } from '@ocso/auth';
+import { Permission, ROLE_PERMISSIONS, assertCan, can, rightsWithin, type Role } from '@ocso/auth';
 import { conflict, forbidden, notFound } from '@ocso/domain';
 import { teamMembers, teams, users, uuidv7, type Db, type DbOrTx } from '@ocso/db';
 import { z } from 'zod';
@@ -72,7 +72,7 @@ export class TeamService {
     };
   }
 
-  /** The creating CS Lead joins the team: team ownership of agents (ADR-026) needs a member to manage them. */
+  /** The creating Lead joins the team: team ownership of agents (ADR-026) needs a member to manage them. */
   async create(actor: ActorContext, input: TeamInput): Promise<TeamView> {
     const principal = actor.principal!;
     assertCan(principal, Permission.TEAMS_MANAGE);
@@ -88,8 +88,8 @@ export class TeamService {
   }
 
   /**
-   * Team membership. Tech Admin: anyone on any team. CS Lead: only on teams
-   * they belong to, and only CS Execs or themselves.
+   * Team membership. Tech admin: anyone on any team. Lead: only on teams
+   * they belong to, and only Service members or themselves.
    */
   async addMember(actor: ActorContext, teamId: string, userId: string): Promise<void> {
     await this.db.transaction(async (tx) => {
@@ -117,12 +117,14 @@ export class TeamService {
     if (can(principal, Permission.USERS_MANAGE)) return { team, user };
     if (!can(principal, Permission.TEAMS_MANAGE)) throw forbidden(Permission.TEAMS_MANAGE);
     const [membership] = await tx.select({ teamId: teamMembers.teamId }).from(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, principal.userId)));
-    if (!membership) throw forbidden(Permission.TEAMS_MANAGE, 'CS Leads manage only the teams they belong to');
-    if (user.id !== principal.userId && user.role !== Role.CS_EXEC) throw forbidden(Permission.TEAMS_MANAGE, 'CS Leads manage CS Exec memberships (and their own) only');
+    if (!membership) throw forbidden(Permission.TEAMS_MANAGE, 'You manage only the teams you belong to');
+    if (user.id !== principal.userId && !rightsWithin(ROLE_PERMISSIONS[user.role], principal)) {
+      throw forbidden(Permission.TEAMS_MANAGE, 'You manage the memberships of colleagues whose rights do not exceed yours (and your own)');
+    }
     return { team, user };
   }
 
-  /** Rename / describe. A CS Lead changes only teams they belong to (the same rule as memberships). */
+  /** Rename / describe. A Lead changes only teams they belong to (the same rule as memberships). */
   async update(actor: ActorContext, id: string, input: TeamInput): Promise<void> {
     const principal = actor.principal!;
     assertCan(principal, Permission.TEAMS_MANAGE);
@@ -130,7 +132,7 @@ export class TeamService {
       const [before] = await tx.select().from(teams).where(eq(teams.id, id));
       if (!before) throw notFound('team', id);
       const [membership] = await tx.select({ teamId: teamMembers.teamId }).from(teamMembers).where(and(eq(teamMembers.teamId, id), eq(teamMembers.userId, principal.userId)));
-      if (!membership) throw forbidden(Permission.TEAMS_MANAGE, 'CS Leads manage only the teams they belong to');
+      if (!membership) throw forbidden(Permission.TEAMS_MANAGE, 'You manage only the teams you belong to');
       const clash = await tx.select({ id: teams.id }).from(teams).where(and(sql`lower(${teams.name}) = lower(${input.name})`, ne(teams.id, id)));
       if (clash.length) throw conflict('team_exists', 'A team with this name already exists');
       await tx.update(teams).set({ name: input.name, description: input.description, updatedAt: new Date() }).where(eq(teams.id, id));

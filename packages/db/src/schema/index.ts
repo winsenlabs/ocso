@@ -15,3 +15,4 @@ export * from './quality.js';
 export * from './internal-agent.js';
 export * from './secrets.js';
 export * from './message-templates.js';
+export * from './approvals.js';

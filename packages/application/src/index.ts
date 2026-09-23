@@ -60,3 +60,4 @@ export * from './audit/audit-scope.js';
 export * from './webhooks/index.js';
 export * from './scaling/index.js';
 export * from './retention/index.js';
+export * from './approvals/index.js';

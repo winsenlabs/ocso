@@ -23,7 +23,7 @@ const COLUMNS: Column<HomeQueueRow>[] = [
   { key: 'state', header: 'State', cell: (q) => <StatusChip tone={STATE[q.state]}>{q.state}</StatusChip> },
 ];
 
-/** Live queue health for the CS Lead (design/06 .dt-q): waiting, staff on shift, 7-day average wait and SLA breaches. */
+/** Live queue health for the Lead (design/06 .dt-q): waiting, staff on shift, 7-day average wait and SLA breaches. */
 export function QueuesTable({ rows }: { rows: HomeQueueRow[] }) {
   return (
     <DataTable

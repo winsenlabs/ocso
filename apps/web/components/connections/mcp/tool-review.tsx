@@ -13,9 +13,10 @@ export interface ToolDecision {
 }
 
 const ROLES: Array<{ role: HumanRole; label: string }> = [
-  { role: 'CS_EXEC', label: 'Exec' },
-  { role: 'CS_LEAD', label: 'Lead' },
-  { role: 'PLATFORM_TECH_ADMIN', label: 'Admin' },
+  { role: 'SERVICE', label: 'Service' },
+  { role: 'LEAD', label: 'Lead' },
+  { role: 'HEAD', label: 'Head' },
+  { role: 'TECH', label: 'Tech' },
 ];
 const RISKS: RiskClass[] = ['READ', 'WRITE', 'SENSITIVE'];
 

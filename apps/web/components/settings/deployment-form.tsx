@@ -18,12 +18,12 @@ export interface DeploymentFormValues {
 }
 
 const TOGGLES: Array<{ name: keyof DeploymentFormValues; label: string }> = [
-  { name: 'execsCanViewAiActive', label: 'CS Execs can view AI-active conversations' },
+  { name: 'execsCanViewAiActive', label: 'Service members can view AI-active conversations' },
   { name: 'allowCrossProviderFallback', label: 'Allow fallback to a different model provider' },
   { name: 'allowCrossRegionFallback', label: 'Allow fallback to a different region' },
 ];
 
-/** Deployment settings form for the Platform Tech Admin → PATCH /v1/settings/deployment. */
+/** Deployment settings form for the Tech admin → PATCH /v1/settings/deployment. */
 export function DeploymentForm({ initial, timezones }: { initial: DeploymentFormValues; timezones: string[] }) {
   const [state, action, pending] = useActionState(updateDeploymentAction, IDLE);
   const errors = state.fieldErrors ?? {};

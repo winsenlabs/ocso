@@ -3,8 +3,8 @@
  * the form only offers what the API accepts. The API remains the enforcement
  * point. Client-safe.
  *
- * - Tech Admin (agents.assign_owner): any teams.
- * - CS Lead (agents.manage): add or remove only teams they belong to; other
+ * - Tech admin (agents.assign_owner): any teams.
+ * - Lead (agents.manage): add or remove only teams they belong to; other
  *   teams' ownership is shown but locked. Removing every one of their own
  *   teams hands the agent off (allowed while another team still owns it).
  * - Always at least one owning team.

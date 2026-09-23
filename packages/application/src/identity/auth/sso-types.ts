@@ -53,7 +53,7 @@ export const SsoProviderPatch = z.object({
 });
 export type SsoProviderPatch = z.infer<typeof SsoProviderPatch>;
 
-/** Secret-free view: what the Tech Admin needs to configure the IdP side. */
+/** Secret-free view: what the Tech admin needs to configure the IdP side. */
 export interface SsoProviderView {
   providerId: string;
   name: string;

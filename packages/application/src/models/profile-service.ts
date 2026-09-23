@@ -70,7 +70,7 @@ function definedFields(patch: ProfilePatch): Partial<ProfileFields> {
 export class ProfileService {
   constructor(private readonly deps: ProfileServiceDeps) {}
 
-  /** Tech Admins and CS Leads (provider read) and anyone who can read agents (to pick a profile). */
+  /** Tech admins and Leads (provider read) and anyone who can read agents (to pick a profile). */
   async list(actor: ActorContext): Promise<ProfileView[]> {
     const principal = authorizeAny(actor, [Permission.PROVIDERS_READ, Permission.AGENTS_READ]);
     const rows = await this.deps.db.select().from(modelProfiles).orderBy(asc(modelProfiles.name));

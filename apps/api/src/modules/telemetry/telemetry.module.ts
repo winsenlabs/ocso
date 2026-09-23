@@ -7,7 +7,7 @@ import { DB, ENV, QUEUE } from '../../infrastructure/tokens.js';
 import { TelemetryController } from './telemetry.controller.js';
 
 /**
- * Tech Admin telemetry (docs/11 §2). Trace links use OCSO_TRACE_URL_TEMPLATE
+ * Tech admin telemetry (docs/11 §2). Trace links use OCSO_TRACE_URL_TEMPLATE
  * (e.g. `http://localhost:16686/trace/{traceId}`); queue depth comes from the
  * configured queue adapter so SQS deployments report real depth.
  */

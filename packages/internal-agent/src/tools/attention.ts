@@ -59,7 +59,7 @@ async function conversationItems(ctx: ToolContext) {
 }
 
 async function businessItems(ctx: ToolContext) {
-  // Agents in the user's scope only (a CS Lead: their teams' agents, ADR-026).
+  // Agents in the user's scope only (a Lead: their teams' agents, ADR-026).
   const [stats, agents, queues] = await Promise.all([agentSummaries(ctx.db, 7), new AgentService(ctx.db).list(ctx.principal), new QueueService(ctx.db).list()]);
   const out = [];
   for (const a of agents) {

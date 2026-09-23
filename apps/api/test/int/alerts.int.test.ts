@@ -8,7 +8,7 @@ const ids = { technical: uuidv7(), business: uuidv7(), leadOnly: uuidv7() };
 
 const as = (who: keyof typeof tokens) => ({ authorization: `Bearer ${tokens[who]}` });
 
-async function createUser(role: 'CS_LEAD' | 'CS_EXEC', email: string): Promise<string> {
+async function createUser(role: 'HEAD' | 'SERVICE', email: string): Promise<string> {
   await h.http().post('/v1/users').set(as('admin')).send({ email, name: role, role, password: 'correct password 1234' }).expect(201);
   return h.loginAs(email, 'correct password 1234');
 }
@@ -23,11 +23,11 @@ async function insertAlert(id: string, kind: 'TECHNICAL' | 'BUSINESS', audience:
 beforeAll(async () => {
   h = await startApi();
   tokens.admin = await completeSetup(h);
-  tokens.lead = await createUser('CS_LEAD', 'lead@ocso.test');
-  tokens.exec = await createUser('CS_EXEC', 'exec@ocso.test');
-  await insertAlert(ids.technical, 'TECHNICAL', ['PLATFORM_TECH_ADMIN'], 'Provider error rate above 5%');
-  await insertAlert(ids.business, 'BUSINESS', ['CS_LEAD', 'CS_EXEC'], 'SLA breaches · Maya');
-  await insertAlert(ids.leadOnly, 'BUSINESS', ['CS_LEAD'], 'Escalation rate above 25% · Maya');
+  tokens.lead = await createUser('HEAD', 'lead@ocso.test');
+  tokens.exec = await createUser('SERVICE', 'exec@ocso.test');
+  await insertAlert(ids.technical, 'TECHNICAL', ['TECH'], 'Provider error rate above 5%');
+  await insertAlert(ids.business, 'BUSINESS', ['HEAD', 'SERVICE'], 'SLA breaches · Maya');
+  await insertAlert(ids.leadOnly, 'BUSINESS', ['HEAD'], 'Escalation rate above 25% · Maya');
 });
 afterAll(async () => {
   await h?.close();
@@ -53,7 +53,7 @@ describe('alerts API RBAC', () => {
     expect(counts.body.byKind.TECHNICAL).toBeUndefined();
   });
 
-  it('lets CS Execs acknowledge and resolve business alerts they can see, with a note', async () => {
+  it('lets Service members acknowledge and resolve business alerts they can see, with a note', async () => {
     await h.http().post(`/v1/alerts/${ids.business}/acknowledge`).set(as('admin')).send({}).expect(404);
     const acked = await h.http().post(`/v1/alerts/${ids.business}/acknowledge`).set(as('exec')).expect(200);
     expect(acked.body).toMatchObject({ id: ids.business, status: 'ACKNOWLEDGED' });
@@ -64,15 +64,15 @@ describe('alerts API RBAC', () => {
     expect(again.body.error.code).toBe('alert_resolved');
   });
 
-  it('enforces rule management per kind: CS Exec none, CS Lead business only, Tech Admin technical only', async () => {
-    const technical = { name: 'Workers', kind: 'TECHNICAL', condition: 'workers_below_min', audienceRoles: ['PLATFORM_TECH_ADMIN'] };
-    const business = { name: 'Escalations', kind: 'BUSINESS', condition: 'escalation_rate_above', params: { thresholdPercent: 20 }, audienceRoles: ['CS_LEAD', 'CS_EXEC'] };
+  it('enforces rule management per kind: Service member none, Lead business only, Tech admin technical only', async () => {
+    const technical = { name: 'Workers', kind: 'TECHNICAL', condition: 'workers_below_min', audienceRoles: ['TECH'] };
+    const business = { name: 'Escalations', kind: 'BUSINESS', condition: 'escalation_rate_above', params: { thresholdPercent: 20 }, audienceRoles: ['HEAD', 'SERVICE'] };
     await h.http().post('/v1/alert-rules').set(as('exec')).send(business).expect(403);
     await h.http().post('/v1/alert-rules').set(as('exec')).send(technical).expect(403);
     await h.http().post('/v1/alert-rules').set(as('lead')).send(technical).expect(403);
     await h.http().post('/v1/alert-rules').set(as('admin')).send(business).expect(403);
     // A technical condition cannot be smuggled in under the business kind.
-    const smuggled = await h.http().post('/v1/alert-rules').set(as('lead')).send({ ...technical, kind: 'BUSINESS', audienceRoles: ['CS_LEAD'] }).expect(400);
+    const smuggled = await h.http().post('/v1/alert-rules').set(as('lead')).send({ ...technical, kind: 'BUSINESS', audienceRoles: ['HEAD'] }).expect(400);
     expect(smuggled.body.error.code).toBe('condition_kind_mismatch');
 
     const leadRule = await h.http().post('/v1/alert-rules').set(as('lead')).send(business).expect(201);

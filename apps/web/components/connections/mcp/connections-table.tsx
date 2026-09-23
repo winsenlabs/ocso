@@ -27,7 +27,7 @@ export function ConnectionsTable({ connections, canManage }: { connections: Conn
         <EmptyState title="No MCP servers connected yet">
           {canManage
             ? 'Add a server: OCSO discovers its tools, you authenticate, classify each tool’s side effects and approve which agents may use them.'
-            : 'A Platform Tech Admin adds MCP servers; their tools, health and approval state will appear here.'}
+            : 'A Tech admin adds MCP servers; their tools, health and approval state will appear here.'}
         </EmptyState>
       }
       columns={[

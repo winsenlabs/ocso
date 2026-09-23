@@ -12,7 +12,7 @@ export interface UserAccessProps {
   invite: 'none' | 'pending' | 'expired' | 'accepted';
   mfaEnabled: boolean;
   active: boolean;
-  /** The viewer may manage this user (Tech Admin: anyone; CS Lead: CS Execs). */
+  /** The viewer may manage this user (Tech admin: anyone; Lead: Service members). */
   canManage: boolean;
   isSelf: boolean;
 }

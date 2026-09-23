@@ -32,8 +32,8 @@ const HOUR = 3_600_000;
 const minuteStart = (offsetMinutes: number) => new Date(Math.floor(NOW.getTime() / MIN) * MIN - offsetMinutes * MIN);
 const TRACE = '4bf92f3577b34da6a3ce929d0e0e4736';
 
-const admin: Principal = { userId: '00000000-0000-7000-8000-0000000000ad', role: 'PLATFORM_TECH_ADMIN', displayName: 'T. Shetty', teamIds: [], via: 'UI' };
-const exec: Principal = { userId: '00000000-0000-7000-8000-0000000000e1', role: 'CS_EXEC', displayName: 'Nikhil', teamIds: [], via: 'UI' };
+const admin: Principal = { userId: '00000000-0000-7000-8000-0000000000ad', role: 'TECH', displayName: 'T. Shetty', teamIds: [], via: 'UI' };
+const exec: Principal = { userId: '00000000-0000-7000-8000-0000000000e1', role: 'SERVICE', displayName: 'Nikhil', teamIds: [], via: 'UI' };
 
 let t: TestDatabase;
 let service: SystemOverviewService;
@@ -42,8 +42,8 @@ const ids: Record<string, string> = {};
 async function seed() {
   const db = t.db;
   await db.insert(users).values([
-    { id: admin.userId, email: 'admin@x.test', name: 'T. Shetty', role: 'PLATFORM_TECH_ADMIN' },
-    { id: exec.userId, email: 'exec@x.test', name: 'Nikhil', role: 'CS_EXEC' },
+    { id: admin.userId, email: 'admin@x.test', name: 'T. Shetty', role: 'TECH' },
+    { id: exec.userId, email: 'exec@x.test', name: 'Nikhil', role: 'SERVICE' },
   ]);
   // Workers: 1 healthy, 1 HEALTHY-but-stale, 1 LOST, 1 long stopped (hidden).
   await db.insert(workers).values([

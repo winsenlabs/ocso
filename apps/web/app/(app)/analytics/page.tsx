@@ -8,7 +8,7 @@ import '@/app/styles/ops.css';
 
 export const metadata: Metadata = { title: 'Analytics' };
 
-/** CS Lead business analytics (docs/11 §3, design/02 Overview + Analytics patterns). */
+/** Lead business analytics (docs/11 §3, design/02 Overview + Analytics patterns). */
 export default function Page({ searchParams }: { searchParams: SearchParams }) {
   return (
     <>

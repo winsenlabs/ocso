@@ -34,7 +34,7 @@ const sink = () => {
 
 beforeAll(async () => {
   t = await createTestDatabase();
-  for (const p of [(admin = person('PLATFORM_TECH_ADMIN')), (lead = person('CS_LEAD')), (exec = person('CS_EXEC'))]) {
+  for (const p of [(admin = person('TECH')), (lead = person('HEAD')), (exec = person('SERVICE'))]) {
     await t.pool.query(`INSERT INTO users (id, email, name, role) VALUES ($1, $2, $3, $4)`, [p.userId, `${p.role}@x.test`, p.displayName, p.role]);
   }
   const providerId = uuidv7();
@@ -69,7 +69,7 @@ describe('internal OCSO agent permissions (docs/12 §3)', () => {
   });
 
   it('refuses a tool the user lacks even when the model calls it anyway', async () => {
-    adapter.script = [{ toolCalls: [{ toolName: 'latency_breakdown', input: { minutes: 60 } }] }, { text: 'That needs the Platform Tech Admin.' }];
+    adapter.script = [{ toolCalls: [{ toolName: 'latency_breakdown', input: { minutes: 60 } }] }, { text: 'That needs the Tech admin.' }];
     const { s, out } = sink();
     await agent.ask(lead, null, 'Why did latency spike?', s, 'c1');
     expect(out.denied).toHaveLength(1);

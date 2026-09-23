@@ -29,11 +29,11 @@ beforeAll(async () => {
   h = await startApi();
   const admin = await completeSetup(h);
   const mk = (email: string, name: string, role: string) => h.http().post('/v1/users').set(auth(admin)).send({ email, name, role, password: 'a password 12345' }).expect(201);
-  const leadId = (await mk('lead@ocso.test', 'Lena Lead', 'CS_LEAD')).body.id;
+  const leadId = (await mk('lead@ocso.test', 'Lena Lead', 'HEAD')).body.id;
   lead = await h.loginAs('lead@ocso.test', 'a password 12345');
   const team = (await h.http().post('/v1/teams').set(auth(lead)).send({ name: 'Web' }).expect(201)).body.id;
   await setTeams(h, admin, leadId, [team]); // the lead's team owns the agent (ADR-026)
-  await h.http().post('/v1/users').set(auth(admin)).send({ email: 'exec@ocso.test', name: 'Priya Rao', role: 'CS_EXEC', password: 'a password 12345', teamIds: [team] }).expect(201);
+  await h.http().post('/v1/users').set(auth(admin)).send({ email: 'exec@ocso.test', name: 'Priya Rao', role: 'SERVICE', password: 'a password 12345', teamIds: [team] }).expect(201);
   exec = await h.loginAs('exec@ocso.test', 'a password 12345');
   await h.http().put('/v1/me/availability').set(auth(exec)).send({ availability: 'AVAILABLE' }).expect(200);
   const queue = (await h.http().post('/v1/queues').set(auth(lead)).send({ name: 'Web tier 1', teamIds: [team] }).expect(201)).body.id;

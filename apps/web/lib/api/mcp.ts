@@ -11,7 +11,7 @@ import { api } from './client';
 
 export const CONNECTION_STATUSES = ['PENDING', 'AUTH_REQUIRED', 'ACTIVE', 'DEGRADED', 'DOWN', 'DISABLED'] as const;
 export const RISK_CLASSES = ['READ', 'WRITE', 'SENSITIVE'] as const;
-export const HUMAN_ROLES = ['CS_EXEC', 'CS_LEAD', 'PLATFORM_TECH_ADMIN'] as const;
+export const HUMAN_ROLES = ['SERVICE', 'LEAD', 'HEAD', 'TECH'] as const;
 export const CONFIRMATION_POLICIES = ['SENSITIVE_ONLY', 'ALL_WRITES', 'NONE'] as const;
 export type RiskClass = (typeof RISK_CLASSES)[number];
 export type HumanRole = (typeof HUMAN_ROLES)[number];

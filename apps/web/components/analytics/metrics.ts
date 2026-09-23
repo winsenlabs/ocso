@@ -1,5 +1,5 @@
 /**
- * Pure helpers for the CS Lead operations pages (analytics, escalation
+ * Pure helpers for the Lead operations pages (analytics, escalation
  * reasons, queues). Client-safe; no invented values — `null` in means "—" out.
  */
 import { formatDuration, formatNumber, formatPercent } from '../../lib/format';

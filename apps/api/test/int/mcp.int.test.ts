@@ -47,7 +47,7 @@ async function consent(authorizationUrl: string): Promise<string> {
 beforeAll(async () => {
   h = await startApi();
   tokens.admin = await completeSetup(h);
-  for (const [who, role] of [['lead', 'CS_LEAD'], ['exec', 'CS_EXEC']] as const) {
+  for (const [who, role] of [['lead', 'HEAD'], ['exec', 'SERVICE']] as const) {
     const password = `${who} password 1234`;
     await h.http().post('/v1/users').set(bearer('admin')).send({ email: `${who}@ocso.test`, name: who, role, password }).expect(201);
     tokens[who] = await h.loginAs(`${who}@ocso.test`, password);

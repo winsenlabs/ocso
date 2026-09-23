@@ -52,9 +52,9 @@ export const virtualAgents = pgTable(
 );
 
 /**
- * Owning teams of a virtual agent (ADR-026). A CS Lead reads and manages an
+ * Owning teams of a virtual agent (ADR-026). A Lead reads and manages an
  * agent only through membership in one of these teams; an agent with no row
- * here is visible to the Platform Tech Admin only until one is assigned.
+ * here is visible to the Tech admin only until one is assigned.
  */
 export const agentTeams = pgTable(
   'agent_teams',
@@ -139,7 +139,7 @@ export interface ArgumentRuleColumn {
   message: string;
 }
 
-/** CS Lead enables specific approved tools per agent, with argument policy rules. */
+/** Lead enables specific approved tools per agent, with argument policy rules. */
 export const agentToolGrants = pgTable(
   'agent_tool_grants',
   {

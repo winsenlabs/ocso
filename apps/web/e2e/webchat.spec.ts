@@ -79,14 +79,14 @@ test.beforeAll(async ({ playwright, browser }) => {
     await call('POST', '/v1/setup', null, { setupToken: E2E.setupToken, orgName: 'E2E Bank', adminName: ACCOUNTS.admin.name, adminEmail: ACCOUNTS.admin.email, adminPassword: ACCOUNTS.admin.password, timezone: 'Asia/Kolkata' });
   }
   tok.admin = await loginApi(ACCOUNTS.admin.email, ACCOUNTS.admin.password);
-  const lead = await call<{ id: string }>('POST', '/v1/users', tok.admin, { name: LEAD.name, email: LEAD.email, role: 'CS_LEAD', password: LEAD.password, teamIds: [], languages: [], maxConcurrent: 5 });
+  const lead = await call<{ id: string }>('POST', '/v1/users', tok.admin, { name: LEAD.name, email: LEAD.email, role: 'HEAD', password: LEAD.password, teamIds: [], languages: [], maxConcurrent: 5 });
   tok.lead = await loginApi(LEAD.email, LEAD.password);
   const team = (await call<{ id: string }>('POST', '/v1/teams', tok.lead, { name: 'WC Orders' })).id;
   // The lead manages the agent through an owning team of their own, outside the queue's team (ADR-026).
   const owners = (await call<{ id: string }>('POST', '/v1/teams', tok.lead, { name: 'WC Agent owners' })).id;
   await call('PATCH', `/v1/users/${lead.id}`, tok.admin, { teamIds: [owners] });
-  // The exec's team is not one of the lead's, so the Tech Admin creates them (a lead creates execs only into their own teams).
-  await call('POST', '/v1/users', tok.admin, { name: EXEC.name, email: EXEC.email, role: 'CS_EXEC', password: EXEC.password, teamIds: [team], languages: [], maxConcurrent: 5 });
+  // The exec's team is not one of the lead's, so the Tech admin creates them (a lead creates execs only into their own teams).
+  await call('POST', '/v1/users', tok.admin, { name: EXEC.name, email: EXEC.email, role: 'SERVICE', password: EXEC.password, teamIds: [team], languages: [], maxConcurrent: 5 });
   tok.exec = await loginApi(EXEC.email, EXEC.password);
   const queue = (await call<{ id: string }>('POST', '/v1/queues', tok.lead, { name: 'WC Orders · Tier 1', teamIds: [team] })).id;
   // Deterministic development model (ADR-015); slow enough chunks that streaming is observable.

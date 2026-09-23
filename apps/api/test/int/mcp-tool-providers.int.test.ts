@@ -21,7 +21,7 @@ async function startDemo(auth: Record<string, unknown>): Promise<DemoServer> {
 }
 
 const TOKEN = 'runtime-factory-bearer-token-42';
-const admin: Principal = { userId: uuidv7(), role: 'PLATFORM_TECH_ADMIN', displayName: 'Admin', teamIds: [], via: 'UI' };
+const admin: Principal = { userId: uuidv7(), role: 'TECH', displayName: 'Admin', teamIds: [], via: 'UI' };
 const actor: ActorContext = { principal: admin, correlationId: 'test-factory' };
 const call = (claims?: string) => ({ toolCallId: uuidv7(), toolName: 'crm.get_customer', args: { cif: '88214' }, timeoutMs: 5_000, ...(claims ? { customerClaims: claims } : {}) });
 
@@ -35,7 +35,7 @@ const seenClaims: Array<string | undefined> = [];
 
 beforeAll(async () => {
   t = await createTestDatabase();
-  await t.pool.query(`INSERT INTO users (id, email, name, role) VALUES ($1, 'admin@x.test', 'Admin', 'PLATFORM_TECH_ADMIN')`, [admin.userId]);
+  await t.pool.query(`INSERT INTO users (id, email, name, role) VALUES ($1, 'admin@x.test', 'Admin', 'TECH')`, [admin.userId]);
   await t.pool.query(`UPDATE deployment_settings SET egress_allowed_internal_hosts = ARRAY['127.0.0.1']`);
   secrets = new LocalSecretStore(new InMemorySecretRows(), parseMasterKey('k1', randomBytes(32).toString('base64')));
   svc = new McpConnectionService({ db: t.db, secrets, publicUrl: 'http://localhost:3000' });

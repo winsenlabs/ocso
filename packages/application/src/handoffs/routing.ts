@@ -35,7 +35,7 @@ export async function resolutionDueFor(tx: DbOrTx, queue: QueueRow | null, type:
 }
 
 /**
- * Eligible CS Exec candidates for a queue with live workload counts
+ * Eligible Service member candidates for a queue with live workload counts
  * (docs/09 §3). Workload = open conversations currently assigned.
  */
 export async function queueCandidates(tx: DbOrTx, queueId: string): Promise<ExecCandidate[]> {
@@ -55,7 +55,7 @@ export async function queueCandidates(tx: DbOrTx, queueId: string): Promise<Exec
     })
     .from(users)
     .innerJoin(teamMembers, eq(teamMembers.userId, users.id))
-    .where(and(inArray(teamMembers.teamId, teamIds), eq(users.status, 'ACTIVE'), inArray(users.role, ['CS_EXEC', 'CS_LEAD'])))
+    .where(and(inArray(teamMembers.teamId, teamIds), eq(users.status, 'ACTIVE'), inArray(users.role, ['SERVICE', 'LEAD', 'HEAD'])))
     .groupBy(users.id);
   return rows.map((r) => ({
     userId: r.id,

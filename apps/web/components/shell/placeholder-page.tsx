@@ -58,7 +58,7 @@ async function PlaceholderBody({
 export function NotPermitted({ role }: { role: string }) {
   return (
     <EmptyState title="Not available for your role">
-      {role} accounts do not have access to this area. If you need it, ask a Platform Tech Admin to review your role.
+      {role} accounts do not have access to this area. If you need it, ask a Tech admin to review your role.
     </EmptyState>
   );
 }

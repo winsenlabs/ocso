@@ -1,5 +1,5 @@
 /**
- * Pure CS Exec selection for AUTO_ASSIGN handoffs (docs/09 §3).
+ * Pure Service member selection for AUTO_ASSIGN handoffs (docs/09 §3).
  * Eligibility is strict; ranking is deterministic so tests and audits can
  * explain every decision.
  */

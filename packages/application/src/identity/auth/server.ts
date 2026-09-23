@@ -146,7 +146,7 @@ function authOptions(config: AuthServerConfig, deps: AuthServerDeps) {
     user: {
       modelName: 'users',
       additionalFields: {
-        role: { type: 'string', required: false, input: false, defaultValue: 'CS_EXEC' },
+        role: { type: 'string', required: false, input: false, defaultValue: 'SERVICE' },
         status: { type: 'string', required: false, input: false, defaultValue: 'ACTIVE' },
       },
     },
@@ -208,9 +208,9 @@ function authOptions(config: AuthServerConfig, deps: AuthServerDeps) {
       user: {
         create: {
           // Only SSO auto-provisioning creates users through Better Auth (sign-up is off).
-          before: async (user) => ({ data: { ...user, email: user.email.toLowerCase(), role: 'CS_EXEC', status: 'ACTIVE', emailVerified: true } }),
+          before: async (user) => ({ data: { ...user, email: user.email.toLowerCase(), role: 'SERVICE', status: 'ACTIVE', emailVerified: true } }),
           after: async (user, ctx) => {
-            await audit.asSystem(ctx ?? {}, { action: 'user.create', targetType: 'user', targetId: user.id, summary: `Created CS_EXEC ${user.email} on first SSO sign-in (auto-provisioning)` });
+            await audit.asSystem(ctx ?? {}, { action: 'user.create', targetType: 'user', targetId: user.id, summary: `Created SERVICE ${user.email} on first SSO sign-in (auto-provisioning)` });
           },
         },
       },

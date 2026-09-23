@@ -279,7 +279,7 @@ export function loadAgentOptions(): Promise<Option[]> {
 /** Active CS staff a lead may transfer to directly. */
 export async function loadTransferUsers(): Promise<Option[]> {
   const users = await api.get('/v1/users', z.array(UserOption));
-  return users.filter((u) => u.status === 'ACTIVE' && (u.role === 'CS_EXEC' || u.role === 'CS_LEAD')).map(({ id, name }) => ({ id, name }));
+  return users.filter((u) => u.status === 'ACTIVE' && (u.role === 'SERVICE' || u.role === 'LEAD' || u.role === 'HEAD')).map(({ id, name }) => ({ id, name }));
 }
 
 /* ───────────── Home (design/06) — built on the inbox views ───────────── */

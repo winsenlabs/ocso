@@ -43,7 +43,7 @@ export class InternalAgentService {
     private readonly actions: InternalActionService,
   ) {}
 
-  /** Whether a Tech Admin has chosen the model profile Ask OCSO runs on (deployment setting). */
+  /** Whether a Tech admin has chosen the model profile Ask OCSO runs on (deployment setting). */
   async configured(): Promise<boolean> {
     return (await new SettingsService(this.db).deployment()).internalAgentProfileId !== null;
   }
@@ -52,7 +52,7 @@ export class InternalAgentService {
     assertCan(principal, Permission.INTERNAL_AGENT_USE);
     const askedAt = Date.now();
     const settings = await new SettingsService(this.db).deployment();
-    if (!settings.internalAgentProfileId) throw validation('internal_agent_not_configured', 'A Tech Admin must choose a model profile for Ask OCSO in Settings');
+    if (!settings.internalAgentProfileId) throw validation('internal_agent_not_configured', 'A Tech admin must choose a model profile for Ask OCSO in Settings');
     const thread = await this.thread(principal, threadId, text, page);
     sink.thread?.(thread);
     const history = await this.history(thread);

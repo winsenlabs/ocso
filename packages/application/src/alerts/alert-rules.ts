@@ -30,7 +30,7 @@ type RuleFields = Omit<AlertRuleRow, 'id' | 'createdBy' | 'createdAt' | 'updated
  * Alert rule CRUD (PM/BUILD-PLAN E8.8). TECHNICAL rules need
  * alert_rules.technical.manage, BUSINESS rules alert_rules.business.manage.
  * A rule that targets a virtual agent is visible and editable only by people
- * who can read that agent (a CS Lead: their teams' agents, ADR-026); rules
+ * who can read that agent (a Lead: their teams' agents, ADR-026); rules
  * with agentId null (platform-wide) stay visible to every reader of the kind.
  */
 export class AlertRuleService {

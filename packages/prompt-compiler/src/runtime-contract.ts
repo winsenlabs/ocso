@@ -1,5 +1,5 @@
 /**
- * OCSO runtime contract — platform-owned, read-only for CS Leads.
+ * OCSO runtime contract — platform-owned, read-only for Leads.
  * Changing this text is a platform release: bump RUNTIME_CONTRACT_VERSION so
  * every compiled prefix hash (and therefore every cache) rolls over.
  */

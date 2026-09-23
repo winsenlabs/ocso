@@ -30,7 +30,7 @@ export async function loadCustomerPanel(session: Session, id: string): Promise<C
       kind: 'ok',
       customer,
       agents: new Map(agents.map((a) => [a.id, a.name])),
-      owners: users ? users.filter((u) => u.status === 'ACTIVE' && u.role !== 'PLATFORM_TECH_ADMIN').map((u) => ({ value: u.id, label: u.name })) : null,
+      owners: users ? users.filter((u) => u.status === 'ACTIVE' && u.role !== 'TECH').map((u) => ({ value: u.id, label: u.name })) : null,
     };
   } catch (err) {
     if (err instanceof ApiError && (err.isForbidden || err.status === 404)) {

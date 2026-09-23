@@ -10,7 +10,7 @@ import { hasPermission, requireSession } from '@/lib/session';
 import { EmailTestForm } from './email-test-form';
 
 /**
- * Transactional email status for the Platform Tech Admin (read only: the
+ * Transactional email status for the Tech admin (read only: the
  * deployment configures it) plus a test send. A failing API call degrades to a
  * banner instead of breaking the Settings page.
  */
@@ -27,7 +27,7 @@ export async function EmailSection() {
   return (
     <div className="row2" style={{ marginTop: 24 }}>
       <div>
-        <SecHead title="Email" desc="invites, password resets, sign-in codes, alert emails · Platform Tech Admin" />
+        <SecHead title="Email" desc="invites, password resets, sign-in codes, alert emails · Tech admin" />
         <div style={{ display: 'grid', gap: 12 }}>
           <section className="ch" aria-label="Email configuration">
             {settings ? <EmailStatus settings={settings} /> : <AlertBanner tone="error" style={{ margin: 0 }}>{`Email status unavailable: ${error ?? 'unknown error'}`}</AlertBanner>}

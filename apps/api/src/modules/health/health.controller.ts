@@ -37,7 +37,7 @@ export class HealthController {
     }
   }
 
-  /** Dependency latencies are operational detail: Tech Admin only (load balancers use /health/ready). */
+  /** Dependency latencies are operational detail: Tech admin only (load balancers use /health/ready). */
   @Get('dependencies')
   @RequirePermission(Permission.SYSTEM_READ)
   async dependencies(): Promise<Record<string, { status: string; latencyMs?: number }>> {

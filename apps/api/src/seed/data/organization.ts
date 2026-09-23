@@ -21,7 +21,7 @@ export const TEAMS: Record<TeamKey, { name: string; description: string }> = {
   sales: { name: 'Sales', description: 'Loan and card sales callbacks from Arjun.' },
 };
 
-/** The two CS Leads: each manages the virtual agents their teams own (ADR-026). */
+/** The two Leads: each manages the virtual agents their teams own (ADR-026). */
 export type LeadKey = 'lead' | 'lead2';
 
 export interface DemoUser {
@@ -36,11 +36,11 @@ export interface DemoUser {
 }
 
 export const USERS: readonly DemoUser[] = [
-  { key: 'admin', name: 'Tarun Shetty', email: 'tarun.shetty@meridian.example', role: 'PLATFORM_TECH_ADMIN', teams: [], languages: ['en'], skills: [], maxConcurrent: 8 },
-  { key: 'lead', name: 'Anjali Rao', email: 'anjali.rao@meridian.example', role: 'CS_LEAD', teams: ['cards', 'hardship'], languages: ['en', 'mr', 'hi'], skills: ['cards', 'emi', 'disputes', 'hardship'], maxConcurrent: 6 },
-  { key: 'lead2', name: 'Rohan Kapoor', email: 'rohan.kapoor@meridian.example', role: 'CS_LEAD', teams: ['sales'], languages: ['en', 'hi'], skills: ['sales'], maxConcurrent: 6 },
-  { key: 'exec1', name: 'Nikhil Menon', email: 'nikhil.menon@meridian.example', role: 'CS_EXEC', teams: ['cards'], languages: ['en', 'mr'], skills: ['cards', 'emi', 'disputes'], maxConcurrent: 8 },
-  { key: 'exec2', name: 'Meera Pillai', email: 'meera.pillai@meridian.example', role: 'CS_EXEC', teams: ['hardship', 'sales'], languages: ['en', 'hi', 'ml'], skills: ['hardship', 'collections', 'sales'], maxConcurrent: 6 },
+  { key: 'admin', name: 'Tarun Shetty', email: 'tarun.shetty@meridian.example', role: 'TECH', teams: [], languages: ['en'], skills: [], maxConcurrent: 8 },
+  { key: 'lead', name: 'Anjali Rao', email: 'anjali.rao@meridian.example', role: 'HEAD', teams: ['cards', 'hardship'], languages: ['en', 'mr', 'hi'], skills: ['cards', 'emi', 'disputes', 'hardship'], maxConcurrent: 6 },
+  { key: 'lead2', name: 'Rohan Kapoor', email: 'rohan.kapoor@meridian.example', role: 'HEAD', teams: ['sales'], languages: ['en', 'hi'], skills: ['sales'], maxConcurrent: 6 },
+  { key: 'exec1', name: 'Nikhil Menon', email: 'nikhil.menon@meridian.example', role: 'SERVICE', teams: ['cards'], languages: ['en', 'mr'], skills: ['cards', 'emi', 'disputes'], maxConcurrent: 8 },
+  { key: 'exec2', name: 'Meera Pillai', email: 'meera.pillai@meridian.example', role: 'SERVICE', teams: ['hardship', 'sales'], languages: ['en', 'hi', 'ml'], skills: ['hardship', 'collections', 'sales'], maxConcurrent: 6 },
 ];
 
 export type SlaKey = 'support' | 'sales';

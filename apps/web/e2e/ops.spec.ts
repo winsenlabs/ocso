@@ -4,11 +4,11 @@ import { ACCOUNTS, E2E, apiUrl } from './config';
 import { login, logout, primaryNav, settled } from './helpers';
 
 /**
- * CS Lead operations pages against the real API + worker. Seeded through the
+ * Lead operations pages against the real API + worker. Seeded through the
  * API (setup → lead/exec/team → scripted model → agent → web chat); the lead
  * then creates an SLA policy and a queue, reads analytics before and after a
  * web-chat customer escalates, records / stages / rejects prompt corrections,
- * reviews the resolved conversation and edits the customer. The CS Exec must
+ * reviews the resolved conversation and edits the customer. The Service member must
  * not see lead-only controls.
  */
 test.describe.configure({ mode: 'serial' });
@@ -41,14 +41,14 @@ test.beforeAll(async ({ playwright }) => {
     await call('POST', '/v1/setup', null, { setupToken: E2E.setupToken, orgName: 'E2E Bank', adminName: ACCOUNTS.admin.name, adminEmail: ACCOUNTS.admin.email, adminPassword: ACCOUNTS.admin.password, timezone: 'Asia/Kolkata' });
   }
   tok.admin = await loginApi(ACCOUNTS.admin.email, ACCOUNTS.admin.password);
-  const lead = await call<{ id: string }>('POST', '/v1/users', tok.admin, { name: LEAD.name, email: LEAD.email, role: 'CS_LEAD', password: LEAD.password, teamIds: [], languages: [], maxConcurrent: 5 });
+  const lead = await call<{ id: string }>('POST', '/v1/users', tok.admin, { name: LEAD.name, email: LEAD.email, role: 'HEAD', password: LEAD.password, teamIds: [], languages: [], maxConcurrent: 5 });
   tok.lead = await loginApi(LEAD.email, LEAD.password);
   ids.team = (await call<{ id: string }>('POST', '/v1/teams', tok.lead, { name: TEAM })).id;
   // The lead manages the agent through an owning team of their own, outside the queue's team (ADR-026).
   const owners = (await call<{ id: string }>('POST', '/v1/teams', tok.lead, { name: 'OPS Agent owners' })).id;
   await call('PATCH', `/v1/users/${lead.id}`, tok.admin, { teamIds: [owners] });
-  // The exec's team is not one of the lead's, so the Tech Admin creates them (a lead creates execs only into their own teams).
-  await call('POST', '/v1/users', tok.admin, { name: EXEC.name, email: EXEC.email, role: 'CS_EXEC', password: EXEC.password, teamIds: [ids.team], languages: [], maxConcurrent: 5 });
+  // The exec's team is not one of the lead's, so the Tech admin creates them (a lead creates execs only into their own teams).
+  await call('POST', '/v1/users', tok.admin, { name: EXEC.name, email: EXEC.email, role: 'SERVICE', password: EXEC.password, teamIds: [ids.team], languages: [], maxConcurrent: 5 });
   ids.seedQueue = (await call<{ id: string }>('POST', '/v1/queues', tok.lead, { name: 'OPS Seed queue', teamIds: [ids.team] })).id;
 
   const provider = await call<{ id: string }>('POST', '/v1/model-providers', tok.admin, { kind: 'DEV_SCRIPTED', name: 'OPS Scripted', settings: { latencyMs: 50, chunkDelayMs: 15 } });
@@ -286,7 +286,7 @@ test('the lead finds the web-chat customer, sees identities and conversations, a
   await logout(page);
 });
 
-test('the CS Exec gets the pickup view and none of the lead-only controls', async ({ page }) => {
+test('the Service member gets the pickup view and none of the lead-only controls', async ({ page }) => {
   await login(page, EXEC);
   const nav = primaryNav(page);
   await expect(nav.getByRole('link', { name: 'Pickup queue' })).toBeVisible();

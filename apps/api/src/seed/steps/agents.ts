@@ -35,7 +35,7 @@ async function ensureAgent(ctx: SeedContext, lead: ActorContext, agent: DemoAgen
 
 /**
  * v1 is the platform template AgentService creates; v2 is the curated prompt,
- * authored as the CS Lead would: draft → immutable version → activate.
+ * authored as the Lead would: draft → immutable version → activate.
  */
 async function ensurePrompt(ctx: SeedContext, lead: ActorContext, agentId: string, agent: DemoAgent): Promise<void> {
   const [version] = await ctx.db
@@ -64,7 +64,7 @@ async function ensureEscalations(ctx: SeedContext, lead: ActorContext, agentId: 
 
 /**
  * Virtual agents with curated prompts and escalation rules (design/02), each
- * built by a CS Lead of its owning team (ADR-026). Returns ids by slug.
+ * built by a Lead of its owning team (ADR-026). Returns ids by slug.
  */
 export async function seedAgents(ctx: SeedContext, leads: Record<LeadKey, ActorContext>, refs: AgentRefs): Promise<Record<AgentKey, string>> {
   const ids = {} as Record<AgentKey, string>;

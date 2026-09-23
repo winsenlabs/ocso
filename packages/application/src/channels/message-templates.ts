@@ -36,8 +36,8 @@ export const TEMPLATES_CONFIG_AREA = 'message_templates';
  * Message templates of a channel (docs/07 §3), for any kind whose adapter
  * implements the template methods: the provider's list (cached ~5 minutes per
  * API instance, `refresh` bypasses it) merged with the templates submitted
- * from OCSO; create + submit for review, status and delete for CS Leads
- * (their teams' channels) and Tech Admins.
+ * from OCSO; create + submit for review, status and delete for Leads
+ * (their teams' channels) and Tech admins.
  */
 export class MessageTemplateService {
   private readonly cache = new Map<string, { at: Date; templates: MessageTemplate[] }>();

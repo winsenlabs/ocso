@@ -6,7 +6,7 @@ import { Actor, RequirePermission } from '../../common/decorators.js';
 
 const Id = z.uuid();
 
-/** Queues, team eligibility and SLA policies (CS Lead). */
+/** Queues, team eligibility and SLA policies (Lead). */
 @Controller('v1')
 export class RoutingController {
   constructor(@Inject(QueueService) private readonly queues: QueueService) {}

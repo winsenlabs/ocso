@@ -10,3 +10,4 @@ export * from './sla/sla.js';
 export * from './model/messages.js';
 export * from './conversation/session-window.js';
 export * from './templates/index.js';
+export * from './approvals/state.js';

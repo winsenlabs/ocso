@@ -34,7 +34,7 @@ describe('sign-in and the /v1 guard', () => {
     const cookie = ([] as string[]).concat(res.headers['set-cookie'] ?? []).find((c) => c.startsWith('ocso.session_token='))!;
     expect(cookie).toMatch(/HttpOnly/i);
     expect(cookie).toMatch(/SameSite=Lax/i);
-    expect((await me(token).expect(200)).body).toMatchObject({ role: 'PLATFORM_TECH_ADMIN', session: { method: 'password' }, mfa: { required: false } });
+    expect((await me(token).expect(200)).body).toMatchObject({ role: 'TECH', session: { method: 'password' }, mfa: { required: false } });
     await h.http().get('/v1/auth/me').set('cookie', cookie.split(';')[0]!).expect(401);
     // Only signed tokens are accepted (bearer plugin requireSignature) and a tampered signature fails.
     await me(token.split('.')[0]!).expect(401);
@@ -63,7 +63,7 @@ describe('sign-in and the /v1 guard', () => {
 
   it('keeps the /v1/auth/login JSON sign-in for API clients', async () => {
     const res = await h.http().post('/v1/auth/login').send({ email: ADMIN.email, password: ADMIN.password }).expect(200);
-    expect(res.body.user.role).toBe('PLATFORM_TECH_ADMIN');
+    expect(res.body.user.role).toBe('TECH');
     await me(res.body.token).expect(200);
     await h.http().post('/v1/auth/logout').set(bearer(res.body.token)).expect(204);
     await me(res.body.token).expect(401);
@@ -74,7 +74,7 @@ describe('user lifecycle', () => {
   const LEAD = { email: 'lead@ocso.test', password: 'lead password 12345' };
 
   it('invites a user: the emailed link sets their password, then they sign in', async () => {
-    const created = await h.http().post('/v1/users').set(bearer(admin)).send({ email: 'Lead@ocso.test', name: 'Lead', role: 'CS_LEAD' }).expect(201);
+    const created = await h.http().post('/v1/users').set(bearer(admin)).send({ email: 'Lead@ocso.test', name: 'Lead', role: 'HEAD' }).expect(201);
     expect(created.body).toMatchObject({ email: 'lead@ocso.test', invite: { status: 'pending' }, onboarding: { kind: 'invite', delivery: { delivered: true } } });
     // Log driver: the inviting admin also gets the link to hand over.
     expect(created.body.onboarding.link).toMatch(/\/invite\?token=/);
@@ -91,7 +91,7 @@ describe('user lifecycle', () => {
   });
 
   it('resends an invite (the old link stops working)', async () => {
-    const created = await h.http().post('/v1/users').set(bearer(admin)).send({ email: 'exec@ocso.test', name: 'Exec', role: 'CS_EXEC' }).expect(201);
+    const created = await h.http().post('/v1/users').set(bearer(admin)).send({ email: 'exec@ocso.test', name: 'Exec', role: 'SERVICE' }).expect(201);
     const first = h.linkToken('exec@ocso.test', '/invite');
     await h.http().post(`/v1/users/${created.body.id}/invite`).set(bearer(admin)).expect(200);
     const second = h.linkToken('exec@ocso.test', '/invite');
@@ -104,13 +104,13 @@ describe('user lifecycle', () => {
     const [lead] = await h.db.db.select().from(users).where(eq(users.email, LEAD.email));
     const a = (await signIn(LEAD.email, LEAD.password).expect(200)).headers['set-auth-token'] as string;
     await me(a).expect(200);
-    await h.http().patch(`/v1/users/${lead!.id}`).set(bearer(admin)).send({ role: 'CS_EXEC' }).expect(200);
+    await h.http().patch(`/v1/users/${lead!.id}`).set(bearer(admin)).send({ role: 'SERVICE' }).expect(200);
     await me(a).expect(401);
     const b = (await signIn(LEAD.email, LEAD.password).expect(200)).headers['set-auth-token'] as string;
     await h.http().patch(`/v1/users/${lead!.id}`).set(bearer(admin)).send({ status: 'DISABLED' }).expect(200);
     await me(b).expect(401);
     await signIn(LEAD.email, LEAD.password).expect(401);
-    await h.http().patch(`/v1/users/${lead!.id}`).set(bearer(admin)).send({ status: 'ACTIVE', role: 'CS_LEAD' }).expect(200);
+    await h.http().patch(`/v1/users/${lead!.id}`).set(bearer(admin)).send({ status: 'ACTIVE', role: 'HEAD' }).expect(200);
   });
 
   it('password reset by email ends all sessions; change password ends the other ones', async () => {
@@ -131,7 +131,7 @@ describe('user lifecycle', () => {
     expect(h.emailsTo(LEAD.email).at(-1)?.kind).toBe('password_changed');
   });
 
-  it('a Tech Admin issues a reset link for someone else (returned only because email is not configured)', async () => {
+  it('a Tech admin issues a reset link for someone else (returned only because email is not configured)', async () => {
     const [lead] = await h.db.db.select().from(users).where(eq(users.email, LEAD.email));
     const res = await h.http().post(`/v1/users/${lead!.id}/password-reset`).set(bearer(admin)).expect(200);
     expect(res.body.link).toMatch(/\/reset-password\?token=/);

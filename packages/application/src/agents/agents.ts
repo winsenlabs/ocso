@@ -166,8 +166,8 @@ export class AgentService {
   }
 
   /**
-   * Replace the owning teams (PUT /v1/agents/:id/owners). A Tech Admin
-   * (agents.assign_owner) may assign any teams; a CS Lead only within their own
+   * Replace the owning teams (PUT /v1/agents/:id/owners). A Tech admin
+   * (agents.assign_owner) may assign any teams; a Lead only within their own
    * teams (owners.ts). Audited as agent.owners_change.
    */
   async setOwners(actor: ActorContext, id: string, teamIds: readonly string[]): Promise<AgentView & { channelIds: string[] }> {

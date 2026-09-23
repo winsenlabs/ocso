@@ -20,7 +20,7 @@ export async function AnalyticsTab({ data, query }: { data: AgentPageData; query
   const { agent } = data;
   const days = analyticsDays(param(query, 'days'));
   const [a, comparison] = await Promise.all([optional(getAgentAnalytics(agent.id, days)), optional(getAgentComparison(days))]);
-  if (!a) return <EmptyState title="Analytics are not available for your role">Business analytics are available to CS Leads.</EmptyState>;
+  if (!a) return <EmptyState title="Analytics are not available for your role">Business analytics are available to Leads.</EmptyState>;
   const channelShares = shares(a.channels.items, (c) => c.conversations);
   const buckets = a.handlingTime.buckets;
   const bucketShares = shares(buckets, (b) => b.total);

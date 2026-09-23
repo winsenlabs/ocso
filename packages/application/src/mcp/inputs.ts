@@ -81,7 +81,7 @@ export const OAuthCallbackInput = z.object({
 });
 export type OAuthCallbackInput = z.infer<typeof OAuthCallbackInput>;
 
-export const HUMAN_ROLES = ['CS_EXEC', 'CS_LEAD', 'PLATFORM_TECH_ADMIN'] as const;
+export const HUMAN_ROLES = ['SERVICE', 'LEAD', 'HEAD', 'TECH'] as const;
 const RiskClass = z.enum(['READ', 'WRITE', 'SENSITIVE']);
 
 export const ClassifyToolsInput = z.object({
@@ -100,7 +100,7 @@ export const ClassifyToolsInput = z.object({
 export type ClassifyToolsInput = z.infer<typeof ClassifyToolsInput>;
 
 export const ApproveConnectionInput = z.object({
-  /** `'*'` = any agent the CS Lead enables; otherwise explicit agent ids. Must be empty for USER scope. */
+  /** `'*'` = any agent the Lead enables; otherwise explicit agent ids. Must be empty for USER scope. */
   allowedAgentIds: z.union([z.literal('*'), z.array(z.uuid()).max(200)]),
   confirmationPolicy: z.enum(['SENSITIVE_ONLY', 'ALL_WRITES', 'NONE']).default('SENSITIVE_ONLY'),
   sendCustomerClaims: z.boolean().default(false),

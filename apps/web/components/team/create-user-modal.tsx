@@ -9,7 +9,7 @@ import { createUserAction, type InviteState } from '@/lib/actions/team';
 import { InviteLink } from './invite-link';
 
 export interface CreateUserModalProps {
-  /** Roles this user may create (Tech Admin: all; CS Lead: CS Exec only). */
+  /** Roles this user may create (Tech admin: all; Lead: Service member only). */
   roles: Array<{ value: string; label: string }>;
   teams: Array<{ value: string; label: string }>;
   onClose: () => void;
@@ -25,7 +25,7 @@ export function CreateUserModal({ roles, teams, onClose, onCreated }: CreateUser
   const [state, action, pending] = useActionState(createUserAction, START);
   const errors = state.fieldErrors ?? {};
   const values = state.values ?? {};
-  const execOnly = roles.length === 1 && roles[0]?.value === 'CS_EXEC';
+  const execOnly = roles.length === 1 && roles[0]?.value === 'SERVICE';
 
   // With the log email driver the link is shown here once, so the modal stays open until "Done".
   useEffect(() => {
@@ -61,7 +61,7 @@ export function CreateUserModal({ roles, teams, onClose, onCreated }: CreateUser
       maxWidth={560}
       footer={
         <>
-          <span className="mono-sm">{execOnly ? 'CS Leads can create CS Exec accounts only' : 'role changes are audited'}</span>
+          <span className="mono-sm">{execOnly ? 'Leads can create Service member accounts only' : 'role changes are audited'}</span>
           <span className="sp" />
           <button type="button" className="btn" onClick={onClose}>
             Cancel

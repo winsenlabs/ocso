@@ -68,7 +68,7 @@ describe('forwardChat', () => {
   });
 
   it('passes typed API errors through as JSON (e.g. not configured)', async () => {
-    const error = { error: { category: 'validation', code: 'internal_agent_not_configured', message: 'A Tech Admin must choose a model profile for Ask OCSO' } };
+    const error = { error: { category: 'validation', code: 'internal_agent_not_configured', message: 'A Tech admin must choose a model profile for Ask OCSO' } };
     const fetchImpl = vi.fn(async () => Response.json(error, { status: 400 }));
     const res = await forwardChat({ apiBaseUrl: 'http://api.test', token: 't', body: '{}', signal: new AbortController().signal, fetchImpl });
     expect(res.status).toBe(400);

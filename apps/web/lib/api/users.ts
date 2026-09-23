@@ -51,7 +51,7 @@ export function listUsers(): Promise<User[]> {
   return api.get('/v1/users', z.array(UserSchema));
 }
 
-/** Invites a user (Tech Admin: any role; CS Lead: CS Execs — enforced by the API). */
+/** Invites a user (Tech admin: any role; Lead: Service members — enforced by the API). */
 export function createUser(input: CreateUserRequest): Promise<CreatedUser> {
   return api.post('/v1/users', input, CreatedUser);
 }
@@ -69,7 +69,7 @@ export function sendPasswordReset(userId: string): Promise<LinkResult> {
   return api.post(`/v1/users/${encodeURIComponent(userId)}/password-reset`, {}, LinkResult);
 }
 
-/** PATCH /v1/users/:id { teamIds } — replaces the user's teams (a CS Lead may change only their own teams, for CS Execs). */
+/** PATCH /v1/users/:id { teamIds } — replaces the user's teams (a Lead may change only their own teams, for Service members). */
 export function updateUserTeams(userId: string, teamIds: string[]): Promise<void> {
   return api.command('PATCH', `/v1/users/${encodeURIComponent(userId)}`, { teamIds });
 }
