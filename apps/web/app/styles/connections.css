@@ -1,0 +1,81 @@
+/* 04 Connections & models — page styles (design/04 inline <style> plus the pieces the screen adds). */
+
+/* Card grids wrap each card in a list item; cards fill the row height. */
+.conn-grid{margin-bottom:16px}
+.conn-grid>[role="listitem"]{display:grid;min-width:0}
+.conn-grid>[role="listitem"]>.pvd{height:100%}
+.pvd-test{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:0}
+.pvd-test:empty{display:none}
+.err-text{font-size:11.5px;color:var(--danger)}
+
+/* Links that wrap a table cell's title keep the table's typography. */
+.cell-link{text-decoration:none;color:inherit;display:block;min-width:0}
+.cell-link:hover b{color:var(--accent)}
+
+/* Form groups inside dialogs. */
+.conn-fieldset{border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin:0;display:grid;gap:12px;min-width:0}
+.conn-fieldset>legend,.conn-fieldset>.legend{font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.07em;color:var(--ink-4);padding:0 4px}
+section.conn-fieldset>.legend{padding:0}
+.conn-kv{grid-template-columns:minmax(96px,120px) minmax(0,1fr);font-size:12px}
+.fld textarea{resize:vertical;min-height:64px;font-family:var(--font-mono);font-size:12px}
+.fld label .cred-state{margin-left:8px;font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.06em;padding:1px 6px;border-radius:4px;background:var(--bg-3);color:var(--ink-3)}
+.fld label .cred-state.set{background:var(--good-soft);color:var(--good)}
+.fld .toggle-row{margin-top:2px}
+
+/* Ordered fallback targets. */
+.fb-row{display:grid;grid-template-columns:18px minmax(0,1fr) minmax(0,1fr) auto;gap:10px;align-items:end}
+.fb-n{align-self:center;text-align:center}
+.fb-actions{display:flex;gap:2px;padding-bottom:4px}
+
+/* Add MCP server wizard (design/04). */
+.mwiz{display:grid;grid-template-columns:184px minmax(0,1fr);gap:0;min-height:100%}
+.mwiz>.sts{border-right:1px solid var(--border);background:var(--bg-2);padding:16px 14px}
+.mwiz>.sts>.sts-inner{position:sticky;top:0}
+.mwiz>.pane{padding:18px;display:grid;gap:14px;align-content:start;min-width:0}
+@media (max-width:700px){.mwiz{grid-template-columns:minmax(0,1fr)}.mwiz>.sts{border-right:none;border-bottom:1px solid var(--border)}}
+.auth-box{border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;display:grid;gap:10px;background:var(--surface)}
+.auth-box details summary{cursor:pointer}
+.server-text{border:1px dashed var(--border-2);border-radius:var(--radius-sm);padding:10px 12px;display:grid;gap:4px}
+.server-text p{margin:0;font-size:12px;color:var(--ink-2);white-space:pre-wrap;overflow-wrap:anywhere}
+.conn-success{padding:22px 20px;border-color:color-mix(in oklab,var(--good) 40%,var(--border))}
+
+/* Tool review rows (.cap from ocso.css). */
+.tool-row{align-items:start}
+.tool-row>input[type="checkbox"]{margin-top:3px}
+.tool-row.changed{border-color:color-mix(in oklab,var(--warn) 50%,var(--border))}
+.tool-row.removed{opacity:0.7}
+.tool-row .cd{display:block;overflow-wrap:anywhere}
+/* The connection drawer carries the tool review table: give it room. */
+.rdrawer:has(.tool-row){width:600px}
+.tool-meta{display:block;margin-top:2px}
+.tool-roles{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px;font-size:11.5px;color:var(--ink-3)}
+.tool-roles label{display:inline-flex;gap:4px;align-items:center}
+.tool-roles input{accent-color:var(--accent);margin:0}
+.risk-select{font:inherit;font-size:11.5px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:4px 6px;color:var(--ink);max-width:170px}
+.removed-tools{display:grid;gap:6px;margin-top:6px}
+
+/* "How adding a server works" strip (design/04). */
+.flowmap{list-style:none;margin:0 0 14px;padding:0;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.flowmap>li{padding:11px 13px;border-right:1px solid var(--border);display:grid;gap:3px;align-content:start}
+.flowmap>li:last-child{border-right:none}
+.flowmap .n{font-family:var(--font-mono);font-size:9.5px;color:var(--ink-4);letter-spacing:0.06em}
+.flowmap .h{font-size:12px;font-weight:600;color:var(--ink)}
+.flowmap .s{font-size:11.5px;color:var(--ink-3);line-height:1.45}
+.flowmap>li.on{background:var(--accent-soft)}
+.flowmap>li.on .h{color:var(--accent)}
+@media (max-width:1100px){.flowmap{grid-template-columns:repeat(2,minmax(0,1fr))}.flowmap>li{border-bottom:1px solid var(--border)}}
+
+/* Health history. */
+.health-spark{height:36px;width:100%;display:block;overflow:visible}
+.health-list .r{grid-template-columns:minmax(0,1fr) 110px 64px}
+
+/* Webhooks. */
+.secret-once{font-family:var(--font-mono);font-size:12px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;overflow-wrap:anywhere;flex:1;min-width:0;user-select:all}
+.event-area{display:grid;gap:6px}
+
+/* Confirmations are portalled to <body> and must sit above the connection drawer (.rdrawer z-index 90). */
+body>.scrim{z-index:95}
+
+/* Channels: generated secrets and setup steps. */
+.generated-secret{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.setup-steps{margin:0;padding-left:18px;display:grid;gap:4px;font-size:12.5px;color:var(--ink-2)}

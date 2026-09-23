@@ -1,0 +1,99 @@
+<!doctype html>
+<!--
+  Example host page for the OCSO customer web chat. Serve it with server.mjs
+  (which fills in the placeholders and signs identify tokens), or copy the
+  <script> tag below into your own site: replace {{OCSO_URL}} with your OCSO
+  address and {{WEBCHAT_KEY}} with the channel's public key.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Example Store — web chat embed demo</title>
+    <style>
+      :root { color-scheme: light; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; color: #1f2430; background: #f6f7f9; }
+      body { margin: 0; }
+      header { background: #fff; border-bottom: 1px solid #e3e6eb; padding: 16px 24px; display: flex; align-items: center; gap: 16px; }
+      header strong { font-size: 18px; }
+      header .who { margin-left: auto; font-size: 14px; color: #5b6272; }
+      main { max-width: 720px; margin: 32px auto; padding: 0 24px; line-height: 1.6; }
+      .card { background: #fff; border: 1px solid #e3e6eb; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; }
+      button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid #c9ced8; background: #fff; cursor: pointer; margin-right: 8px; }
+      button.primary { background: #1f2430; color: #fff; border-color: #1f2430; }
+      code { background: #eef0f4; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+      #log { font-size: 13px; color: #5b6272; min-height: 20px; }
+    </style>
+  </head>
+  <body data-identify="{{IDENTIFY}}">
+    <header>
+      <strong>Example Store</strong>
+      <span>Demo host site</span>
+      <span class="who" id="who">Browsing as a guest</span>
+    </header>
+    <main>
+      <div class="card">
+        <h1 style="margin-top: 0; font-size: 22px">Need help with an order?</h1>
+        <p>This page embeds the OCSO web chat with one tag:</p>
+        <p><code>&lt;script src="…/ocso-webchat.js" data-key="…" async&gt;&lt;/script&gt;</code></p>
+        <p>The launcher appears bottom-right once the chat is ready. Conversations continue across reloads.</p>
+        <button type="button" class="primary" id="open">Chat with us</button>
+      </div>
+      <div class="card">
+        <h2 style="margin-top: 0; font-size: 17px">Signed-in customers</h2>
+        <p>
+          After your own login, sign a short-lived HS256 JWT (<code>sub</code> = your customer id) with the channel's
+          host identity secret on your server and pass it to <code>OcsoWebChat.identify(token)</code>.
+        </p>
+        <button type="button" id="signin">Sign in as demo customer</button>
+        <button type="button" id="signout">Sign out</button>
+        <p id="log" role="status"></p>
+      </div>
+    </main>
+
+    <script>
+      // Calls made before the loader finishes are queued and replayed.
+      window.OcsoWebChat = window.OcsoWebChat || [];
+    </script>
+    <script src="{{OCSO_URL}}/ocso-webchat.js" data-key="{{WEBCHAT_KEY}}" async></script>
+    <script>
+      (function () {
+        var log = document.getElementById('log');
+        var who = document.getElementById('who');
+        var identifyEnabled = document.body.getAttribute('data-identify') === 'on';
+        function chat(method) {
+          var args = Array.prototype.slice.call(arguments, 1);
+          if (window.OcsoWebChat && window.OcsoWebChat.__ocso) return window.OcsoWebChat[method].apply(null, args);
+          window.OcsoWebChat.push([method].concat(args));
+        }
+        document.getElementById('open').addEventListener('click', function () {
+          chat('open');
+        });
+        document.getElementById('signin').addEventListener('click', function () {
+          if (!identifyEnabled) {
+            log.textContent = 'Identify is off: start server.mjs with OCSO_HOST_JWT_SECRET.';
+            return;
+          }
+          fetch('/token?customer=cus-demo-001&name=Demo%20Customer', { method: 'POST' })
+            .then(function (res) {
+              return res.json();
+            })
+            .then(function (body) {
+              return window.OcsoWebChat.identify(body.token);
+            })
+            .then(function (result) {
+              log.textContent = result.ok ? 'Chat now knows you as cus-demo-001.' : 'Identify failed: ' + (result.error || 'unknown');
+              if (result.ok) who.textContent = 'Signed in as Demo Customer';
+            })
+            .catch(function () {
+              log.textContent = 'Could not reach the demo token endpoint.';
+            });
+        });
+        document.getElementById('signout').addEventListener('click', function () {
+          chat('reset');
+          who.textContent = 'Browsing as a guest';
+          log.textContent = 'Signed out: the chat starts over as a guest.';
+        });
+      })();
+    </script>
+  </body>
+</html>

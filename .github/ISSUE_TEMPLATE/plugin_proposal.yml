@@ -1,0 +1,80 @@
+name: New plugin proposal
+description: Propose a new channel, model provider, alert destination, email sender or other extension.
+labels: [plugin]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Plugins are compile-time and live in this repository: an implementation of a contract, registered in one place.
+        Read docs/plugins/README.md and the page for your extension point before proposing.
+        (A third-party plugin SDK, `@winsendotai/ocso-plugin-sdk`, is planned but does not exist yet.)
+        Tools do not need a plugin: expose them as an MCP server and connect it in the web app.
+  - type: dropdown
+    id: extension-point
+    attributes:
+      label: Extension point
+      options:
+        - Channel (ChannelAdapter)
+        - Model provider (ProviderDefinition)
+        - Alert delivery destination (AlertDeliveryAdapter)
+        - Alert rule condition (evaluator)
+        - Email sender (EmailSender)
+        - Infrastructure driver (blob, secrets, queue, deployment)
+        - Ask OCSO tool (InternalTool)
+        - Sign-in method (Better Auth plugin)
+        - Something that needs a new contract
+    validations:
+      required: true
+  - type: input
+    id: name
+    attributes:
+      label: Name and proposed kind
+      placeholder: "Telegram bot · TELEGRAM"
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: Who needs it, and what they cannot do today.
+    validations:
+      required: true
+  - type: textarea
+    id: provider
+    attributes:
+      label: Provider API
+      description: |
+        Links to the official API docs. How requests are authenticated; how inbound webhooks are signed or verified;
+        idempotency keys; rate limits and error codes; media limits; any session window or template rules; delivery receipts.
+    validations:
+      required: true
+  - type: textarea
+    id: contract-fit
+    attributes:
+      label: Fit with the contract
+      description: |
+        Which contract methods map cleanly, and what does not fit? Settings and secrets the admin enters.
+        For a channel: capabilities (part types, text limit, markdown) and identity kinds.
+        For a provider: SDK package, prompt-caching controls, usage reporting.
+    validations:
+      required: true
+  - type: textarea
+    id: core-changes
+    attributes:
+      label: Core changes needed
+      description: Anything outside the plugin directory and its registration line. Core code must not branch on the new kind (build rule §4).
+  - type: textarea
+    id: testing
+    attributes:
+      label: Testing plan
+      description: Recorded provider-shaped fixtures and the shared contract suite to extend. Which behaviour needs live verification?
+    validations:
+      required: true
+  - type: checkboxes
+    id: commitment
+    attributes:
+      label: Contribution
+      options:
+        - label: I intend to implement this and maintain it.
+        - label: I have read docs/plugins/README.md.
+          required: true

@@ -1,0 +1,38 @@
+{
+  "name": "@ocso/model-providers",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "@ocso/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "catalog"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@ocso/domain": "workspace:*",
+    "zod": "catalog:",
+    "ai": "^7.0.109",
+    "@ai-sdk/amazon-bedrock": "^5.0.90",
+    "@ai-sdk/google-vertex": "^5.0.89",
+    "@ai-sdk/azure": "^4.0.76",
+    "@ai-sdk/openai": "^4.0.72",
+    "@ai-sdk/anthropic": "^4.0.59",
+    "@ai-sdk/openai-compatible": "^3.0.53",
+    "@ai-sdk/provider": "^4.0.17",
+    "@aws-sdk/credential-providers": "^3.1137.0",
+    "@azure/identity": "^4.13.3",
+    "aws4fetch": "^1.0.20",
+    "google-auth-library": "^10.9.1"
+  }
+}

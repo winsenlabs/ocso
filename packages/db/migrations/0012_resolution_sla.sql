@@ -1,0 +1,2 @@
+ALTER TABLE "conversations" ADD COLUMN "resolution_due_at" timestamp with time zone;--> statement-breakpoint
+CREATE INDEX "conversations_resolution_due_idx" ON "conversations" USING btree ("resolution_due_at") WHERE "conversations"."control_state" <> 'RESOLVED' AND "conversations"."resolution_due_at" IS NOT NULL;

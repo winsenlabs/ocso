@@ -1,0 +1,119 @@
+/* OCSO web — additions on top of base.css + one.css + charts.css + mock.css + ocso.css.
+   Loads last. The five design files are verbatim copies of design/shared and
+   must not be edited; anything the mockups define inline in a page <style>
+   (or reference without defining) lives here instead. */
+
+/* ─────────── Fonts: next/font variables feed the design tokens ─────────── */
+:root {
+  --font-sans: var(--font-inter, "Inter"), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+/* ─────────── Accessibility ─────────── */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+a:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-visible,[role="tab"]:focus-visible,.fchip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.skip-link{position:absolute;left:12px;top:-40px;z-index:200;background:var(--ink);color:var(--bg);padding:6px 10px;border-radius:var(--radius-sm);font-size:12px}
+.skip-link:focus{top:12px}
+
+/* ─────────── Referenced by the mockups, defined in rho.css (not loaded) or nowhere ─────────── */
+.region{font-family:var(--font-mono);font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-3);display:inline-flex;align-items:center;gap:5px}
+.region::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--good)}
+.icon-btn{display:inline-grid;place-items:center;width:26px;height:26px;flex:none;border-radius:var(--radius-sm);border:1px solid transparent;background:transparent;color:var(--ink-3);padding:0}
+.icon-btn:hover{background:var(--bg-3);color:var(--ink)}
+.icon-btn svg{width:15px;height:15px}
+
+/* charts.css's legend class `.lg` loads after base.css and hijacks `.avatar.lg`
+   (dark, left-aligned initials in the mockups' agent cards). Restore the avatar. */
+.avatar.lg{display:grid;place-items:center;color:#fff;gap:0}
+
+/* ─────────── Shell ─────────── */
+:root{--shell-pad-top:22px;--shell-pad-x:26px;--shell-pad-bottom:60px}
+.main.shell{padding:var(--shell-pad-top) var(--shell-pad-x) var(--shell-pad-bottom)}
+button.sb-walle{width:100%;text-align:left;font:inherit;color:white}
+button.sb-walle .sb-walle-name,button.sb-walle .sb-walle-sub{display:block}
+.sb-walle.active{box-shadow:0 0 0 2px var(--accent-ring)}
+.sb-item .kbd{margin-left:auto}
+.sb-foot .grow{min-width:0}
+.sb-foot-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sb-foot-status .role{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.sb-foot form{display:contents}
+.shell-skeleton{height:12px;border-radius:4px;background:var(--bg-3);margin:10px 8px}
+.topbar-search{text-decoration:none}
+
+/* ─────────── Tabs rendered as links (design uses buttons) ─────────── */
+.tabs a{font-size:12.5px;color:var(--ink-3);padding:8px 12px 9px;white-space:nowrap;border-bottom:2px solid transparent;margin-bottom:-1px;text-decoration:none}
+.tabs a:hover{color:var(--ink)}
+.tabs a.on{color:var(--ink);font-weight:600;border-bottom-color:var(--accent)}
+
+/* ─────────── Tiles and empty states without data ─────────── */
+.tile .nd{font-family:var(--font-mono);font-size:9.5px;color:var(--ink-4);text-transform:uppercase;letter-spacing:0.06em;margin-top:2px}
+.tile.nodata .v{color:var(--ink-4)}
+.empty.sm{padding:18px 16px}
+.empty.sm h3{font-size:12.5px}
+.empty.sm p{font-size:12px}
+.empty .actions{display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap}
+/* .rail-card h3 (mono caption) must not restyle an empty state's title inside the card */
+.rail-card .empty h3{display:block;font-family:var(--font-sans);text-transform:none;letter-spacing:0;color:var(--ink);font-size:12.5px;margin:0 0 4px}
+
+/* ─────────── 01 Conversation workspace (page styles) ─────────── */
+.risk{font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;padding:1px 6px;border-radius:4px;flex:none}
+.risk.r{background:var(--bg-3);color:var(--ink-3)}.risk.w{background:var(--warn-soft);color:var(--warn)}.risk.s{background:var(--danger-soft);color:var(--danger)}
+.rcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 13px;display:grid;gap:9px;align-content:start}
+.rcard>h3{margin:0;font-family:var(--font-mono);font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--ink-4);display:flex;align-items:center;gap:8px}
+.rkv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:5px 12px;font-size:12px}
+.rkv .k{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-4)}
+.rkv .v{color:var(--ink);min-width:0;overflow-wrap:anywhere}
+.ch-mark.lg{width:26px;height:26px;font-size:10px}
+
+/* ─────────── 03 System control center (page styles) ─────────── */
+.cfg{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.cfg .f{background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 11px}
+.cfg .f .l{font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-4)}
+.cfg .f .vv{font-size:16px;font-weight:600;letter-spacing:-0.02em;margin-top:2px;font-variant-numeric:tabular-nums}
+.cfg .f .h{font-family:var(--font-mono);font-size:10px;color:var(--ink-4);margin-top:2px}
+.util{height:5px;background:var(--bg-3);border-radius:999px;overflow:hidden;min-width:60px}
+.util>i{display:block;height:100%;background:var(--ink-3);border-radius:999px}
+.util>i.w{background:var(--warn)}.util>i.d{background:var(--danger)}
+
+/* ─────────── 05 Internal agent drawer (page styles) ─────────── */
+.rdrawer .grp{font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.07em;color:var(--ink-4)}
+.sugg{display:grid;gap:5px}
+.sugg button{text-align:left;border:1px solid var(--border);background:var(--bg-2);border-radius:var(--radius-sm);padding:7px 10px;font:inherit;font-size:12.5px;color:var(--ink-2);cursor:pointer}
+.sugg button:hover{border-color:var(--accent-soft-2);color:var(--accent)}
+.minitable{border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:var(--surface)}
+.minitable .r{display:grid;grid-template-columns:minmax(0,1fr) 62px 56px;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border);font-size:12px;align-items:center}
+.minitable .r:last-child{border-bottom:none}
+.minitable .r.h{background:var(--bg-2);font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-4)}
+.minitable .r .n{font-family:var(--font-mono);font-size:11px;text-align:right;font-variant-numeric:tabular-nums}
+.ask-box{background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:9px 11px;display:grid;gap:8px}
+.ask-box textarea{width:100%;min-height:40px;resize:none;background:transparent;border:none;font:inherit;font-size:13px;color:var(--ink);outline:none}
+.ask-box:focus-within{border-color:var(--accent-2);box-shadow:0 0 0 3px var(--accent-ring)}
+
+/* ─────────── 06 Home (page styles) ─────────── */
+.agcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;display:grid;gap:10px;align-content:start;min-width:0}
+.agcard .h{display:flex;align-items:center;gap:10px}
+.agcard .nm{font-size:14px;font-weight:600;letter-spacing:-0.01em}
+.agcard .rl{font-family:var(--font-mono);font-size:10.5px;color:var(--ink-3)}
+
+/* ─────────── Forms ─────────── */
+.fld .err{font-size:11.5px;color:var(--danger)}
+.fld input[aria-invalid="true"],.auth-field input[aria-invalid="true"]{border-color:color-mix(in oklab,var(--danger) 55%,var(--border))}
+.fld input:disabled,.fld select:disabled{opacity:0.7;cursor:not-allowed}
+.fld-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.fld{align-content:start}
+.checks{display:flex;gap:6px;flex-wrap:wrap}
+.checks label{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2);border:1px solid var(--border);border-radius:999px;padding:4px 10px;cursor:pointer;background:var(--surface)}
+.checks input[type="checkbox"]{accent-color:var(--accent);margin:0;width:auto;padding:0;border:0;background:none;box-shadow:none}
+.toggle-row{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--ink-2)}
+.toggle-row input{accent-color:var(--accent);margin:0}
+.btn:disabled{opacity:0.6;cursor:not-allowed}
+.auth-card .btn.accent{width:100%;padding:9px 12px;font-size:13px}
+.auth-card h1{font-size:18px;font-weight:600;letter-spacing:-0.02em;margin:0 0 4px}
+.auth-card .auth-sub{font-size:12.5px;color:var(--ink-3);margin:0 0 18px}
+.auth-card.wide{max-width:520px}
+.auth-field select{width:100%;box-sizing:border-box;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 11px;font:inherit;font-size:13.5px;color:var(--ink);outline:none}
+.auth-field select:focus{border-color:var(--accent-2);box-shadow:0 0 0 3px var(--accent-ring)}
+@media (max-width:700px){.fld-row{grid-template-columns:minmax(0,1fr)}}
+
+/* Inline warning text (e.g. a channel with no agent). */
+.warn-text{color:var(--warn)}

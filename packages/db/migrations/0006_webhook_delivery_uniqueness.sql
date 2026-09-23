@@ -1,0 +1,2 @@
+ALTER TABLE "webhook_subscriptions" ADD COLUMN "created_by" uuid;--> statement-breakpoint
+CREATE UNIQUE INDEX "webhook_deliveries_event_uq" ON "webhook_deliveries" USING btree ("subscription_id","event_id");

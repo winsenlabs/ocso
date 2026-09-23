@@ -1,0 +1,216 @@
+# OCSO continuous integration.
+#
+# Jobs are independent so a failure points at one concern:
+#   lint-typecheck-unit  source guards (pnpm lint), turbo typecheck, vitest unit, guard-script tests
+#   integration          vitest integration project against a postgres:18 service
+#   web-build            production Next.js build (standalone output)
+#   e2e                  Playwright against a locally started API + web stack (optional, non-blocking)
+#   terraform            fmt / init -backend=false / validate for infra/aws/terraform
+#   docker               build every image target from the root Dockerfile (+ the demo MCP server), no push
+#   compose              `docker compose config` for the default and all optional profiles
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  TURBO_TELEMETRY_DISABLED: '1'
+  NEXT_TELEMETRY_DISABLED: '1'
+
+jobs:
+  lint-typecheck-unit:
+    name: lint · typecheck · unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      # pnpm version comes from package.json "packageManager" (pnpm@11.1.2); do not also set `version`.
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Source guards (file size, import boundaries, package cycles)
+        run: pnpm lint
+      - name: Source guard script tests
+        run: node --test scripts/test/
+      - name: Typecheck (turbo; builds dependencies first)
+        run: pnpm typecheck
+      - name: Unit tests
+        run: pnpm test
+
+  integration:
+    name: integration (postgres 18)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      # Admin connection; each test file creates and drops its own migrated database.
+      OCSO_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # vitest resolves workspace packages through the `@ocso/source` export condition,
+      # so integration tests run against source and need no prior build.
+      - name: Integration tests
+        run: pnpm test:int
+
+  web-build:
+    name: web build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build web and its dependencies
+        run: pnpm turbo run build --filter=@ocso/web...
+        env:
+          # Rewrites to the API are resolved at build time (apps/web/next.config.ts).
+          API_URL: http://api:4000
+
+  e2e:
+    name: e2e (optional)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Non-blocking until the Playwright suite is stable across runners.
+    continue-on-error: true
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      # apps/web/e2e/config.ts: the stack creates/drops its own database via psql on this server.
+      E2E_PG_URL: postgres://postgres:postgres@localhost:5432
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The stack runs the built API (and @ocso/db's migrate.js). The web app is built by
+      # e2e/stack/start-web.mjs itself, because its API rewrites are fixed at build time.
+      - name: Build API and dependencies
+        run: pnpm turbo run build --filter=@ocso/api...
+      - name: Install Chromium for Playwright
+        run: pnpm --filter @ocso/web exec playwright install --with-deps chromium
+      - name: Playwright
+        run: pnpm --filter @ocso/web test:e2e
+      - name: Upload Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: |
+            apps/web/test-results
+            apps/web/playwright-report
+          if-no-files-found: ignore
+          retention-days: 7
+
+  terraform:
+    name: terraform fmt · validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: infra/aws/terraform
+    steps:
+      - uses: actions/checkout@v5
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.3
+          terraform_wrapper: false
+      - name: terraform fmt
+        run: terraform fmt -check -recursive
+      - name: terraform init (no backend)
+        run: terraform init -backend=false -input=false
+      - name: terraform validate
+        run: terraform validate
+
+  docker:
+    name: docker build (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: api, file: Dockerfile, target: api }
+          - { name: worker, file: Dockerfile, target: worker }
+          - { name: migrate, file: Dockerfile, target: migrate }
+          - { name: web, file: Dockerfile, target: web }
+          # Example EXTERNAL business system (not OCSO core) with its own Dockerfile.
+          - { name: mcp-bank-demo, file: examples/mcp-bank-demo/Dockerfile, target: '' }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - name: Build ${{ matrix.name }} (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          target: ${{ matrix.target }}
+          push: false
+          # Same value Compose uses; the web image bakes its API rewrites at build time.
+          build-args: |
+            API_URL=http://api:4000
+          cache-from: type=gha,scope=ocso-${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=ocso-${{ matrix.name }}
+
+  compose:
+    name: compose config
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      # Mirrors the documented first run: .env starts as a copy of the template.
+      - name: Prepare .env from the template
+        run: test -f .env || cp .env.example .env
+      - name: Default services
+        run: docker compose -f compose.yaml config --quiet
+      - name: All optional profiles
+        run: docker compose -f compose.yaml --profile demo --profile observability --profile s3 config --quiet

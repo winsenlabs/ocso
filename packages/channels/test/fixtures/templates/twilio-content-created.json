@@ -1,0 +1,32 @@
+{
+  "sid": "HX4f797bbf4c5ea0aeb6bf52c4572d788f",
+  "account_sid": "AC380f1440015864f92677447480f1f528",
+  "friendly_name": "appointment_reminder",
+  "language": "en",
+  "variables": {
+    "1": "Sam",
+    "2": "Tuesday at 3pm"
+  },
+  "types": {
+    "twilio/quick-reply": {
+      "body": "Hi {{1}}, this is a reminder of your appointment on {{2}}. Can you make it?",
+      "actions": [
+        {
+          "title": "Yes, confirm",
+          "id": "appt_confirm"
+        },
+        {
+          "title": "Reschedule",
+          "id": "appt_reschedule"
+        }
+      ]
+    }
+  },
+  "url": "https://content.twilio.com/v1/Content/HX4f797bbf4c5ea0aeb6bf52c4572d788f",
+  "date_created": "2026-09-18T11:02:10Z",
+  "date_updated": "2026-09-18T11:02:10Z",
+  "links": {
+    "approval_create": "https://content.twilio.com/v1/Content/HX4f797bbf4c5ea0aeb6bf52c4572d788f/ApprovalRequests/whatsapp",
+    "approval_fetch": "https://content.twilio.com/v1/Content/HX4f797bbf4c5ea0aeb6bf52c4572d788f/ApprovalRequests"
+  }
+}

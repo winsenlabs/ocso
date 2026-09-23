@@ -1,0 +1,13 @@
+export * from './inputs.js';
+export * from './errors.js';
+export { McpConnectionService, oauthRedirectUri, type McpConnectionServiceDeps } from './connection-service.js';
+export { PersonalConnectionService } from './personal-connections.js';
+export { AgentToolGrantService, type AgentToolEntry, type AgentToolsView } from './agent-tool-grants.js';
+export { McpHealthMonitor, recordConnectionAuthFailure, type HealthCheckOutcome, type HealthSampleView } from './health-monitor.js';
+export { SecretCredentialPort, compareAndRotateSecret, type SecretCasResult, type SecretCredentialPortHooks } from './credentials.js';
+export { egressPolicyFor, loadEgressPolicy } from './egress.js';
+export { connectionTarget, modelPrefix, type ConnectionRow, type ToolRow } from './records.js';
+export type { DiscoveryOutcome } from './discovery-runner.js';
+export type { OAuthBegun, OAuthCompleted } from './auth-flow.js';
+export type { ToolSyncSummary } from './tool-sync.js';
+export type { ConnectionStage, ConnectionView, ToolCounts, ToolView } from './views.js';

@@ -1,0 +1,20 @@
+{
+  "SmsMessageSid": "MM3c4d5e6f708192a3b4c5d6e7f8a9b0c1",
+  "NumMedia": "1",
+  "ProfileName": "Priya Deshmukh",
+  "MessageType": "contacts",
+  "SmsSid": "MM3c4d5e6f708192a3b4c5d6e7f8a9b0c1",
+  "WaId": "919812341208",
+  "SmsStatus": "received",
+  "Body": "",
+  "To": "whatsapp:+14155238886",
+  "MessagingServiceSid": "MG0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+  "NumSegments": "1",
+  "ReferralNumMedia": "0",
+  "MessageSid": "MM3c4d5e6f708192a3b4c5d6e7f8a9b0c1",
+  "AccountSid": "ACa1b2c3d4e5f60718293a4b5c6d7e8f90",
+  "From": "whatsapp:+919812341208",
+  "ApiVersion": "2010-04-01",
+  "MediaContentType0": "text/vcard",
+  "MediaUrl0": "https://api.twilio.com/2010-04-01/Accounts/ACa1b2c3d4e5f60718293a4b5c6d7e8f90/Messages/MM3c4d5e6f708192a3b4c5d6e7f8a9b0c1/Media/ME3d4e5f60718293a4b5c6d7e8f9a0b1c2"
+}

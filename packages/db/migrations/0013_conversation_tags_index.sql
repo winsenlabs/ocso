@@ -1,0 +1,1 @@
+CREATE INDEX "conversations_tags_idx" ON "conversations" USING gin ("tags");

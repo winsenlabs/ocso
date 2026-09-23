@@ -100,6 +100,7 @@ Event/metric
 - database degraded
 - auth failures
 - token/cost anomaly
+- monthly model spend reaching a budget threshold (`spend_budget_above`, ADR-027): month-to-date spend in the deployment timezone against a USD budget, once per threshold per month, with a month-end projection
 - latency SLO breach
 
 ### Business examples

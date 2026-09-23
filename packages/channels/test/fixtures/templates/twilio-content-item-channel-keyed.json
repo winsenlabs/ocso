@@ -1,0 +1,27 @@
+{
+  "date_created": "2026-09-20T10:00:00Z",
+  "date_updated": "2026-09-20T10:05:00Z",
+  "sid": "HXf23dc31161b83909dff099feb03ea1b5",
+  "account_sid": "AC380f1440015864f92677447480f1f528",
+  "friendly_name": "delivery_delayed",
+  "language": "en",
+  "variables": {
+    "1": "A-10424"
+  },
+  "types": {
+    "twilio/text": {
+      "body": "Your order {{1}} is delayed by a day. We are sorry for the wait."
+    }
+  },
+  "approval_requests": {
+    "whatsapp": {
+      "type": "whatsapp",
+      "name": "delivery_delayed",
+      "category": "UTILITY",
+      "content_type": "twilio/text",
+      "status": "paused",
+      "rejection_reason": "",
+      "allow_category_change": true
+    }
+  }
+}

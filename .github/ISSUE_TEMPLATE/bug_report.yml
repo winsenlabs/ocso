@@ -1,0 +1,86 @@
+name: Bug report
+description: Something in OCSO does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Security vulnerabilities go to security@winsenlabs.dev, not here (see SECURITY.md).
+        Never paste secrets, `.env` contents, tokens or real customer data.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: The smallest set of steps. Say whether the demo seed (`OCSO_DEMO_SEED=true`) reproduces it.
+      placeholder: |
+        1. Sign in as a CS Lead
+        2. Open ...
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Conversations, handoff or CS workspace
+        - Virtual agents or prompts
+        - Channels (WhatsApp, web chat)
+        - Model providers or profiles
+        - MCP tools
+        - Sign-in, users, teams or roles
+        - Alerts, telemetry or analytics
+        - Ask OCSO (internal agent)
+        - Workers, queues or scaling
+        - Deployment (Docker Compose, TLS overlay, Terraform)
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: How are you running OCSO?
+      options:
+        - Docker Compose on one host
+        - Docker Compose with the TLS overlay (infra/compose/tls.yaml)
+        - From source (pnpm)
+        - ECS Fargate (infra/aws/terraform)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Commit or image tag
+      description: "`git rev-parse --short HEAD`, or `OCSO_VERSION` for prebuilt images."
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: Role of the signed-in user, if relevant
+      options:
+        - Not relevant
+        - Platform Tech Admin
+        - CS Lead
+        - CS Exec
+        - Customer (web chat or WhatsApp)
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: "Relevant lines from `docker compose logs api worker web` (or migrate/keygen). Remove secrets and personal data first."
+      render: text
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: Browser, model provider, channel provider, screenshots.

@@ -1,0 +1,49 @@
+name: Feature request
+description: Suggest a change or a new capability.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For a new channel, model provider or other plugin, use the "New plugin proposal" form instead.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+  - type: dropdown
+    id: who
+    attributes:
+      label: Who is it for?
+      multiple: true
+      options:
+        - Platform Tech Admin
+        - CS Lead
+        - CS Exec
+        - Customers
+        - Operators (deployment)
+        - Contributors (developer experience)
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: What should OCSO do? Include the screens, API or configuration you imagine.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and workarounds
+      description: What you tried or considered, including doing it outside OCSO (for example as an MCP server).
+  - type: checkboxes
+    id: rules
+    attributes:
+      label: Fit with the build rules
+      description: See docs/99-BUILD-RULES.md.
+      options:
+        - label: This keeps OCSO single-tenant (one deployment, one organization).
+        - label: Business-system logic stays outside OCSO (exposed over MCP), not in the core.

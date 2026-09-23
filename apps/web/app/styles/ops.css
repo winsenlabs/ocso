@@ -1,0 +1,75 @@
+/* CS Lead operations pages (analytics, queues, SLA, escalation reasons,
+   reviews, corrections, customers). Composed from design/shared classes;
+   only what those screens need beyond them lives here. Imported by each
+   page under app/(app)/{analytics,queues,sla,escalation-reasons,reviews,corrections,customers}. */
+
+/* ─────────── Window bar / filter row ─────────── */
+.ops-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 16px}
+.ops-bar .seg a.seg-opt{text-decoration:none}
+.ops-bar .seg a.seg-opt:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.ops-bar-extra{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+/* ─────────── Footnote refs and definitions ─────────── */
+.fn{font-family:var(--font-mono);font-size:8.5px;font-weight:600;vertical-align:super;margin-left:3px;color:var(--accent);text-decoration:none;line-height:0}
+.fn:hover{text-decoration:underline}
+.tile .k .fn{font-size:8.5px}
+.ops-defs{margin-top:26px;border-top:1px solid var(--border);padding-top:14px}
+.ops-defs h2{font-size:12.5px;font-weight:600;color:var(--ink-2);margin:0 0 8px}
+.ops-defs ol{margin:0;padding-left:22px;display:grid;gap:5px;font-size:12px;color:var(--ink-3);line-height:1.5;max-width:980px}
+.ops-defs li::marker{font-family:var(--font-mono);font-size:10.5px;color:var(--accent)}
+.ops-defs li:target{color:var(--ink);background:var(--accent-soft);border-radius:4px}
+
+/* ─────────── Compact tables inside chart cards ─────────── */
+.ops-mini{border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:var(--surface)}
+.ops-mini .r{display:grid;grid-template-columns:minmax(0,1.4fr) 44px 70px 72px;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border);font-size:12px;align-items:center}
+.ops-mini .r:last-child{border-bottom:none}
+.ops-mini .r.h{background:var(--bg-2);font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-4)}
+.ops-mini .r .n{font-family:var(--font-mono);font-size:11px;text-align:right;font-variant-numeric:tabular-nums}
+.ops-chan{display:flex;align-items:center;gap:7px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ops-list{display:grid;gap:7px;font-size:12.5px;color:var(--ink-2)}
+.ops-scroll{overflow-x:auto}
+.ops-scroll .dtable{min-width:860px}
+.dtable .dt-row a{color:inherit;text-decoration:none}
+.dtable .dt-row a:hover{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
+.dtable .dt-row .btn{justify-self:start}
+.ops-share{display:grid;grid-template-columns:minmax(40px,1fr) 34px;gap:6px;align-items:center}
+
+/* ─────────── Queues / SLA ─────────── */
+.ops-fieldset{border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px 12px;margin:0;display:grid;gap:8px}
+.ops-fieldset legend{font-size:12px;color:var(--ink-2);font-weight:500;padding:0 4px}
+.ops-grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.ops-grid5{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+@media (max-width:700px){.ops-grid4,.ops-grid5{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.ops-sla:target{box-shadow:0 0 0 3px var(--accent-ring);border-color:var(--accent-2)}
+
+/* ─────────── Corrections / reviews ─────────── */
+nav.ops-bar a.fchip{text-decoration:none}
+.ops-actions{display:grid;gap:12px;border-top:1px solid var(--border);padding-top:14px}
+.ops-actions .fld input:not([type="radio"]){background:var(--surface)}
+.ops-actions textarea{resize:vertical;min-height:72px}
+.rdrawer .dbody > .btn{justify-self:start}
+.ops-crit{border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px 10px;margin:0;display:grid;gap:6px}
+.ops-crit legend{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-3);padding:0 4px}
+.ops-crit .err{font-size:11.5px;color:var(--danger)}
+.ops-scale{display:flex;gap:6px;flex-wrap:wrap}
+.ops-scale label{display:inline-grid;place-items:center;min-width:34px;height:28px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--font-mono);font-size:12px;color:var(--ink-2);cursor:pointer;background:var(--surface);position:relative}
+.ops-scale label.on{background:var(--accent-soft);color:var(--accent);border-color:var(--accent-2);font-weight:600}
+.ops-scale label:focus-within{outline:2px solid var(--accent);outline-offset:1px}
+.ops-scale input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+
+/* ─────────── Customers ─────────── */
+.ops-search{display:flex;gap:8px;align-items:center;margin:0 0 16px;max-width:720px}
+.ops-search input{flex:1;min-width:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:7px 11px;font:inherit;font-size:13px;color:var(--ink);outline:none}
+.ops-search input:focus{border-color:var(--accent-2);box-shadow:0 0 0 3px var(--accent-ring)}
+.ops-ids{display:flex;gap:5px;flex-wrap:wrap;align-items:center;min-width:0}
+.ops-ids .chip{font-family:var(--font-mono);font-size:10.5px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ops-convs{display:grid;gap:6px}
+.ops-conv{display:grid;gap:4px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);text-decoration:none;color:inherit}
+.ops-conv:hover{border-color:var(--accent-soft-2)}
+.ops-preview{font-size:12px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ops-edit{display:grid;gap:12px;border-top:1px solid var(--border);padding-top:14px}
+.ops-edit textarea.mono{font-family:var(--font-mono);font-size:12px}
+.rdrawer section{display:grid;gap:8px}
+.rdrawer h3.grp{margin:0}
+.ops-stage{display:grid;gap:8px}
+.ops-note{display:block;margin-top:4px;overflow-wrap:anywhere}

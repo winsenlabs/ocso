@@ -1,0 +1,62 @@
+{
+  "name": "@ocso/worker",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node --enable-source-maps --import ./dist/instrumentation.js dist/main.js"
+  },
+  "dependencies": {
+    "@ocso/application": "workspace:*",
+    "@ocso/agent-runtime": "workspace:*",
+    "@ocso/auth": "workspace:*",
+    "@ocso/blob": "workspace:*",
+    "@ocso/bootstrap": "workspace:*",
+    "@ocso/channels": "workspace:*",
+    "@ocso/config": "workspace:*",
+    "@ocso/db": "workspace:*",
+    "@ocso/deployment": "workspace:*",
+    "@ocso/domain": "workspace:*",
+    "@ocso/events": "workspace:*",
+    "@ocso/mcp": "workspace:*",
+    "@ocso/model-providers": "workspace:*",
+    "@ocso/observability": "workspace:*",
+    "@ocso/prompt-compiler": "workspace:*",
+    "@ocso/queue": "workspace:*",
+    "@ocso/secrets": "workspace:*",
+    "@ocso/tools": "workspace:*",
+    "@ocso/alerts": "workspace:*",
+    "@ocso/email": "workspace:*",
+    "@nestjs/common": "catalog:",
+    "@nestjs/core": "catalog:",
+    "reflect-metadata": "catalog:",
+    "rxjs": "catalog:",
+    "nestjs-pino": "catalog:",
+    "pino-http": "catalog:",
+    "pino": "catalog:",
+    "@opentelemetry/api": "catalog:",
+    "@opentelemetry/sdk-node": "catalog:",
+    "@opentelemetry/auto-instrumentations-node": "catalog:",
+    "@opentelemetry/exporter-trace-otlp-proto": "catalog:",
+    "@opentelemetry/exporter-metrics-otlp-proto": "catalog:",
+    "@opentelemetry/exporter-logs-otlp-proto": "catalog:",
+    "@opentelemetry/sdk-metrics": "catalog:",
+    "@opentelemetry/sdk-logs": "catalog:",
+    "@opentelemetry/resources": "catalog:",
+    "@opentelemetry/semantic-conventions": "catalog:",
+    "import-in-the-middle": "catalog:",
+    "drizzle-orm": "catalog:",
+    "pg": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "catalog:",
+    "@types/pg": "catalog:"
+  }
+}

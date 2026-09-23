@@ -1,0 +1,25 @@
+{
+  "entry": [
+    {
+      "id": "102290129340398",
+      "time": 1758585600,
+      "changes": [
+        {
+          "value": {
+            "event": "DISABLED",
+            "message_template_id": 1304694804498707,
+            "message_template_name": "cart_reminder",
+            "message_template_language": "en",
+            "reason": "NONE",
+            "message_template_category": "MARKETING",
+            "disable_info": {
+              "disable_date": 1758585600
+            }
+          },
+          "field": "message_template_status_update"
+        }
+      ]
+    }
+  ],
+  "object": "whatsapp_business_account"
+}

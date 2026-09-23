@@ -1,0 +1,253 @@
+import { expect, test, type Page } from '@playwright/test';
+import { ACCOUNTS, E2E, apiUrl } from './config';
+import { acceptInvite, createUser, expectNavLinksResolve, login, logout, navModel, settled } from './helpers';
+import { totp } from './totp';
+
+/**
+ * One serial story on a fresh database: first-run setup → Tech Admin →
+ * invites a CS Lead → CS Lead invites a CS Exec, asserting the role-specific
+ * navigation of design/OCSONav.dc.html at each step; then MFA enrolment when
+ * the Tech Admin requires it, and a forgotten password (ADR-025).
+ */
+test.describe.configure({ mode: 'serial' });
+
+const TEAM = 'Cards & EMI · Tier 2';
+
+test('first-run setup creates the Platform Tech Admin', async ({ page }) => {
+  await page.goto('/login');
+  await page.waitForURL('**/setup'); // no users yet → login forwards to setup
+  await expect(page.getByRole('heading', { name: 'Set up OCSO' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Create administrator' }).click();
+  await expect(page.getByText('The setup token is at least 16 characters')).toBeVisible();
+
+  await page.getByLabel('Setup token').fill('wrong-token-wrong-token');
+  await page.getByLabel('Organization name').fill('E2E Bank');
+  await page.getByLabel('Your name').fill(ACCOUNTS.admin.name);
+  await page.getByLabel('Work email').fill(ACCOUNTS.admin.email);
+  await page.getByLabel('Password').fill(ACCOUNTS.admin.password);
+  await page.getByRole('button', { name: 'Create administrator' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Setup token is not valid' })).toBeVisible();
+
+  await page.getByLabel('Setup token').fill(E2E.setupToken);
+  await page.getByLabel('Password').fill(ACCOUNTS.admin.password);
+  await page.getByRole('button', { name: 'Create administrator' }).click();
+  await page.waitForURL('**/login?setup=done');
+  await expect(page.getByText('Setup complete.')).toBeVisible();
+
+  // Setup is one-time: the page now forwards to sign-in.
+  await page.goto('/setup');
+  await page.waitForURL('**/login');
+});
+
+test('sign-in shows API errors, then the admin sees Platform navigation and not My work', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByLabel('Work email').fill(ACCOUNTS.admin.email);
+  await page.getByLabel('Password').fill('not-the-password');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Invalid email or password' })).toBeVisible();
+
+  await login(page, ACCOUNTS.admin);
+  const nav = await navModel(page);
+  expect(nav.groups).toEqual(['Platform', 'Integrations', 'Oversight']);
+  expect(nav.items).toEqual([
+    'Home', 'Search',
+    'System', 'Workers', 'Queues & leases', 'Telemetry',
+    'Models', 'Connections', 'Channels', 'Message templates', 'Secrets', 'Webhooks',
+    'Alerts', 'Virtual agents', 'Audit log', 'Team & roles',
+    'My connections',
+    'Settings',
+  ]);
+  expect(nav.groups).not.toContain('My work');
+
+  await expect(page.locator('.greeting h1')).toContainText('Tara,');
+  await expect(page.getByText('E2E Bank · PROD'.toUpperCase())).toBeVisible();
+  // Nothing invented: metric tiles without an API say so.
+  await expect(page.locator('.tile.nodata').first()).toContainText('no data yet');
+  // Worker limits are real (GET /v1/settings/workers).
+  await expect(page.getByRole('region', { name: 'Capacity' })).toContainText('10 workers');
+
+  await expectNavLinksResolve(page);
+});
+
+test('admin creates a CS Lead from Team & roles', async ({ page }) => {
+  await login(page, ACCOUNTS.admin);
+  await page.goto('/team');
+  await expect(page.getByRole('heading', { name: 'Team & roles' })).toBeVisible();
+  await page.getByRole('button', { name: 'New user' }).click();
+  const roles = await page.getByRole('dialog', { name: 'New user' }).getByLabel('Role').locator('option').allTextContents();
+  expect(roles).toEqual(['Platform Tech Admin', 'CS Lead', 'CS Exec']);
+  await page.getByRole('button', { name: 'Cancel' }).click();
+
+  await createUser(page, { ...ACCOUNTS.lead, role: 'CS_LEAD' });
+  await expect(page.getByRole('status').filter({ hasText: `Invited ${ACCOUNTS.lead.name} · CS Lead` })).toBeVisible();
+  await logout(page);
+});
+
+test('CS Lead sees Operations / Quality / Governance and can create only CS Execs', async ({ page }) => {
+  await login(page, ACCOUNTS.lead);
+  const nav = await navModel(page);
+  expect(nav.groups).toEqual(['Operations', 'Quality', 'Governance']);
+  expect(nav.items).toEqual([
+    'Home', 'Search',
+    'Conversations', 'Virtual agents', 'Queues', 'Customers', 'Message templates',
+    'Analytics', 'Reviews', 'Prompt corrections', 'Escalation reasons',
+    'Alerts', 'SLA policies', 'Team',
+    'My connections',
+    'Settings',
+  ]);
+  await expectNavLinksResolve(page);
+
+  await page.goto('/team');
+  await page.getByRole('button', { name: 'New team' }).click();
+  await page.getByLabel('Team name').fill(TEAM);
+  await page.getByRole('button', { name: 'Create team' }).click();
+  await expect(page.getByRole('table', { name: 'Teams' }).getByText(TEAM)).toBeVisible();
+
+  await page.getByRole('button', { name: 'New user' }).click();
+  const roles = await page.getByRole('dialog', { name: 'New user' }).getByLabel('Role').locator('option').allTextContents();
+  expect(roles).toEqual(['CS Exec']);
+  await page.getByRole('button', { name: 'Cancel' }).click();
+
+  await createUser(page, { ...ACCOUNTS.exec, team: TEAM });
+  await logout(page);
+});
+
+test('CS Exec sees My work only, cannot open Team, and returns to the requested page after sign-in', async ({ page }) => {
+  await page.goto('/settings');
+  await page.waitForURL('**/login?next=%2Fsettings');
+  await login(page, ACCOUNTS.exec, '/settings');
+
+  const nav = await navModel(page);
+  expect(nav.groups).toEqual(['My work']);
+  expect(nav.items).toEqual(['Home', 'Search', 'Conversations', 'Pickup queue', 'Customers', 'Alerts', 'My connections', 'Settings']);
+  await expect(page.locator('.scope-sw')).toContainText(TEAM);
+  await expectNavLinksResolve(page);
+
+  await page.goto('/team');
+  await expect(page.getByText('Not available for your role')).toBeVisible();
+
+  await page.goto('/settings');
+  await expect(page.getByRole('region', { name: 'Deployment settings' })).toContainText('E2E Bank');
+  await expect(page.getByRole('button', { name: 'Save changes' })).toHaveCount(0);
+});
+
+test('Ask OCSO opens with Ctrl+J and says it is not set up yet', async ({ page }) => {
+  await login(page, ACCOUNTS.exec);
+  await settled(page);
+  await page.keyboard.press('Control+j');
+  const drawer = page.getByRole('dialog', { name: 'Ask OCSO' });
+  await expect(drawer).toBeVisible();
+  await expect(drawer).toContainText('scope · my conversations');
+  await expect(drawer).toContainText('role: cs exec');
+
+  // No model profile chosen for the internal agent yet (full flow: internal-agent.spec.ts).
+  await expect(drawer.getByText('Ask OCSO is not set up yet.')).toBeVisible();
+
+  await page.keyboard.press('Escape');
+  await expect(drawer).toBeHidden();
+  await page.getByRole('button', { name: /Ask OCSO/ }).first().click();
+  await expect(drawer).toBeVisible();
+});
+
+test('Tech Admin saves deployment settings', async ({ page }) => {
+  await login(page, ACCOUNTS.admin);
+  await page.goto('/settings');
+  await page.getByLabel('Region label').fill('ap-south-1');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page.getByText('Deployment settings saved')).toBeVisible();
+  await expect(page.locator('.sb-brand .region')).toHaveText('ap-south-1');
+});
+
+test('logout clears the session so app routes go back to sign-in', async ({ page, context }) => {
+  await login(page, ACCOUNTS.admin);
+  expect((await context.cookies()).some((c) => c.name === 'ocso.session_token' && c.httpOnly && c.sameSite === 'Lax')).toBe(true);
+  await logout(page);
+  expect((await context.cookies()).some((c) => c.name === 'ocso.session_token')).toBe(false);
+  await page.goto('/team');
+  await page.waitForURL('**/login?next=%2Fteam');
+});
+
+/** Reads the setup key shown next to the QR code and answers with the current code. */
+async function enrolAuthenticator(page: Page, password: string): Promise<string> {
+  await page.getByLabel('Current password').fill(password);
+  await page.getByRole('button', { name: 'Set up authenticator app' }).click();
+  const secret = (await page.getByLabel('Setup key').textContent())?.trim() ?? '';
+  expect(secret).toMatch(/^[A-Z2-7]+=*$/);
+  await page.getByLabel('6-digit code from the app').fill(totp(secret));
+  await page.getByRole('button', { name: 'Verify and turn on' }).click();
+  await expect(page.getByText('Two-factor authentication is on.')).toBeVisible();
+  await expect(page.getByRole('list', { name: 'Backup codes' }).getByRole('listitem')).toHaveCount(10);
+  return secret;
+}
+
+test('Tech Admin requires MFA for CS Leads: the lead enrols at sign-in, then signs in with a code', async ({ page }) => {
+  await login(page, ACCOUNTS.admin);
+  await page.goto('/settings');
+  const policy = page.getByRole('form', { name: 'Require MFA for roles' });
+  await policy.getByLabel('CS Lead').check();
+  await policy.getByRole('button', { name: 'Save MFA policy' }).click();
+  await expect(page.getByText('MFA is now required for the selected roles')).toBeVisible();
+  await logout(page);
+
+  // Password alone lands on forced enrolment; nothing else is reachable.
+  await page.goto('/login');
+  await page.getByLabel('Work email').fill(ACCOUNTS.lead.email);
+  await page.getByLabel('Password', { exact: true }).fill(ACCOUNTS.lead.password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.waitForURL('**/mfa-setup');
+  await page.goto('/team');
+  await page.waitForURL('**/mfa-setup');
+  const secret = await enrolAuthenticator(page, ACCOUNTS.lead.password);
+  await page.getByRole('link', { name: /continue/ }).click();
+  await expect(page.getByRole('navigation', { name: 'Primary' })).toBeVisible();
+  await logout(page);
+
+  await page.getByLabel('Work email').fill(ACCOUNTS.lead.email);
+  await page.getByLabel('Password', { exact: true }).fill(ACCOUNTS.lead.password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByLabel('Authentication code').fill('000000');
+  await page.getByRole('button', { name: 'Verify' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'That code is not valid' })).toBeVisible();
+  await page.getByLabel('Authentication code').fill(totp(secret));
+  await page.getByRole('button', { name: 'Verify' }).click();
+  await page.waitForURL((url) => url.pathname === '/');
+  await expect(page.getByRole('navigation', { name: 'Primary' })).toBeVisible();
+  await page.goto('/account/security');
+  await expect(page.getByRole('region', { name: 'Two-factor authentication' })).toContainText('on');
+  await expect(page.getByRole('region', { name: 'Active sessions' })).toContainText('password + code');
+  await logout(page);
+
+  // Other specs sign leads in with a password only: lift the requirement again.
+  await login(page, ACCOUNTS.admin);
+  await page.goto('/settings');
+  await page.getByRole('form', { name: 'Require MFA for roles' }).getByLabel('CS Lead').uncheck();
+  await page.getByRole('form', { name: 'Require MFA for roles' }).getByRole('button', { name: 'Save MFA policy' }).click();
+  await expect(page.getByText('MFA is no longer required for any role.')).toBeVisible();
+});
+
+test('a CS Exec who forgot their password resets it from the emailed link', async ({ page, request }) => {
+  await page.goto('/login');
+  await page.getByRole('link', { name: 'Forgot password?' }).click();
+  await expect(page.getByRole('heading', { name: 'Forgot your password?' })).toBeVisible();
+  await page.getByLabel('Work email').fill(ACCOUNTS.exec.email);
+  await page.getByRole('button', { name: 'Email me a reset link' }).click();
+  await expect(page.getByText('Check your email.')).toBeVisible();
+
+  // The e2e API uses the log email driver; a test-only hook (refused in production) exposes the message.
+  const admin = await request.post(`${apiUrl}/v1/auth/login`, { data: { email: ACCOUNTS.admin.email, password: ACCOUNTS.admin.password } });
+  const token = ((await admin.json()) as { token: string }).token;
+  const mail = await request.get(`${apiUrl}/v1/test-hooks/emails?to=${encodeURIComponent(ACCOUNTS.exec.email)}`, { headers: { authorization: `Bearer ${token}` } });
+  const messages = (await mail.json()) as Array<{ kind: string | null; text: string }>;
+  const link = /https?:\/\/\S+\/reset-password\?token=[\w-]+/.exec(messages.filter((m) => m.kind === 'password_reset').at(-1)?.text ?? '')?.[0];
+  expect(link).toBeTruthy();
+
+  const newPassword = `${ACCOUNTS.exec.password}-renewed`;
+  await acceptInvite(page, link!, newPassword, 'Set new password');
+  await page.goto('/login');
+  await page.getByLabel('Work email').fill(ACCOUNTS.exec.email);
+  await page.getByLabel('Password', { exact: true }).fill(ACCOUNTS.exec.password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Invalid email or password' })).toBeVisible();
+  await login(page, { ...ACCOUNTS.exec, password: newPassword });
+});

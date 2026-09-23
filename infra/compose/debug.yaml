@@ -1,0 +1,19 @@
+# Optional debugging overlay — NOT for production.
+#
+#   docker compose -f compose.yaml -f infra/compose/debug.yaml up -d
+#
+# Publishes the API and PostgreSQL on the loopback interface only, so you can
+# curl the API directly (e.g. POST /v1/auth/login) or connect with psql. In the
+# default stack only the web app (port 3000) is published; it proxies the
+# public ingress paths (/channels, /public, /oauth, /.well-known, /blobs) to
+# the API and keeps /v1/* private.
+services:
+  api:
+    ports:
+      - "127.0.0.1:${OCSO_API_DEBUG_PORT:-4000}:4000"
+
+  postgres:
+    # Port publishing needs a non-internal network.
+    networks: [backend, default]
+    ports:
+      - "127.0.0.1:${OCSO_POSTGRES_DEBUG_PORT:-15433}:5432"

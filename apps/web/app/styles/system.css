@@ -1,0 +1,49 @@
+/* System control center, alerts and audit (design/03 page styles + the
+   screens design/03 implies). Loaded by /system/**, /alerts and /audit. */
+
+/* ─────────── Status strip (design/03 .statusbar) ─────────── */
+.statusbar{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) auto;gap:16px;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;margin-bottom:14px}
+.statusbar.bad{border-color:color-mix(in oklab,var(--danger) 45%,var(--border))}
+.statusbar .big{font-size:19px;font-weight:600;letter-spacing:-0.02em}
+.statusbar .svc{display:flex;gap:16px;flex-wrap:wrap;list-style:none;margin:0;padding:0}
+.statusbar .svc>li{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2)}
+.statusbar .uptime{display:grid;gap:2px;justify-items:end}
+.statusbar .uptime-v{font-size:16px;font-weight:600;letter-spacing:-0.02em;font-variant-numeric:tabular-nums}
+@media (max-width:900px){.statusbar{grid-template-columns:minmax(0,1fr)}.statusbar .uptime{justify-items:start}}
+
+/* ─────────── Worker configuration form ─────────── */
+.cfg-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.cfg-form .fld input{font-variant-numeric:tabular-nums}
+.cmd-block{margin:0;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 11px;font-family:var(--font-mono);font-size:11.5px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink)}
+.plain-list{margin:0;padding-left:16px;display:grid;gap:3px;font-size:12.5px;color:var(--ink-2)}
+.plain-list.warn-list{color:var(--warn)}
+.sys-bottom{margin-top:14px;align-items:start}
+.sys-bottom>.rail-card{margin:0}
+
+/* ─────────── Alerts ─────────── */
+.al-filters{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.al-filters .grp{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+.al-filters .grp>.l{font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-4);margin-right:2px}
+a.fchip{text-decoration:none}
+.cell-btn{display:block;width:100%;text-align:left;background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;text-decoration:none}
+.cell-btn:hover b{color:var(--accent)}
+.dt-row.selected{background:var(--accent-soft)}
+.al-body{font-size:12.5px;line-height:1.55;color:var(--ink-2);margin:0;white-space:pre-wrap}
+.al-actions{display:grid;gap:8px}
+.al-actions textarea{width:100%;box-sizing:border-box;min-height:64px;resize:vertical;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;font:inherit;font-size:12.5px;color:var(--ink)}
+.al-json{margin:0;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;font-family:var(--font-mono);font-size:11px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow:auto}
+.rule-method{font-size:12px;line-height:1.5;color:var(--ink-3);margin:0}
+.fld textarea{min-height:70px;resize:vertical}
+
+/* ─────────── Audit ─────────── */
+.au-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end;margin-bottom:12px}
+.au-filters .actions{display:flex;gap:6px}
+.diff{display:grid;gap:0;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;font-size:12px}
+.diff .r{display:grid;grid-template-columns:minmax(110px,0.9fr) minmax(0,1fr) minmax(0,1fr);gap:10px;padding:6px 10px;border-bottom:1px solid var(--border);align-items:start}
+.diff .r:last-child{border-bottom:none}
+.diff .r.h{background:var(--bg-2);font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-4)}
+.diff .k{font-family:var(--font-mono);font-size:11px;color:var(--ink-2);overflow-wrap:anywhere}
+.diff .v{font-family:var(--font-mono);font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere}
+.diff .v.old{color:var(--danger)}
+.diff .v.new{color:var(--good)}
+.diff .r.same .v{color:var(--ink-3)}

@@ -95,3 +95,10 @@ Never interpolate:
 - hidden internal data not authorized for the current user/customer context
 
 External MCP tool descriptions should be treated as data and normalized through a trusted adapter boundary.
+
+## Implementation notes (as built)
+
+- Prompt compilation, component versioning and cache breakpoints: `packages/prompt-compiler`; versions are immutable once activated (database trigger), activation bumps the agent's cache generation (`cache_generations`), which invalidates the worker's hot turn cache (PM/ARCHITECTURE-DECISIONS.md ADR-024).
+- Provider prompt caching is implemented per provider (Bedrock cache points, Vertex implicit + Claude-on-Vertex cache control, Foundry prompt cache key, OpenAI prompt cache key/retention, Anthropic cache control, Sarvam reported as unverified) — table in ADR-006.
+- The AI copilot and replay evaluation reuse the agent's compiled prefix (same system blocks, same tool definitions, same cache key) and append their own instruction after it, so they hit the same provider cache.
+- Every model request records cache read/write tokens (`usage_events`); the Tech Admin telemetry shows hit rates per provider/profile.

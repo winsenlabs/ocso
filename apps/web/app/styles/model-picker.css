@@ -1,0 +1,30 @@
+/* Model picker (profile dialog) and model-pricing extras — ADR-027. */
+.mpick{position:relative}
+.mpick-row{display:flex;gap:6px;align-items:center}
+.mpick-row>input{flex:1;min-width:0}
+.mpick-list{position:absolute;z-index:30;left:0;right:0;top:100%;margin:2px 0 0;padding:4px;list-style:none;max-height:280px;overflow:auto;background:var(--surface);border:1px solid var(--border-2);border-radius:var(--radius-sm);box-shadow:0 8px 24px color-mix(in oklab,var(--ink) 14%,transparent)}
+.mpick-list>li{display:grid;gap:1px;padding:6px 8px;border-radius:4px;cursor:pointer;min-width:0}
+.mpick-list>li.on{background:var(--accent-soft)}
+.mpick-id{font-family:var(--font-mono);font-size:12px;color:var(--ink);overflow-wrap:anywhere}
+.mpick-name{font-size:11.5px;color:var(--ink-2)}
+.mpick-meta{font-family:var(--font-mono);font-size:10.5px;color:var(--ink-3);overflow-wrap:anywhere}
+.mpick-warn{color:var(--warn)}
+.mpick-detail:empty{display:none}
+.mpick-price.none{color:var(--warn)}
+.mpick-price.offer{color:var(--accent)}
+
+/* Post-save price summary in the profile dialog. */
+.price-checks{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.price-checks>li{display:flex;gap:10px;align-items:center;flex-wrap:wrap;border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;font-size:12.5px}
+.price-checks>li .sp{flex:1}
+
+/* Pricing section: origin, catalog source, catalog status. */
+.price-src{display:block;margin-top:2px}
+.price-src a{color:inherit}
+.catalog-status{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0 10px;font-size:12px;color:var(--ink-3)}
+.catalog-status .warn{color:var(--warn)}
+
+/* Fallback rows hold pickers with status lines: align to the top. */
+.fb-row:has(.mpick){align-items:start}
+.fb-row:has(.mpick)>.fb-n{align-self:start;margin-top:31px}
+.fb-row:has(.mpick)>.fb-actions{margin-top:21px}

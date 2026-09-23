@@ -45,6 +45,12 @@ Possible stream events:
 
 The canonical backend event is separate from how a specific UI renders it.
 
+*As built:* SSE only (no WebSocket endpoint). Staff streams (`GET /v1/realtime/stream`, Ask OCSO chat)
+authenticate like every `/v1` route and re-check their session every minute, closing when it was
+revoked or expired (ADR-025). Authentication itself is Better Auth at `/api/auth/*` (browsers reach it
+on the public origin through the web app); `/v1/auth/me` describes the signed-in user and their MFA
+state.
+
 ## 4. Event envelope
 
 Conceptually:

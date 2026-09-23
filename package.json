@@ -1,0 +1,27 @@
+{
+  "name": "ocso",
+  "license": "Apache-2.0",
+  "private": true,
+  "description": "OCSO \u2014 Open Customer Service Orchestrator",
+  "type": "module",
+  "packageManager": "pnpm@11.1.2",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "vitest run --project unit",
+    "test:int": "vitest run --project integration",
+    "lint": "node scripts/check-source-guards.mjs",
+    "test:chaos": "node tests/resilience/chaos-worker-kill.mjs",
+    "test:load": "node tests/resilience/load-webchat.mjs"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "@types/node": "catalog:",
+    "turbo": "^2.11.2",
+    "vite": "catalog:"
+  }
+}

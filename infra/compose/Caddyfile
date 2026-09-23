@@ -1,0 +1,26 @@
+# HTTPS front for OCSO (infra/compose/tls.yaml). Caddy obtains and renews a
+# Let's Encrypt certificate for OCSO_DOMAIN automatically (HTTP-01 on :80,
+# TLS-ALPN on :443) and redirects http → https. No account email is needed:
+# renewal is automatic and Let's Encrypt no longer sends expiry emails.
+
+{$OCSO_DOMAIN} {
+	encode zstd gzip
+
+	# Only the web app is exposed; it proxies the public ingress paths to the API (ADR-020).
+	# Server-sent events (live updates, web chat, Ask OCSO) must not be buffered.
+	reverse_proxy web:3000 {
+		flush_interval -1
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

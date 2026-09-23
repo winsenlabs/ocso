@@ -1,0 +1,8 @@
+{
+  "name": "appointment_reminder",
+  "category": "UTILITY",
+  "content_type": "twilio/quick-reply",
+  "status": "received",
+  "rejection_reason": "",
+  "allow_category_change": true
+}

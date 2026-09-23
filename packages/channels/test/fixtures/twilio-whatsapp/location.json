@@ -1,0 +1,22 @@
+{
+  "SmsMessageSid": "SM4d5e6f708192a3b4c5d6e7f8a9b0c1d2",
+  "NumMedia": "0",
+  "ProfileName": "Priya Deshmukh",
+  "MessageType": "location",
+  "SmsSid": "SM4d5e6f708192a3b4c5d6e7f8a9b0c1d2",
+  "WaId": "919812341208",
+  "SmsStatus": "received",
+  "Body": "",
+  "To": "whatsapp:+14155238886",
+  "MessagingServiceSid": "MG0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+  "NumSegments": "1",
+  "ReferralNumMedia": "0",
+  "MessageSid": "SM4d5e6f708192a3b4c5d6e7f8a9b0c1d2",
+  "AccountSid": "ACa1b2c3d4e5f60718293a4b5c6d7e8f90",
+  "From": "whatsapp:+919812341208",
+  "ApiVersion": "2010-04-01",
+  "Latitude": "19.0760",
+  "Longitude": "72.8777",
+  "Address": "Nariman Point, Mumbai 400021",
+  "Label": "Meridian Bank branch"
+}

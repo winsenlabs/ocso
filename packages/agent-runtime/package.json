@@ -1,0 +1,46 @@
+{
+  "name": "@ocso/agent-runtime",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "@ocso/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "@ocso/source": "./src/testing/scripted-adapter.ts",
+      "types": "./dist/testing/scripted-adapter.d.ts",
+      "default": "./dist/testing/scripted-adapter.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@ocso/application": "workspace:*",
+    "@ocso/db": "workspace:*",
+    "@ocso/domain": "workspace:*",
+    "@ocso/model-providers": "workspace:*",
+    "@ocso/prompt-compiler": "workspace:*",
+    "@ocso/tools": "workspace:*",
+    "@ocso/channels": "workspace:*",
+    "@ocso/blob": "workspace:*",
+    "@ocso/queue": "workspace:*",
+    "@ocso/observability": "workspace:*",
+    "@ocso/secrets": "workspace:*",
+    "@ocso/events": "workspace:*",
+    "@ocso/auth": "workspace:*",
+    "drizzle-orm": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@ocso/db": "workspace:*"
+  }
+}

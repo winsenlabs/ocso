@@ -1,0 +1,1 @@
+CREATE INDEX "login_attempts_ip_idx" ON "login_attempts" USING btree ("ip","occurred_at");

@@ -1,0 +1,119 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "102290129340398",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "15550783881",
+              "phone_number_id": "106540352242922"
+            },
+            "contacts": [
+              {
+                "profile": {
+                  "name": "Sheena Nelson"
+                },
+                "wa_id": "16505551234",
+                "user_id": "US.13491208655302741918"
+              },
+              {
+                "profile": {
+                  "name": "Arjun Mehta"
+                },
+                "wa_id": "919876543210",
+                "user_id": "IN.88123456789012345678"
+              }
+            ],
+            "messages": [
+              {
+                "from": "16505551234",
+                "from_user_id": "US.13491208655302741918",
+                "id": "wamid.MULTI.A1",
+                "timestamp": "1758535200",
+                "type": "text",
+                "text": {
+                  "body": "First customer"
+                }
+              },
+              {
+                "from": "919876543210",
+                "from_user_id": "IN.88123456789012345678",
+                "id": "wamid.MULTI.B1",
+                "timestamp": "1758535200",
+                "type": "text",
+                "text": {
+                  "body": "Second customer"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "15550783881",
+              "phone_number_id": "106540352242922"
+            },
+            "statuses": [
+              {
+                "id": "wamid.OUT.1",
+                "status": "delivered",
+                "timestamp": "1758535200",
+                "recipient_id": "16505551234"
+              }
+            ]
+          }
+        },
+        {
+          "field": "message_template_status_update",
+          "value": {
+            "event": "APPROVED",
+            "message_template_id": 12345,
+            "message_template_name": "payment_reminder",
+            "message_template_language": "en_US"
+          }
+        }
+      ]
+    },
+    {
+      "id": "102290129340398",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "15550009999",
+              "phone_number_id": "109999999999999"
+            },
+            "contacts": [
+              {
+                "profile": {
+                  "name": "Meera Iyer"
+                },
+                "wa_id": "919000000001"
+              }
+            ],
+            "messages": [
+              {
+                "from": "919000000001",
+                "id": "wamid.MULTI.C1",
+                "timestamp": "1758535200",
+                "type": "text",
+                "text": {
+                  "body": "Third customer, second number"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

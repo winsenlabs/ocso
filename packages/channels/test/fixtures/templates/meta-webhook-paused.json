@@ -1,0 +1,26 @@
+{
+  "entry": [
+    {
+      "id": "102290129340398",
+      "time": 1758499200,
+      "changes": [
+        {
+          "value": {
+            "event": "PAUSED",
+            "message_template_id": 1304694804498707,
+            "message_template_name": "cart_reminder",
+            "message_template_language": "en",
+            "reason": "NONE",
+            "message_template_category": "MARKETING",
+            "other_info": {
+              "title": "FIRST_PAUSE",
+              "description": "Your WhatsApp message template has been paused for 3 hours."
+            }
+          },
+          "field": "message_template_status_update"
+        }
+      ]
+    }
+  ],
+  "object": "whatsapp_business_account"
+}

@@ -1,0 +1,127 @@
+/* 01 Conversation workspace — page styles from design/01 (inline <style> in the
+   mockup) plus what the live screen needs. Loaded by app/(app)/conversations/layout.tsx. */
+
+/* The workspace fills the viewport under the app shell (design: main padding 0, 100vh). It cancels the
+   shell's padding on itself rather than through `.main.shell:has(> .ws)`: after a client-side navigation
+   Next keeps the previous route's subtree in the DOM as a `display:none` child, which kept matching that
+   selector and left every later screen without padding. A hidden child takes no space, so this cannot. */
+.ws{
+  display:grid;grid-template-columns:336px minmax(0,1fr) 316px;height:100vh;min-height:0;overflow:hidden;
+  margin:calc(-1 * var(--shell-pad-top)) calc(-1 * var(--shell-pad-x)) calc(-1 * var(--shell-pad-bottom));
+}
+.ws>section,.ws>aside{min-width:0;min-height:0}
+.inbox{border-right:1px solid var(--border);background:var(--surface);display:grid;grid-template-rows:auto auto minmax(0,1fr)}
+.inbox .ih{padding:12px 14px 10px;border-bottom:1px solid var(--border);display:grid;gap:9px}
+.inbox .ih.page-head{margin:0}
+.inbox .ih h1{margin:0;font-size:15px;font-weight:600;letter-spacing:-0.01em}
+.inbox .filters{display:flex;gap:5px;flex-wrap:wrap;padding:9px 12px;border-bottom:1px solid var(--border);background:var(--bg-2)}
+.inbox .filters .fchip{font-size:11px;padding:3px 9px}
+.inbox .filters select{font:inherit;font-family:var(--font-mono);font-size:10.5px;color:var(--ink-2);background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:3px 8px;max-width:150px}
+.inbox .list{overflow-y:auto;min-height:0}
+.inbox a.crow{text-decoration:none}
+.inbox .crow .sla{font-size:10px}
+.ws-search{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:5px 10px}
+.ws-search:focus-within{border-color:var(--accent-2);box-shadow:0 0 0 3px var(--accent-ring)}
+.ws-search input{flex:1;min-width:0;border:none;background:transparent;font:inherit;font-size:12px;color:var(--ink);outline:none;padding:0}
+.ws-search input::placeholder{color:var(--ink-4)}
+.ws-skel{height:64px;border-bottom:1px solid var(--border);background:linear-gradient(90deg,var(--surface) 0%,var(--bg-2) 50%,var(--surface) 100%)}
+
+.center{display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;background:var(--bg);min-height:0}
+.center.span{grid-column:2 / -1;grid-template-rows:minmax(0,1fr)}
+.center>*{min-width:0}
+.center .chead{padding:11px 20px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.center .chead .nm{font-size:13.5px;letter-spacing:-0.01em}
+.center .ban{padding:10px 20px;background:var(--surface);border-bottom:1px solid var(--border);display:grid;gap:8px}
+.center .tlwrap{overflow-y:auto;padding:18px 20px 22px;min-height:240px}
+/* One shrinkable column: long system lines (escalation reasons) wrap instead of widening every turn. */
+.center .tl{grid-template-columns:minmax(0,1fr)}
+.center .tl .sysev .s{white-space:normal;text-align:center;overflow-wrap:anywhere;max-width:80%}
+.center .ws-empty{display:grid;place-items:center;padding:40px 20px}
+.center .ws-empty .empty{max-width:440px}
+.takeover{flex-wrap:wrap}.takeover .tt,.takeover .ts{min-width:0}
+.comp .box>*,.comp .modes>*,.comp .brow>*{min-width:0}
+.comp .err{font-size:11.5px;color:var(--danger)}
+.comp .pass{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-3)}
+.comp .pass input{accent-color:var(--warn);margin:0}
+.comp .toolform{display:grid;gap:10px;margin-bottom:8px}
+.comp .toolform .fld-row{gap:10px}
+.comp .toolpick{display:grid;gap:6px;max-height:200px;overflow-y:auto;margin-bottom:8px}
+.locked{display:flex;align-items:center;gap:10px;padding:13px 20px;border-top:1px solid var(--border);background:var(--bg-2);font-size:12.5px;color:var(--ink-3);flex-wrap:wrap}
+
+.rail2{border-left:1px solid var(--border);background:var(--surface-2);overflow-y:auto;padding:14px;display:grid;gap:12px;align-content:start}
+.rcard>h3 .sp{flex:1}
+.rcard .prev{display:grid;gap:2px;padding:6px 0;border-top:1px solid var(--border);font-size:12px;color:var(--ink-2);text-decoration:none}
+.rcard .prev:first-of-type{border-top:0;padding-top:0}
+.rcard .prev .sn{color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tool-opt{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 9px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);text-align:left;font:inherit;color:inherit;width:100%}
+button.tool-opt{cursor:pointer}
+button.tool-opt:hover{border-color:var(--border-2);background:var(--surface-2)}
+.tool-opt .tn{font-family:var(--font-mono);font-size:11.5px;color:var(--ink);font-weight:600}
+.tool-opt .td{font-size:11.5px;color:var(--ink-3);margin-top:1px;display:block}
+
+/* Attachments and media parts */
+.att{display:inline-flex;align-items:center;gap:8px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 9px;font-size:12px;color:var(--ink-2);margin-top:8px;max-width:100%;text-decoration:none}
+.att .thumb{width:30px;height:38px;border-radius:3px;background:var(--bg-3);border:1px solid var(--border);display:grid;place-items:center;font-family:var(--font-mono);font-size:8px;color:var(--ink-4);flex:none}
+.att b{color:var(--ink);font-weight:500;overflow-wrap:anywhere}
+.parts{display:grid;gap:6px}
+.parts .media-img{display:block;margin-top:8px;padding:0;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-2);cursor:zoom-in;max-width:260px;overflow:hidden}
+.parts .media-img img{display:block;max-width:100%;max-height:220px;object-fit:cover}
+.parts audio,.parts video{display:block;margin-top:8px;max-width:100%}
+.parts video{max-height:260px;border-radius:var(--radius-sm)}
+.parts .caption{font-size:12.5px;color:var(--ink-2);margin-top:4px}
+.lightbox-img{display:block;max-width:100%;max-height:70vh;margin:0 auto;border-radius:var(--radius-sm)}
+.ev .dl{font-family:var(--font-mono);font-size:10px;color:var(--ink-4);margin-top:6px;display:block}
+.ev .dl.fail{color:var(--danger)}
+.ev.ai.streaming .tx::after{content:"▍";color:var(--accent);margin-left:1px;animation:ws-caret 1s steps(1) infinite}
+@keyframes ws-caret{50%{opacity:0}}
+
+/* Sensitive-action confirmation card (design/01 .confirm) placed in the timeline */
+.confirm.inline{max-width:744px;margin-left:36px}
+.confirm .kvs{display:flex;gap:6px 14px;flex-wrap:wrap;font-family:var(--font-mono);font-size:10.5px;color:var(--ink-3)}
+.confirm .kvs b{color:var(--ink);font-weight:600}
+.confirm .deny{display:grid;gap:6px}
+.confirm .deny input{width:100%;box-sizing:border-box;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 9px;font:inherit;font-size:12.5px;color:var(--ink)}
+
+/* Roles without conversation access: one full-width notice, no panes. */
+.ws-forbidden{grid-column:1 / -1;padding:22px 26px;overflow-y:auto}
+.ws:has(> .ws-forbidden)>:not(.ws-forbidden){display:none}
+
+/* Conversation tags: rail/header chips with remove, autocomplete combobox, inbox filter and row chips. */
+.tag-row{display:flex;gap:5px;flex-wrap:wrap;align-items:center;min-width:0}
+.tagchip{display:inline-flex;align-items:center;gap:4px;max-width:100%}
+.tagchip a{color:inherit;text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tagchip a:hover{text-decoration:underline}
+.tagchip button{border:0;background:none;padding:0 1px;margin:0;font:inherit;font-size:11px;line-height:1;color:var(--ink-4);cursor:pointer}
+.tagchip button:hover{color:var(--danger)}
+.tagchip button:focus-visible{outline:2px solid var(--accent);outline-offset:1px;border-radius:2px}
+.tag-input{position:relative;display:grid;gap:4px;min-width:0}
+.tag-input input{width:100%;box-sizing:border-box;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:4px 8px;font:inherit;font-family:var(--font-mono);font-size:11px;color:var(--ink);outline:none}
+.tag-input input:focus{border-color:var(--accent-2);box-shadow:0 0 0 3px var(--accent-ring)}
+.tag-suggest{position:absolute;top:calc(100% + 3px);left:0;right:0;z-index:30;margin:0;padding:3px;list-style:none;background:var(--surface);border:1px solid var(--border-2);border-radius:var(--radius-sm);box-shadow:0 8px 22px oklch(0% 0 0/0.14);max-height:220px;overflow-y:auto;min-width:160px}
+.tag-input.inline .tag-suggest{position:static;box-shadow:none}
+.tag-suggest li{display:flex;align-items:center;gap:8px;padding:4px 7px;border-radius:4px;font-family:var(--font-mono);font-size:11px;color:var(--ink-2);cursor:pointer}
+.tag-suggest li.on{background:var(--accent-soft);color:var(--accent)}
+.tag-suggest li .n{margin-left:auto;color:var(--ink-4);font-size:10px}
+.tag-err{font-size:11.5px;color:var(--danger)}
+.inbox .filters .tag-input{width:150px}
+.inbox .filters .tag-filter{display:inline-flex;align-items:center;gap:5px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crow .rtags{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;min-width:0}
+.crow .rtags .chip{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chead .ctags{display:none;min-width:0;max-width:340px}
+.chead .ctags .tag-input{width:150px}
+
+@media (max-width:1500px){.ws{grid-template-columns:300px minmax(0,1fr) 300px}}
+@media (max-width:1240px){.ws{grid-template-columns:280px minmax(0,1fr)}.rail2{display:none}.center.span{grid-column:2}.chead .ctags{display:block}}
+@media (max-width:1100px){
+  .main.shell:has(> .ws){height:auto;overflow:visible}
+  .ws{grid-template-columns:minmax(0,1fr);height:auto;overflow:visible}
+  .inbox{border-right:none;border-bottom:1px solid var(--border);grid-template-rows:auto auto auto}
+  .inbox .list{max-height:320px}
+  .center,.center.span{grid-template-rows:auto auto auto auto;grid-column:1}
+  .center .tlwrap{overflow:visible}
+}
+
+/* Staged reply attachments (composer) */
+.comp .attachments { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 0 0; }
+.comp .attachments .fchip { display: inline-flex; align-items: center; gap: 4px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.comp .attachments .icon-btn { width: 18px; height: 18px; font-size: 10px; }

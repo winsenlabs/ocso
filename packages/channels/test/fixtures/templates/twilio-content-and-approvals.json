@@ -1,0 +1,122 @@
+{
+  "contents": [
+    {
+      "date_created": "2026-09-10T08:12:44Z",
+      "date_updated": "2026-09-10T08:40:02Z",
+      "sid": "HX0f0e72ce92eef937d6f481b338ecbd19",
+      "account_sid": "AC380f1440015864f92677447480f1f528",
+      "friendly_name": "order_ready_pickup",
+      "language": "en",
+      "variables": {
+        "1": "Priya",
+        "2": "A-10423"
+      },
+      "types": {
+        "twilio/text": {
+          "body": "Hi {{1}}, your order {{2}} is ready for pickup at the front desk. Reply STOP to opt out."
+        }
+      },
+      "approval_requests": {
+        "name": "order_ready_pickup",
+        "category": "UTILITY",
+        "content_type": "twilio/text",
+        "status": "approved",
+        "rejection_reason": "",
+        "allow_category_change": true
+      }
+    },
+    {
+      "date_created": "2026-09-18T11:02:10Z",
+      "date_updated": "2026-09-18T11:02:10Z",
+      "sid": "HX4f797bbf4c5ea0aeb6bf52c4572d788f",
+      "account_sid": "AC380f1440015864f92677447480f1f528",
+      "friendly_name": "appointment_reminder",
+      "language": "en",
+      "variables": {
+        "1": "Sam",
+        "2": "Tuesday at 3pm"
+      },
+      "types": {
+        "twilio/quick-reply": {
+          "body": "Hi {{1}}, this is a reminder of your appointment on {{2}}. Can you make it?",
+          "actions": [
+            {
+              "title": "Yes, confirm",
+              "id": "appt_confirm"
+            },
+            {
+              "title": "Reschedule",
+              "id": "appt_reschedule"
+            }
+          ]
+        }
+      },
+      "approval_requests": {
+        "name": "appointment_reminder",
+        "category": "UTILITY",
+        "content_type": "twilio/quick-reply",
+        "status": "pending",
+        "rejection_reason": "",
+        "allow_category_change": true
+      }
+    },
+    {
+      "date_created": "2026-09-19T14:30:00Z",
+      "date_updated": "2026-09-19T14:41:27Z",
+      "sid": "HXd44344fc2fada9cf545f9e4352636ec8",
+      "account_sid": "AC380f1440015864f92677447480f1f528",
+      "friendly_name": "invoice_ready",
+      "language": "en",
+      "variables": {
+        "1": "invoices/INV-2291.pdf"
+      },
+      "types": {
+        "twilio/media": {
+          "body": "Your invoice is attached.",
+          "media": [
+            "https://files.example.com/{{1}}"
+          ]
+        }
+      },
+      "approval_requests": {
+        "name": "invoice_ready",
+        "category": "UTILITY",
+        "content_type": "twilio/media",
+        "status": "rejected",
+        "rejection_reason": "INVALID_FORMAT. Facebook is not able to create template with templateName=invoice_ready_hxd44344fc2fada9cf545f9e4352636ec8 due to the following error: Invalid parameter. More Details: Message template 'components' param is missing expected field(s). component of type HEADER is missing expected field(s) (example)",
+        "allow_category_change": true
+      }
+    },
+    {
+      "date_created": "2026-09-21T09:15:31Z",
+      "date_updated": "2026-09-21T09:15:31Z",
+      "sid": "HX57def8125582d179373231006d5b2418",
+      "account_sid": "AC380f1440015864f92677447480f1f528",
+      "friendly_name": "welcome_back_draft",
+      "language": "en",
+      "variables": {},
+      "types": {
+        "twilio/text": {
+          "body": "Welcome back! How can we help you today?"
+        }
+      },
+      "approval_requests": {
+        "name": "",
+        "category": "",
+        "content_type": "",
+        "status": "unsubmitted",
+        "rejection_reason": "",
+        "allow_category_change": true
+      }
+    }
+  ],
+  "meta": {
+    "page": 0,
+    "page_size": 50,
+    "first_page_url": "https://content.twilio.com/v1/ContentAndApprovals?PageSize=50&Page=0",
+    "previous_page_url": null,
+    "url": "https://content.twilio.com/v1/ContentAndApprovals?PageSize=50&Page=0",
+    "next_page_url": "https://content.twilio.com/v1/ContentAndApprovals?PageSize=50&Page=1&PageToken=PAHX57def8125582d179373231006d5b2418",
+    "key": "contents"
+  }
+}

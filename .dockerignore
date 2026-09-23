@@ -1,0 +1,44 @@
+# Build context for the root Dockerfile (classic builder and BuildKit).
+# Keep it small: every file here is sent to the daemon and the prune stages
+# `COPY . .` the whole context.
+
+# Dependencies and build output (rebuilt inside the image)
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/*.tsbuildinfo
+**/coverage
+**/test-results
+**/playwright-report
+
+# Secrets and local state — never in an image
+.env
+.env.*
+**/.env
+**/.env.*
+secrets
+data
+**/*.pem
+**/*.key
+
+# Not needed to build or run the apps
+.git
+.github
+PM
+design
+docs
+infra/aws
+scripts
+packages/*/test
+apps/*/test
+examples/*/test
+**/*.log
+**/.DS_Store
+
+# Deployment files that are not part of any image (keeps the prune cache warm).
+# infra/compose/ocso-entrypoint.sh IS copied into the server images.
+compose.yaml
+.env.example
+infra/compose/*.yaml
+infra/compose/*.mjs
