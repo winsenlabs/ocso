@@ -1,38 +1,37 @@
 import { can, type Principal } from '@ocso/auth';
 import { forbidden, validation } from '@ocso/domain';
-import type { ToolSpec } from '@ocso/domain';
-import { z } from 'zod';
 import type { AnyInternalTool } from './contract.js';
-import { agentPerformance, setAgentStatus } from './tools/agents.js';
+import { agentPerformance } from './tools/agents.js';
 import { attentionSummary } from './tools/attention.js';
 import { conversationDetail, listConversations } from './tools/conversations.js';
 import { latencyBreakdown, mcpHealth, promptCacheStats } from './tools/telemetry.js';
-import { queueStatus, recentChanges, updateWorkerSettings, workerCapacity } from './tools/system.js';
+import { queueStatus, recentChanges, workerCapacity } from './tools/system.js';
 
-export const DEFAULT_TOOLS: readonly AnyInternalTool[] = [
+/**
+ * The insight tools (PM/research/12 §3): cross-service reads that join the capability catalog as
+ * `insight.<name>` (scripts/capabilities reads this list). The model reaches them through `execute_tool`.
+ */
+export const INSIGHT_TOOLS: readonly AnyInternalTool[] = [
   attentionSummary,
   listConversations,
   conversationDetail,
   agentPerformance,
-  setAgentStatus,
   queueStatus,
   workerCapacity,
-  updateWorkerSettings,
   latencyBreakdown,
   promptCacheStats,
   mcpHealth,
   recentChanges,
 ];
 
-/**
- * The tool catalogue for one user (docs/12 §3): tools whose permission the
- * user lacks are not offered to the model at all, and every execution is
- * re-authorized — the model can never reach a tool the user could not use.
- */
+/** @deprecated The insight tools; kept under the earlier name. */
+export const DEFAULT_TOOLS = INSIGHT_TOOLS;
+
+/** Insight tools by name, with the permission re-checked and the input validated on every run. */
 export class InternalToolRegistry {
   private readonly byName: Map<string, AnyInternalTool>;
 
-  constructor(tools: readonly AnyInternalTool[] = DEFAULT_TOOLS) {
+  constructor(tools: readonly AnyInternalTool[] = INSIGHT_TOOLS) {
     this.byName = new Map(tools.map((t) => [t.name, t]));
   }
 
@@ -43,14 +42,6 @@ export class InternalToolRegistry {
 
   available(principal: Principal): AnyInternalTool[] {
     return [...this.byName.values()].filter((t) => can(principal, t.permission));
-  }
-
-  specs(principal: Principal): ToolSpec[] {
-    return this.available(principal).map((t) => ({
-      name: t.name,
-      description: `${t.description}${t.risk === 'HIGH_WRITE' ? ' [requires user confirmation]' : t.risk === 'LOW_WRITE' ? ' [write]' : ''}`,
-      inputSchema: z.toJSONSchema(t.input, { target: 'draft-2020-12', io: 'input' }) as Record<string, unknown>,
-    }));
   }
 
   /** Resolve + authorize + validate. Throws typed errors the loop reports to the model. */

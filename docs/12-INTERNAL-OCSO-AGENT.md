@@ -46,6 +46,14 @@ Examples:
 - "Change provider credentials" — sensitive
 - "Scale max workers to 100" — sensitive/configurable confirmation
 
+## 4a. How it reaches everything (ADR-035)
+
+Ask OCSO sees two tools. `get_tools(purpose)` searches a catalog generated from every API route, filtered to what the
+current user may use; `execute_tool(name, args)` runs a read through the real route as that user, or turns a write into
+a confirmation card the user must click. Changes under maker–checker ask for a checker and a reason and are submitted
+for approval; Ask OCSO never offers bootstrap self-approval. Checkers can review and decide proposals from the drawer.
+A deployment setting (`Ask OCSO can make changes`) turns writes off. See PM/research/12-ask-ocso-copilot.md.
+
 ## 5. Architecture
 
 ```

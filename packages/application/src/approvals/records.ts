@@ -73,6 +73,7 @@ export async function recordDecision(tx: DbOrTx, actor: ActorContext, p: Proposa
     warnings: [...(r.warnings ?? [])],
     bulkBatchId: r.bulkBatchId ?? null,
     auditEventId,
+    via: actor.principal?.via === 'INTERNAL_AGENT' ? 'INTERNAL_AGENT' : null,
   });
 }
 

@@ -4,7 +4,7 @@ import { ApprovalService, QueueBaseline, QueueInput, QueuePatch, QueueService, S
 import { DomainError, ErrorCategory } from '@ocso/domain';
 import type { Response } from 'express';
 import { z } from 'zod';
-import { Actor, CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
+import { Actor, Capability, CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
 import { approvalResponse } from '../approvals/approval-response.js';
 
 const Id = z.uuid();
@@ -31,6 +31,7 @@ export class RoutingController {
     @Inject(ApprovalService) private readonly approvals: ApprovalService,
   ) {}
 
+  @Capability({ name: 'routing.list_queues', summary: 'List queues and their settings.' })
   @Get('queues')
   @RequirePermission(Permission.QUEUES_READ)
   list() {
@@ -38,6 +39,7 @@ export class RoutingController {
   }
 
   /** Maker–checker state of one queue (badge + submit modal). */
+  @Capability({ name: 'routing.get_queue_approval_state', summary: "A queue's approval state." })
   @Get('queues/:id/approval')
   @RequirePermission(Permission.QUEUES_READ)
   approval(@CurrentPrincipal() principal: Principal, @Param('id', { schema: Id }) id: string) {
@@ -45,6 +47,7 @@ export class RoutingController {
   }
 
   /** A draft queue; with `approval` it is also submitted for its first approval (202 `{id, proposal}`). */
+  @Capability({ name: 'routing.create_queue', summary: 'Create a queue as a draft (its first approval can be requested at once).' })
   @Post('queues')
   @RequirePermission(Permission.QUEUES_MANAGE)
   async create(@Actor() actor: ActorContext, @Body({ schema: QueueBody }) body: QueueBody, @Res({ passthrough: true }) res: Response) {
@@ -56,6 +59,7 @@ export class RoutingController {
   }
 
   /** Submit a draft queue for its first approval (always a proposal). */
+  @Capability({ name: 'routing.submit_queue', summary: 'Submit a draft queue for its first approval.' })
   @Post('queues/:id/submit')
   @RequirePermission(Permission.QUEUES_MANAGE)
   submit(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Body({ schema: WithApproval }) body: ApprovalBody, @Res({ passthrough: true }) res: Response) {
@@ -67,6 +71,7 @@ export class RoutingController {
    * draft queue, else becomes a proposal. `applied` says which stops went through when the rest answers 409.
    * `baseline` (the lists the editor loaded) makes removals exact: only ids it saw and unticked are removed.
    */
+  @Capability({ name: 'routing.update_queue', summary: 'Change a queue: stops apply at once, other changes to an approved queue need approval.' })
   @Patch('queues/:id')
   @RequirePermission(Permission.QUEUES_MANAGE)
   async update(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Body({ schema: QueuePatchBody }) body: QueuePatchBody, @Res({ passthrough: true }) res: Response) {
@@ -91,18 +96,21 @@ export class RoutingController {
     }
   }
 
+  @Capability({ name: 'routing.list_sla_policies', summary: 'List SLA policies (response and resolution targets).', tags: ['sla', 'target'] })
   @Get('sla-policies')
   @RequirePermission(Permission.QUEUES_READ)
   slaPolicies() {
     return this.queues.listSlaPolicies();
   }
 
+  @Capability({ name: 'routing.get_sla_policy_approval_state', summary: "An SLA policy's approval state.", tags: ['sla'] })
   @Get('sla-policies/:id/approval')
   @RequirePermission(Permission.QUEUES_READ)
   slaApproval(@CurrentPrincipal() principal: Principal, @Param('id', { schema: Id }) id: string) {
     return this.approvals.objectState(principal, 'sla_policy', id);
   }
 
+  @Capability({ name: 'routing.create_sla_policy', summary: 'Create an SLA policy as a draft (its first approval can be requested at once).', tags: ['sla'] })
   @Post('sla-policies')
   @RequirePermission(Permission.SLA_MANAGE)
   async createSla(@Actor() actor: ActorContext, @Body({ schema: SlaBody }) body: SlaBody, @Res({ passthrough: true }) res: Response) {
@@ -113,12 +121,14 @@ export class RoutingController {
     return { id, ...outcome };
   }
 
+  @Capability({ name: 'routing.submit_sla_policy', summary: 'Submit a draft SLA policy for its first approval.', tags: ['sla'] })
   @Post('sla-policies/:id/submit')
   @RequirePermission(Permission.SLA_MANAGE)
   submitSla(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Body({ schema: WithApproval }) body: ApprovalBody, @Res({ passthrough: true }) res: Response) {
     return approvalResponse(res, requestApproval(this.approvals, actor, { objectKind: 'sla_policy', objectId: id, action: 'CREATE' }, body.approval, null));
   }
 
+  @Capability({ name: 'routing.update_sla_policy', summary: "Change an SLA policy (an approved policy's change needs approval).", tags: ['sla'] })
   @Put('sla-policies/:id')
   @RequirePermission(Permission.SLA_MANAGE)
   async updateSla(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Body({ schema: SlaBody }) body: SlaBody, @Res({ passthrough: true }) res: Response) {

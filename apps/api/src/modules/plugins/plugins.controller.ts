@@ -2,7 +2,7 @@ import { Controller, Get, Inject } from '@nestjs/common';
 import { Permission } from '@ocso/auth';
 import { describePlugins, type OcsoPlugin, type PluginInfo } from '@ocso/bootstrap';
 import type { ApiEnv } from '@ocso/config';
-import { RequirePermission } from '../../common/decorators.js';
+import { Capability, RequirePermission } from '../../common/decorators.js';
 import { ENV, PLUGINS } from '../../infrastructure/tokens.js';
 
 /**
@@ -19,6 +19,7 @@ export class PluginsController {
     this.plugins = describePlugins(plugins, env.APP_VERSION);
   }
 
+  @Capability({ name: 'system.list_plugins', summary: 'List the plugins compiled into this deployment.', tags: ['plugin'] })
   @Get('plugins')
   @RequirePermission(Permission.SYSTEM_READ)
   list(): PluginInfo[] {

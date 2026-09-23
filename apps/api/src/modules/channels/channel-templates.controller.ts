@@ -7,7 +7,7 @@ import type { ChannelRegistry } from '@ocso/channels';
 import { channels, type Db } from '@ocso/db';
 import { TemplateDraftSchema, type TemplateDraft } from '@ocso/domain';
 import { z } from 'zod';
-import { Actor, CurrentPrincipal, RequireAnyPermission, RequirePermission } from '../../common/decorators.js';
+import { Actor, Capability, CurrentPrincipal, RequireAnyPermission, RequirePermission } from '../../common/decorators.js';
 import { CHANNEL_REGISTRY, DB } from '../../infrastructure/tokens.js';
 import { approvalResponse } from '../approvals/approval-response.js';
 
@@ -34,6 +34,7 @@ export class ChannelTemplatesController {
   ) {}
 
   /** Provider list (cached ~5 min; `?refresh=true` refetches) merged with templates submitted from OCSO. */
+  @Capability({ name: 'channels.list_message_templates', summary: "List a channel's message templates with their review status.", tags: ['template', 'message template'] })
   @Get()
   @RequireAnyPermission(Permission.CONVERSATIONS_REPLY, Permission.MESSAGE_TEMPLATES_MANAGE)
   list(@Param('id', { schema: Id }) id: string, @Query({ schema: ListQuery }) q: ListQuery) {
@@ -41,6 +42,7 @@ export class ChannelTemplatesController {
   }
 
   /** Current review status (incl. the rejection reason), asked from the provider. */
+  @Capability({ name: 'channels.get_message_template', summary: 'Get one message template and its review status.', tags: ['template'] })
   @Get(':templateId')
   @RequireAnyPermission(Permission.CONVERSATIONS_REPLY, Permission.MESSAGE_TEMPLATES_MANAGE)
   get(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Param('templateId', { schema: TemplateId }) templateId: string) {
@@ -51,6 +53,7 @@ export class ChannelTemplatesController {
    * Save a draft (201): the provider never sees it until a checker approves its submission. With `approval`,
    * the submission is proposed in the same call (202 `{ template, problems, warnings, proposal }`).
    */
+  @Capability({ name: 'channels.create_message_template', summary: 'Save a new message template draft for a channel.', tags: ['template'] })
   @Post()
   @RequirePermission(Permission.MESSAGE_TEMPLATES_MANAGE)
   async create(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Body({ schema: DraftBody }) body: DraftBody, @Res({ passthrough: true }) res: Response) {
@@ -69,6 +72,7 @@ export class ChannelTemplatesController {
   }
 
   /** Edit a draft the provider has never seen (409 template_submitted once it is at the provider; approval_open while its submission waits). */
+  @Capability({ name: 'channels.update_message_template_draft', summary: 'Edit a message template draft that was never submitted.', tags: ['template'] })
   @Put('drafts/:recordId')
   @RequirePermission(Permission.MESSAGE_TEMPLATES_MANAGE)
   updateDraft(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Param('recordId', { schema: Id }) recordId: string, @Body({ schema: TemplateDraftSchema }) body: TemplateDraft) {
@@ -76,6 +80,7 @@ export class ChannelTemplatesController {
   }
 
   /** Submit a draft to the provider: always a proposal — 202 `{proposal}` with `approval`, else 409 approval_required. */
+  @Capability({ name: 'channels.submit_message_template', summary: 'Submit a message template draft to the provider (always needs approval).', tags: ['template'] })
   @Post('drafts/:recordId/submit')
   @RequirePermission(Permission.MESSAGE_TEMPLATES_MANAGE)
   async submit(
@@ -93,6 +98,7 @@ export class ChannelTemplatesController {
    * Deleting (message_templates.delete, Head) is always a proposal: 202 `{proposal}` with `approval`, else 409
    * approval_required. A template made in the provider's console is recorded first so the proposal has an object.
    */
+  @Capability({ name: 'channels.delete_message_template', summary: 'Delete a message template (always needs approval).', tags: ['template'] })
   @Delete(':templateId')
   @RequirePermission(Permission.MESSAGE_TEMPLATES_DELETE)
   async remove(
@@ -115,6 +121,7 @@ export class MessageTemplateChannelsController {
     @Inject(CHANNEL_REGISTRY) private readonly registry: ChannelRegistry,
   ) {}
 
+  @Capability({ name: 'channels.list_template_channels', summary: 'List the channels whose message templates you can manage.', tags: ['template'] })
   @Get('channels')
   @RequirePermission(Permission.MESSAGE_TEMPLATES_MANAGE)
   async channels(@CurrentPrincipal() principal: Principal) {

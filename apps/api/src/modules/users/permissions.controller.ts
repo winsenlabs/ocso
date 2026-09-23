@@ -3,7 +3,7 @@ import type { Response } from 'express';
 import { Permission } from '@ocso/auth';
 import { PermissionChangeInput, PermissionService, type ActorContext } from '@ocso/application';
 import { z } from 'zod';
-import { Actor, Authenticated, RequireAnyPermission, RequirePermission } from '../../common/decorators.js';
+import { Actor, Authenticated, Capability, RequireAnyPermission, RequirePermission } from '../../common/decorators.js';
 
 /**
  * Per-user permissions (PM/research/11 §3.5): the catalogue, a user's effective
@@ -16,6 +16,7 @@ import { Actor, Authenticated, RequireAnyPermission, RequirePermission } from '.
 export class PermissionsController {
   constructor(@Inject(PermissionService) private readonly permissions: PermissionService) {}
 
+  @Capability({ name: 'users.list_permissions', summary: 'List every permission, what it allows and which roles hold it by default.', tags: ['rights', 'role'] })
   @Get('permissions/catalogue')
   @Authenticated()
   catalogue() {
@@ -23,6 +24,7 @@ export class PermissionsController {
   }
 
   /** permissions.read; another user must share a team with the reader unless they hold users.manage (else 404). */
+  @Capability({ name: 'users.get_user_permissions', summary: "A user's effective permissions: role preset plus individual grants and revokes.", tags: ['rights', 'role', 'access'] })
   @Get('users/:id/permissions')
   @RequirePermission(Permission.PERMISSIONS_READ)
   forUser(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string) {
@@ -30,6 +32,7 @@ export class PermissionsController {
   }
 
   /** Grants/revokes need permissions.manage and a preset change users.manage(_team): checked in PermissionService. */
+  @Capability({ name: 'users.change_user_permissions', summary: "Change a user's permissions (preset, grants, revokes): reductions apply at once, widening needs approval.", approvalKind: 'permission_change', tags: ['rights', 'grant', 'revoke', 'role', 'access'] })
   @Post('users/:id/permission-changes')
   @RequireAnyPermission(Permission.PERMISSIONS_MANAGE, Permission.USERS_MANAGE, Permission.USERS_MANAGE_TEAM)
   async change(

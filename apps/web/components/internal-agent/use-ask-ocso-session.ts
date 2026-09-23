@@ -2,7 +2,7 @@
 
 import type { Chat } from '@ai-sdk/react';
 import { useCallback, useMemo, useState } from 'react';
-import type { ActionDecision } from '../../lib/actions/internal-agent';
+import type { ActionDecision } from './decisions';
 import { createAskOcsoChat, type ChatStore } from './chat';
 import type { PageContext } from './page-context';
 import { DrawerStateSchema, ThreadHistorySchema, type AskOcsoMessage, type DrawerState, type ThreadHistory } from './types';

@@ -3,7 +3,7 @@ import { Permission, type Principal } from '@ocso/auth';
 import { ApprovalService, ModelListService, ProviderInput, ProviderPatch, ProviderService, ProviderTestInput, WithApproval, requestStagedApproval, type ActorContext } from '@ocso/application';
 import type { Response } from 'express';
 import { z } from 'zod';
-import { Actor, CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
+import { Actor, Capability, CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
 import { approvalResponse } from '../approvals/approval-response.js';
 import { createDraft, proposeOnly, withApprovalState, OptionalApproval, type ApprovalBody } from '../settings/platform-approvals.js';
 
@@ -34,6 +34,7 @@ export class ModelProvidersController {
     @Inject(ApprovalService) private readonly approvals: ApprovalService,
   ) {}
 
+  @Capability({ name: 'models.list_providers', summary: 'List model providers with their status and health.' })
   @Get()
   @RequirePermission(Permission.PROVIDERS_READ)
   async list(@Actor() actor: ActorContext, @CurrentPrincipal() principal: Principal) {
@@ -41,12 +42,14 @@ export class ModelProvidersController {
   }
 
   /** Provider kinds available in this deployment, with form field descriptors. */
+  @Capability({ name: 'models.list_provider_kinds', summary: 'List the model provider kinds available in this deployment.' })
   @Get('kinds')
   @RequirePermission(Permission.PROVIDERS_READ)
   kinds(@Actor() actor: ActorContext) {
     return this.providers.kinds(actor);
   }
 
+  @Capability({ name: 'models.get_provider', summary: 'Get one model provider (never its credentials).' })
   @Get(':id')
   @RequirePermission(Permission.PROVIDERS_READ)
   async get(@Actor() actor: ActorContext, @CurrentPrincipal() principal: Principal, @Param('id', { schema: z.uuid() }) id: string) {
@@ -57,6 +60,7 @@ export class ModelProvidersController {
    * Models this provider offers (its own listing, or its configured deployments),
    * with catalog metadata and prices. Listing failures come back as `error`.
    */
+  @Capability({ name: 'models.list_provider_models', summary: 'List the models a provider offers, with catalog prices.' })
   @Get(':id/models')
   @RequirePermission(Permission.PROVIDERS_READ)
   listModels(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string, @Query({ schema: ModelsQuery }) q: ModelsQuery) {
@@ -64,6 +68,7 @@ export class ModelProvidersController {
   }
 
   /** A disabled draft (201); `enabled: true` with `approval` also submits its activation (202). */
+  @Capability({ name: 'models.create_provider', summary: 'Add a model provider as a disabled draft (enabling needs approval; credentials are entered in the UI).' })
   @Post()
   @RequirePermission(Permission.PROVIDERS_MANAGE)
   create(@Actor() actor: ActorContext, @Body({ schema: CreateBody }) body: CreateBody, @Res({ passthrough: true }) res: Response) {
@@ -75,6 +80,7 @@ export class ModelProvidersController {
    * `enabled: false` disables at once (never gated); `enabled: true` is an ACTIVATE proposal (a draft's other
    * fields are saved first). Other fields: written directly on a draft, an UPDATE proposal once approved.
    */
+  @Capability({ name: 'models.update_provider', summary: 'Change a model provider: disabling applies at once, enabling needs approval.', stopWhen: { enabled: false }, tags: ['disable'] })
   @Patch(':id')
   @RequirePermission(Permission.PROVIDERS_MANAGE)
   async update(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string, @Body({ schema: PatchBody }) body: PatchBody, @Res({ passthrough: true }) res: Response) {
@@ -93,6 +99,7 @@ export class ModelProvidersController {
   }
 
   /** "Test connection": health probe plus a tiny generation; updates the provider's health fields. */
+  @Capability({ name: 'models.test_provider', summary: "Test a model provider's connection (a health probe and a tiny generation).", risk: 'LOW_WRITE', tags: ['test', 'connection'] })
   @Post(':id/test')
   @HttpCode(200)
   @RequirePermission(Permission.PROVIDERS_MANAGE)
@@ -101,6 +108,7 @@ export class ModelProvidersController {
   }
 
   /** Always a proposal (DELETE): 202 `{proposal}` with `approval`, else 409 approval_required. */
+  @Capability({ name: 'models.delete_provider', summary: 'Delete a model provider (always needs approval).' })
   @Delete(':id')
   @RequirePermission(Permission.PROVIDERS_MANAGE)
   remove(@Actor() actor: ActorContext, @Param('id', { schema: z.uuid() }) id: string, @Body({ schema: OptionalApproval }) body: ApprovalBody, @Res({ passthrough: true }) res: Response) {

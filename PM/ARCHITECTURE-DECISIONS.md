@@ -1150,3 +1150,33 @@ need to add channels and providers without forking, and to build their own chat 
 can do anything the api/worker can; the trust statement is explicit in `docs/plugins/installing.md`. The public contract
 is now a compatibility promise: breaking it means `apiVersion: 2`. Migrations 0032 (host context, held user tokens,
 single-use passes, `forward_user_token`) and 0033 (per-channel verified ids) are additive and data-only respectively.
+
+## ADR-035 — Ask OCSO as a platform copilot: a generated capability catalog behind two meta tools
+
+**Status:** Accepted, 2026-09-24. Design: PM/research/12-ask-ocso-copilot.md.
+
+**Context.** Owners expect Ask OCSO to do anything the signed-in user is permitted to do, instead of clicking through the
+UI. Twelve hand-written tools did not scale to ~280 API routes, and one tool schema per route would bloat every prompt.
+
+**Decision.**
+1. **Catalog from the API.** A build step (`pnpm capabilities:generate`, TypeScript compiler API) derives every route's
+   method, path, permission(s), input JSON Schema (from the route's own zod schemas), summary (doc comment or
+   `@Capability`), risk (READ / LOW_WRITE / HIGH_WRITE, stops) and approval kind into a committed catalog; a CI test fails
+   when it is stale or a route lacks a summary. Routes that authenticate, stream, ingest publicly, upload files or return
+   secrets once are excluded; responses that carry sign-in links are redacted.
+2. **Two model tools.** `get_tools(purpose)` searches the catalog filtered to the user's permissions; `execute_tool(name,
+   args)` runs a read or turns a write into a card. Prompt size is constant.
+3. **The real API, as the user.** Every call goes through the route itself, in-process over loopback, with a single-use
+   60-second delegation token bound to the user, session, thread and call; the auth guard rebuilds the same principal and
+   marks the actor `via=INTERNAL_AGENT`. Guards, validation, team scoping, approvals, rate limits and audit are the UI's.
+4. **Every write is a server-built card** confirmed only by the user's click (low-risk writes included). Cards are bound
+   to a hash of tool, arguments and object state, single use, expire in 15 minutes, and settle to EXECUTED, SUBMITTED,
+   REJECTED, EXPIRED, STALE, FAILED or UNKNOWN (a write that outlived its bound). Governed changes pick a checker and a
+   reason and submit a proposal; bootstrap self-approval is never offered (UI only). Checkers review and decide from Ask
+   OCSO against the proposal's content hash. Tool results and card text are fenced as untrusted data.
+5. **Kill switch.** `ask_ocso_writes` (a governed deployment setting): off → reads only.
+6. **Surface.** The in-app drawer only.
+
+**Consequences.** New API routes become Ask OCSO capabilities automatically. The quality bar is an 83-scenario evaluation
+suite (scripted replay in CI; a real-model run on demand) with 100% safety as a release gate. Migration 0034 (card
+columns, `approval_decisions.via`, `ask_ocso_writes`).

@@ -4,13 +4,16 @@ import type { Response } from 'express';
 import { createUIMessageStream, pipeUIMessageStreamToResponse } from 'ai';
 import { Permission, type Principal } from '@ocso/auth';
 import { validation } from '@ocso/domain';
-import { InternalActionService, InternalAgentService } from '@ocso/internal-agent';
+import { and, eq } from 'drizzle-orm';
+import { InternalActionService, InternalAgentService, capabilityByName, capabilitySuggestions, currentCard, isWriteCapability, type CapabilitySuggestions } from '@ocso/internal-agent';
 import { SessionLiveness } from '@ocso/application';
 import type { ApiEnv } from '@ocso/config';
+import { internalAgentActions, type Db } from '@ocso/db';
+import { notFound } from '@ocso/domain';
 import { z } from 'zod';
 import { CurrentPrincipal, RequirePermission, type OcsoRequest } from '../../common/decorators.js';
 import { abortWhenSessionEnds } from '../../common/session-watch.js';
-import { ENV } from '../../infrastructure/tokens.js';
+import { DB, ENV } from '../../infrastructure/tokens.js';
 
 const Id = z.uuid();
 /** The page the user has open (design/05 "context · …"): an in-app path plus the object ids on it. */
@@ -29,10 +32,17 @@ const ChatInput = z.object({
   context: PageContextInput.nullable().optional(),
 });
 type ChatInput = z.infer<typeof ChatInput>;
+/** Governed cards name the checker and why (PM/research/12 §5); other cards send nothing. */
+const ConfirmInput = z.object({
+  checkerId: z.uuid().optional(),
+  reason: z.string().trim().min(3).max(500).optional(),
+});
+type ConfirmInput = z.infer<typeof ConfirmInput>;
 
 /**
- * Ask OCSO (design/05, docs/12): streams AI SDK UI message chunks. Tool links,
- * tables, confirmation cards and RBAC refusals arrive as typed `data-*` parts.
+ * Ask OCSO (design/05, PM/research/12): streams AI SDK UI message chunks. Tool links, tables, confirmation cards
+ * (`data-action`, the ActionCard) and RBAC refusals arrive as typed `data-*` parts. Left out of the capability
+ * catalog (scripts/capabilities): Ask OCSO never drives itself.
  */
 @Controller('v1/internal-agent')
 export class InternalAgentController {
@@ -41,6 +51,7 @@ export class InternalAgentController {
     @Inject(InternalActionService) private readonly actions: InternalActionService,
     @Inject(SessionLiveness) private readonly liveness: SessionLiveness,
     @Inject(ENV) private readonly env: ApiEnv,
+    @Inject(DB) private readonly db: Db,
   ) {}
 
   @Post('chat')
@@ -77,7 +88,7 @@ export class InternalAgentController {
             step: (label) => writer.write({ type: 'data-step', data: { label }, transient: true }),
             links: (links) => writer.write({ type: 'data-links', data: links }),
             table: (table) => writer.write({ type: 'data-table', data: table }),
-            action: (action) => writer.write({ type: 'data-action', data: action }),
+            card: (card) => writer.write({ type: 'data-action', id: card.id, data: card }),
             denied: (message) => writer.write({ type: 'data-denied', data: { message } }),
             thread: (id) => writer.write({ type: 'data-thread', id: 'thread', data: { threadId: id } }),
           },
@@ -109,16 +120,57 @@ export class InternalAgentController {
     return this.agent.messages(principal, id);
   }
 
-  @Post('actions/:id/confirm')
+  /** "What can you do?": suggestion chips and a per-area summary from the catalog, for this user's permissions. */
+  @Get('capabilities/suggestions')
   @RequirePermission(Permission.INTERNAL_AGENT_USE)
-  confirm(@CurrentPrincipal() principal: Principal, @Param('id', { schema: Id }) id: string, @Req() req: OcsoRequest) {
-    return this.actions.confirm(principal, id, req.correlationId ?? randomUUID());
+  async suggestions(@CurrentPrincipal() principal: Principal) {
+    return readsOnlyUnless(await this.actions.writesEnabled(), capabilitySuggestions(principal));
   }
 
-  @Post('actions/:id/reject')
-  @HttpCode(204)
+  /**
+   * Where one of the caller's cards stands now (the drawer re-reads it when a confirm outlives its own wait).
+   * `running` is true while a confirm is still in progress: the card then reads PENDING but must not be offered again.
+   */
+  @Get('actions/:id')
   @RequirePermission(Permission.INTERNAL_AGENT_USE)
-  async reject(@CurrentPrincipal() principal: Principal, @Param('id', { schema: Id }) id: string, @Req() req: OcsoRequest) {
-    await this.actions.reject(principal, id, req.correlationId ?? randomUUID());
+  async action(@CurrentPrincipal() principal: Principal, @Param('id', { schema: Id }) id: string) {
+    const [row] = await this.db.select().from(internalAgentActions).where(and(eq(internalAgentActions.id, id), eq(internalAgentActions.userId, principal.userId)));
+    const card = row ? currentCard(row) : null;
+    if (!row || !card) throw notFound('internal_agent_action', id);
+    return { ...card, running: row.status === 'CONFIRMING' && card.status === 'PENDING' };
   }
+
+  /**
+   * Run a confirmation card: a fresh permission check, the card's hash against the object now (STALE when it
+   * changed), then the real route as this user — applied (direct, stop) or submitted to the chosen checker
+   * (governed: `checkerId` and `reason` required). Answers the card with its final status and result.
+   */
+  @Post('actions/:id/confirm')
+  @HttpCode(200)
+  @RequirePermission(Permission.INTERNAL_AGENT_USE)
+  confirm(@CurrentPrincipal() principal: Principal, @Param('id', { schema: Id }) id: string, @Body({ schema: ConfirmInput }) body: ConfirmInput, @Req() req: OcsoRequest) {
+    return this.actions.confirm(principal, id, body ?? {}, req.correlationId ?? randomUUID());
+  }
+
+  /** Cancel a card: nothing changes; audited. Answers the card marked REJECTED. */
+  @Post('actions/:id/reject')
+  @HttpCode(200)
+  @RequirePermission(Permission.INTERNAL_AGENT_USE)
+  reject(@CurrentPrincipal() principal: Principal, @Param('id', { schema: Id }) id: string, @Req() req: OcsoRequest) {
+    return this.actions.reject(principal, id, req.correlationId ?? randomUUID());
+  }
+}
+
+/**
+ * With the writes kill switch off, "What can you do?" offers reads only: no change chips, no change counts,
+ * and `writesOn: false` so the drawer says changes are turned off by the deployment settings.
+ */
+export function readsOnlyUnless(writesOn: boolean, s: CapabilitySuggestions): CapabilitySuggestions & { writesOn: boolean } {
+  if (writesOn) return { ...s, writesOn };
+  const isWrite = (tool: string) => {
+    const c = capabilityByName(tool);
+    return c === undefined || isWriteCapability(c);
+  };
+  const areas = s.areas.filter((a) => a.reads > 0).map((a) => ({ ...a, writes: 0 }));
+  return { suggestions: s.suggestions.filter((x) => !isWrite(x.tool)), areas, total: areas.reduce((n, a) => n + a.reads, 0), writesOn };
 }

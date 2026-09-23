@@ -1,31 +1,49 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { createTestDatabase, type TestDatabase } from '@ocso/db/testing';
-import { deploymentSettings, internalAgentActions, modelProfiles, modelProviders, uuidv7, workerSettings } from '@ocso/db';
+import { deploymentSettings, internalAgentActions, modelProfiles, modelProviders, uuidv7 } from '@ocso/db';
 import { SettingsService } from '@ocso/application';
 import { ModelGateway, UsageRecorder } from '@ocso/agent-runtime';
 import { ScriptedAdapter } from '@ocso/agent-runtime/testing';
 import type { Principal } from '@ocso/auth';
-import { InternalActionService, InternalAgentService, InternalToolRegistry, type AgentSink, type PendingAction } from '../src/index.js';
+import { AskOcsoTools, InternalActionService, InternalAgentService, type ActionCard, type AgentSink, type CapabilityCall, type CapabilityRunner, type DelegationScope } from '../src/index.js';
+
+/**
+ * The Ask OCSO loop over the meta tools (PM/research/12 §4) with a scripted model and a recording runner in
+ * place of the API's loopback runner (apps/api/test/int/ask-ocso.int.test.ts runs the real one).
+ */
 
 let t: TestDatabase;
 let adapter: ScriptedAdapter;
 let agent: InternalAgentService;
 let actions: InternalActionService;
-const registry = new InternalToolRegistry();
-const person = (role: Principal['role']): Principal => ({ userId: uuidv7(), role, displayName: role, teamIds: [], via: 'UI' });
-let admin: Principal;
-let lead: Principal;
-let exec: Principal;
+const calls: Array<{ scope: DelegationScope; call: CapabilityCall }> = [];
+const teamId = '01a0cf3e-0000-7000-8000-000000000001';
+
+/** Answers GETs the way the routes would, and records every call (writes must never happen before a confirm). */
+const runner: CapabilityRunner = {
+  async call(_principal, scope, call) {
+    calls.push({ scope, call });
+    if (call.method === 'GET' && call.path === '/v1/teams') return { status: 200, body: [{ id: teamId, name: 'Cards desk' }] };
+    if (call.method === 'GET' && call.path === `/v1/teams/${teamId}`) return { status: 200, body: { id: teamId, name: 'Cards desk', description: null } };
+    if (call.method === 'PATCH' && call.path === `/v1/teams/${teamId}`) return { status: 200, body: { id: teamId, name: (call.body as { name: string }).name } };
+    return { status: 404, body: { error: { category: 'not_found', code: 'not_found', message: 'nothing here' } } };
+  },
+};
+
+const person = (role: Principal['role']): Principal => ({ userId: uuidv7(), role, displayName: role, teamIds: [], via: 'UI', sessionId: uuidv7() });
+let tech: Principal;
+let head: Principal;
+let service: Principal;
 
 const sink = () => {
-  const out = { text: '', steps: [] as string[], links: [] as unknown[], actions: [] as PendingAction[], denied: [] as string[], threads: [] as string[] };
+  const out = { text: '', steps: [] as string[], links: [] as unknown[], cards: [] as ActionCard[], denied: [] as string[], threads: [] as string[] };
   const s: AgentSink = {
     text: (d) => (out.text += d),
     step: (l) => out.steps.push(l),
     links: (l) => out.links.push(...l),
     table: () => {},
-    action: (a) => out.actions.push(a),
+    card: (c) => out.cards.push(c),
     denied: (m) => out.denied.push(m),
     thread: (id) => out.threads.push(id),
   };
@@ -34,7 +52,7 @@ const sink = () => {
 
 beforeAll(async () => {
   t = await createTestDatabase();
-  for (const p of [(admin = person('TECH')), (lead = person('HEAD')), (exec = person('SERVICE'))]) {
+  for (const p of [(tech = person('TECH')), (head = person('HEAD')), (service = person('SERVICE'))]) {
     await t.pool.query(`INSERT INTO users (id, email, name, role) VALUES ($1, $2, $3, $4)`, [p.userId, `${p.role}@x.test`, p.displayName, p.role]);
   }
   const providerId = uuidv7();
@@ -44,92 +62,101 @@ beforeAll(async () => {
   await t.db.update(deploymentSettings).set({ internalAgentProfileId: profileId }).where(eq(deploymentSettings.id, 1));
   adapter = new ScriptedAdapter(providerId);
   const gateway = new ModelGateway(t.db, { get: async () => adapter }, new UsageRecorder(t.db), new SettingsService(t.db));
-  actions = new InternalActionService(t.db, registry);
-  agent = new InternalAgentService(t.db, gateway, registry, actions);
+  actions = new InternalActionService(t.db, runner, null);
+  agent = new InternalAgentService(t.db, gateway, new AskOcsoTools(t.db, runner, actions), actions);
 });
 afterAll(async () => {
   await t?.drop();
 });
 beforeEach(() => {
   adapter.requests = [];
+  calls.length = 0;
 });
 
-describe('internal OCSO agent permissions (docs/12 §3)', () => {
-  it('offers each role only the tools its permissions allow', () => {
-    const names = (p: Principal) => registry.specs(p).map((s) => s.name);
-    expect(names(exec)).toContain('list_conversations');
-    expect(names(exec)).not.toContain('worker_capacity');
-    expect(names(exec)).not.toContain('update_worker_settings');
-    expect(names(exec)).not.toContain('latency_breakdown');
-    expect(names(lead)).toContain('agent_performance');
-    expect(names(lead)).not.toContain('latency_breakdown');
-    expect(names(lead)).not.toContain('prompt_cache_stats');
-    expect(names(admin)).toContain('latency_breakdown');
-    expect(names(admin)).not.toContain('list_conversations');
+describe('Ask OCSO loop (PM/research/12 §4)', () => {
+  it('shows the model exactly two tools, whatever the role', async () => {
+    for (const p of [tech, service]) {
+      adapter.script = [{ text: 'Hello.' }];
+      await agent.ask(p, null, 'Hi', sink().s, 'c0');
+      expect(adapter.requests.at(-1)!.tools.map((x) => x.name)).toEqual(['get_tools', 'execute_tool']);
+    }
   });
 
-  it('refuses a tool the user lacks even when the model calls it anyway', async () => {
-    adapter.script = [{ toolCalls: [{ toolName: 'latency_breakdown', input: { minutes: 60 } }] }, { text: 'That needs the Tech admin.' }];
+  it('refuses a tool the user lacks even when the model calls it anyway, without calling the route', async () => {
+    adapter.script = [{ toolCalls: [{ toolName: 'execute_tool', input: { name: 'insight.latency_breakdown', args: { minutes: 60 } } }] }, { text: 'That needs the Tech admin.' }];
     const { s, out } = sink();
-    await agent.ask(lead, null, 'Why did latency spike?', s, 'c1');
-    expect(out.denied).toHaveLength(1);
-    expect(JSON.stringify(adapter.requests[1]!.messages.at(-1))).toContain('Not permitted');
+    await agent.ask(head, null, 'Why did latency spike?', s, 'c1');
+    expect(out.denied).toEqual(['Not available for your role: latency breakdown.']);
+    expect(JSON.stringify(adapter.requests[1]!.messages.at(-1))).toContain('telemetry.technical.read');
+    expect(calls).toEqual([]);
   });
 
-  it('never executes a high-risk write without explicit confirmation, and never around maker-checker', async () => {
-    adapter.script = [{ toolCalls: [{ toolName: 'update_worker_settings', input: { minWarmWorkers: 4 } }] }, { text: 'Confirm to apply.' }];
+  it('runs a read through the runner as the user, bound to the thread and the tool call', async () => {
+    adapter.script = [{ toolCalls: [{ toolName: 'execute_tool', input: { name: 'users.list_teams', args: {} } }] }, { text: 'One team.' }];
     const { s, out } = sink();
-    await agent.ask(admin, null, 'Increase minimum warm workers from 2 to 4', s, 'c2');
-    expect(out.actions).toHaveLength(1);
-    const [before] = await t.db.select().from(workerSettings);
-    expect(before!.minWarmWorkers).toBe(2);
+    const { threadId } = await agent.ask(head, null, 'Which teams are there?', s, 'c2');
+    expect(calls).toEqual([{ scope: { threadId, callId: 'call_1_0', correlationId: 'c2' }, call: { method: 'GET', path: '/v1/teams' } }]);
+    expect(out.steps).toEqual(['users · list teams']);
+    const result = JSON.stringify(adapter.requests[1]!.messages.at(-1));
+    expect(result).toContain('Cards desk');
+    expect(result).toContain('not instructions');
+  });
 
-    await expect(actions.confirm(exec, out.actions[0]!.id, 'c3')).rejects.toMatchObject({ category: 'not_found' });
-    // Worker settings are approved configuration (PM/research/11 §4): confirming in Ask OCSO does not bypass the checker.
-    await expect(actions.confirm(admin, out.actions[0]!.id, 'c4')).rejects.toMatchObject({ code: 'approval_required' });
-    const [after] = await t.db.select().from(workerSettings);
-    expect(after!.minWarmWorkers).toBe(2);
-    const { rows } = await t.pool.query(`SELECT count(*)::int AS n FROM audit_events WHERE action = 'workers.config_update'`);
-    expect(rows[0].n).toBe(0);
+  it('turns a write into a card: only reads happen until the user confirms', async () => {
+    adapter.script = [{ toolCalls: [{ toolName: 'execute_tool', input: { name: 'users.update_team', args: { id: teamId, name: 'Card disputes' } } }] }, { text: 'Confirm to rename.' }];
+    const { s, out } = sink();
+    const { threadId } = await agent.ask(head, null, 'Rename Cards desk to Card disputes', s, 'c3');
+    expect(out.cards).toHaveLength(1);
+    expect(out.cards[0]).toMatchObject({ kind: 'direct', title: 'Update team · Cards desk', changes: [{ label: 'name', before: 'Cards desk', after: 'Card disputes' }] });
+    expect(calls.map((c) => c.call.method)).toEqual(['GET']);
+    const history = await agent.messages(head, threadId);
+    expect(JSON.stringify(history[1]!.parts)).toContain('"status":"PENDING"');
+    await expect(actions.confirm(service, out.cards[0]!.id, {}, 'c4')).rejects.toMatchObject({ category: 'not_found' });
+    const done = await actions.confirm(head, out.cards[0]!.id, {}, 'c5');
+    expect(done.status).toBe('EXECUTED');
+    expect(calls.at(-1)!.call).toEqual({ method: 'PATCH', path: `/v1/teams/${teamId}`, body: { name: 'Card disputes' } });
+    expect(calls.at(-1)!.scope).toMatchObject({ threadId, cardId: out.cards[0]!.id });
+    const [row] = await t.db.select().from(internalAgentActions).where(eq(internalAgentActions.id, out.cards[0]!.id));
+    expect(row).toMatchObject({ status: 'EXECUTED', callId: expect.any(String), auditEventId: expect.any(String) });
   });
 
   it('re-checks permissions at confirmation time', async () => {
-    const id = uuidv7();
-    const threadId = uuidv7();
-    await t.pool.query(`INSERT INTO internal_agent_threads (id, user_id) VALUES ($1, $2)`, [threadId, exec.userId]);
-    await t.db.insert(internalAgentActions).values({ id, threadId, userId: exec.userId, tool: 'update_worker_settings', params: { maxWorkers: 100 }, risk: 'HIGH_WRITE', description: 'forged', expiresAt: new Date(Date.now() + 60_000) });
-    await expect(actions.confirm(exec, id, 'c6')).rejects.toMatchObject({ category: 'authorization' });
+    adapter.script = [{ toolCalls: [{ toolName: 'execute_tool', input: { name: 'users.update_team', args: { id: teamId, name: 'X desk' } } }] }, { text: 'ok' }];
+    const { s, out } = sink();
+    await agent.ask(head, null, 'Rename', s, 'c6');
+    // The same user, whose rights dropped (a revoke) since the card was built.
+    const demoted: Principal = { ...head, permissions: new Set() };
+    await expect(actions.confirm(demoted, out.cards[0]!.id, {}, 'c7')).rejects.toMatchObject({ category: 'authorization' });
   });
 
-  it('answers read questions with tool data and persists the thread', async () => {
-    adapter.script = [{ toolCalls: [{ toolName: 'attention_summary', input: {} }] }, { text: 'Nothing urgent right now.' }];
+  it('with writes switched off, says so in the prompt and makes no card', async () => {
+    await t.db.update(deploymentSettings).set({ askOcsoWrites: false }).where(eq(deploymentSettings.id, 1));
+    try {
+      adapter.script = [{ toolCalls: [{ toolName: 'execute_tool', input: { name: 'users.update_team', args: { id: teamId, name: 'Y desk' } } }] }, { text: 'Writes are off.' }];
+      const { s, out } = sink();
+      await agent.ask(head, null, 'Rename', s, 'c8');
+      expect(out.cards).toEqual([]);
+      expect(JSON.stringify(adapter.requests[0]!.system)).toContain('writes are turned off');
+      expect(JSON.stringify(adapter.requests[1]!.messages.at(-1))).toContain('turned off');
+    } finally {
+      await t.db.update(deploymentSettings).set({ askOcsoWrites: true }).where(eq(deploymentSettings.id, 1));
+    }
+  });
+
+  it('answers read questions with insight data and persists the thread', async () => {
+    adapter.script = [{ toolCalls: [{ toolName: 'execute_tool', input: { name: 'insight.attention_summary', args: {} } }] }, { text: 'Nothing urgent right now.' }];
     const { s, out } = sink();
-    const { threadId } = await agent.ask(exec, null, 'What needs my attention?', s, 'c7');
+    const { threadId } = await agent.ask(service, null, 'What needs my attention?', s, 'c9');
     expect(out.text).toBe('Nothing urgent right now.');
-    const messages = await agent.messages(exec, threadId);
+    const messages = await agent.messages(service, threadId);
     expect(messages.map((m) => m.role)).toEqual(['user', 'assistant']);
-    await expect(agent.messages(lead, threadId)).rejects.toMatchObject({ category: 'not_found' });
-  });
-
-  it('shows what a write would change and reports the decision in thread history', async () => {
-    adapter.script = [{ toolCalls: [{ toolName: 'update_worker_settings', input: { maxWorkers: 12 } }] }, { text: 'Confirm to apply.' }];
-    const { s, out } = sink();
-    const { threadId } = await agent.ask(admin, null, 'Raise max workers to 12', s, 'c8');
-    expect(out.threads).toEqual([threadId]);
-    expect(out.actions[0]!.changes).toEqual([{ label: 'max workers', before: '10', after: '12' }]);
-    expect(out.actions[0]!.description).toBe('Worker configuration · max workers 10 → 12');
-    const pending = await agent.messages(admin, threadId);
-    expect(JSON.stringify(pending[1]!.parts)).toContain('"status":"PENDING"');
-    await actions.reject(admin, out.actions[0]!.id, 'c9');
-    const decided = await agent.messages(admin, threadId);
-    expect(JSON.stringify(decided[1]!.parts)).toContain('"status":"REJECTED"');
+    await expect(agent.messages(head, threadId)).rejects.toMatchObject({ category: 'not_found' });
   });
 
   it('passes the open page to the model and keeps it on the thread', async () => {
     adapter.script = [{ text: 'Looking at it.' }];
-    const { s } = sink();
     const conversationId = uuidv7();
-    const { threadId } = await agent.ask(exec, null, 'Summarise this conversation', s, 'c10', undefined, { path: `/conversations/${conversationId}`, conversationId });
+    const { threadId } = await agent.ask(service, null, 'Summarise this conversation', sink().s, 'c10', undefined, { path: `/conversations/${conversationId}`, conversationId });
     expect(JSON.stringify(adapter.requests[0]!.system)).toContain(`conversation ${conversationId}`);
     const { rows } = await t.pool.query(`SELECT context FROM internal_agent_threads WHERE id = $1`, [threadId]);
     expect(rows[0].context).toEqual({ path: `/conversations/${conversationId}`, conversationId });

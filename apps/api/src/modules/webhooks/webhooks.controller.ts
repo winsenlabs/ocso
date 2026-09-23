@@ -3,7 +3,7 @@ import { Permission, type Principal } from '@ocso/auth';
 import { ApprovalService, WEBHOOK_EVENT_TYPES, WebhookDeliveryService, WebhookInput, WebhookPatch, WebhookService, WithApproval, requestApproval, type ActorContext } from '@ocso/application';
 import type { Response } from 'express';
 import { z } from 'zod';
-import { Actor, CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
+import { Actor, Capability, CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
 import { approvalResponse } from '../approvals/approval-response.js';
 import { createDraft, proposeOnly, withApprovalState, OptionalApproval, type ApprovalBody } from '../settings/platform-approvals.js';
 
@@ -28,12 +28,14 @@ export class WebhooksController {
     @Inject(ApprovalService) private readonly approvals: ApprovalService,
   ) {}
 
+  @Capability({ name: 'webhooks.list_webhooks', summary: 'List outgoing webhook subscriptions with their status.' })
   @Get('webhooks')
   @RequirePermission(Permission.WEBHOOKS_MANAGE)
   async list(@Actor() actor: ActorContext, @CurrentPrincipal() principal: Principal) {
     return withApprovalState(this.approvals, principal, 'webhook_subscription', await this.webhooks.list(actor));
   }
 
+  @Capability({ name: 'webhooks.list_event_types', summary: 'List the event types a webhook can subscribe to.' })
   @Get('webhooks/event-types')
   @RequirePermission(Permission.WEBHOOKS_MANAGE)
   eventTypes() {
@@ -41,6 +43,7 @@ export class WebhooksController {
   }
 
   /** Returns the signing secret once; it is never readable again. A disabled draft; with `approval` its activation is submitted too (202). */
+  @Capability({ exclude: 'returns the signing secret once; create webhooks in Settings' })
   @Post('webhooks')
   @RequirePermission(Permission.WEBHOOKS_MANAGE)
   create(@Actor() actor: ActorContext, @Body({ schema: CreateBody }) body: CreateBody, @Res({ passthrough: true }) res: Response) {
@@ -49,6 +52,7 @@ export class WebhooksController {
   }
 
   /** `enabled: false` disables at once; `enabled: true` is an ACTIVATE proposal; other fields: draft direct (204), else UPDATE proposal (202). */
+  @Capability({ name: 'webhooks.update_webhook', summary: "Change a webhook's name, URL or events: disabling applies at once, enabling needs approval.", stopWhen: { enabled: false }, tags: ['disable'] })
   @Patch('webhooks/:id')
   @HttpCode(204)
   @RequirePermission(Permission.WEBHOOKS_MANAGE)
@@ -64,6 +68,7 @@ export class WebhooksController {
     return approvalResponse(res, requestApproval(this.approvals, actor, { objectKind: 'webhook_subscription', objectId: id, action: 'UPDATE', payload: edit }, approval, () => this.webhooks.update(actor, id, edit)));
   }
 
+  @Capability({ exclude: 'returns the new signing secret; rotate it in Settings' })
   @Post('webhooks/:id/rotate-secret')
   @RequirePermission(Permission.WEBHOOKS_MANAGE)
   rotate(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string) {
@@ -71,12 +76,14 @@ export class WebhooksController {
   }
 
   /** Always a proposal (DELETE): 202 `{proposal}` with `approval`, else 409 approval_required. */
+  @Capability({ name: 'webhooks.delete_webhook', summary: 'Delete a webhook (always needs approval).' })
   @Delete('webhooks/:id')
   @RequirePermission(Permission.WEBHOOKS_MANAGE)
   remove(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Body({ schema: OptionalApproval }) body: ApprovalBody, @Res({ passthrough: true }) res: Response) {
     return proposeOnly(res, this.approvals, actor, { kind: 'webhook_subscription', id, action: 'DELETE' }, body?.approval);
   }
 
+  @Capability({ name: 'webhooks.test_webhook', summary: 'Send a test event to a webhook.', risk: 'LOW_WRITE', tags: ['test'] })
   @Post('webhooks/:id/test')
   @RequirePermission(Permission.WEBHOOKS_MANAGE)
   async test(@Param('id', { schema: Id }) id: string) {
@@ -84,12 +91,14 @@ export class WebhooksController {
     return this.delivery.sendTest(id);
   }
 
+  @Capability({ name: 'webhooks.list_deliveries', summary: "A webhook's recent deliveries and their status.", tags: ['delivery'] })
   @Get('webhooks/:id/deliveries')
   @RequirePermission(Permission.WEBHOOKS_MANAGE)
   deliveries(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Query({ schema: DeliveriesQuery }) q: DeliveriesQuery) {
     return this.webhooks.deliveries(actor, id, q.status);
   }
 
+  @Capability({ name: 'webhooks.retry_delivery', summary: 'Retry a failed webhook delivery.', risk: 'LOW_WRITE', tags: ['delivery', 'retry'] })
   @Post('webhook-deliveries/:id/retry')
   @HttpCode(204)
   @RequirePermission(Permission.WEBHOOKS_MANAGE)

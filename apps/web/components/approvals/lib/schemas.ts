@@ -51,6 +51,8 @@ export const DecisionSchema = z.object({
   reason: z.string().nullable(),
   contentHash: z.string(),
   bulkBatchId: z.string().nullable(),
+  /** INTERNAL_AGENT: made through Ask OCSO for this person. */
+  via: z.string().nullable().optional(),
   occurredAt: z.string(),
 });
 export type ApprovalDecision = z.infer<typeof DecisionSchema>;

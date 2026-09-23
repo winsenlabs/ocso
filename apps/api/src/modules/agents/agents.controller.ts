@@ -3,7 +3,7 @@ import { Permission, type Principal } from '@ocso/auth';
 import { AgentInput, AgentOwnersInput, AgentPatch, AgentService, ApprovalService, WithApproval, requestApproval, type ActorContext } from '@ocso/application';
 import type { Response } from 'express';
 import { z } from 'zod';
-import { Actor, CurrentPrincipal, RequireAnyPermission, RequirePermission } from '../../common/decorators.js';
+import { Actor, Capability, CurrentPrincipal, RequireAnyPermission, RequirePermission } from '../../common/decorators.js';
 import { approvalResponse } from '../approvals/approval-response.js';
 import { AgentStatsService } from './agent-stats.service.js';
 
@@ -28,6 +28,7 @@ export class AgentsController {
   ) {}
 
   /** Only the agents the caller can read (their teams' agents; every agent for the Tech admin). */
+  @Capability({ name: 'agents.list_agents', summary: 'List the virtual agents you can see, with their live stats.' })
   @Get()
   @RequirePermission(Permission.AGENTS_READ)
   async list(@CurrentPrincipal() principal: Principal) {
@@ -35,6 +36,7 @@ export class AgentsController {
     return agents.map((a) => ({ ...a, stats: stats.get(a.id) ?? null }));
   }
 
+  @Capability({ name: 'agents.get_agent', summary: 'Get one virtual agent: configuration, stats and approval state.' })
   @Get(':id')
   @RequirePermission(Permission.AGENTS_READ)
   async get(@CurrentPrincipal() principal: Principal, @Param('id', { schema: Id }) id: string) {
@@ -44,6 +46,7 @@ export class AgentsController {
     return { ...agent, stats: stats.get(id) ?? null, approval };
   }
 
+  @Capability({ name: 'agents.create_agent', summary: 'Create a virtual agent (it starts as a draft).' })
   @Post()
   @RequirePermission(Permission.AGENTS_MANAGE)
   create(@Actor() actor: ActorContext, @Body({ schema: AgentInput }) body: AgentInput) {
@@ -54,6 +57,7 @@ export class AgentsController {
    * A draft agent changes directly (200). Once approved, a change is a proposal:
    * 202 `{proposal}` with `approval: {checkerId, reason}`, else 409 approval_required.
    */
+  @Capability({ name: 'agents.update_agent', summary: "Change a virtual agent's settings: name, purpose, model profiles, queue, channels, hours (an approved agent's change needs approval)." })
   @Patch(':id')
   @RequirePermission(Permission.AGENTS_MANAGE)
   update(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Body({ schema: PatchBody }) body: PatchBody, @Res({ passthrough: true }) res: Response) {
@@ -62,6 +66,7 @@ export class AgentsController {
   }
 
   /** Deleting an agent (agents.delete, Head) is always a proposal: 202 `{proposal}`, or 409 approval_required. */
+  @Capability({ name: 'agents.delete_agent', summary: 'Delete a virtual agent (always needs approval).' })
   @Delete(':id')
   @RequirePermission(Permission.AGENTS_DELETE)
   remove(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Body({ schema: WithApproval }) body: ApprovalBody, @Res({ passthrough: true }) res: Response) {
@@ -72,6 +77,7 @@ export class AgentsController {
    * Replace the owning teams. Tech admin (agents.assign_owner): any teams, for
    * governance. Lead (agents.manage): only within their own teams. Audited.
    */
+  @Capability({ name: 'agents.set_agent_owners', summary: 'Replace the teams that own a virtual agent.', tags: ['owner', 'team'] })
   @Put(':id/owners')
   @RequireAnyPermission(Permission.AGENTS_ASSIGN_OWNER, Permission.AGENTS_MANAGE)
   setOwners(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Body({ schema: AgentOwnersInput }) body: AgentOwnersInput) {
@@ -83,6 +89,7 @@ export class AgentsController {
    * live or resuming — is an ACTIVATE and always a proposal: 202 `{proposal}`
    * with `approval`, else 409 approval_required.
    */
+  @Capability({ name: 'agents.set_agent_status', summary: 'Pause a virtual agent (applies at once) or take it live / resume it (needs approval).', stopWhen: { status: 'PAUSED' }, tags: ['pause', 'stop', 'resume', 'go live', 'activate'] })
   @Post(':id/status')
   @RequireAnyPermission(Permission.AGENTS_MANAGE, Permission.AGENTS_PAUSE)
   setStatus(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Body({ schema: StatusInput }) body: StatusInput, @Res({ passthrough: true }) res: Response) {

@@ -28,7 +28,7 @@ import type { Db } from '@ocso/db';
 import type { QueueAdapter } from '@ocso/queue';
 import type { BlobStore } from '@ocso/blob';
 import { z } from 'zod';
-import { Actor, CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
+import { Actor, Capability, CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
 import { BLOB_STORE, DB, QUEUE } from '../../infrastructure/tokens.js';
 import { SESSION_WINDOW_HOURS } from '../channels/templates.providers.js';
 import { ConversationAccessService } from './conversation-access.service.js';
@@ -54,6 +54,7 @@ export class ConversationsController {
     @Inject(SESSION_WINDOW_HOURS) private readonly windowHours: SessionWindowHours,
   ) {}
 
+  @Capability({ name: 'conversations.list_conversations', summary: 'List conversations you can see (all, mine, waiting, AI, human, priority, resolved), with search.', tags: ['inbox', 'waiting'] })
   @Get()
   @RequirePermission(Permission.CONVERSATIONS_READ)
   async list(@CurrentPrincipal() principal: Principal, @Query({ schema: InboxQuery }) q: InboxQuery) {
@@ -61,12 +62,14 @@ export class ConversationsController {
   }
 
   /** Most used tags on conversations the caller can see (autocomplete). Declared before `:id`. */
+  @Capability({ name: 'conversations.list_conversation_tags', summary: 'The most used conversation tags (autocomplete by prefix).', tags: ['tag', 'label'] })
   @Get('tags')
   @RequirePermission(Permission.CONVERSATIONS_READ)
   async tags(@CurrentPrincipal() principal: Principal, @Query({ schema: TagSuggestionQuery }) q: TagSuggestionQuery) {
     return tagSuggestions(this.db, principal, await this.access.policy(), q);
   }
 
+  @Capability({ name: 'conversations.get_conversation', summary: 'Get one conversation: customer, agent, state, queue, assignee and summary.' })
   @Get(':id')
   @RequirePermission(Permission.CONVERSATIONS_READ)
   async detail(@CurrentPrincipal() principal: Principal, @Param('id', { schema: Id }) id: string) {
@@ -76,6 +79,7 @@ export class ConversationsController {
     return detail;
   }
 
+  @Capability({ name: 'conversations.get_conversation_timeline', summary: "Read a conversation's messages and events in order.", tags: ['messages', 'transcript', 'history'] })
   @Get(':id/timeline')
   @RequirePermission(Permission.CONVERSATIONS_READ)
   async timeline(@CurrentPrincipal() principal: Principal, @Param('id', { schema: Id }) id: string, @Query({ schema: TimelineQuery }) q: TimelineQuery) {
@@ -84,6 +88,7 @@ export class ConversationsController {
     return Promise.all(items.map(async (item) => (item.kind === 'message' ? { ...item, parts: await this.access.signParts(item.parts) } : item)));
   }
 
+  @Capability({ name: 'conversations.claim_conversation', summary: 'Claim a waiting conversation for yourself.', risk: 'LOW_WRITE', tags: ['pick up', 'assign to me'] })
   @Post(':id/claim')
   @HttpCode(204)
   @RequirePermission(Permission.CONVERSATIONS_CLAIM)
@@ -92,6 +97,7 @@ export class ConversationsController {
     await this.control.claim(actor, id);
   }
 
+  @Capability({ name: 'conversations.accept_conversation', summary: 'Accept a conversation offered to you.', risk: 'LOW_WRITE', tags: ['offer'] })
   @Post(':id/accept')
   @HttpCode(204)
   @RequirePermission(Permission.CONVERSATIONS_CLAIM)
@@ -99,6 +105,7 @@ export class ConversationsController {
     await this.control.accept(actor, id);
   }
 
+  @Capability({ name: 'conversations.decline_conversation', summary: 'Decline a conversation offered to you.', risk: 'LOW_WRITE', tags: ['offer'] })
   @Post(':id/decline')
   @HttpCode(204)
   @RequirePermission(Permission.CONVERSATIONS_CLAIM)
@@ -106,6 +113,7 @@ export class ConversationsController {
     await this.control.decline(actor, id);
   }
 
+  @Capability({ name: 'conversations.take_over_conversation', summary: 'Take over a conversation from the AI agent.', tags: ['handover', 'human', 'escalate'] })
   @Post(':id/take-over')
   @HttpCode(204)
   @RequirePermission(Permission.CONVERSATIONS_TAKE_OVER)
@@ -114,6 +122,7 @@ export class ConversationsController {
     await this.control.takeOver(actor, id);
   }
 
+  @Capability({ name: 'conversations.transfer_conversation', summary: 'Transfer a conversation to another queue or person.', tags: ['reassign', 'move', 'handover'] })
   @Post(':id/transfer')
   @HttpCode(204)
   @RequirePermission(Permission.CONVERSATIONS_TRANSFER)
@@ -122,6 +131,7 @@ export class ConversationsController {
     await this.control.transfer(actor, id, body);
   }
 
+  @Capability({ name: 'conversations.return_to_ai', summary: 'Hand a conversation back to the AI agent, with a handover summary.', tags: ['handback', 'ai'] })
   @Post(':id/return-to-ai')
   @HttpCode(204)
   @RequirePermission(Permission.CONVERSATIONS_RETURN_TO_AI)
@@ -130,6 +140,7 @@ export class ConversationsController {
     await this.control.returnToAi(actor, id, body);
   }
 
+  @Capability({ name: 'conversations.cancel_return_to_ai', summary: 'Cancel a pending hand-back to the AI agent.', risk: 'LOW_WRITE', tags: ['handback'] })
   @Post(':id/cancel-return')
   @HttpCode(204)
   @RequirePermission(Permission.CONVERSATIONS_RETURN_TO_AI)
@@ -138,6 +149,7 @@ export class ConversationsController {
     await this.control.cancelReturn(actor, id);
   }
 
+  @Capability({ name: 'conversations.resolve_conversation', summary: 'Resolve a conversation, with a disposition and tags.', tags: ['close', 'done'] })
   @Post(':id/resolve')
   @HttpCode(204)
   @RequirePermission(Permission.CONVERSATIONS_RESOLVE)
@@ -146,6 +158,7 @@ export class ConversationsController {
     await this.control.resolve(actor, id, body);
   }
 
+  @Capability({ name: 'conversations.reopen_conversation', summary: 'Reopen a resolved conversation.' })
   @Post(':id/reopen')
   @HttpCode(204)
   @RequirePermission(Permission.CONVERSATIONS_TAKE_OVER)
@@ -154,6 +167,7 @@ export class ConversationsController {
     await this.control.reopen(actor, id);
   }
 
+  @Capability({ name: 'conversations.add_note', summary: 'Add an internal note to a conversation (optionally shown to the AI agent).', risk: 'LOW_WRITE', tags: ['note', 'comment', 'internal'] })
   @Post(':id/notes')
   @RequirePermission(Permission.CONVERSATIONS_NOTE)
   async note(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Body({ schema: NoteInput }) body: NoteInput) {
@@ -162,6 +176,7 @@ export class ConversationsController {
   }
 
   /** Replace the tag set (normalized, de-duplicated, ≤ 20); returns what was stored. */
+  @Capability({ name: 'conversations.set_tags', summary: "Replace a conversation's tags.", risk: 'LOW_WRITE', tags: ['tag', 'label'] })
   @Put(':id/tags')
   @RequirePermission(Permission.CONVERSATIONS_NOTE)
   async setTags(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Body({ schema: SetTagsInput }) body: SetTagsInput) {
@@ -169,6 +184,7 @@ export class ConversationsController {
     return setConversationTags(this.db, actor, id, body);
   }
 
+  @Capability({ name: 'conversations.send_reply', summary: 'Send a reply to the customer in a conversation.', tags: ['reply', 'message', 'respond'] })
   @Post(':id/messages')
   @RequirePermission(Permission.CONVERSATIONS_REPLY)
   async reply(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Body({ schema: HumanReplyInput }) body: HumanReplyInput) {
@@ -181,6 +197,7 @@ export class ConversationsController {
    * after the 24-hour window; allowed inside it too). `reopen: true` reopens a
    * resolved conversation and sends in one step.
    */
+  @Capability({ name: 'conversations.send_template_message', summary: 'Send an approved message template to the customer (e.g. outside the messaging window).', tags: ['template', 'message'] })
   @Post(':id/template-message')
   @RequirePermission(Permission.CONVERSATIONS_REPLY)
   async templateMessage(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Body({ schema: TemplateMessageInput }) body: TemplateMessageInput) {

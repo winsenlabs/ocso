@@ -4,7 +4,7 @@ import { ApprovalService, AuthPolicyInput, AuthPolicyService, SETTINGS_OBJECT_ID
 import { SsoProviderInput, SsoProviderPatch, SsoProviderService } from '@ocso/application/auth-server';
 import type { Response } from 'express';
 import { z } from 'zod';
-import { Actor, CurrentPrincipal, RequirePermission, type OcsoRequest } from '../../common/decorators.js';
+import { Actor, Capability, CurrentPrincipal, type OcsoRequest, RequirePermission } from '../../common/decorators.js';
 import { approvalResponse } from '../approvals/approval-response.js';
 import { createDraft, proposeOnly, withApprovalState, OptionalApproval, type ApprovalBody } from '../settings/platform-approvals.js';
 
@@ -35,12 +35,14 @@ export class AuthSettingsController {
     @Inject(ApprovalService) private readonly approvals: ApprovalService,
   ) {}
 
+  @Capability({ name: 'settings.get_auth_policy', summary: 'Get the sign-in policy: which roles must use multi-factor authentication.', tags: ['mfa', 'sign-in', 'security'] })
   @Get('auth-policy')
   @RequirePermission(Permission.DEPLOYMENT_SETTINGS_MANAGE)
   getPolicy() {
     return this.policy.get();
   }
 
+  @Capability({ name: 'settings.update_auth_policy', summary: 'Change which roles must use multi-factor authentication (needs approval).', tags: ['mfa', 'sign-in', 'security'] })
   @Put('auth-policy')
   @RequirePermission(Permission.DEPLOYMENT_SETTINGS_MANAGE)
   updatePolicy(@Actor() actor: ActorContext, @Body({ schema: PolicyBody }) body: PolicyBody, @Res({ passthrough: true }) res: Response) {
@@ -48,6 +50,7 @@ export class AuthSettingsController {
     return approvalResponse(res, requestApproval(this.approvals, actor, { objectKind: 'deployment_settings', objectId: SETTINGS_OBJECT_ID, action: 'UPDATE', payload: { mfa } }, approval, null));
   }
 
+  @Capability({ name: 'settings.list_sso_providers', summary: 'List single sign-on (SSO) providers.', tags: ['sso', 'sign-in'] })
   @Get('sso-providers')
   @RequirePermission(Permission.DEPLOYMENT_SETTINGS_MANAGE)
   async listProviders(@Actor() actor: ActorContext, @CurrentPrincipal() principal: Principal) {
@@ -55,6 +58,7 @@ export class AuthSettingsController {
   }
 
   /** Registered as a draft (201); `approval` in the body also submits its activation (202). */
+  @Capability({ exclude: "takes the identity provider's client secret; add SSO providers in Settings" })
   @Post('sso-providers')
   @RequirePermission(Permission.DEPLOYMENT_SETTINGS_MANAGE)
   createProvider(@Actor() actor: ActorContext, @Body({ schema: SsoProviderInput.and(WithApproval) }) body: SsoProviderInput & ApprovalBody, @Req() req: OcsoRequest, @Res({ passthrough: true }) res: Response) {
@@ -62,6 +66,7 @@ export class AuthSettingsController {
     return createDraft(res, { approvals: this.approvals, actor, kind: 'sso_provider', live: approval !== undefined, approval, create: () => this.sso.create(actor, input as SsoProviderInput, actingSession(req)) });
   }
 
+  @Capability({ name: 'settings.update_sso_provider', summary: "Change an SSO provider's name, domains or auto-provisioning.", tags: ['sso'] })
   @Patch('sso-providers/:providerId')
   @RequirePermission(Permission.DEPLOYMENT_SETTINGS_MANAGE)
   async updateProvider(@Actor() actor: ActorContext, @Param('providerId', { schema: ProviderId }) providerId: string, @Body({ schema: PatchBody }) body: PatchBody, @Res({ passthrough: true }) res: Response) {
@@ -71,6 +76,7 @@ export class AuthSettingsController {
   }
 
   /** DISABLED stops sign-in through it at once; ACTIVE (activate or re-enable) is an ACTIVATE proposal. */
+  @Capability({ name: 'settings.set_sso_provider_status', summary: 'Disable an SSO provider (applies at once) or activate / re-enable it (needs approval).', stopWhen: { status: 'DISABLED' }, tags: ['sso', 'disable'] })
   @Post('sso-providers/:providerId/status')
   @RequirePermission(Permission.DEPLOYMENT_SETTINGS_MANAGE)
   async setProviderStatus(@Actor() actor: ActorContext, @Param('providerId', { schema: ProviderId }) providerId: string, @Body({ schema: StatusBody }) body: StatusBody, @Res({ passthrough: true }) res: Response) {
@@ -79,6 +85,7 @@ export class AuthSettingsController {
   }
 
   /** Always a proposal (DELETE): 202 `{proposal}` with `approval`, else 409 approval_required. */
+  @Capability({ name: 'settings.delete_sso_provider', summary: 'Delete an SSO provider (always needs approval).', tags: ['sso'] })
   @Delete('sso-providers/:providerId')
   @RequirePermission(Permission.DEPLOYMENT_SETTINGS_MANAGE)
   async deleteProvider(@Actor() actor: ActorContext, @Param('providerId', { schema: ProviderId }) providerId: string, @Body({ schema: OptionalApproval }) body: ApprovalBody, @Res({ passthrough: true }) res: Response) {

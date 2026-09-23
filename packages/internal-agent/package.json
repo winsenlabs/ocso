@@ -4,12 +4,15 @@
   "license": "Apache-2.0",
   "private": true,
   "type": "module",
-  "description": "The internal OCSO operating agent: permission-filtered tools over application services (docs/12).",
+  "description": "Ask OCSO: the internal operating agent \u2014 meta tools over the capability catalog, confirmation cards (PM/research/12).",
   "exports": {
     ".": {
       "@ocso/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./evals": {
+      "@ocso/source": "./evals/index.ts"
     }
   },
   "files": [
@@ -20,12 +23,13 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@ocso/application": "workspace:*",
     "@ocso/agent-runtime": "workspace:*",
+    "@ocso/application": "workspace:*",
     "@ocso/auth": "workspace:*",
     "@ocso/db": "workspace:*",
     "@ocso/domain": "workspace:*",
     "@ocso/model-providers": "workspace:*",
+    "@ocso/tools": "workspace:*",
     "drizzle-orm": "catalog:",
     "zod": "catalog:"
   },

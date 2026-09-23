@@ -1,7 +1,7 @@
 import { Controller, Get, Inject } from '@nestjs/common';
 import type { Principal } from '@ocso/auth';
 import { HomeService } from '@ocso/application';
-import { Authenticated, CurrentPrincipal } from '../../common/decorators.js';
+import { Authenticated, Capability, CurrentPrincipal } from '../../common/decorators.js';
 
 /**
  * Role-aware home (design/06). Any signed-in user; HomeService returns exactly
@@ -12,6 +12,7 @@ import { Authenticated, CurrentPrincipal } from '../../common/decorators.js';
 export class HomeController {
   constructor(@Inject(HomeService) private readonly home: HomeService) {}
 
+  @Capability({ name: 'analytics.get_home', summary: 'Your Home page summary: key numbers and what needs attention.', tags: ['home', 'dashboard', 'summary'] })
   @Get()
   @Authenticated()
   get(@CurrentPrincipal() principal: Principal) {

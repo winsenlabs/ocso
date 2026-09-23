@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { DeniedSchema, MiniTableSchema, ObjectLinkSchema, PendingActionSchema, type AskOcsoMessage, type AskOcsoPart } from './types';
+import { ActionPartSchema, DeniedSchema, MiniTableSchema, ObjectLinkSchema, type AskOcsoMessage, type AskOcsoPart } from './types';
 
 /**
  * Thread history (GET /v1/internal-agent/threads/:id/messages) → chat
@@ -19,13 +19,23 @@ const StoredPartSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('text'), text: z.string() }),
   z.object({ type: z.literal('links'), links: z.array(ObjectLinkSchema) }),
   z.object({ type: z.literal('table'), table: MiniTableSchema }),
-  z.object({ type: z.literal('action'), action: PendingActionSchema }),
-  z.object({ type: z.literal('tool'), name: z.string(), ok: z.boolean().optional() }),
+  z.object({ type: z.literal('action'), action: ActionPartSchema }),
+  z.object({ type: z.literal('card'), card: ActionPartSchema }),
+  z.object({ type: z.literal('tool'), name: z.string(), args: z.unknown().optional(), ok: z.boolean().optional() }),
   z.object({ type: z.literal('denied'), text: z.string() }),
 ]);
 
-/** "list_conversations" → "list conversations" (the stream's step label). */
-export const stepLabel = (toolName: string) => toolName.replaceAll('_', ' ');
+/**
+ * The stream's step label for a tool call: "list_conversations" → "list conversations".
+ * The meta tools read as what they did: get_tools → "find tools", execute_tool
+ * { name: 'agents.update_agent' } → "agents · update agent".
+ */
+export function stepLabel(toolName: string, args?: unknown): string {
+  if (toolName === 'get_tools') return 'find tools';
+  const inner = toolName === 'execute_tool' && args && typeof args === 'object' ? (args as { name?: unknown }).name : undefined;
+  const name = typeof inner === 'string' && inner ? inner : toolName;
+  return name.replace(/^insight\./, '').replace('.', ' · ').replaceAll('_', ' ');
+}
 
 function toPart(raw: unknown): AskOcsoPart | null {
   const parsed = StoredPartSchema.safeParse(raw);
@@ -40,8 +50,10 @@ function toPart(raw: unknown): AskOcsoPart | null {
       return { type: 'data-table', data: p.table };
     case 'action':
       return { type: 'data-action', id: p.action.id, data: p.action };
+    case 'card':
+      return { type: 'data-action', id: p.card.id, data: p.card };
     case 'tool':
-      return { type: 'data-step', data: { label: stepLabel(p.name) } };
+      return { type: 'data-step', data: { label: stepLabel(p.name, p.args) } };
     case 'denied':
       return { type: 'data-denied', data: DeniedSchema.parse({ message: p.text }) };
   }

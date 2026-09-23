@@ -21,21 +21,83 @@ export const MiniTableSchema = z.object({
 });
 export type MiniTableData = z.infer<typeof MiniTableSchema>;
 
-export const ActionStatusSchema = z.enum(['PENDING', 'EXECUTED', 'REJECTED', 'EXPIRED', 'FAILED']);
+/**
+ * UNKNOWN: a confirm whose outcome is not known yet (the request outlived its wait, or the route outlived its
+ * bound and may still apply). The drawer says so, links the object, and re-reads the card until it settles.
+ */
+export const ActionStatusSchema = z.enum(['PENDING', 'EXECUTED', 'SUBMITTED', 'REJECTED', 'EXPIRED', 'FAILED', 'STALE', 'UNKNOWN']);
 export type ActionStatus = z.infer<typeof ActionStatusSchema>;
 
-/** A write the agent proposed; nothing changes until the same user confirms it. */
+const ChangeSchema = z.object({ label: z.string(), before: z.string().nullable(), after: z.string() });
+
+/**
+ * A confirmation card (PM/research/12 §5): built by the server for every write
+ * the agent wants to make. Nothing runs until this user confirms it; governed
+ * changes are submitted to a checker instead of applied.
+ */
+export const ActionCardSchema = z.object({
+  id: z.string(),
+  tool: z.string(),
+  title: z.string(),
+  summary: z.string().default(''),
+  kind: z.enum(['direct', 'stop', 'governed']),
+  object: z.object({ kind: z.string(), id: z.string(), name: z.string(), href: z.string().nullish() }).nullish(),
+  changes: z.array(ChangeSchema).default([]),
+  warnings: z.array(z.string()).default([]),
+  approval: z
+    .object({
+      objectKind: z.string(),
+      checkers: z.array(z.object({ id: z.string(), name: z.string(), role: z.string(), suggested: z.boolean() })),
+      noEligibleChecker: z.boolean(),
+      uiHref: z.string().nullish(),
+    })
+    .nullish(),
+  expiresAt: z.string(),
+  status: ActionStatusSchema.default('PENDING'),
+  result: z.object({ message: z.string(), href: z.string().nullish(), proposalId: z.string().nullish() }).nullish(),
+});
+export type ActionCardData = z.infer<typeof ActionCardSchema>;
+
+/** The earlier proposal shape (before cards): still rendered for old threads. */
 export const PendingActionSchema = z.object({
   id: z.string(),
   tool: z.string(),
   risk: z.string(),
   description: z.string(),
   expiresAt: z.string(),
-  changes: z.array(z.object({ label: z.string(), before: z.string().nullable(), after: z.string() })).optional(),
+  changes: z.array(ChangeSchema).optional(),
   /** Present on history reads: where the action stands now. Live proposals are pending. */
   status: ActionStatusSchema.optional(),
 });
 export type PendingAction = z.infer<typeof PendingActionSchema>;
+
+/** A card as it arrives on the stream or in history: the card shape, or the earlier proposal shape. */
+export const ActionPartSchema = z.union([ActionCardSchema, PendingActionSchema]);
+export type ActionPart = z.infer<typeof ActionPartSchema>;
+
+/** One card shape for the renderer; a legacy proposal becomes a direct card. */
+export function toActionCard(part: ActionPart): ActionCardData {
+  if ('kind' in part) return part;
+  return {
+    id: part.id,
+    tool: part.tool,
+    title: part.description,
+    summary: '',
+    kind: 'direct',
+    changes: part.changes ?? [],
+    warnings: [],
+    expiresAt: part.expiresAt,
+    status: part.status ?? 'PENDING',
+  };
+}
+
+/** A "What can you do?" chip: a task this user's permissions cover (GET /v1/internal-agent/capabilities/suggestions). */
+export const SuggestionSchema = z.object({ label: z.string().min(1), prompt: z.string().min(1) });
+export type Suggestion = z.infer<typeof SuggestionSchema>;
+
+/** One area of the capability catalog this user can reach (GET /v1/internal-agent/capabilities/suggestions `areas`). */
+export const CapabilityAreaSchema = z.object({ area: z.string(), label: z.string(), reads: z.number().int().min(0), writes: z.number().int().min(0) });
+export type CapabilityArea = z.infer<typeof CapabilityAreaSchema>;
 
 export const StepSchema = z.object({ label: z.string() });
 export const DeniedSchema = z.object({ message: z.string() });
@@ -45,7 +107,7 @@ export const dataPartSchemas = {
   step: StepSchema,
   links: z.array(ObjectLinkSchema),
   table: MiniTableSchema,
-  action: PendingActionSchema,
+  action: ActionPartSchema,
   denied: DeniedSchema,
   thread: ThreadRefSchema,
 };
@@ -54,7 +116,7 @@ export type AskOcsoData = {
   step: z.infer<typeof StepSchema>;
   links: ObjectLink[];
   table: MiniTableData;
-  action: PendingAction;
+  action: ActionPart;
   denied: z.infer<typeof DeniedSchema>;
   thread: z.infer<typeof ThreadRefSchema>;
 };
@@ -85,6 +147,12 @@ export const DrawerStateSchema = z.object({
   threads: z.array(ThreadSummarySchema),
   /** Only when not configured and the user may configure it. */
   profiles: z.array(ProfileOptionSchema).nullable(),
+  /** "What can you do?" chips for this user's role; null when the API has none (the drawer falls back to its own). */
+  suggestions: z.array(SuggestionSchema).nullable().default(null),
+  /** The "What can you do?" answer, per catalog area for this user's role; null when the API sent none (the model answers). */
+  areas: z.array(CapabilityAreaSchema).nullable().default(null),
+  /** The deployment's Ask OCSO writes switch: off, the drawer offers reads only and says changes are turned off. */
+  writesOn: z.boolean().default(true),
 });
 export type DrawerState = z.infer<typeof DrawerStateSchema>;
 

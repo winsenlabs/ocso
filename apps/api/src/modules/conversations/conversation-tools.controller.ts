@@ -6,7 +6,7 @@ import type { ActorContext } from '@ocso/application';
 import { notFound } from '@ocso/domain';
 import { toolCalls, type Db } from '@ocso/db';
 import { z } from 'zod';
-import { Actor, CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
+import { Actor, Capability, CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
 import { DB } from '../../infrastructure/tokens.js';
 import { ConversationAccessService } from './conversation-access.service.js';
 
@@ -25,6 +25,7 @@ export class ConversationToolsController {
     @Inject(ConversationAccessService) private readonly access: ConversationAccessService,
   ) {}
 
+  @Capability({ name: 'conversations.list_conversation_tools', summary: 'List the tools a person can run in a conversation.', tags: ['tool'] })
   @Get('conversations/:id/tools')
   @RequirePermission(Permission.CONVERSATIONS_READ)
   async list(@CurrentPrincipal() principal: Principal, @Param('id', { schema: Id }) id: string) {
@@ -39,6 +40,7 @@ export class ConversationToolsController {
     return { available, pendingConfirmations: pending };
   }
 
+  @Capability({ name: 'conversations.run_conversation_tool', summary: 'Run a tool in a conversation as the human agent (e.g. look up an order).', tags: ['tool', 'lookup'] })
   @Post('conversations/:id/tools/run')
   @RequirePermission(Permission.TOOLS_EXECUTE_HUMAN)
   async run(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Body({ schema: RunInput }) body: RunInput) {
@@ -46,6 +48,7 @@ export class ConversationToolsController {
     return this.tools.run(actor, id, body.toolId, body.args, body.confirmed);
   }
 
+  @Capability({ name: 'conversations.confirm_tool_call', summary: 'Confirm a sensitive tool call the AI agent is waiting on.', tags: ['tool', 'confirm'] })
   @Post('tool-calls/:id/confirm')
   @RequirePermission(Permission.TOOLS_CONFIRM_SENSITIVE)
   async confirm(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string) {
@@ -53,6 +56,7 @@ export class ConversationToolsController {
     return this.tools.confirm(actor, id);
   }
 
+  @Capability({ name: 'conversations.deny_tool_call', summary: 'Deny a sensitive tool call the AI agent is waiting on, with a reason.', tags: ['tool', 'deny'] })
   @Post('tool-calls/:id/deny')
   @HttpCode(204)
   @RequirePermission(Permission.TOOLS_CONFIRM_SENSITIVE)

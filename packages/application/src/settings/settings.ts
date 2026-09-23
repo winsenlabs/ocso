@@ -27,6 +27,8 @@ export const DeploymentSettingsInput = z.object({
   egressAllowedInternalHosts: z.array(z.string().max(253)).max(200).optional(),
   internalAgentProfileId: z.uuid().nullable().optional(),
   internalAgentConfirmLowWrites: z.boolean().optional(),
+  /** Ask OCSO may propose and confirm writes (PM/research/12 §9 kill switch); off → reads only. Governed like every setting. */
+  askOcsoWrites: z.boolean().optional(),
   /** Days the main database keeps audit events the audit store verified (ADR-032); the database refuses < 90. */
   auditLocalWindowDays: z.number().int().min(90).max(3650).optional(),
   /** Open approvals older than this carry the `aged` warning (PM/research/11b). */

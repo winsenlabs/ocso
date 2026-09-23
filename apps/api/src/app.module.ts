@@ -3,6 +3,7 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
 import { loggerOptions } from '@ocso/observability';
 import { AuthGuard } from './common/auth.guard.js';
+import { DelegationModule } from './common/delegation.js';
 import { OcsoExceptionFilter } from './common/exception.filter.js';
 import { TracingInterceptor } from './common/tracing.interceptor.js';
 import { InfrastructureModule } from './infrastructure/infrastructure.module.js';
@@ -79,6 +80,7 @@ export const FEATURE_MODULES = [
       },
     }),
     InfrastructureModule,
+    DelegationModule,
     ...FEATURE_MODULES,
   ],
   providers: [

@@ -4,6 +4,7 @@ import '@/app/styles/internal-agent.css';
 import { useChat } from '@ai-sdk/react';
 import { usePathname } from 'next/navigation';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { CapabilitiesAnswer, introText } from '@/components/internal-agent/capabilities';
 import { classifyChatError, type ChatProblem } from '@/components/internal-agent/chat-errors';
 import { Composer } from '@/components/internal-agent/composer';
 import { contextObjectLabel, pageContext } from '@/components/internal-agent/page-context';
@@ -28,6 +29,8 @@ export function AskOcsoDrawer({ id, copy, session, onClose }: { id: string; copy
   const { messages, status, error, stop } = useChat({ chat: session.chat });
   const [showHistory, setShowHistory] = useState(false);
   const [attachContext, setAttachContext] = useState(true);
+  /** "What can you do?" answered from the catalog; it gives way to the next question. */
+  const [showCapabilities, setShowCapabilities] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const { refresh } = session;
@@ -46,6 +49,8 @@ export function AskOcsoDrawer({ id, copy, session, onClose }: { id: string; copy
   const objectLabel = contextObjectLabel(context);
   const contextLabel = `${areaLabel(pathname)}${objectLabel ? ` · ${objectLabel}` : ''}`;
   const last = messages.at(-1);
+  const areas = load.status === 'ready' ? load.data.areas : null;
+  const writesOn = load.status === 'ready' ? load.data.writesOn : true;
 
   useEffect(() => {
     if (problem?.kind === 'not_configured') void refresh();
@@ -61,11 +66,13 @@ export function AskOcsoDrawer({ id, copy, session, onClose }: { id: string; copy
   async function openThread(threadId: string) {
     if (await session.openThread(threadId)) {
       setShowHistory(false);
+      setShowCapabilities(false);
       inputRef.current?.focus();
     }
   }
 
   function newThread() {
+    setShowCapabilities(false);
     session.newThread();
     setShowHistory(false);
     inputRef.current?.focus();
@@ -87,14 +94,18 @@ export function AskOcsoDrawer({ id, copy, session, onClose }: { id: string; copy
       id={id}
       inputRef={inputRef}
       roleChip={copy.roleChip}
-      suggestions={copy.suggestions}
+      suggestions={load.status === 'ready' && load.data.suggestions?.length ? load.data.suggestions : copy.suggestions.map((q) => ({ label: q, prompt: q }))}
       disabled={blocked}
       working={working}
       attachContext={attachContext}
       contextLabel={contextLabel}
       onToggleContext={() => setAttachContext((v) => !v)}
-      onSend={(text) => session.send(text, attachContext ? context : null)}
+      onSend={(text) => {
+        setShowCapabilities(false);
+        session.send(text, attachContext ? context : null);
+      }}
       onStop={() => void stop()}
+      onWhatCanYouDo={areas?.length ? () => setShowCapabilities(true) : undefined}
     />
   );
 
@@ -122,10 +133,7 @@ export function AskOcsoDrawer({ id, copy, session, onClose }: { id: string; copy
         <div className="aturn">
           <OcsoAvatar />
           <span className="bd">
-            <span className="ans ia-intro">
-              Ask about conversations, agents, queues or configuration. OCSO answers from live data with exactly your permissions, and changes only
-              happen after you confirm them.
-            </span>
+            <span className="ans ia-intro">{introText(writesOn)}</span>
           </span>
         </div>
       ) : null}
@@ -146,6 +154,7 @@ export function AskOcsoDrawer({ id, copy, session, onClose }: { id: string; copy
             />
           ),
         )}
+        {showCapabilities && areas?.length ? <CapabilitiesAnswer areas={areas} writesOn={writesOn} /> : null}
         {working && last?.role !== 'assistant' ? (
           <AssistantTurn message={null} streaming durationMs={null} stopped={false} decisions={session.decisions} onDecided={session.decide} userName={copy.userName} />
         ) : null}

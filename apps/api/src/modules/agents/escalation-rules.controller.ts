@@ -13,7 +13,7 @@ import {
   type ActorContext,
 } from '@ocso/application';
 import { z } from 'zod';
-import { Actor, CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
+import { Actor, Capability, CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
 import { approvalResponse } from '../approvals/approval-response.js';
 
 const Id = z.uuid();
@@ -39,6 +39,7 @@ export class EscalationRulesController {
     @Inject(ApprovalService) private readonly approvals: ApprovalService,
   ) {}
 
+  @Capability({ name: 'agents.list_escalation_rules', summary: "List a virtual agent's escalation rules (when the AI hands over to a person).", tags: ['escalation', 'handover', 'rule'] })
   @Get()
   @RequirePermission(Permission.AGENTS_READ)
   list(@CurrentPrincipal() principal: Principal, @Param('agentId', { schema: Id }) agentId: string) {
@@ -46,6 +47,7 @@ export class EscalationRulesController {
   }
 
   /** 201 the draft (off). With `approval`, its ACTIVATE is proposed in the same call: 202 `{ rule, proposal }`. */
+  @Capability({ name: 'agents.create_escalation_rule', summary: 'Add an escalation rule to a virtual agent (it starts off; turning it on needs approval).', tags: ['escalation', 'handover', 'rule'] })
   @Post()
   @RequirePermission(Permission.ESCALATION_MANAGE)
   async create(@Actor() actor: ActorContext, @Param('agentId', { schema: Id }) agentId: string, @Body({ schema: CreateBody }) body: CreateBody, @Res({ passthrough: true }) res: Response) {
@@ -62,6 +64,7 @@ export class EscalationRulesController {
   }
 
   /** `enabled` goes alone: false is an immediate stop (200); true is ACTIVATE (202/409). Other fields: 200 for a draft, else 202/409. */
+  @Capability({ name: 'agents.update_escalation_rule', summary: 'Change an escalation rule: turning it off applies at once; turning it on, or editing an approved rule, needs approval.', stopWhen: { enabled: false }, tags: ['escalation', 'handover', 'rule'] })
   @Put(':ruleId')
   @RequirePermission(Permission.ESCALATION_MANAGE)
   async update(
@@ -87,6 +90,7 @@ export class EscalationRulesController {
   }
 
   /** Deleting is always a proposal: 202 `{proposal}` with `approval`, else 409 approval_required. */
+  @Capability({ name: 'agents.delete_escalation_rule', summary: 'Delete an escalation rule (always needs approval).', tags: ['escalation', 'rule'] })
   @Delete(':ruleId')
   @RequirePermission(Permission.ESCALATION_MANAGE)
   async remove(

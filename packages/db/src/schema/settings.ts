@@ -21,6 +21,8 @@ export const deploymentSettings = pgTable('deployment_settings', {
   internalAgentProfileId: uuid(),
   /** Require explicit confirmation for LOW_WRITE internal-agent actions too. */
   internalAgentConfirmLowWrites: boolean().notNull().default(false),
+  /** Ask OCSO may propose and confirm writes (PM/research/12 §9 kill switch); off → reads only. */
+  askOcsoWrites: boolean().notNull().default(true),
   setupCompletedAt: ts('setup_completed_at'),
   /** Open approvals older than this carry the `aged` warning and appear in the exception report (0023). */
   approvalAgeWarningHours: integer().notNull().default(72),

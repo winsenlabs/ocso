@@ -14,6 +14,9 @@
     "test": "vitest run --project unit",
     "test:int": "vitest run --project integration",
     "lint": "node scripts/check-source-guards.mjs",
+    "capabilities:generate": "node scripts/capabilities/generate.mjs",
+    "capabilities:check": "node scripts/capabilities/generate.mjs --check",
+    "evals:ask-ocso": "node packages/internal-agent/evals/cli.mjs",
     "test:chaos": "node tests/resilience/chaos-worker-kill.mjs",
     "test:load": "node tests/resilience/load-webchat.mjs"
   },

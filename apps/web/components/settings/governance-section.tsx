@@ -24,7 +24,7 @@ export async function GovernanceSection() {
       {assistant ? (
         <div>
           <SecHead title="Ask OCSO" desc="internal agent · inherits each user's permissions" />
-          <AssistantForm profiles={profiles.map((p) => ({ id: p.id, name: p.name }))} profileId={assistant.internalAgentProfileId} confirmLowWrites={assistant.internalAgentConfirmLowWrites} />
+          <AssistantForm profiles={profiles.map((p) => ({ id: p.id, name: p.name }))} profileId={assistant.internalAgentProfileId} writesEnabled={assistant.askOcsoWrites} />
         </div>
       ) : null}
     </div>

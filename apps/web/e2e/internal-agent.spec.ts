@@ -7,13 +7,10 @@ import { approvedProfile, approvedProvider, userIdOf } from './platform-setup';
 
 /**
  * Ask OCSO (design/05, docs/12) on the real stack with the DEV_SCRIPTED model
- * (API started with OCSO_ENABLE_DEV_PROVIDERS=true). The scripted model
- * streams real text but only calls tools named like refund/balance/…, so it
- * never proposes internal-agent actions: the confirmation flows start from a
- * proposal row written exactly as InternalActionService.propose() stores it,
- * then go through the real UI → server action → API confirm (permission
- * re-check, execution, audit). Live tool steps / refusals are unit-tested
- * (test/unit/internal-agent/chat-stream.test.ts).
+ * (API started with OCSO_ENABLE_DEV_PROVIDERS=true): setup, streaming, stop,
+ * threads, and proposals stored before confirmation cards (seeded the way the
+ * earlier agent stored them). Cards end to end — read, direct write, governed
+ * write, checker approval, stop, refusal — are in ask-ocso.spec.ts.
  */
 test.describe.configure({ mode: 'serial' });
 
@@ -192,9 +189,9 @@ test('Lead gets a streamed answer, can stop one, and the thread is kept', async 
   await expect(log(page)).toContainText('You said: "And which agent needs attention?"');
 });
 
-test('Lead confirms a proposed change: applied through the API, audited, never offered again', async ({ page }) => {
+test('A proposal from before confirmation cards stays readable in history but can no longer run', async ({ page }) => {
   const title = 'Pause Maya for now';
-  const { actionId } = seedProposal(ids.lead!, title, {
+  seedProposal(ids.lead!, title, {
     tool: 'set_agent_status',
     params: { agentId: ids.agent, status: 'PAUSED' },
     description: 'Pause Maya. New customer messages will wait for humans.',
@@ -204,38 +201,27 @@ test('Lead confirms a proposed change: applied through the API, audited, never o
   await openDrawer(page);
   await openThread(page, title);
 
-  const card = drawer(page).getByRole('group', { name: 'Confirm sensitive change' });
+  const card = log(page).getByRole('group', { name: 'Pause Maya. New customer messages will wait for humans.' });
   await expect(log(page)).toContainText('1 step · set agent status');
-  await expect(card).toContainText('confirm sensitive change');
-  await expect(card).toContainText('Pause Maya. New customer messages will wait for humans.');
-  await expect(card.getByRole('list', { name: 'What will change' })).toContainText('Maya · status');
-  await expect(card).toContainText('DRAFT → PAUSED');
+  await expect(card).toContainText('confirm change');
+  await expect(card.getByRole('table')).toContainText('Maya · status');
+  await expect(card.getByRole('row', { name: /Maya · status/ })).toContainText('DRAFT');
+  await expect(card.getByRole('row', { name: /Maya · status/ })).toContainText('PAUSED');
   await expect(card).toContainText(`attributed to ${ACCOUNTS.lead.name}`);
+  // Earlier proposals carry no server-built card (PM/research/12 §5): the API refuses to run them.
   await card.getByRole('button', { name: 'Confirm change' }).click();
-
-  await expect(card.getByRole('status')).toContainText('confirmed');
+  await expect(card.getByRole('status')).toContainText('earlier version of Ask OCSO');
   await expect(card.getByRole('button', { name: 'Confirm change' })).toHaveCount(0);
-  await expect(card.getByRole('link', { name: /Maya/ })).toHaveAttribute('href', `/agents/${ids.agent}`);
-
   const agent = await (await api.get(`/v1/agents/${ids.agent}`, { headers: auth('lead') })).json();
-  expect(agent.status).toBe('PAUSED');
-  const audit = await (await api.get(`/v1/audit?targetId=${actionId}`, { headers: auth('admin') })).json();
-  expect(audit).toEqual([expect.objectContaining({ action: 'internal_agent.action_confirmed', via: 'INTERNAL_AGENT', actorId: ids.lead })]);
-
-  // Reloaded from history, the card reports the decision instead of offering it again.
-  await page.reload();
-  await openDrawer(page);
-  await openThread(page, title);
-  await expect(drawer(page).getByRole('group', { name: 'Confirm sensitive change' })).toContainText('Applied.');
-  await expect(drawer(page).getByRole('button', { name: 'Confirm change' })).toHaveCount(0);
+  expect(agent.status).toBe('DRAFT');
 });
 
-test('Service member cannot confirm a lead-only change: the API re-checks the role and nothing changes', async ({ page }) => {
+test('Threads are per user, refusals read plainly, and an earlier proposal does nothing for anyone', async ({ page }) => {
   const title = 'Put Maya live';
   seedProposal(
     ids.exec!,
     title,
-    { tool: 'set_agent_status', params: { agentId: ids.agent, status: 'LIVE' }, description: 'Put Maya live.', changes: [{ label: 'Maya · status', before: 'PAUSED', after: 'LIVE' }] },
+    { tool: 'set_agent_status', params: { agentId: ids.agent, status: 'LIVE' }, description: 'Put Maya live.', changes: [{ label: 'Maya · status', before: 'DRAFT', after: 'LIVE' }] },
     [{ type: 'denied', text: 'Not available for your role: latency breakdown.' }],
   );
   await login(page, ACCOUNTS.exec);
@@ -247,9 +233,9 @@ test('Service member cannot confirm a lead-only change: the API re-checks the ro
   await history.getByRole('button', { name: new RegExp(title) }).click();
 
   await expect(drawer(page).getByRole('note')).toContainText('Not available for your role: latency breakdown.');
-  const card = drawer(page).getByRole('group', { name: 'Confirm sensitive change' });
+  const card = log(page).getByRole('group', { name: 'Put Maya live.' });
   await card.getByRole('button', { name: 'Confirm change' }).click();
-  await expect(card.getByRole('alert')).toContainText('Not allowed for your role');
+  await expect(card.getByRole('status')).toContainText('earlier version of Ask OCSO');
   const agent = await (await api.get(`/v1/agents/${ids.agent}`, { headers: auth('lead') })).json();
-  expect(agent.status).toBe('PAUSED');
+  expect(agent.status).toBe('DRAFT');
 });
