@@ -140,7 +140,10 @@ COPY tsconfig.base.json ./
 # service name and the ECS Service Connect alias are both `api:4000`.
 ARG API_URL=http://api:4000
 ENV API_URL=${API_URL}
-# apps/web has no public/ dir today; create it so the runtime COPY is stable.
+# Optional: the public origin, so pre-rendered pages link the Open Graph card absolutely.
+ARG OCSO_PUBLIC_URL=
+ENV OCSO_PUBLIC_URL=${OCSO_PUBLIC_URL}
+# apps/web has public/ (web manifest icons); create it so the runtime COPY is stable.
 # --env-mode=loose: turbo 2 runs tasks in strict env mode and would strip
 # API_URL (not declared in turbo.json), silently baking the localhost fallback
 # into the rewrites. The grep fails the build if that ever happens again.

@@ -381,6 +381,8 @@ services:
         APP_VERSION: ${OCSO_VERSION:-local}
         # Baked into Next rewrites at build time; must match the runtime value.
         API_URL: http://api:4000
+        # Absolute URL for the Open Graph card on pre-rendered pages (link previews); optional.
+        OCSO_PUBLIC_URL: ${OCSO_PUBLIC_URL:-}
     environment:
       NODE_ENV: production
       API_URL: http://api:4000

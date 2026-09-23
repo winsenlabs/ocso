@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/ocso-logo-inverse.svg">
+    <img src="brand/ocso-logo.svg" alt="OCSO" height="56">
+  </picture>
+</p>
+
 # OCSO — Open Customer Service Orchestrator
 
 OCSO is an open-source, self-hosted runtime for AI employees that talk to your customers: support,

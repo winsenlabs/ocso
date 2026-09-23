@@ -19,13 +19,27 @@ const mono = localFont({
   display: 'swap',
 });
 
-export const metadata: Metadata = {
-  title: { default: 'OCSO', template: '%s — OCSO' },
-  description: 'Open Customer Service Orchestrator',
-  robots: { index: false, follow: false },
-};
+/** Icons, the web manifest and the Open Graph card come from app/ file conventions (brand/ holds the sources). */
+export function generateMetadata(): Metadata {
+  const publicUrl = process.env['OCSO_PUBLIC_URL'];
+  return {
+    ...(publicUrl ? { metadataBase: new URL(publicUrl) } : {}),
+    title: { default: 'OCSO', template: '%s — OCSO' },
+    applicationName: 'OCSO',
+    description: 'Open Customer Service Orchestrator',
+    openGraph: { title: 'OCSO', description: 'Open Customer Service Orchestrator', siteName: 'OCSO', type: 'website' },
+    robots: { index: false, follow: false },
+  };
+}
 
-export const viewport: Viewport = { width: 'device-width', initialScale: 1 };
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#F9FCFE' },
+    { media: '(prefers-color-scheme: dark)', color: '#090E12' },
+  ],
+};
 
 /** Applies the saved theme before first paint (same key as design/OCSONav). */
 const THEME_SCRIPT =
