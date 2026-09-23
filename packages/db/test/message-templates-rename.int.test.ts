@@ -59,7 +59,8 @@ describe('message templates rename', () => {
     expect(rows).toEqual([{ id: template, name: 'order_ready', status: 'PENDING' }]);
     expect((await q(`SELECT to_regclass('whatsapp_templates') AS t`)).rows[0]).toEqual({ t: null });
     const names = await q(
-      `SELECT conname AS n FROM pg_constraint WHERE conrelid = 'message_templates'::regclass
+      // Postgres 18 names NOT NULL constraints (contype 'n') and RENAME TABLE keeps their old names; nothing refers to them.
+      `SELECT conname AS n FROM pg_constraint WHERE conrelid = 'message_templates'::regclass AND contype <> 'n'
        UNION ALL SELECT indexname FROM pg_indexes WHERE tablename = 'message_templates' ORDER BY 1`,
     );
     expect(names.rows.map((r: { n: string }) => r.n).every((n: string) => n.startsWith('message_templates_'))).toBe(true);

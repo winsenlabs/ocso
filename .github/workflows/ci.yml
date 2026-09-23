@@ -120,7 +120,7 @@ jobs:
   e2e:
     name: e2e (optional)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 50
     # Non-blocking until the Playwright suite is stable across runners.
     continue-on-error: true
     services:
@@ -154,8 +154,22 @@ jobs:
         run: pnpm turbo run build --filter=@ocso/api...
       - name: Install Chromium for Playwright
         run: pnpm --filter @ocso/web exec playwright install --with-deps chromium
-      - name: Playwright
-        run: pnpm --filter @ocso/web test:e2e
+      # Each spec is one serial story from a fresh deployment (first-run setup onward), so each
+      # gets its own database; the web build from the first spec is reused by the rest.
+      - name: Playwright (one fresh database per spec)
+        working-directory: apps/web
+        run: |
+          failed=0
+          i=0
+          for spec in e2e/*.spec.ts; do
+            i=$((i + 1))
+            name=$(basename "$spec" .spec.ts)
+            reuse=1; [ "$i" -eq 1 ] && reuse=
+            echo "::group::$name"
+            E2E_REUSE_BUILD=$reuse E2E_DB_NAME="ocso_e2e_$i" pnpm exec playwright test "$spec" --output "test-results/$name" || { failed=1; echo "::error::e2e spec $name failed"; }
+            echo "::endgroup::"
+          done
+          exit $failed
       - name: Upload Playwright traces
         if: failure()
         uses: actions/upload-artifact@v4
