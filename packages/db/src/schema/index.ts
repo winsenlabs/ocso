@@ -13,6 +13,7 @@ export * from './alerts.js';
 export * from './audit.js';
 export * from './quality.js';
 export * from './internal-agent.js';
+export * from './channel-links.js';
 export * from './secrets.js';
 export * from './message-templates.js';
 export * from './approvals.js';

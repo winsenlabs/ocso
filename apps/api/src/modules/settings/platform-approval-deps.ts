@@ -18,7 +18,7 @@ export const platformApprovalDepsProvider = {
   inject: [SECRET_STORE, CHANNEL_REGISTRY, PROVIDER_REGISTRY, PLUGINS, EMAIL_SENDER, ENV],
   useFactory: (secrets: SecretStore, channels: ChannelRegistry, providers: ProviderRegistry, plugins: readonly OcsoPlugin[], emailSender: EmailSender, env: ApiEnv): PlatformApprovalDeps => ({
     secrets,
-    validateChannel: (kind, settings, values) => (channels.has(kind) ? channels.get(kind).validateConfig(settings, values) : [`channel kind ${kind} is not available`]),
+    validateChannel: (kind, settings, values) => channels.validateConfig(kind, settings, values),
     providers,
     deliveries: createAlertDeliveryRegistry({ fetch: noDelivery, emailSender }, plugins),
     publicUrl: env.OCSO_PUBLIC_URL,

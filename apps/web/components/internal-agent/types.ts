@@ -151,6 +151,8 @@ export const ThreadSummarySchema = z.object({
   id: z.string(),
   title: z.string(),
   updatedAt: z.string(),
+  /** Where it was asked: null for the drawer, else the chat channel kind (`slack`, `ms_teams`). */
+  surface: z.string().nullish(),
 });
 export type ThreadSummary = z.infer<typeof ThreadSummarySchema>;
 

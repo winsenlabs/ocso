@@ -14,7 +14,7 @@ import { api } from './client';
 /** GET /v1/internal-agent/threads — the caller's own threads, newest first. */
 export function listInternalAgentThreads(): Promise<ThreadSummary[]> {
   return api.get('/v1/internal-agent/threads', z.array(ThreadSummarySchema.loose())).then((rows) =>
-    rows.map((r) => ({ id: r.id, title: r.title, updatedAt: r.updatedAt })),
+    rows.map((r) => ({ id: r.id, title: r.title, updatedAt: r.updatedAt, surface: r.surface ?? null })),
   );
 }
 

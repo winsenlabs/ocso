@@ -104,7 +104,7 @@ const post = (params: Record<string, string>, signature: string, path = channel.
 describe('channel kinds are plugins', () => {
   it('lists Twilio first as "WhatsApp — Twilio", with its webhook segment and a connection check', async () => {
     const res = await h.http().get('/v1/channels/kinds').set(auth(admin)).expect(200);
-    expect(res.body.map((k: { kind: string }) => k.kind)).toEqual(['TWILIO_WHATSAPP', 'WHATSAPP', 'WEBCHAT']);
+    expect(res.body.map((k: { kind: string }) => k.kind)).toEqual(['TWILIO_WHATSAPP', 'WHATSAPP', 'WEBCHAT', 'SLACK', 'MS_TEAMS']);
     expect(res.body[0]).toMatchObject({ label: 'WhatsApp — Twilio', inboundWebhook: true, webhookSegment: 'twilio-whatsapp', connectionCheck: true });
     expect(res.body[1]).toMatchObject({ label: 'WhatsApp — Meta Cloud API', webhookSegment: 'whatsapp', connectionCheck: false });
   });

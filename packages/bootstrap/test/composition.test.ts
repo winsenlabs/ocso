@@ -32,7 +32,7 @@ describe('composition root (FIRST_PARTY_PLUGINS)', () => {
   });
 
   it('builds every first-party registry from the list', () => {
-    expect(createChannelRegistry({ fetch: offline }).kinds()).toEqual(['TWILIO_WHATSAPP', 'WHATSAPP', 'WEBCHAT']);
+    expect(createChannelRegistry({ fetch: offline }).kinds()).toEqual(['TWILIO_WHATSAPP', 'WHATSAPP', 'WEBCHAT', 'SLACK', 'MS_TEAMS']);
     expect(createProviderRegistry({ OCSO_ENABLE_DEV_PROVIDERS: false }).list().map((d) => d.kind)).toEqual([
       'BEDROCK',
       'VERTEX',

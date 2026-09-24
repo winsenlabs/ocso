@@ -3,6 +3,7 @@ import { validation } from '@ocso/domain';
 import { authAccounts, authPasskeys, teamMembers, teams, users, type DbOrTx } from '@ocso/db';
 import { recordAudit } from '../audit/audit.js';
 import type { ActorContext } from '../shared/context.js';
+import { revokeUserChatLinks } from './channel-links.js';
 import { revokeUserSessions } from './credentials.js';
 import { assertBreakGlassRemains } from './permissions/apply.js';
 
@@ -28,16 +29,17 @@ export async function writeProfile(tx: DbOrTx, actor: ActorContext, id: string, 
   await recordAudit(tx, actor, { action: 'user.update', targetType: 'user', targetId: id, summary: `Updated ${email}`, after: profile });
 }
 
-/** A stop: never gated. Ends every session at once (open streams close within a minute). */
+/** A stop: never gated. Ends every session at once (open streams close within a minute) and revokes their chat account links (Ask OCSO over Slack, Teams). */
 export async function disableUser(tx: DbOrTx, actor: ActorContext, id: string, email: string, breakGlass: boolean): Promise<void> {
   if (breakGlass) await assertBreakGlassRemains(tx, id);
   await tx.update(users).set({ status: 'DISABLED', updatedAt: new Date() }).where(eq(users.id, id));
   const revoked = await revokeUserSessions(tx, id);
+  const links = await revokeUserChatLinks(tx, id);
   await recordAudit(tx, actor, {
     action: 'user.disable',
     targetType: 'user',
     targetId: id,
-    summary: `Disabled ${email}${revoked ? ` · ended ${revoked} session(s)` : ''}`,
+    summary: `Disabled ${email}${revoked ? ` · ended ${revoked} session(s)` : ''}${links ? ` · revoked ${links} chat account link(s)` : ''}`,
   });
 }
 

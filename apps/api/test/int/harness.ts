@@ -53,7 +53,9 @@ export async function startApi(options: { env?: Record<string, string> } = {}): 
   });
   const { createApp } = await import('../../src/bootstrap.js');
   const app = await createApp({ logger: false });
-  await app.init();
+  // Listen once on a loopback port. Handing supertest a server that is not listening makes it open and close a
+  // throwaway listener per request, which intermittently fails long request runs with "socket hang up".
+  await app.listen(0, '127.0.0.1');
   const http = () => request(app.getHttpServer());
   const emailsTo = (email: string) =>
     app

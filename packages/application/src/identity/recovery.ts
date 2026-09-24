@@ -4,6 +4,7 @@ import { DomainError, validation } from '@ocso/domain';
 import { authPolicy, authTwoFactors, users, type Db } from '@ocso/db';
 import { z } from 'zod';
 import { recordAudit } from '../audit/audit.js';
+import { revokeUserChatLinks } from './channel-links.js';
 import { revokeUserSessions, setPasswordCredential } from './credentials.js';
 import { hashPassword, passwordProblems } from './password.js';
 
@@ -26,7 +27,8 @@ const authError = (code: string, message: string) => new DomainError('authentica
  * Bootstrap-only: works only while the operator sets OCSO_RECOVERY_TOKEN, and
  * each token value works once. It resets one active Tech admin's
  * password, removes their authenticator (they re-enroll at next sign-in when
- * MFA is required) and ends their sessions. Audited.
+ * MFA is required), ends their sessions and revokes their chat account links (Ask OCSO over Slack or Teams: whoever
+ * held the lost account may have linked their own chat identity). Audited.
  */
 export class RecoveryService {
   constructor(
@@ -61,6 +63,7 @@ export class RecoveryService {
       await tx.delete(authTwoFactors).where(eq(authTwoFactors.userId, admin.id));
       await tx.update(users).set({ twoFactorEnabled: false, emailVerified: true, updatedAt: new Date() }).where(eq(users.id, admin.id));
       const ended = await revokeUserSessions(tx, admin.id);
+      const unlinked = await revokeUserChatLinks(tx, admin.id);
       await tx
         .insert(authPolicy)
         .values({ id: 1, recoveryTokenUsedHash: tokenHash })
@@ -69,7 +72,7 @@ export class RecoveryService {
         action: 'auth.recovery',
         targetType: 'user',
         targetId: admin.id,
-        summary: `Break-glass recovery reset the password of ${admin.email}, removed their authenticator and ended ${ended} session(s)`,
+        summary: `Break-glass recovery reset the password of ${admin.email}, removed their authenticator, ended ${ended} session(s) and revoked ${unlinked} chat account link(s)`,
       });
     });
   }

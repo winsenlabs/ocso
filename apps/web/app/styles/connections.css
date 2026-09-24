@@ -79,3 +79,5 @@ body>.scrim{z-index:95}
 /* Channels: generated secrets and setup steps. */
 .generated-secret{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .setup-steps{margin:0;padding-left:18px;display:grid;gap:4px;font-size:12.5px;color:var(--ink-2)}
+.setup-file{display:grid;gap:6px;margin-top:8px}
+.setup-file-body{font-family:var(--font-mono);font-size:12px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px;margin:0;max-height:260px;overflow:auto;white-space:pre;user-select:all}

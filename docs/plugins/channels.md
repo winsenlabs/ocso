@@ -15,6 +15,8 @@ Shipped adapters, all in `packages/channels/src/`:
 | `TWILIO_WHATSAPP` | `twilio-whatsapp/` | WhatsApp through Twilio Programmable Messaging |
 | `WHATSAPP` | `whatsapp/` | WhatsApp Cloud API, called directly (Meta) |
 | `WEBCHAT` | `webchat/` | OCSO's own embeddable widget |
+| `SLACK` | `slack/` | A Slack app: direct messages and @mentions in (Events API), `chat.postMessage` out ([setup](slack.md)) |
+| `MS_TEAMS` | `teams/` | An Azure Bot in Microsoft Teams: Bot Framework activities in (JWT-verified), Bot Connector REST out ([setup](ms-teams.md)) |
 
 The package README ([packages/channels/README.md](../../packages/channels/README.md)) documents each
 adapter's provider details. The operator setup is in
@@ -43,7 +45,8 @@ export interface ChannelAdapter {
   readonly embed?: EmbeddedChat | undefined;
   /** Validate admin-entered settings/secrets; returns human-readable problems. */
   validateConfig(settings: unknown, secrets: Readonly<Record<string, string>>): string[];
-  verifyRequest(req: RawHttpRequest, config: ChannelRuntimeConfig): VerificationResult;
+  /** May be async (e.g. JWTs checked against published signing keys); the caller always awaits it. */
+  verifyRequest(req: RawHttpRequest, config: ChannelRuntimeConfig): VerificationResult | Promise<VerificationResult>;
   parseInbound(req: RawHttpRequest, config: ChannelRuntimeConfig): InboundEnvelope;
   /** Reply for an accepted webhook; when absent the API answers with a JSON ingest summary. */
   webhookAcknowledgement?(): WebhookAcknowledgement;
@@ -64,6 +67,7 @@ export interface ChannelKindDescriptor {
   secrets: ChannelSecretField[];
   identitySetting?: ChannelIdentitySetting;    // { label: 'sender', keys: ['from', 'messagingServiceSid'] }
   setupSteps: readonly string[];               // what the admin does in the provider's console after saving
+  setupFiles?: readonly ChannelSetupFile[];    // app manifests to paste/upload; only {{webhookUrl}} and {{settings.<key>}} are filled
   inboundWebhook: boolean;                     // provider calls /channels/<webhookSegment>/<publicKey>/webhook
   webhookSegment?: string;                     // lower-case a-z0-9-; defaults to the kind in kebab case
   webhookEvents?: string;                      // "messages, delivery statuses", for the Webhooks list
@@ -100,7 +104,7 @@ A channel package contributes adapter factories to the composition root. The fir
 entry of `FIRST_PARTY_PLUGINS` in `packages/bootstrap/src/first-party.ts`:
 
 ```ts
-{ name: '@ocso/channels', channels: [createTwilioWhatsAppAdapter, createWhatsAppAdapter, createWebChatAdapter] },
+{ name: '@ocso/channels', channels: [createTwilioWhatsAppAdapter, createWhatsAppAdapter, createWebChatAdapter, createSlackChannelAdapter, createMsTeamsAdapter] },
 ```
 
 `createChannelRegistry` (`packages/bootstrap/src/channels.ts`) calls each factory with the host's
@@ -168,7 +172,11 @@ owns it), and its secrets are resolved from the SecretStore. The web app proxies
 api, so this works behind the single published port. The routes are public by design and are pinned in
 `apps/api/test/unit/route-access.test.ts`; authenticity is your `verifyRequest`. The API keeps the raw
 body for HMAC checks and passes `req.url` as the public origin plus the path exactly as received, for
-URL-bound signatures such as Twilio's.
+URL-bound signatures such as Twilio's. `verifyRequest` may be async: the Teams adapter checks the Bot
+Connector's bearer JWT against Microsoft's published signing keys, which it fetches through `deps.fetch`
+and caches (bounded TTL, rate-limited refresh on an unknown `kid`). The controller awaits it; throw a
+`provider_unavailable` DomainError (502, the provider retries) when the keys cannot be fetched, and never
+fall back to accepting the request.
 
 **Verify, then persist, then acknowledge.** The controller calls `verifyRequest`, then `parseInbound`,
 then hands the envelope to `IngressService`
@@ -178,6 +186,22 @@ then hands the envelope to `IngressService`
 one `media.fetch` job per pending media part. Only then does the API answer, with your
 `webhookAcknowledgement()` or a JSON summary. A provider that retries after a timeout gets a
 duplicate, not a second message.
+
+**Reply context (threads, conversation references).** Some transports answer "where", not only "whom":
+a Slack thread, a Bot Framework conversation. Put it on the inbound message as
+`replyContext: Readonly<Record<string, string>>` (at most `REPLY_CONTEXT_MAX_KEYS` = 16 string values
+and `REPLY_CONTEXT_MAX_BYTES` = 4096 bytes of JSON; a larger or non-string one is dropped, not an
+error). Ingress stores it on the inbound interaction (`interactions.reply_context`, migration 0035) and
+never reads it. `DeliveryService` hands back, as `OutboundTarget.replyContext`, the one of the customer
+message the reply answers: the latest on that conversation **and channel** up to the agent turn's input
+(for a human or system message, up to that message). A customer message that arrives while the turn runs,
+say an @mention in a public channel during a DM answer, never redirects the answer there. It is absent when no inbound message carried one (for example a message
+OCSO starts), so `send` must have a fallback (Slack: the customer's DM). Treat it as data your own
+parser wrote, but still validate it before use.
+
+A verified request can also be a handshake that arrives as a POST (Slack's `url_verification`):
+return `{ kind: 'challenge', status: 200, body }` from `verifyRequest` after the signature check and
+the controller answers with the body and stores nothing.
 
 **Delivery statuses, identity changes, template reviews.** Statuses are applied so they never move
 backwards. `identityUpdates` re-link an existing customer identity instead of creating a new customer.

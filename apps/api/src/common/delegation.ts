@@ -11,6 +11,9 @@ import { DomainError } from '@ocso/domain';
  * - valid for 60 seconds and single use;
  * - bound to the user, their session (refused once the session ends or goes idle), the Ask OCSO thread, the
  *   card or the read's tool call, and the exact method and path of the one request;
+ * - or, when Ask OCSO answers through a linked chat account (Slack, Teams), bound to the user and that link
+ *   instead of a session (`linkId`, `surface`): refused once the link is revoked, or the user is disabled or no
+ *   longer holds internal_agent.use;
  * - accepted only on a connection from loopback to the private listener's own port: never from the public
  *   listener, a reverse proxy or another host.
  *
@@ -20,7 +23,11 @@ import { DomainError } from '@ocso/domain';
 export interface DelegationClaims {
   jti: string;
   userId: string;
-  sessionId: string;
+  /** The signed-in session Ask OCSO acts within (the drawer). Exactly one of sessionId and linkId is set. */
+  sessionId?: string | undefined;
+  /** The linked chat account Ask OCSO acts through (a staff chat channel), with its surface (`slack`). */
+  linkId?: string | undefined;
+  surface?: string | undefined;
   threadId: string;
   cardId?: string | undefined;
   callId?: string | undefined;
@@ -55,6 +62,7 @@ export class DelegationTokens {
   }
 
   issue(grant: DelegationGrant, now = Date.now()): string {
+    if (Boolean(grant.sessionId) === Boolean(grant.linkId)) throw refused('bind the token to a session or to a chat link');
     const claims: DelegationClaims = { ...grant, jti: randomUUID(), exp: now + DELEGATION_TTL_MS };
     const payload = b64(JSON.stringify(claims));
     return `${PREFIX}.${payload}.${this.sign(payload)}`;
@@ -79,6 +87,7 @@ export class DelegationTokens {
       throw refused('malformed token');
     }
     if (typeof claims.exp !== 'number' || claims.exp <= now) throw refused('expired');
+    if (Boolean(claims.sessionId) === Boolean(claims.linkId)) throw refused('malformed token');
     if (claims.method !== request.method.toUpperCase() || claims.path !== request.path) throw refused('issued for another request');
     this.prune(now);
     if (this.used.has(claims.jti)) throw refused('already used');

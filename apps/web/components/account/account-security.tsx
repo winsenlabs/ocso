@@ -1,4 +1,6 @@
+import { ChatLinksCard } from '@/components/chat-links/chat-links-card';
 import { SecHead } from '@/components/ui/sec-head';
+import { listMyChatLinks } from '@/lib/api/chat-links';
 import { StatusChip } from '@/components/ui/status-chip';
 import { listMyPasskeys, listMySessions } from '@/lib/api/account';
 import { fetchSecurity } from '@/lib/api/auth';
@@ -12,7 +14,7 @@ import { TwoFactorManage } from './two-factor-manage';
 /** Account security (ADR-025): everything here acts on the signed-in user only. */
 export async function AccountSecurity() {
   const session = await requireSession();
-  const [security, sessions, passkeys] = await Promise.all([fetchSecurity(), listMySessions(), listMyPasskeys()]);
+  const [security, sessions, passkeys, chatLinks] = await Promise.all([fetchSecurity(), listMySessions(), listMyPasskeys(), listMyChatLinks().catch(() => null)]);
   const timeZone = session.user.deployment.timezone;
   const mfaOn = security.mfa?.enrolled ?? false;
   return (
@@ -34,6 +36,8 @@ export async function AccountSecurity() {
       </section>
       <PasskeysCard passkeys={passkeys} timeZone={timeZone} />
       <SessionsCard sessions={sessions} currentId={security.sessionId} timeZone={timeZone} />
+      {/* Ask OCSO in Slack / Teams: the chat accounts linked to this user. */}
+      {chatLinks ? <ChatLinksCard links={chatLinks} timeZone={timeZone} whose="mine" /> : null}
     </div>
   );
 }

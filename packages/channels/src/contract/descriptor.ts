@@ -63,6 +63,27 @@ export interface ChannelTemplateTerms {
   mediaHeaderUnsupported?: string | undefined;
 }
 
+/**
+ * A ready-made file the admin pastes or uploads into the provider's console after saving (a Slack app
+ * manifest, a Teams app manifest). The web app fills the placeholders from the saved channel and offers copy
+ * and download. Only `{{webhookUrl}}` and `{{settings.<key>}}` exist: secrets are never interpolated.
+ * Values are inserted as plain text: JSON-string-escaped for `application/json` (put placeholders inside
+ * string literals), and for YAML and plain text any value with quotes, backslashes, `#`, control characters
+ * or line breaks is left out (the placeholder stays and the admin is told to fill it in).
+ */
+export interface ChannelSetupFile {
+  /** Stable id within the kind (`a-z0-9-`). */
+  key: string;
+  /** Heading shown above the file ("Teams app manifest"). */
+  label: string;
+  /** What to do with it, one sentence. */
+  description?: string | undefined;
+  /** Download name, e.g. `manifest.json`. */
+  filename: string;
+  contentType: 'application/json' | 'text/yaml' | 'text/plain';
+  template: string;
+}
+
 /** What the "Add channel" form, the channel list and the workspace need to know about a kind. */
 export interface ChannelKindDescriptor {
   kind: ChannelKind;
@@ -77,6 +98,8 @@ export interface ChannelKindDescriptor {
   identitySetting?: ChannelIdentitySetting | undefined;
   /** What the admin does in the provider's console after saving (plain sentences, in order). */
   setupSteps: readonly string[];
+  /** Files to paste or upload in the provider's console (app manifests), shown with the setup steps. */
+  setupFiles?: readonly ChannelSetupFile[] | undefined;
   /** Provider calls OCSO at `/channels/<webhookSegment>/<publicKey>/webhook`. */
   inboundWebhook: boolean;
   /** URL segment of the inbound webhook (lower-case, `a-z0-9-`); defaults to the kind in kebab case. */
@@ -92,7 +115,25 @@ export interface ChannelKindDescriptor {
   embeddable: boolean;
   /** Present when the adapter implements the message-template methods. */
   templates?: ChannelTemplateTerms | undefined;
+  /**
+   * Staff can use this kind to talk to Ask OCSO (a workplace chat such as Slack or Teams). Core then offers the
+   * `destination` setting on its channels: `router` (default: customers, routed like any channel) or `ask_ocso`
+   * (staff link their chat account to their OCSO user and ask Ask OCSO as themselves; no customer conversations).
+   * The adapter needs nothing else: core adds the setting to the settings schema and reads it.
+   */
+  staffDestination?: boolean | undefined;
+  /**
+   * How Ask OCSO threads and audit rows name this kind when staff ask through it (`slack`, `teams`: lower-case
+   * `a-z0-9_`, at most 32 characters). Defaults to the kind in lower case. Only read on staff-destination kinds.
+   */
+  staffSurface?: string | undefined;
 }
+
+/** Where a channel's inbound messages go (`settings.destination`, for kinds whose descriptor sets `staffDestination`). */
+export type ChannelDestination = 'router' | 'ask_ocso';
+export const CHANNEL_DESTINATIONS: readonly ChannelDestination[] = ['router', 'ask_ocso'];
+/** The settings key core owns on staff-destination kinds. */
+export const DESTINATION_SETTING = 'destination';
 
 /** A descriptor plus what the registry derives from the adapter (served by `GET /v1/channels/kinds`). */
 export interface ChannelKindInfo extends ChannelKindDescriptor {
@@ -100,4 +141,36 @@ export interface ChannelKindInfo extends ChannelKindDescriptor {
   connectionCheck: boolean;
   /** Customers may be reached with provider-approved message templates. */
   messageTemplates: boolean;
+}
+
+/** `{{webhookUrl}}` or `{{settings.<key>}}`: the only placeholders a setup file may use. */
+export const SETUP_FILE_PLACEHOLDER = /\{\{\s*(webhookUrl|settings\.[A-Za-z][A-Za-z0-9_]{0,63})\s*\}\}/g;
+const ANY_PLACEHOLDER = /\{\{([^}]*)\}\}/g;
+const SETUP_FILE_KEY = /^[a-z][a-z0-9-]{0,39}$/;
+const SETUP_FILE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
+const SETUP_FILE_TYPES: ReadonlySet<string> = new Set(['application/json', 'text/yaml', 'text/plain']);
+const MAX_SETUP_FILE_BYTES = 64 * 1024;
+
+/** Problems with a kind's setup files (registration refuses the kind when there are any). */
+export function setupFileProblems(files: readonly ChannelSetupFile[] | undefined): string[] {
+  if (files === undefined) return [];
+  if (!Array.isArray(files)) return ['setupFiles must be an array'];
+  const problems: string[] = [];
+  const keys = new Set<string>();
+  files.forEach((file, i) => {
+    const at = `setupFiles[${i}]`;
+    if (typeof file?.key !== 'string' || !SETUP_FILE_KEY.test(file.key)) problems.push(`${at}: invalid key "${String(file?.key)}"`);
+    else if (keys.has(file.key)) problems.push(`${at}: duplicate key "${file.key}"`);
+    else keys.add(file.key);
+    if (typeof file?.label !== 'string' || !file.label.trim()) problems.push(`${at}: label is required`);
+    if (typeof file?.filename !== 'string' || !SETUP_FILE_NAME.test(file.filename)) problems.push(`${at}: invalid filename "${String(file?.filename)}"`);
+    if (!SETUP_FILE_TYPES.has(file?.contentType)) problems.push(`${at}: contentType must be application/json, text/yaml or text/plain`);
+    if (typeof file?.template !== 'string' || !file.template.length) return void problems.push(`${at}: template is required`);
+    if (new TextEncoder().encode(file.template).byteLength > MAX_SETUP_FILE_BYTES) problems.push(`${at}: template exceeds 64 KiB`);
+    for (const match of file.template.matchAll(ANY_PLACEHOLDER)) {
+      const token = match[0];
+      if (!new RegExp(`^${SETUP_FILE_PLACEHOLDER.source}$`).test(token)) problems.push(`${at}: unknown placeholder ${token} (only {{webhookUrl}} and {{settings.<key>}}; secrets are never interpolated)`);
+    }
+  });
+  return problems;
 }

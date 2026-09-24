@@ -40,7 +40,7 @@ export class ChannelWebhookController {
     @Res() res: Response,
   ): Promise<void> {
     const { adapter, config } = await this.channels.resolveWebhook(segment, publicKey);
-    const result = adapter.verifyRequest(toRawRequest('GET', req.headers, query, undefined, this.publicUrl(req)), config);
+    const result = await adapter.verifyRequest(toRawRequest('GET', req.headers, query, undefined, this.publicUrl(req)), config);
     if (result.kind === 'challenge') {
       res.status(200).type('text/plain').send(result.body);
       return;
@@ -53,9 +53,14 @@ export class ChannelWebhookController {
   async receive(@Param('segment') segment: string, @Param('publicKey') publicKey: string, @Req() req: RawRequest, @Res() res: Response): Promise<void> {
     const { adapter, config } = await this.channels.resolveWebhook(segment, publicKey);
     const raw = toRawRequest('POST', req.headers, {}, req.rawBody, this.publicUrl(req));
-    const verified = adapter.verifyRequest(raw, config);
+    const verified = await adapter.verifyRequest(raw, config);
     if (verified.kind === 'rejected') {
       throw new DomainError(verified.status === 401 ? 'authentication' : 'authorization', 'webhook_signature_invalid', 'Webhook signature verification failed');
+    }
+    // A verified handshake posted to the webhook (e.g. Slack's url_verification): answer it, store nothing.
+    if (verified.kind === 'challenge') {
+      res.status(200).type('text/plain').send(verified.body);
+      return;
     }
     const envelope = adapter.parseInbound(raw, config);
     const summary = await this.channels.process(config.id, envelope, req.correlationId ?? segment);

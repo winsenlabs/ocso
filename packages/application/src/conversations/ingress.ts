@@ -22,6 +22,21 @@ export interface IngressMessage {
   identityVerified?: boolean | undefined;
   /** Context the embedding site passed with this session; stored on the conversation (latest session wins). */
   hostContext?: { source: 'host' | 'client'; values: Readonly<Record<string, string | number | boolean>>; at: Date } | undefined;
+  /** Where replies go, in the adapter's terms (a thread, a conversation reference); stored on the interaction for delivery. */
+  replyContext?: Readonly<Record<string, string>> | undefined;
+}
+
+/** Bounds of a stored reply context (mirror @ocso/channels REPLY_CONTEXT_MAX_*); a larger or malformed one is dropped. */
+export const REPLY_CONTEXT_MAX_KEYS = 16;
+export const REPLY_CONTEXT_MAX_BYTES = 4096;
+
+/** The reply context as stored: string values only, within the bounds; null when absent, empty or out of bounds. */
+export function boundedReplyContext(context: Readonly<Record<string, unknown>> | undefined): Record<string, string> | null {
+  if (!context) return null;
+  const entries = Object.entries(context);
+  if (!entries.length || entries.length > REPLY_CONTEXT_MAX_KEYS || entries.some(([, v]) => typeof v !== 'string')) return null;
+  const value = Object.fromEntries(entries) as Record<string, string>;
+  return Buffer.byteLength(JSON.stringify(value), 'utf8') <= REPLY_CONTEXT_MAX_BYTES ? value : null;
 }
 
 export interface IngressStatusUpdate {
@@ -115,7 +130,7 @@ export class IngressService {
           correlationId,
           parts: message.parts,
         },
-        { channelId, now },
+        { channelId, now, replyContext: boundedReplyContext(message.replyContext) },
       );
       await tx.update(channels).set({ lastInboundAt: now }).where(eq(channels.id, channelId));
       await emitEvent(tx, actor, 'interaction.received', { interactionId: appended.interactionId, seq: appended.seq, actorType: 'CUSTOMER', channelId }, {

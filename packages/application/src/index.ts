@@ -12,6 +12,7 @@ export * from './identity/credentials.js';
 export * from './identity/auth-policy.js';
 export * from './identity/auth-mailer.js';
 export * from './identity/recovery.js';
+export * from './identity/channel-links.js';
 export * from './settings/settings.js';
 export * from './settings/email.js';
 export * from './cache/generations.js';

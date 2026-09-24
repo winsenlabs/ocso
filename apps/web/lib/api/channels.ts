@@ -67,6 +67,20 @@ export const ChannelKindSchema = z.object({
   identitySetting: z.object({ label: z.string(), keys: z.array(z.string()) }).nullable().catch(null).default(null),
   /** Provider-console steps after saving. */
   setupSteps: z.array(z.string()).catch([]).default([]),
+  /** Files to paste or upload in the provider's console (app manifests), placeholders filled from the channel. */
+  setupFiles: z
+    .array(
+      z.object({
+        key: z.string(),
+        label: z.string(),
+        description: z.string().optional(),
+        filename: z.string(),
+        contentType: z.enum(['application/json', 'text/yaml', 'text/plain']),
+        template: z.string(),
+      }),
+    )
+    .catch([])
+    .default([]),
   inboundWebhook: z.boolean().default(false),
   /** What the provider posts to the webhook, for the Webhooks list. */
   webhookEvents: z.string().optional(),

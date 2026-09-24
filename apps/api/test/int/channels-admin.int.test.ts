@@ -44,7 +44,7 @@ describe('channel administration (design/04 Channels)', () => {
     const exec = await mk('kinds-exec@ocso.test', 'SERVICE');
     const lead = await mk('kinds-lead@ocso.test', 'HEAD');
     const kinds = await h.http().get('/v1/channels/kinds').set(auth(exec)).expect(200);
-    expect(kinds.body.map((k: { kind: string }) => k.kind)).toEqual(['TWILIO_WHATSAPP', 'WHATSAPP', 'WEBCHAT']);
+    expect(kinds.body.map((k: { kind: string }) => k.kind)).toEqual(['TWILIO_WHATSAPP', 'WHATSAPP', 'WEBCHAT', 'SLACK', 'MS_TEAMS']);
     await h.http().get('/v1/channels/kinds').set(auth(lead)).expect(200);
     await h.http().get('/v1/channels/kinds').expect(401);
   });

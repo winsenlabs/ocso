@@ -13,3 +13,5 @@ export { redactSecrets } from './common/redact.js';
 export * from './whatsapp/index.js';
 export * from './twilio-whatsapp/index.js';
 export * from './webchat/index.js';
+export * from './slack/index.js';
+export * from './teams/index.js';

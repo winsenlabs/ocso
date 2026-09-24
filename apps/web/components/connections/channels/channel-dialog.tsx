@@ -102,7 +102,7 @@ export function ChannelDialog({ kinds, channel, initialKind, agents, publicOrigi
   const revealed = saved?.revealedSecrets
     ? (def?.secrets ?? []).filter((f) => saved.revealedSecrets?.[f.key]).map((f) => ({ key: f.key, label: f.label, value: saved.revealedSecrets![f.key]! }))
     : [];
-  const kindInfo = { inboundWebhook: def?.inboundWebhook ?? false, embeddable: def?.embeddable ?? false, label: kindLabel(def), connectionCheck: def?.connectionCheck ?? false, setupSteps: def?.setupSteps ?? [] };
+  const kindInfo = { inboundWebhook: def?.inboundWebhook ?? false, embeddable: def?.embeddable ?? false, label: kindLabel(def), connectionCheck: def?.connectionCheck ?? false, setupSteps: def?.setupSteps ?? [], setupFiles: def?.setupFiles ?? [] };
   // Client-generated secrets are for pasting elsewhere (e.g. the provider's console): shown once more with the next steps.
   const generatedSecrets = (def?.secrets ?? []).filter((f) => generated[f.key]).map((f) => ({ label: f.label, value: generated[f.key]! }));
 

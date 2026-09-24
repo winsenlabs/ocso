@@ -100,7 +100,9 @@ export const TELEGRAM_CAPABILITIES: ChannelCapabilities = Object.freeze<ChannelC
 ## 4. Verify and parse inbound
 
 `verifyRequest` runs before anything is parsed or stored. Compare secrets in constant time with the
-shared helper. `parseInbound` turns one webhook body into canonical messages. The
+shared helper. It may return a `Promise` when verification needs the network, for example a bearer JWT
+checked against the provider's published keys (see `packages/channels/src/teams/verification.ts`); the
+API awaits it either way. `parseInbound` turns one webhook body into canonical messages. The
 `externalMessageId` is the idempotency key: the core drops a second delivery of the same id.
 
 ```ts

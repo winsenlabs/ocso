@@ -5,17 +5,21 @@ import type { Db } from '@ocso/db';
 import { AskOcsoTools, InternalActionService, InternalAgentService, InternalToolRegistry } from '@ocso/internal-agent';
 import { AUDIT_STORE, DB } from '../../infrastructure/tokens.js';
 import { APPROVAL_REGISTRY } from '../approvals/approvals.tokens.js';
+import { ChatLinksController } from './chat-links.controller.js';
 import { InternalAgentController } from './internal-agent.controller.js';
 import { LoopbackCapabilityRunner } from './loopback-runner.js';
+import { StaffChatService } from './staff-chat.service.js';
 
 /**
  * Ask OCSO (PM/research/12): the meta tools over the capability catalog, confirmation cards, and the
- * in-process runner that calls the real API routes as the user.
+ * in-process runner that calls the real API routes as the user; and Ask OCSO over staff chat channels (Slack, Teams:
+ * StaffChatService, reached by channel ingress) with the chat account links behind it.
  */
 @Module({
-  controllers: [InternalAgentController],
+  controllers: [InternalAgentController, ChatLinksController],
   providers: [
     LoopbackCapabilityRunner,
+    StaffChatService,
     { provide: InternalToolRegistry, useFactory: () => new InternalToolRegistry() },
     {
       provide: InternalActionService,

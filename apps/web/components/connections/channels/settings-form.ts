@@ -204,3 +204,42 @@ export function identitySettingOf(settings: Record<string, unknown>, setting: { 
 export function embedSnippet(origin: string, publicKey: string): string {
   return `<script src="${origin.replace(/\/+$/, '')}/ocso-webchat.js" data-key="${publicKey}" async></script>`;
 }
+
+/** A descriptor setup file (`setupFiles`: an app manifest to paste or upload in the provider's console). */
+export interface SetupFileDef {
+  key: string;
+  label: string;
+  description?: string | undefined;
+  filename: string;
+  contentType: 'application/json' | 'text/yaml' | 'text/plain';
+  template: string;
+}
+
+const SETUP_PLACEHOLDER = /\{\{\s*(webhookUrl|settings\.[A-Za-z][A-Za-z0-9_]{0,63})\s*\}\}/g;
+/** YAML / plain text: values that are one plain scalar whatever surrounds them (no quotes, comments, flow or block syntax). */
+const PLAIN_SAFE = /^[A-Za-z0-9][A-Za-z0-9 ._~:/?=&%+@,()-]*$/;
+
+/**
+ * Fill a setup file's placeholders from the saved channel. Only `{{webhookUrl}}` and `{{settings.<key>}}`
+ * exist (the descriptor contract never interpolates secrets). Values go in as plain text: JSON-string-escaped
+ * for JSON; for YAML and plain text a value that could change the file's structure is left out. A missing or
+ * left-out value keeps its placeholder and is listed in `missing`, so the admin knows what to fill in.
+ */
+export function renderSetupFile(file: SetupFileDef, ctx: { webhookUrl: string | null; settings: Record<string, unknown> }): { content: string; missing: string[] } {
+  const missing = new Set<string>();
+  const content = file.template.replace(SETUP_PLACEHOLDER, (token, name: string) => {
+    const raw = name === 'webhookUrl' ? ctx.webhookUrl : ctx.settings[name.slice('settings.'.length)];
+    const value = typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean' ? String(raw) : '';
+    if (!value) {
+      missing.add(name);
+      return token;
+    }
+    if (file.contentType === 'application/json') return JSON.stringify(value).slice(1, -1);
+    if (!PLAIN_SAFE.test(value) || value.includes(': ') || value.includes(' #')) {
+      missing.add(name);
+      return token;
+    }
+    return value;
+  });
+  return { content, missing: [...missing] };
+}

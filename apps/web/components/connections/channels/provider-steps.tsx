@@ -1,4 +1,7 @@
+'use client';
+
 import { CopyButton } from '../copy-button';
+import { renderSetupFile, type SetupFileDef } from './settings-form';
 
 /**
  * What the admin does in the provider's console after saving a channel: the
@@ -56,4 +59,51 @@ export function RevealedSecrets({ secrets }: { secrets: ReadonlyArray<{ key: str
       <p className="mono-sm">Keep it on your server. OCSO stores it by reference and never shows it again; rotate it from the channel’s Edit dialog.</p>
     </section>
   );
+}
+
+/**
+ * Files the kind's descriptor provides for the provider's console (a Slack or Teams app manifest), filled
+ * from the saved channel: copy or download. Placeholders a value could not fill stay visible, with a note.
+ */
+export function SetupFiles({ files, webhookUrl, settings }: { files: readonly SetupFileDef[]; webhookUrl: string | null; settings: Record<string, unknown> }) {
+  if (!files.length) return null;
+  return (
+    <>
+      {files.map((file) => {
+        const { content, missing } = renderSetupFile(file, { webhookUrl, settings });
+        return (
+          <div key={file.key} className="setup-file" aria-label={file.label}>
+            <div className="rowsplit">
+              <span className="mono-sm">
+                {file.label} · <code className="mono">{file.filename}</code>
+              </span>
+              <span className="sp" />
+              <CopyButton value={content} what={file.label} />
+              <button type="button" className="btn tiny" aria-label={`Download ${file.label}`} onClick={() => download(file.filename, file.contentType, content)}>
+                Download
+              </button>
+            </div>
+            {file.description ? <p className="mono-sm">{file.description}</p> : null}
+            {missing.length ? (
+              <p className="mono-sm" role="note">
+                Fill in {missing.map((m) => m.replace(/^settings\./, '')).join(', ')} before using this file (set it on the channel, or edit the placeholders).
+              </p>
+            ) : null}
+            <pre className="setup-file-body" tabIndex={0}>
+              {content}
+            </pre>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+function download(filename: string, contentType: string, content: string): void {
+  const url = URL.createObjectURL(new Blob([content], { type: `${contentType};charset=utf-8` }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }

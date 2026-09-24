@@ -51,7 +51,7 @@ const IDENTITY_DISPLAY = Symbol('IDENTITY_DISPLAY');
         new ChannelService(
           db,
           secrets,
-          (kind, settings, values) => (registry.has(kind) ? registry.get(kind).validateConfig(settings, values) : [`channel kind ${kind} is not available`]),
+          (kind, settings, values) => registry.validateConfig(kind, settings, values),
           (kind, publicKey) => registry.paths(kind, publicKey),
         ),
     },

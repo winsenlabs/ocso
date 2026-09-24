@@ -15,7 +15,8 @@ export { CONFIRM_BOUND_MS, OUTCOME_UNKNOWN_CODE, READ_TIMEOUT_MS, WRITE_TIMEOUT_
  * private listener bound to 127.0.0.1 on an ephemeral port — never a public hop — with a single-use delegation
  * token bound to the user's session, the thread, the card or call and the exact request. The auth guard accepts
  * such tokens only on this listener, so guards, validation, team scoping, approvals, rate limits and audit are
- * exactly the UI's. There is no service-account path: a principal without a session cannot delegate.
+ * exactly the UI's. There is no service-account path: a principal without a session cannot delegate, except
+ * through a linked chat account (Ask OCSO over Slack or Teams), whose token is bound to the link instead.
  */
 @Injectable()
 export class LoopbackCapabilityRunner implements CapabilityRunner, OnModuleDestroy {
@@ -48,7 +49,9 @@ export class LoopbackCapabilityRunner implements CapabilityRunner, OnModuleDestr
   }
 
   async call(principal: Principal, scope: DelegationScope, call: CapabilityCall): Promise<CapabilityResponse> {
-    if (!principal.sessionId) throw new DomainError('authentication', 'no_session', 'Ask OCSO acts only within a signed-in session');
+    // A signed-in session (the drawer), or a linked chat account (a staff chat channel): never neither.
+    const bound = principal.sessionId ? { sessionId: principal.sessionId } : principal.chatLink ? { linkId: principal.chatLink.linkId, surface: principal.chatLink.surface } : null;
+    if (!bound) throw new DomainError('authentication', 'no_session', 'Ask OCSO acts only within a signed-in session or a linked chat account');
     const port = await this.listen();
     const url = new URL(call.path, `http://127.0.0.1:${port}`);
     for (const [key, value] of Object.entries(call.query ?? {})) {
@@ -58,7 +61,7 @@ export class LoopbackCapabilityRunner implements CapabilityRunner, OnModuleDestr
     }
     const token = this.tokens.issue({
       userId: principal.userId,
-      sessionId: principal.sessionId,
+      ...bound,
       threadId: scope.threadId,
       ...(scope.cardId ? { cardId: scope.cardId } : {}),
       ...(scope.callId ? { callId: scope.callId } : {}),

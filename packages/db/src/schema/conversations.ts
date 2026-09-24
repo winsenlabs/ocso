@@ -143,6 +143,11 @@ export const interactions = pgTable(
     externalMessageId: text(),
     turnId: uuid(),
     preview: text(),
+    /**
+     * Inbound only (0035): where replies go, in the channel adapter's terms (InboundMessage.replyContext — a Slack
+     * thread, a Bot Framework conversation reference). Opaque to core; delivery hands back the one of the message a reply answers.
+     */
+    replyContext: jsonb().$type<Record<string, string>>(),
     createdAt: createdAt(),
   },
   (t) => [

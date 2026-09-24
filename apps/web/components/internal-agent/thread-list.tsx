@@ -47,7 +47,10 @@ export function ThreadList({
             <li key={t.id}>
               <button type="button" className="ia-thread" aria-current={t.id === activeId ? 'true' : undefined} onClick={() => onOpen(t.id)} disabled={busy}>
                 <span className="ia-thread-title">{t.title}</span>
-                <span className="mono-sm">{relativeTime(t.updatedAt, now)}</span>
+                <span className="mono-sm">
+                  {t.surface ? `in ${t.surface.replace(/_/g, ' ')} · ` : ''}
+                  {relativeTime(t.updatedAt, now)}
+                </span>
               </button>
             </li>
           ))}

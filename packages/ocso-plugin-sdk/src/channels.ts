@@ -88,7 +88,17 @@ export interface InboundMessage {
   identityVerified?: boolean | undefined;
   /** Context the embedding site passed with the sender's session (embeddable kinds), and who vouched for it. */
   hostContext?: InboundHostContext | undefined;
+  /**
+   * Where replies to this message go, in the adapter's own terms (a Slack channel and thread, a Bot Framework
+   * conversation reference). Opaque to OCSO: stored with the inbound message and handed back as
+   * `OutboundTarget.replyContext` for the conversation's later outbound messages. At most
+   * 16 string values, 4096 bytes of JSON in total; larger contexts are dropped.
+   */
+  replyContext?: Readonly<Record<string, string>> | undefined;
 }
+
+/** An adapter's reply context (`InboundMessage.replyContext`, `OutboundTarget.replyContext`): opaque string values. */
+export type ReplyContext = Readonly<Record<string, string>>;
 
 /** Allowlisted key/values from the embedding site: `host` = its backend vouched, `client` = the browser sent them. */
 export interface InboundHostContext {
@@ -157,6 +167,13 @@ export interface OutboundTarget {
   channelAccountId?: string | undefined;
   /** Time of the customer's last inbound message (session-window checks). */
   lastInboundAt: Date | null;
+  /**
+   * The `replyContext` of the customer message this outbound message answers: the latest inbound message on
+   * this conversation and channel that carried one, up to the agent turn's input (or, for a human or system
+   * message, up to that message) — a later customer message elsewhere never redirects it. Absent when none
+   * did, e.g. a message OCSO starts.
+   */
+  replyContext?: Readonly<Record<string, string>> | undefined;
 }
 
 export type SendResult =
@@ -213,7 +230,12 @@ export interface ChannelAdapter {
   readonly embed?: EmbeddedChat | undefined;
   /** Validate admin-entered settings/secrets; returns human-readable problems. */
   validateConfig(settings: unknown, secrets: Readonly<Record<string, string>>): string[];
-  verifyRequest(req: RawHttpRequest, config: ChannelRuntimeConfig): VerificationResult;
+  /**
+   * Authenticate an inbound request before anything is parsed or stored. May be async when verification needs
+   * the network (e.g. JWTs checked against a provider's published signing keys, fetched through `deps.fetch`);
+   * OCSO always awaits it.
+   */
+  verifyRequest(req: RawHttpRequest, config: ChannelRuntimeConfig): VerificationResult | Promise<VerificationResult>;
   parseInbound(req: RawHttpRequest, config: ChannelRuntimeConfig): InboundEnvelope;
   /** Reply for an accepted webhook; when absent the API answers with a JSON ingest summary. */
   webhookAcknowledgement?(): WebhookAcknowledgement;

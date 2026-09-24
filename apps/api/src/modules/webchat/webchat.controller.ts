@@ -137,7 +137,7 @@ export class WebChatController {
   async send(@Param('publicKey') publicKey: string, @Headers('origin') origin: string | undefined, @Req() req: OcsoRequest & { rawBody?: Buffer }) {
     const ctx = await this.identity.access(req, publicKey, origin);
     const raw = toRawRequest('POST', req.headers, {}, req.rawBody);
-    const verified = ctx.adapter.verifyRequest(raw, ctx.config);
+    const verified = await ctx.adapter.verifyRequest(raw, ctx.config);
     if (verified.kind === 'rejected') throw new DomainError(verified.status === 401 ? 'authentication' : 'authorization', 'webchat_token_invalid', verified.reason);
     this.limitVisitor('messages', ctx, await this.identity.identify(ctx, req.headers.authorization));
     const summary = await this.ingress.process(ctx.config.id, ctx.adapter.parseInbound(raw, ctx.config), req.correlationId ?? randomUUID());

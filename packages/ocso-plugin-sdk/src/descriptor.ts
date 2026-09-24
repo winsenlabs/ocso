@@ -47,6 +47,26 @@ export interface ChannelTemplateTerms {
   mediaHeaderUnsupported?: string | undefined;
 }
 
+/**
+ * A ready-made file the admin pastes or uploads into the provider's console after saving (an app manifest).
+ * OCSO fills the placeholders from the saved channel and offers copy and download. Only `{{webhookUrl}}` and
+ * `{{settings.<key>}}` exist: secrets are never interpolated. Values are inserted as plain text:
+ * JSON-string-escaped for `application/json` (put placeholders inside string literals); for YAML and plain
+ * text a value with quotes, backslashes, `#`, control characters or line breaks is left out.
+ */
+export interface ChannelSetupFile {
+  /** Stable id within the kind (`a-z0-9-`). */
+  key: string;
+  /** Heading shown above the file ("Teams app manifest"). */
+  label: string;
+  /** What to do with it, one sentence. */
+  description?: string | undefined;
+  /** Download name, e.g. `manifest.json`. */
+  filename: string;
+  contentType: 'application/json' | 'text/yaml' | 'text/plain';
+  template: string;
+}
+
 /** What the "Add channel" form, the channel list and the workspace need to know about a kind. */
 export interface ChannelKindDescriptor {
   kind: ChannelKind;
@@ -60,6 +80,8 @@ export interface ChannelKindDescriptor {
   identitySetting?: ChannelIdentitySetting | undefined;
   /** What the admin does in the provider's console after saving (plain sentences, in order). */
   setupSteps: readonly string[];
+  /** Files to paste or upload in the provider's console (app manifests), shown with the setup steps. */
+  setupFiles?: readonly ChannelSetupFile[] | undefined;
   /** Provider calls OCSO at `/channels/<webhookSegment>/<publicKey>/webhook`. */
   inboundWebhook: boolean;
   /** URL segment of the inbound webhook (`a-z0-9-`); defaults to the kind in kebab case. */
@@ -70,4 +92,13 @@ export interface ChannelKindDescriptor {
   embeddable: boolean;
   /** Present exactly when the adapter implements the message-template methods. */
   templates?: ChannelTemplateTerms | undefined;
+  /**
+   * Staff can use this kind to talk to Ask OCSO (a workplace chat such as Slack or Teams). OCSO then adds its own
+   * `destination` setting (`router` | `ask_ocso`) to the kind's settings form and routes `ask_ocso` channels'
+   * messages to Ask OCSO as the staff member who linked their chat account. Do not declare `destination` in
+   * `settingsSchema` yourself.
+   */
+  staffDestination?: boolean | undefined;
+  /** How Ask OCSO threads and audit rows name this kind (`teams`: `a-z0-9_`, up to 32); defaults to the kind in lower case. */
+  staffSurface?: string | undefined;
 }

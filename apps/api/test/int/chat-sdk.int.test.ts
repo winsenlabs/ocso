@@ -141,8 +141,7 @@ beforeAll(async () => {
     summarizeAfter: 40,
   });
 
-  // Real sockets: Node's fetch must stream the SSE body from a listening server.
-  await h.app.listen(0, '127.0.0.1');
+  // Real sockets: Node's fetch must stream the SSE body from a listening server (the harness already listens).
   const address = h.app.getHttpServer().address() as { port: number };
   baseUrl = `http://127.0.0.1:${address.port}`;
 });

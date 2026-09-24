@@ -207,7 +207,7 @@ describe('plugin loader', () => {
       name: '@ocso/channels',
       version: '2026.9.0',
       source: 'first-party',
-      contributes: { channels: ['TWILIO_WHATSAPP', 'WHATSAPP', 'WEBCHAT'], modelProviders: [], alertDestinations: [], emailDrivers: [] },
+      contributes: { channels: ['TWILIO_WHATSAPP', 'WHATSAPP', 'WEBCHAT', 'SLACK', 'MS_TEAMS'], modelProviders: [], alertDestinations: [], emailDrivers: [] },
       internal: [],
     });
     expect(info.find((p) => p.name === '@ocso/blob')?.internal).toEqual(['blob drivers: local, s3']);

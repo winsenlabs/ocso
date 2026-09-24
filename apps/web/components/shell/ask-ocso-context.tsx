@@ -6,6 +6,9 @@ import type { AskOcsoCopy } from './ask-ocso-copy';
 import { AskOcsoDrawer } from './ask-ocso-drawer';
 
 export const ASK_OCSO_DRAWER_ID = 'ask-ocso-drawer';
+/** Query parameter that opens the drawer on a thread (links Ask OCSO sends into chat). */
+export const THREAD_PARAM = 'askOcso';
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** A question handed to the drawer from elsewhere on the page (Home's Ask OCSO bar, a "needs you" item). */
 export interface AskOcsoRequest {
@@ -70,7 +73,22 @@ export function useAskOcso(): AskOcsoState {
  * reopening keeps the conversation.
  */
 export function AskOcsoDrawerHost({ copy }: { copy: AskOcsoCopy }) {
-  const { open, close, request, consumeRequest } = useAskOcso();
+  const { open, close, request, consumeRequest, toggle } = useAskOcso();
   const session = useAskOcsoSession();
+  const { openThread } = session;
+  // `?askOcso=<thread id>` (the "Open in OCSO" link Ask OCSO sends in Slack or Teams for a card that is finished
+  // here): open the drawer on that thread, whose cards render with their current state. The parameter is removed.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const threadId = url.searchParams.get(THREAD_PARAM);
+    if (!threadId) return;
+    url.searchParams.delete(THREAD_PARAM);
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+    if (!UUID.test(threadId)) return;
+    void openThread(threadId).then((found) => {
+      if (found && !open) toggle();
+    });
+    // Once per page load: the parameter is gone after the first run.
+  }, []);
   return open ? <AskOcsoDrawer id={ASK_OCSO_DRAWER_ID} copy={copy} session={session} onClose={close} request={request} onRequestHandled={consumeRequest} /> : null;
 }

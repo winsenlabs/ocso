@@ -147,7 +147,7 @@ describe('idle expiry and long-lived streams', () => {
 
   it('closes the realtime stream once its session is revoked', async () => {
     const token = (await signIn(ADMIN.email, ADMIN.password).expect(200)).headers['set-auth-token'] as string;
-    const server = h.app.getHttpServer().listen(0);
+    const server = h.app.getHttpServer(); // the harness already listens on a loopback port
     try {
       const { port } = server.address() as { port: number };
       const res = await fetch(`http://127.0.0.1:${port}/v1/realtime/stream`, { headers: { ...bearer(token), accept: 'text/event-stream' } });
@@ -161,8 +161,7 @@ describe('idle expiry and long-lived streams', () => {
       while (!done && Date.now() < deadline) done = (await reader.read()).done;
       expect(done).toBe(true);
     } finally {
-      server.closeAllConnections();
-      server.close();
+      server.closeIdleConnections();
     }
   });
 });
