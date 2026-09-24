@@ -110,7 +110,7 @@ describe('installed plugins', () => {
   it('lists first-party and installed plugins with versions and contributions (system.read)', async () => {
     const res = await h.http().get('/v1/system/plugins').set(auth(admin)).expect(200);
     const plugins = res.body as Array<{ name: string; version: string; source: string; contributes: Record<string, string[]> }>;
-    expect(plugins.find((p) => p.name === '@ocso/channels')).toMatchObject({ version: '9.9.9-test', source: 'first-party', contributes: { channels: ['TWILIO_WHATSAPP', 'WHATSAPP', 'WEBCHAT'] } });
+    expect(plugins.find((p) => p.name === '@ocso/channels')).toMatchObject({ version: '9.9.9-test', source: 'first-party', contributes: { channels: ['TWILIO_WHATSAPP', 'WHATSAPP', 'WEBCHAT', 'SLACK', 'MS_TEAMS'] } });
     expect(plugins.find((p) => p.name === '@ocso/email')?.contributes.emailDrivers).toEqual(expect.arrayContaining(['log']));
     expect(plugins.at(-1)).toEqual({
       name: NAME,
@@ -130,7 +130,7 @@ describe('installed plugins', () => {
 
   it('serves the installed channel kind to the admin form', async () => {
     const res = await h.http().get('/v1/channels/kinds').set(auth(admin)).expect(200);
-    expect(res.body.map((k: { kind: string }) => k.kind)).toEqual(['TWILIO_WHATSAPP', 'WHATSAPP', 'WEBCHAT', 'ECHO']);
+    expect(res.body.map((k: { kind: string }) => k.kind)).toEqual(['TWILIO_WHATSAPP', 'WHATSAPP', 'WEBCHAT', 'SLACK', 'MS_TEAMS', 'ECHO']);
   });
 
   it('turns a marked plugin error into a typed error response; unmarked ones stay internal', async () => {

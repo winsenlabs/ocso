@@ -7,6 +7,8 @@ Channel adapters for OCSO (docs/07, ADR-007). An adapter handles transport only:
 | `TwilioWhatsAppChannelAdapter` | `createTwilioWhatsAppAdapter({ fetch, now })` | WhatsApp through Twilio Programmable Messaging (form-encoded webhooks, Messages API) |
 | `WhatsAppChannelAdapter` | `createWhatsAppAdapter({ fetch, now })` | WhatsApp Cloud API, called directly (Graph API version comes from config) |
 | `WebChatChannelAdapter` | `createWebChatAdapter({ now, generateId? })` | OCSO's own widget: JSON in, realtime stream out |
+| `SlackChannelAdapter` | `createSlackChannelAdapter({ fetch, now, sleep? })` | A Slack app: Events API + interactivity in (signed `v0` HMAC), `chat.postMessage` out; see docs/plugins/slack.md |
+| `MsTeamsChannelAdapter` | `createMsTeamsAdapter({ fetch, now, sleep? })` | An Azure Bot in Microsoft Teams: Bot Framework activities in (bearer JWT verified against Microsoft's signing keys, so `verifyRequest` is async), Bot Connector REST out with a cached client-credentials token; see docs/plugins/ms-teams.md |
 
 `fetch` is the only way an adapter reaches the network. The composition root (`packages/bootstrap`) passes the SSRF-guarded channel egress: public https hosts, plus hosts a Tech admin allowlisted (deployment settings). A factory called without `fetch` gets `NO_NETWORK`, which rejects every call; tests pass a stub.
 
@@ -65,7 +67,7 @@ Secrets: `accessToken`, `appSecret`, `verifyToken`. Call `validateConfig` before
 
 ```ts
 // NestJS: NestFactory.create(AppModule, { rawBody: true }); raise the JSON body limit to >= 3 MB.
-const verdict = adapter.verifyRequest(req, channel);          // GET -> challenge, POST -> HMAC over RAW body
+const verdict = await adapter.verifyRequest(req, channel);    // GET -> challenge, POST -> HMAC over RAW body (may be async, e.g. Teams JWTs)
 if (verdict.kind === 'challenge') return reply.status(200).type('text/plain').send(verdict.body);
 if (verdict.kind === 'rejected') return reply.status(verdict.status).send();
 const envelope = adapter.parseInbound(req, channel);          // throws DomainError(validation) on non-JSON

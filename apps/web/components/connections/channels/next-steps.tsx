@@ -3,13 +3,14 @@
 import { CopyButton } from '../copy-button';
 import { ChannelTest } from './channel-test';
 import { EmbedPanel } from './embed-panel';
-import { GeneratedSecrets, ProviderSteps } from './provider-steps';
+import { GeneratedSecrets, ProviderSteps, SetupFiles } from './provider-steps';
+import type { SetupFileDef } from './settings-form';
 import { inboundWebhookUrl } from './settings-form';
 
 interface Props {
-  channel: { id: string; kind: string; publicKey: string; webhookPath: string | null; status: string };
+  channel: { id: string; kind: string; publicKey: string; webhookPath: string | null; status: string; settings?: Record<string, unknown> | undefined };
   /** From the kind's descriptor (GET /v1/channels/kinds). */
-  kind: { inboundWebhook: boolean; embeddable: boolean; label: string; connectionCheck: boolean; setupSteps: readonly string[] };
+  kind: { inboundWebhook: boolean; embeddable: boolean; label: string; connectionCheck: boolean; setupSteps: readonly string[]; setupFiles?: readonly SetupFileDef[] | undefined };
   publicOrigin: string;
   /** Secrets generated in this dialog for the admin to copy elsewhere (shown once), if any. */
   generated?: ReadonlyArray<{ label: string; value: string }> | undefined;
@@ -34,6 +35,7 @@ export function ChannelNextSteps({ channel, kind, publicOrigin, generated = [], 
             <CopyButton value={url} what="webhook URL" />
           </div>
           <ProviderSteps steps={kind.setupSteps} fallback="Configure the provider to call this URL for inbound messages; requests are verified before anything is stored." />
+          <SetupFiles files={kind.setupFiles ?? []} webhookUrl={url} settings={channel.settings ?? {}} />
           <GeneratedSecrets secrets={generated} />
           {inactive}
         </section>
@@ -52,6 +54,7 @@ export function ChannelNextSteps({ channel, kind, publicOrigin, generated = [], 
             : 'Allowed origins is empty, so any site may embed the widget. Add your site origins to restrict it.'}
         </p>
         {kind.setupSteps.length ? <ProviderSteps steps={kind.setupSteps} fallback="" /> : null}
+        <SetupFiles files={kind.setupFiles ?? []} webhookUrl={null} settings={channel.settings ?? {}} />
         <GeneratedSecrets secrets={generated} />
         {inactive}
       </section>

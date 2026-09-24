@@ -1,4 +1,6 @@
-import { index, jsonb, pgTable, text, uuid } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { index, jsonb, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { channelAccountLinks } from './channel-links.js';
 import { createdAt, id, ts, updatedAt } from './columns.js';
 import { users } from './identity.js';
 
@@ -12,10 +14,19 @@ export const internalAgentThreads = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     title: text().notNull().default('New conversation'),
     context: jsonb().$type<Record<string, unknown>>().notNull().default({}),
+    /** Where the thread was asked from (0036): null = the drawer; otherwise the chat channel's kind in lower case (`slack`). */
+    surface: text(),
+    /** The linked chat account a chat thread runs as (0036); null for drawer threads. */
+    channelLinkId: uuid().references(() => channelAccountLinks.id, { onDelete: 'set null' }),
+    /** The chat thread it continues (a digest of the adapter's reply context), unique per link. */
+    chatThreadKey: text(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [index('internal_agent_threads_user_idx').on(t.userId, t.updatedAt)],
+  (t) => [
+    index('internal_agent_threads_user_idx').on(t.userId, t.updatedAt),
+    uniqueIndex('internal_agent_threads_chat_uq').on(t.channelLinkId, t.chatThreadKey).where(sql`${t.channelLinkId} IS NOT NULL`),
+  ],
 );
 
 export const internalAgentMessages = pgTable(

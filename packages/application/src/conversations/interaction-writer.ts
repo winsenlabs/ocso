@@ -12,6 +12,8 @@ export interface AppendOptions {
   turnId?: string | null | undefined;
   kind?: 'MESSAGE' | 'SYSTEM_EVENT' | 'TOOL_EVENT' | undefined;
   deliveryStatus?: string | undefined;
+  /** Inbound only: where replies go, in the channel adapter's terms (already bounded by the caller). */
+  replyContext?: Record<string, string> | null | undefined;
   now: Date;
 }
 
@@ -69,6 +71,7 @@ export async function appendInteraction(
     deliveryStatus: options.deliveryStatus ?? 'NOT_APPLICABLE',
     turnId: options.turnId ?? null,
     preview,
+    replyContext: options.replyContext ?? null,
     createdAt: options.now,
   });
   await tx.insert(interactionParts).values(

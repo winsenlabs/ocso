@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   ChannelRegistry,
+  createMsTeamsAdapter,
+  createSlackChannelAdapter,
   createTwilioWhatsAppAdapter,
   createWebChatAdapter,
   createWhatsAppAdapter,
@@ -8,6 +10,8 @@ import {
   withinSessionWindow,
   type ChannelAdapter,
 } from '../src/index.js';
+import { slConfig } from './helpers/slack.js';
+import { mtConfig } from './helpers/teams.js';
 import { twConfig } from './helpers/twilio.js';
 import { wcConfig } from './helpers/webchat.js';
 import { waConfig } from './helpers/whatsapp.js';
@@ -16,13 +20,15 @@ const adapters: Array<[ChannelAdapter, ReturnType<typeof waConfig>]> = [
   [createWhatsAppAdapter({ fetch: () => Promise.reject(new Error('offline')) }), waConfig()],
   [createWebChatAdapter(), wcConfig()],
   [createTwilioWhatsAppAdapter({ fetch: () => Promise.reject(new Error('offline')) }), twConfig()],
+  [createSlackChannelAdapter({ fetch: () => Promise.reject(new Error('offline')) }), slConfig()],
+  [createMsTeamsAdapter({ fetch: () => Promise.reject(new Error('offline')) }), mtConfig()],
 ];
 
 describe('channel adapters satisfy the shared contract', () => {
   it('register by kind in the channel registry', () => {
     const registry = new ChannelRegistry();
     for (const [adapter] of adapters) registry.register(adapter);
-    expect(registry.kinds()).toEqual(['WHATSAPP', 'WEBCHAT', 'TWILIO_WHATSAPP']);
+    expect(registry.kinds()).toEqual(['WHATSAPP', 'WEBCHAT', 'TWILIO_WHATSAPP', 'SLACK', 'MS_TEAMS']);
     expect(registry.get('WHATSAPP').kind).toBe('WHATSAPP');
   });
 

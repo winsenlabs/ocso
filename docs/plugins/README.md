@@ -77,7 +77,7 @@ built from the same plugins. Plugin names must be unique, and a registry refuses
 
 | Extension point | Contract | Shipped implementations | What the core does for you |
 |---|---|---|---|
-| [Channels](channels.md) | `ChannelAdapter` (`packages/channels/src/contract/types.ts`), `ChannelKindDescriptor` (`contract/descriptor.ts`) | WhatsApp via Twilio, WhatsApp via Meta Cloud API, web chat | Webhook route per kind, persist-before-ack ingress with dedupe, identity resolution, media fetch jobs, customer-safe rendering filter, delivery retries, admin form from JSON Schema, encrypted secrets |
+| [Channels](channels.md) | `ChannelAdapter` (`packages/channels/src/contract/types.ts`), `ChannelKindDescriptor` (`contract/descriptor.ts`) | WhatsApp via Twilio, WhatsApp via Meta Cloud API, web chat, Slack, Microsoft Teams | Webhook route per kind, persist-before-ack ingress with dedupe, identity resolution, media fetch jobs, customer-safe rendering filter, delivery retries, admin form from JSON Schema, encrypted secrets |
 | [Model providers](model-providers.md) | `ProviderDefinition` (`packages/model-providers/src/providers/definition.ts`), `ModelProviderAdapter` (`contract/types.ts`) | AWS Bedrock, Google Vertex AI, Microsoft Foundry, OpenAI, Anthropic, Sarvam (plus a development-only scripted provider) | Shared AI SDK call path, usage and error normalization, secret scrubbing, health checks, admin form from zod schemas, profiles with fallbacks and policy checks, cost telemetry |
 | [Tools (built-in and MCP)](tools-and-mcp.md) | `ToolProviderSource`, `ToolProvider` (`packages/tools/src/registry.ts`, `provider.ts`); any MCP server over Streamable HTTP | Built-in OCSO tools (`@ocso/agent-runtime`), `McpToolProvider` connections (`@ocso/mcp`, added in the web app) | One authorization and `tool_calls` audit path for every call, discovery, OAuth 2.1 or static-header auth, risk classification and approval, human confirmation, SSRF-guarded egress, health checks |
 | [Alert destinations](alerts.md#delivery-destinations) | `AlertDeliveryAdapter` (`packages/alerts/src/contract.ts`) | In-app, email, Slack, Microsoft Teams, signed webhook, PagerDuty | Dispatch per lifecycle event, retries with backoff, encrypted secrets, test button, form from the adapter's schema |
@@ -181,6 +181,8 @@ need `@ocso/db` or `@ocso/config`), alert conditions, scheduled tasks and Ask OC
 ## Pages
 
 - [channels.md](channels.md): channel adapters
+- [slack.md](slack.md): the Slack channel (setup, behaviour, limits)
+- [ms-teams.md](ms-teams.md): the Microsoft Teams channel (setup, behaviour, limits)
 - [add-a-channel.md](add-a-channel.md): worked example, a Telegram-shaped channel in seven steps
 - [model-providers.md](model-providers.md): model provider definitions and adapters
 - [tools-and-mcp.md](tools-and-mcp.md): built-in tools, MCP tool servers and the tool authorization path

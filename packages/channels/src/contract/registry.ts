@@ -1,9 +1,19 @@
-import { CHANNEL_KIND_PATTERN, type ChannelKind, type ChannelKindDescriptor, type ChannelKindInfo } from './descriptor.js';
+import {
+  CHANNEL_DESTINATIONS,
+  CHANNEL_KIND_PATTERN,
+  DESTINATION_SETTING,
+  setupFileProblems,
+  type ChannelDestination,
+  type ChannelKind,
+  type ChannelKindDescriptor,
+  type ChannelKindInfo,
+} from './descriptor.js';
 import type { EmbeddedChat } from './embed.js';
 import type { ChannelAdapter } from './types.js';
 
 const SEGMENT = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const MARK_CODE = /^[A-Za-z0-9]{1,3}$/;
+const STAFF_SURFACE = /^[a-z][a-z0-9_]{0,31}$/;
 
 /** Path prefix of OCSO's widget page for embeddable kinds (`/chat/<publicKey>`, served by the web app). */
 export const EMBED_PAGE_PREFIX = '/chat';
@@ -34,6 +44,15 @@ export class ChannelRegistry {
     if (Boolean(descriptor.templates) !== supportsTemplates(adapter)) {
       throw new Error(`channel adapter ${kind}: describe message templates exactly when the adapter implements listTemplates, createTemplate and sendTemplate`);
     }
+    const fileProblems = setupFileProblems(descriptor.setupFiles);
+    if (fileProblems.length) throw new Error(`channel adapter ${kind}: ${fileProblems.join('; ')}`);
+    if (descriptor.staffDestination !== undefined && typeof descriptor.staffDestination !== 'boolean') throw new Error(`channel adapter ${kind}: staffDestination must be a boolean`);
+    if (descriptor.staffSurface !== undefined && (typeof descriptor.staffSurface !== 'string' || !STAFF_SURFACE.test(descriptor.staffSurface))) {
+      throw new Error(`channel adapter ${kind}: staffSurface must be lower-case a-z0-9_ (up to 32 characters)`);
+    }
+    if (descriptor.staffDestination && schemaProperties(descriptor.settingsSchema)?.[DESTINATION_SETTING] !== undefined) {
+      throw new Error(`channel adapter ${kind}: the "${DESTINATION_SETTING}" setting belongs to OCSO on staff-destination kinds; remove it from the settings schema`);
+    }
     if (descriptor.inboundWebhook) {
       const segment = descriptor.webhookSegment ?? defaultWebhookSegment(kind);
       if (!SEGMENT.test(segment)) throw new Error(`invalid webhook segment "${segment}" for ${kind}`);
@@ -59,10 +78,51 @@ export class ChannelRegistry {
     return [...this.adapters.keys()];
   }
 
-  /** The kind's descriptor plus what the registry derives from its adapter (for `GET /v1/channels/kinds`). */
+  /**
+   * The kind's descriptor plus what the registry derives from its adapter (for `GET /v1/channels/kinds`). A
+   * staff-destination kind's settings schema gains OCSO's own `destination` setting, so the admin form offers it.
+   */
   describe(kind: ChannelKind): ChannelKindInfo {
     const adapter = this.get(kind);
-    return { ...adapter.describe(), connectionCheck: typeof adapter.checkConnection === 'function', messageTemplates: supportsTemplates(adapter) };
+    const descriptor = adapter.describe();
+    const settingsSchema = descriptor.staffDestination ? withDestinationSetting(descriptor.settingsSchema) : descriptor.settingsSchema;
+    return { ...descriptor, settingsSchema, connectionCheck: typeof adapter.checkConnection === 'function', messageTemplates: supportsTemplates(adapter) };
+  }
+
+  /**
+   * Where a channel's inbound messages go: `ask_ocso` only for a staff-destination kind whose settings say so,
+   * `router` otherwise (every other kind, unknown kinds, and a missing or unknown value).
+   */
+  destination(kind: string, settings: Readonly<Record<string, unknown>> | null | undefined): ChannelDestination {
+    if (!this.has(kind) || !this.get(kind).describe().staffDestination) return 'router';
+    return settings?.[DESTINATION_SETTING] === 'ask_ocso' ? 'ask_ocso' : 'router';
+  }
+
+  /** How Ask OCSO threads and audit rows name a staff chat kind (`slack`, `teams`): the descriptor's staffSurface, else the kind in lower case. */
+  staffSurface(kind: string): string {
+    const declared = this.has(kind) ? this.get(kind).describe().staffSurface : undefined;
+    return declared ?? kind.toLowerCase();
+  }
+
+  /**
+   * A channel configuration's problems: OCSO's `destination` setting (staff-destination kinds only), then the
+   * adapter's own validation of the rest.
+   */
+  validateConfig(kind: string, settings: unknown, secrets: Readonly<Record<string, string>>): string[] {
+    if (!this.has(kind)) return [`channel kind ${kind} is not available`];
+    const adapter = this.get(kind);
+    const staff = Boolean(adapter.describe().staffDestination);
+    const record = settings && typeof settings === 'object' && !Array.isArray(settings) ? (settings as Record<string, unknown>) : null;
+    const problems: string[] = [];
+    let own = settings;
+    if (staff && record && DESTINATION_SETTING in record) {
+      const { [DESTINATION_SETTING]: destination, ...rest } = record;
+      if (destination !== undefined && !CHANNEL_DESTINATIONS.includes(destination as ChannelDestination)) {
+        problems.push(`settings.${DESTINATION_SETTING}: must be one of ${CHANNEL_DESTINATIONS.join(', ')}`);
+      }
+      own = rest;
+    }
+    return [...problems, ...adapter.validateConfig(own, secrets)];
   }
 
   /** Every registered kind, in registration order (the "Add channel" list order). */
@@ -124,6 +184,25 @@ export class ChannelRegistry {
     }
     return null;
   }
+}
+
+function schemaProperties(schema: Record<string, unknown>): Record<string, unknown> | null {
+  const properties = schema['properties'];
+  return properties && typeof properties === 'object' ? (properties as Record<string, unknown>) : null;
+}
+
+/** The `destination` setting OCSO adds to staff-destination kinds (JSON Schema, input shape). */
+const DESTINATION_SCHEMA = {
+  type: 'string',
+  enum: [...CHANNEL_DESTINATIONS],
+  default: 'router',
+  title: 'Destination',
+  description:
+    'router: people who message this channel are customers, routed like any channel. ask_ocso: your staff talk to Ask OCSO here, as themselves, after linking their chat account to their OCSO user once.',
+};
+
+function withDestinationSetting(schema: Record<string, unknown>): Record<string, unknown> {
+  return { ...schema, properties: { [DESTINATION_SETTING]: DESTINATION_SCHEMA, ...(schemaProperties(schema) ?? {}) } };
 }
 
 function supportsTemplates(adapter: ChannelAdapter): boolean {

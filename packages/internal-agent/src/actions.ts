@@ -306,7 +306,9 @@ export class InternalActionService {
         .returning({ id: internalAgentActions.id });
       if (!updated.length) throw new DomainError('conflict', 'action_not_pending', 'This card is already being confirmed or was decided');
       if (principal && correlationId && status !== 'EXPIRED') {
-        const actor = { principal: { ...viaInternalAgent(principal), delegation: { threadId: row.threadId, cardId: row.id } }, correlationId };
+        const link = principal.chatLink;
+        const delegation = { threadId: row.threadId, cardId: row.id, ...(link ? { surface: link.surface, linkId: link.linkId } : {}) };
+        const actor = { principal: { ...viaInternalAgent(principal), delegation }, correlationId };
         const action =
           status === 'REJECTED' ? 'internal_agent.action_rejected' : status === 'EXECUTED' || status === 'SUBMITTED' ? 'internal_agent.action_confirmed' : status === 'UNKNOWN' ? 'internal_agent.action_unknown' : 'internal_agent.action_failed';
         const auditId = await recordAudit(tx, actor, {

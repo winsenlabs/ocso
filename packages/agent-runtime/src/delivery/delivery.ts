@@ -1,6 +1,6 @@
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, lte } from 'drizzle-orm';
 import { TemplateMessageDataSchema, isTemplateMessageSchema, type InteractionPart } from '@ocso/domain';
-import { conversations, customerIdentities, interactionParts, interactions, type Db } from '@ocso/db';
+import { conversations, customerIdentities, interactionParts, interactions, turns, type Db } from '@ocso/db';
 import { customerSafeParts, type ChannelAdapter, type ChannelRuntimeConfig, type OutboundMediaResolver, type OutboundTarget, type SendResult } from '@ocso/channels';
 import type { BlobStore } from '@ocso/blob';
 import { emitEvent, lastCustomerMessageAt } from '@ocso/application';
@@ -57,7 +57,8 @@ export class DeliveryService {
       },
     };
     const lastInboundAt = await lastCustomerMessageAt(this.db, conv!.customerId, row.channelId);
-    const target: OutboundTarget = { identityKind: identity.kind, identityValue: identity.value, lastInboundAt };
+    const replyContext = await this.replyContextFor(row);
+    const target: OutboundTarget = { identityKind: identity.kind, identityValue: identity.value, lastInboundAt, ...(replyContext ? { replyContext } : {}) };
     let lastId: string | null = null;
     for (const send of this.sends(adapter, config, safe.parts, target, media)) {
       const result = await send();
@@ -72,6 +73,36 @@ export class DeliveryService {
       await emitEvent(tx, { correlationId }, 'interaction.delivery_updated', { interactionId: row.id, status: 'SENT' }, { conversationId: row.conversationId });
     });
     return { kind: 'sent' };
+  }
+
+  /**
+   * Where this message answers, as the adapter recorded it on the inbound message (a thread, a conversation
+   * reference): the latest inbound message on the conversation and channel that carried one, up to the message
+   * this reply answers — an agent reply's turn input (`turns.seq_to`), else the customer messages before this
+   * one. A later message elsewhere (a DM answer while the customer @mentions the app in a channel) never moves a
+   * reply there. Null when none did.
+   */
+  private async replyContextFor(row: { conversationId: string; channelId: string | null; seq: number; turnId: string | null }): Promise<Record<string, string> | null> {
+    let upTo = row.seq;
+    if (row.turnId) {
+      const [turn] = await this.db.select({ seqTo: turns.seqTo }).from(turns).where(eq(turns.id, row.turnId));
+      if (turn) upTo = Math.min(upTo, turn.seqTo);
+    }
+    const [latest] = await this.db
+      .select({ replyContext: interactions.replyContext })
+      .from(interactions)
+      .where(
+        and(
+          eq(interactions.conversationId, row.conversationId),
+          eq(interactions.channelId, row.channelId!),
+          eq(interactions.direction, 'INBOUND'),
+          isNotNull(interactions.replyContext),
+          lte(interactions.seq, upTo),
+        ),
+      )
+      .orderBy(desc(interactions.seq))
+      .limit(1);
+    return latest?.replyContext ?? null;
   }
 
   /** One provider call per rendered payload, or a single template send. */

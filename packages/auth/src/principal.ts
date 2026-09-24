@@ -26,6 +26,19 @@ export interface Principal {
    * the confirmation card (a write) or the model's tool call (a read). Audit rows carry it.
    */
   readonly delegation?: InternalAgentDelegation | undefined;
+  /**
+   * Set when Ask OCSO answers this user through a linked chat account (Slack, Teams: a channel whose destination
+   * is Ask OCSO). There is no session then: Ask OCSO's delegated requests are bound to the link instead, and are
+   * refused once the link is revoked or the user is disabled or loses internal_agent.use.
+   */
+  readonly chatLink?: ChatLinkBinding | undefined;
+}
+
+/** The linked chat account a session-less Ask OCSO principal acts through. */
+export interface ChatLinkBinding {
+  readonly linkId: string;
+  /** The channel kind in lower case (`slack`), recorded on audit rows as the surface. */
+  readonly surface: string;
 }
 
 /** Which Ask OCSO thread and card (or read call) a delegated request belongs to. */
@@ -33,6 +46,10 @@ export interface InternalAgentDelegation {
   readonly threadId: string;
   readonly cardId?: string | undefined;
   readonly callId?: string | undefined;
+  /** The chat surface (`slack`) when asked through a linked chat account; absent for the drawer. */
+  readonly surface?: string | undefined;
+  /** The chat account link the request ran through (with `surface`). */
+  readonly linkId?: string | undefined;
 }
 
 /** The principal's effective permissions. */

@@ -29,3 +29,16 @@ export function defaultWebhookSegment(kind: string): string {
 
 /** Path prefix of OCSO's widget page for embeddable channel kinds (`/chat/<publicKey>`). */
 export const EMBED_PAGE_PREFIX = '/chat';
+
+/** Setup-file placeholders: `{{webhookUrl}}` and `{{settings.<key>}}` only (secrets are never interpolated). */
+export const SETUP_FILE_PLACEHOLDER_PATTERN = /^\{\{\s*(webhookUrl|settings\.[A-Za-z][A-Za-z0-9_]{0,63})\s*\}\}$/;
+
+/** Setup-file keys: lower case a-z0-9-, 1–40 characters. */
+export const SETUP_FILE_KEY_PATTERN = /^[a-z][a-z0-9-]{0,39}$/;
+
+/** Setup-file download names: letters, digits, `.`, `_`, `-`, at most 100 characters. */
+export const SETUP_FILE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
+
+/** Limits of an inbound `replyContext`: at most this many keys and this many bytes of JSON; OCSO drops a larger one. */
+export const REPLY_CONTEXT_MAX_KEYS = 16;
+export const REPLY_CONTEXT_MAX_BYTES = 4096;

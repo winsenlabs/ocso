@@ -1,7 +1,7 @@
 import { createBuiltinToolSource } from '@ocso/agent-runtime';
 import { createEmailAdapter, createInAppAdapter, createPagerDutyAdapter, createSlackAdapter, createTeamsAdapter, createWebhookAdapter } from '@ocso/alerts';
 import { AUDIT_STORE_DRIVERS } from '@ocso/audit-store';
-import { createTwilioWhatsAppAdapter, createWebChatAdapter, createWhatsAppAdapter } from '@ocso/channels';
+import { createMsTeamsAdapter, createSlackChannelAdapter, createTwilioWhatsAppAdapter, createWebChatAdapter, createWhatsAppAdapter } from '@ocso/channels';
 import { EMAIL_DRIVERS } from '@ocso/email';
 import { FIRST_PARTY_PROVIDERS } from '@ocso/model-providers';
 import { connectionToolSource } from '@ocso/tools';
@@ -27,7 +27,7 @@ import { MCP_TOOL_SOURCE, McpToolProviderFactory } from './tool-providers.js';
  * the alternative).
  */
 export const FIRST_PARTY_PLUGINS: readonly OcsoPlugin[] = [
-  { name: '@ocso/channels', channels: [createTwilioWhatsAppAdapter, createWhatsAppAdapter, createWebChatAdapter] },
+  { name: '@ocso/channels', channels: [createTwilioWhatsAppAdapter, createWhatsAppAdapter, createWebChatAdapter, createSlackChannelAdapter, createMsTeamsAdapter] },
   { name: '@ocso/model-providers', modelProviders: FIRST_PARTY_PROVIDERS },
   {
     name: '@ocso/alerts',

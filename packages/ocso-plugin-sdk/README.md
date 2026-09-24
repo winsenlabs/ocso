@@ -132,9 +132,22 @@ The OCSO repository has a fuller example, a signed JSON-webhook channel with tes
   `capacity`, `provider_unavailable`, `tool_unavailable` and `timeout` are retried with backoff. An
   integer `details.status` is kept as the provider's status code. Any other error is treated as
   transient and retried until the attempts run out.
+- **Webhook verification:** `verifyRequest` runs before anything is parsed or stored. It may
+  return the `VerificationResult` directly or a `Promise` of it, for checks that need the network
+  (for example a bearer JWT verified against the provider's published signing keys, fetched with
+  the `fetch` you were given; cache the keys). OCSO awaits it either way. Reject with `401` for a
+  missing or expired credential and `403` for a wrong one; a thrown error becomes a 500 and the
+  provider retries.
 - **Web chat embedding:** an `embeddable` channel implements `embed` (`EmbeddedChat`). Its
   `openSession` and `identify` are async (they may verify tokens against a JWKS endpoint).
   `mintSessionPass` and `openUserToken` are optional.
+- **Staff chat (Ask OCSO):** a workplace chat kind (Slack, Teams) sets `staffDestination: true`.
+  OCSO adds a `destination` setting (`router` or `ask_ocso`) to its settings form; on an
+  `ask_ocso` channel, staff link their chat account to their OCSO user once and then ask Ask OCSO
+  as themselves. The adapter needs nothing more than its usual inbound parsing, rendering (text
+  and choice buttons) and sending, with a stable identity per chat user. `staffSurface` (optional,
+  `a-z0-9_`) names the kind on Ask OCSO threads and audit rows (`teams`); it defaults to the kind
+  in lower case.
 - **Model providers** describe their settings with zod 4 schemas (`z.ZodType`), which OCSO turns
   into form fields. Install `zod@^4` as a dependency of a provider plugin. The other kinds do
   not need zod at runtime. The SDK's type declarations do mention zod, so a project that
@@ -164,6 +177,8 @@ test('OCSO accepts the plugin', () => {
 - message templates: described exactly when `listTemplates`, `createTemplate` and
   `sendTemplate` are all implemented,
 - webhook URL segments,
+- `staffDestination` (a boolean; such a kind leaves the `destination` setting to OCSO) and
+  `staffSurface` (lower-case `a-z0-9_`, up to 32 characters),
 - alert destination events (a non-empty subset of `ALERT_EVENTS`),
 - missing methods.
 

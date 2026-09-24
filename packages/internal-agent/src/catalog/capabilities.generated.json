@@ -14749,6 +14749,11 @@
       "reason": "the internal agent's own routes"
     },
     {
+      "route": "GET /v1/internal-agent/chat-links",
+      "handler": "ChatLinksController.mine",
+      "reason": "the internal agent's own routes"
+    },
+    {
       "route": "GET /v1/internal-agent/threads",
       "handler": "InternalAgentController.threads",
       "reason": "the internal agent's own routes"
@@ -14756,6 +14761,11 @@
     {
       "route": "GET /v1/internal-agent/threads/:id/messages",
       "handler": "InternalAgentController.messages",
+      "reason": "the internal agent's own routes"
+    },
+    {
+      "route": "GET /v1/internal-agent/users/:id/chat-links",
+      "handler": "ChatLinksController.ofUser",
       "reason": "the internal agent's own routes"
     },
     {
@@ -14836,6 +14846,21 @@
     {
       "route": "POST /v1/internal-agent/chat",
       "handler": "InternalAgentController.chat",
+      "reason": "the internal agent's own routes"
+    },
+    {
+      "route": "POST /v1/internal-agent/chat-links/:id/revoke",
+      "handler": "ChatLinksController.revoke",
+      "reason": "the internal agent's own routes"
+    },
+    {
+      "route": "POST /v1/internal-agent/link-tokens/confirm",
+      "handler": "ChatLinksController.confirm",
+      "reason": "the internal agent's own routes"
+    },
+    {
+      "route": "POST /v1/internal-agent/link-tokens/preview",
+      "handler": "ChatLinksController.preview",
       "reason": "the internal agent's own routes"
     },
     {

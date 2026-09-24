@@ -12,7 +12,7 @@ export default function AccountSecurityPage() {
   return (
     <>
       <AppTopbar searchLabel="Search" />
-      <PageHead title="Account security" sub="Your password, two-factor authentication, passkeys and signed-in sessions." />
+      <PageHead title="Account security" sub="Your password, two-factor authentication, passkeys, signed-in sessions and linked chat accounts." />
       <PageBody>
         <Suspense fallback={<div className="shell-skeleton" aria-busy="true" />}>
           <AccountSecurity />

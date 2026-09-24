@@ -15,6 +15,8 @@ import { DiscardPendingUser } from './discard-pending';
 import { SubmitPendingUser } from './submit-pending';
 import { ROLE_TONE, STATUS_CHIP } from './labels';
 import { PermissionsPanel } from './permissions-panel';
+import { ChatLinksCard } from '@/components/chat-links/chat-links-card';
+import type { ChatLink } from '@/lib/api/chat-links';
 
 export type UserDrawerTab = 'overview' | 'permissions';
 
@@ -23,6 +25,8 @@ export interface UserDrawerData {
   catalogue: CatalogueEntry[];
   /** Maker–checker state of the person's creation or access change (PM/research/11 §3.4); null when not visible. */
   approval?: ObjectApprovalState | null;
+  /** Chat accounts linked to Ask OCSO (Slack, Teams): loaded for a viewer with users.manage only; null = not shown. */
+  chatLinks?: ChatLink[] | null;
 }
 
 /** The proposal waiting on this person (their creation, or an access change), for the drawer's badge. */
@@ -95,6 +99,7 @@ export function UserDrawer({ user, tab, data, teamNames, timeZone, viewer }: Use
               ) : null}
               <p className="mono-sm">teams · {teamNames.length ? teamNames.join(', ') : 'none'}</p>
               <p className="mono-sm">last sign-in · {user.lastLoginAt ? formatDateTime(user.lastLoginAt, timeZone) : 'never'}</p>
+              {data.chatLinks ? <ChatLinksCard links={data.chatLinks} timeZone={timeZone} whose={{ name: user.name }} /> : null}
             </section>
           ) : data.permissions ? (
             <>

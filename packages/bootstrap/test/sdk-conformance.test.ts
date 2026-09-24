@@ -2,6 +2,8 @@ import { ALERT_EVENTS as INTERNAL_ALERT_EVENTS, DESTINATION_KIND_PATTERN as INTE
 import {
   CHANNEL_KIND_PATTERN as INTERNAL_CHANNEL_KIND,
   EMBED_PAGE_PREFIX as INTERNAL_EMBED_PAGE_PREFIX,
+  REPLY_CONTEXT_MAX_BYTES as INTERNAL_REPLY_CONTEXT_MAX_BYTES,
+  REPLY_CONTEXT_MAX_KEYS as INTERNAL_REPLY_CONTEXT_MAX_KEYS,
   defaultWebhookSegment as internalDefaultWebhookSegment,
   originAllowed as internalOriginAllowed,
   type ChannelAdapter,
@@ -114,8 +116,24 @@ describe('SDK checkPlugin agrees with the internal registries', () => {
     ['templates implemented but not described', () => [brokenChannel(templated(), { templates: undefined })]],
     ['an invalid webhook segment', () => [brokenChannel(webhook(), { webhookSegment: 'Not_Valid' })]],
     ['the same kind twice', () => [webhook(), webhook()]],
+    ['a setup file with a secret placeholder', () => [brokenChannel(webhook(), { setupFiles: [{ key: 'manifest', label: 'M', filename: 'm.json', contentType: 'application/json', template: '{"t":"{{secrets.token}}"}' }] })]],
+    ['a setup file with an unknown placeholder', () => [brokenChannel(webhook(), { setupFiles: [{ key: 'manifest', label: 'M', filename: 'm.json', contentType: 'application/json', template: '{"u":"{{publicKey}}"}' }] })]],
+    ['a setup file with a bad filename', () => [brokenChannel(webhook(), { setupFiles: [{ key: 'manifest', label: 'M', filename: '../m.json', contentType: 'application/json', template: '{}' }] })]],
+    ['a setup file with an unknown content type', () => [brokenChannel(webhook(), { setupFiles: [{ key: 'manifest', label: 'M', filename: 'm.html', contentType: 'text/html' as never, template: '<p/>' }] })]],
+    ['two setup files with one key', () => [brokenChannel(webhook(), { setupFiles: [0, 1].map(() => ({ key: 'manifest', label: 'M', filename: 'm.json', contentType: 'application/json' as const, template: '{}' })) })]],
+    ['a non-boolean staffDestination', () => [brokenChannel(webhook(), { staffDestination: 'yes' as never })]],
+    ['an invalid staffSurface', () => [brokenChannel(webhook(), { staffDestination: true, staffSurface: 'MS Teams' })]],
+    ['a staff-destination kind declaring its own destination setting', () => [brokenChannel(webhook(), { staffDestination: true, settingsSchema: { type: 'object', properties: { destination: { type: 'string' } } } })]],
     ['the same webhook segment twice', () => [webhook(), brokenChannel(webhook(), { kind: 'OTHER_KIND', webhookSegment: webhook().describe().webhookSegment ?? internalDefaultWebhookSegment(webhook().kind) }, { kind: 'OTHER_KIND' })]],
   ];
+  it('both accept a channel with valid setup files', () => {
+    const files = [
+      { key: 'manifest', label: 'App manifest', filename: 'manifest.json', contentType: 'application/json' as const, template: '{"url":"{{webhookUrl}}","id":"{{ settings.appId }}"}' },
+      { key: 'yaml', label: 'YAML', filename: 'manifest.yaml', contentType: 'text/yaml' as const, template: 'url: {{webhookUrl}}\n' },
+    ];
+    expectAgreement(pluginWith({ channels: [() => brokenChannel(webhook(), { setupFiles: files })] }), false);
+  });
+
   it.each(channelCases)('both reject a channel with %s', (_case, adapters) => {
     expectAgreement(pluginWith({ channels: adapters().map((a) => () => a) }), true);
   });
@@ -203,6 +221,8 @@ describe('SDK constants and helpers match the internal ones', () => {
     expect(Sdk.DESTINATION_KIND_PATTERN.source).toBe(INTERNAL_DESTINATION_KIND.source);
     expect(Sdk.DRIVER_NAME_PATTERN.source).toBe(INTERNAL_DRIVER_NAME.source);
     expect(Sdk.EMBED_PAGE_PREFIX).toBe(INTERNAL_EMBED_PAGE_PREFIX);
+    expect(Sdk.REPLY_CONTEXT_MAX_KEYS).toBe(INTERNAL_REPLY_CONTEXT_MAX_KEYS);
+    expect(Sdk.REPLY_CONTEXT_MAX_BYTES).toBe(INTERNAL_REPLY_CONTEXT_MAX_BYTES);
     expect(Sdk.ALERT_EVENTS).toEqual(INTERNAL_ALERT_EVENTS);
     expect(Sdk.PART_TYPES).toEqual(PART_TYPES);
     for (const kind of ['WHATSAPP', 'TWILIO_WHATSAPP', 'A_B_C']) expect(Sdk.defaultWebhookSegment(kind)).toBe(internalDefaultWebhookSegment(kind));

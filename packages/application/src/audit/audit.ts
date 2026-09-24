@@ -60,6 +60,12 @@ export async function recordAudit(tx: DbOrTx, actor: ActorContext, entry: AuditE
 /** An Ask OCSO request (PM/research/12 §5) records its thread and card beside any confirmation the entry carries. */
 function withDelegation(confirmation: Record<string, unknown> | undefined, delegation: Principal['delegation']): Record<string, unknown> | null {
   if (!delegation) return confirmation ?? null;
-  const internalAgent = { threadId: delegation.threadId, ...(delegation.cardId ? { cardId: delegation.cardId } : {}), ...(delegation.callId ? { callId: delegation.callId } : {}) };
+  const internalAgent = {
+    threadId: delegation.threadId,
+    ...(delegation.cardId ? { cardId: delegation.cardId } : {}),
+    ...(delegation.callId ? { callId: delegation.callId } : {}),
+    ...(delegation.surface ? { surface: delegation.surface } : {}),
+    ...(delegation.linkId ? { linkId: delegation.linkId } : {}),
+  };
   return { ...(confirmation ?? {}), internalAgent };
 }

@@ -7,6 +7,9 @@ import {
   DRIVER_NAME_PATTERN,
   MARK_CODE_PATTERN,
   PROVIDER_KIND_PATTERN,
+  SETUP_FILE_KEY_PATTERN,
+  SETUP_FILE_NAME_PATTERN,
+  SETUP_FILE_PLACEHOLDER_PATTERN,
   WEBHOOK_SEGMENT_PATTERN,
   defaultWebhookSegment,
 } from '../patterns.js';
@@ -85,11 +88,47 @@ export function checkChannels(factories: readonly unknown[], problems: string[])
     if (Boolean(descriptor['templates']) !== (templateMethods === 3)) {
       problems.push(`${label}: describe message templates exactly when the adapter implements listTemplates, createTemplate and sendTemplate`);
     }
+    checkSetupFiles(descriptor['setupFiles'], label, problems);
+    const staff = descriptor['staffDestination'];
+    if (staff !== undefined && typeof staff !== 'boolean') problems.push(`${label}: staffDestination must be a boolean`);
+    const surface = descriptor['staffSurface'];
+    if (surface !== undefined && (typeof surface !== 'string' || !/^[a-z][a-z0-9_]{0,31}$/.test(surface))) problems.push(`${label}: staffSurface must be lower-case a-z0-9_ (up to 32 characters)`);
+    const schema = descriptor['settingsSchema'];
+    const properties = isObject(schema) ? schema['properties'] : undefined;
+    if (staff === true && isObject(properties) && properties['destination'] !== undefined) {
+      problems.push(`${label}: the "destination" setting belongs to OCSO on staff-destination kinds; remove it from the settings schema`);
+    }
     if (descriptor['inboundWebhook']) {
       const segment = descriptor['webhookSegment'] ?? defaultWebhookSegment(kind);
       if (typeof segment !== 'string' || !WEBHOOK_SEGMENT_PATTERN.test(segment)) problems.push(`${label}: invalid webhook segment "${String(segment)}"`);
       else if (segments.has(segment)) problems.push(`${label}: webhook segment "${segment}" is used twice`);
       else segments.add(segment);
+    }
+  });
+}
+
+const SETUP_FILE_TYPES = new Set(['application/json', 'text/yaml', 'text/plain']);
+
+/** Descriptor `setupFiles`: keys, labels, file names, content types, size and placeholders. */
+function checkSetupFiles(files: unknown, label: string, problems: string[]): void {
+  if (files === undefined) return;
+  if (!Array.isArray(files)) return void problems.push(`${label}: setupFiles must be an array`);
+  const keys = new Set<string>();
+  files.forEach((file: unknown, i) => {
+    const at = `${label}: setupFiles[${i}]`;
+    if (!isObject(file)) return void problems.push(`${at}: must be an object`);
+    const key = file['key'];
+    if (typeof key !== 'string' || !SETUP_FILE_KEY_PATTERN.test(key)) problems.push(`${at}: invalid key "${String(key)}"`);
+    else if (keys.has(key)) problems.push(`${at}: duplicate key "${key}"`);
+    else keys.add(key);
+    if (typeof file['label'] !== 'string' || !file['label'].trim()) problems.push(`${at}: label is required`);
+    if (typeof file['filename'] !== 'string' || !SETUP_FILE_NAME_PATTERN.test(file['filename'])) problems.push(`${at}: invalid filename "${String(file['filename'])}"`);
+    if (!SETUP_FILE_TYPES.has(file['contentType'] as string)) problems.push(`${at}: contentType must be application/json, text/yaml or text/plain`);
+    const template = file['template'];
+    if (typeof template !== 'string' || !template.length) return void problems.push(`${at}: template is required`);
+    if (new TextEncoder().encode(template).byteLength > 64 * 1024) problems.push(`${at}: template exceeds 64 KiB`);
+    for (const match of template.matchAll(/\{\{[^}]*\}\}/g)) {
+      if (!SETUP_FILE_PLACEHOLDER_PATTERN.test(match[0])) problems.push(`${at}: unknown placeholder ${match[0]} (only {{webhookUrl}} and {{settings.<key>}}; secrets are never interpolated)`);
     }
   });
 }
