@@ -67,7 +67,7 @@ export class McpPersonalController {
     return this.connections.discover(actor, id);
   }
 
-  @Capability({ exclude: 'takes a credential (header token); set it on the Connections page' })
+  @Capability({ exclude: 'takes a credential (header token); set it on the MCP connections page (My connections)' })
   @Post(':id/auth/header')
   @HttpCode(200)
   @RequirePermission(Permission.MCP_CONNECT_PERSONAL)
@@ -75,7 +75,7 @@ export class McpPersonalController {
     return this.connections.setHeaderAuth(actor, id, body);
   }
 
-  @Capability({ exclude: 'starts a browser OAuth flow; authorize connections on the Connections page' })
+  @Capability({ exclude: 'starts a browser OAuth flow; authorize connections on the MCP connections page (My connections)' })
   @Post(':id/oauth/begin')
   @HttpCode(200)
   @RequirePermission(Permission.MCP_CONNECT_PERSONAL)

@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { Permission } from '@ocso/auth';
 import { NotPermitted } from '@/components/shell/placeholder-page';
 import { CellTitle, DataTable, type Column } from '@/components/ui/data-table';
@@ -106,7 +105,7 @@ export async function EscalationReasonsBody({ searchParams }: { searchParams: Se
 
   return (
     <>
-      <WindowBar basePath="/escalation-reasons" days={days} window={data.window} extra={<Link className="btn tiny ghost" href={`/analytics?days=${days}`}>Analytics</Link>} />
+      <WindowBar basePath="/escalation-reasons" days={days} window={data.window} />
       <Tiles min={160}>
         <MetricTile label="escalations" value={formatNumber(data.total)} delta={countDelta(data.total, data.previousTotal)} definition={data.definitions.reasons} note={notes.refs['reasons']} />
         <MetricTile label="previous window" value={formatNumber(data.previousTotal)} definition={data.definitions.previous} note={notes.refs['previous']} />

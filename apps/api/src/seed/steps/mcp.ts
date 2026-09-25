@@ -108,7 +108,7 @@ export type McpSeedResult = 'connected' | 'skipped' | 'failed';
 /**
  * Connects the demo MCP server when MCP_DEMO_URL/DEMO_MCP_TOKEN are set. Any
  * failure is reported and skipped: the rest of the demo stays usable and the
- * connection can be finished from Connections & models in the UI.
+ * connection can be finished from Integrations → MCP connections in the UI.
  */
 export async function seedMcp(ctx: SeedContext, admin: ActorContext, lead: ActorContext, mayaId: string, checker?: ActorContext): Promise<McpSeedResult> {
   const mcp = ctx.config.mcp;

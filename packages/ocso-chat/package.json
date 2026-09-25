@@ -1,7 +1,7 @@
 {
   "name": "@winsendotai/ocso-chat",
   "version": "0.1.0",
-  "description": "Headless client for OCSO web chat: sessions, live streaming, attachments and choices, for browsers and React Native.",
+  "description": "Headless client for OCSO (Open Customer Success Orchestration) web chat: sessions, live streaming, attachments and choices, for browsers and React Native.",
   "license": "Apache-2.0",
   "type": "module",
   "sideEffects": false,

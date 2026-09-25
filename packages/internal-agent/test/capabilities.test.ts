@@ -237,7 +237,7 @@ describe('capability catalog', () => {
     expect(APP_ROUTES).toContain('/agents/:id');
     expect(APP_ROUTES).toContain('/approvals');
     expect(APP_ROUTES.some((r) => r.startsWith('/login'))).toBe(false);
-    for (const c of CAPABILITIES) if (c.uiHref) expect(APP_ROUTES, c.name).toContain(c.uiHref.replace(/:\w+/g, ':id'));
+    for (const c of CAPABILITIES) if (c.uiHref) expect(APP_ROUTES, c.name).toContain(c.uiHref.split('?')[0]!.replace(/:\w+/g, ':id'));
   });
 });
 
@@ -290,6 +290,14 @@ describe('catalog helpers', () => {
   it('fills paths and validates page links', () => {
     expect(fillPath('/v1/agents/:id/status', { id: 'a b' })).toBe('/v1/agents/a%20b/status');
     expect(fillPath('/v1/agents/:id', {})).toBeNull();
+    // A page pattern's fixed query is kept; only the path is filled and checked.
+    expect(fillPath('/connections?tab=channels', {})).toBe('/connections?tab=channels');
+    expect(fillPath('/agents/:id?tab=tools', { id: 'a1' })).toBe('/agents/a1?tab=tools');
+    expect(fillPath('/agents/:id?tab=tools', { id: '..' })).toBeNull();
+    expect(isAppRoute('/connections?tab=mcp&view=mine')).toBe(true);
+    // Integration capabilities open their Integrations page.
+    expect(capabilityByName('channels.list_channels')?.uiHref).toBe('/connections?tab=channels');
+    expect(capabilityByName('mcp.create_connection')?.uiHref).toBe('/connections?tab=mcp');
     expect(isAppRoute('/agents/7f1c0a52-0000-4000-8000-000000000000')).toBe(true);
     expect(isAppRoute('/approvals?box=AWAITING_ME')).toBe(true);
     expect(isAppRoute('/login')).toBe(false);

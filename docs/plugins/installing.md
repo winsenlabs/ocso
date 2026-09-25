@@ -50,7 +50,7 @@ loads the list too.
 
 Tech admins see the running list under **System → Plugins** (`GET /v1/system/plugins`, permission `system.read`):
 each plugin, its version, whether it is first-party or installed, and the kinds it contributes. What a plugin
-contributes then appears where OCSO's own kinds do: **Connections → Channels → Add channel**, the model provider form,
+contributes then appears where OCSO's own kinds do: **Integrations → Channels → Add channel**, the model provider form,
 the alert destination form, and `EMAIL_DRIVER=<name>` for an email driver.
 
 ## Build a derived image

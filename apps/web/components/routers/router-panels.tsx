@@ -108,7 +108,7 @@ export function ChannelsPanel({ routerId, name, channels, attached, canManage }:
   return (
     <section className="rt-panel" aria-label="Channels">
       <h3 className="rt-h">Channels</h3>
-      {channels.length === 0 ? <p className="mono-sm">No channels yet: a Tech admin adds them under Connections.</p> : null}
+      {channels.length === 0 ? <p className="mono-sm">No channels yet: a Tech admin adds them under Integrations → Channels.</p> : null}
       <div className="checks" role="group" aria-label="Channels routed by this router">
         {channels.map((c) => (
           <label key={c.id}>

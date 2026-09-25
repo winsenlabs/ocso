@@ -21,7 +21,7 @@ export function ConnectTemplateButton({ templateId, name }: { templateId: string
           start(async () => {
             const r = await connectTemplateAction(templateId);
             if (!r.ok) setError(r.message);
-            else router.replace(connectionsHref({ tab: 'mine', connection: r.data.connectionId }), { scroll: false });
+            else router.replace(connectionsHref({ tab: 'mcp', view: 'mine', connection: r.data.connectionId }), { scroll: false });
           })
         }
       >

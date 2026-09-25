@@ -5,439 +5,322 @@
   </picture>
 </p>
 
-# OCSO — One Customer Success Orchestrator
+<h1 align="center">OCSO: Open Customer Success Orchestration</h1>
 
-OCSO is an open-source, self-hosted runtime for AI employees that talk to your customers: support,
-sales, collections, onboarding. You run named virtual agents on WhatsApp and web chat, give them tools
-from your own systems over MCP, and let your people take over any conversation and hand it back. One
-deployment belongs to one organization (single-tenant, multi-user) and runs on any Docker host.
-It is for teams that want the customer conversation, the model choice and the data to stay under their
-own control.
+<p align="center">
+  Self-hosted AI agents and human teams on every customer channel, on one governed path.
+</p>
 
-Status: pre-1.0, under active development. See [Status and known gaps](#status-and-known-gaps).
+<p align="center">
+  <a href="https://github.com/winsenlabs/ocso/actions/workflows/ci.yml"><img src="https://github.com/winsenlabs/ocso/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0"></a>
+  <img src="https://img.shields.io/badge/status-pre--1.0-orange" alt="Status: pre-1.0">
+  <a href="https://ocso.winsenlabs.dev"><img src="https://img.shields.io/badge/site-ocso.winsenlabs.dev-3D5DCF" alt="Website"></a>
+</p>
 
-## What you get
+<p align="center">
+  <a href="https://ocso.winsenlabs.dev">Website</a> ·
+  <a href="#quickstart-the-demo-in-a-few-minutes">Quickstart</a> ·
+  <a href="docs/00-INDEX.md">Docs</a> ·
+  <a href="docs/plugins/README.md">Plugins</a> ·
+  <a href="ROADMAP.md">Roadmap</a> ·
+  <a href="CONTRIBUTING.md">Contributing</a>
+</p>
 
-- **Virtual agents with versioned prompts.** Prompts are built from named components by a prompt
-  compiler. Every change is a new immutable version with a reason; you preview the compiled prompt and
-  its cache-prefix hash, replay a draft against past conversations, activate, and roll back.
-- **Channels.** WhatsApp through Twilio or directly through the Meta Cloud API, and an embeddable web
-  chat widget (one script tag) with optional signed customer identity. Text, images, audio, video,
-  documents and locations are stored as typed message parts, not as flat text.
-- **Human handoff and the CS workspace.** Conversations move through explicit control states (AI active,
-  escalation requested, waiting for a human, human active, AI resuming, resolved). Escalation rules,
-  queues with SLA policies, auto-assign or open pickup, transfers, internal notes, copilot reply drafts,
-  and return to the AI. Every control change is audited.
-- **Role presets, per-user permissions and team-scoped ownership.** Four presets, with permissions checked
-  in code (ADR-029):
-  - **Tech** runs the platform (providers, channels, MCP, users, settings, audit verification). It never
-    reads conversation content.
-  - **Head** has full authority inside their teams, checks Leads' and other Heads' changes, and signs the
-    exception report.
-  - **Lead** runs their teams' agents, prompts, queues and routers, and proposes changes but cannot check them.
-  - **Service** handles the conversations of their teams' queues.
+---
 
-  On top of a preset, a user can be given per-user grants (optionally with an expiry) and revokes. Taking
-  access away applies at once; widening it needs approval. Virtual agents are owned by teams, and a Head or
-  Lead sees and manages only the agents their teams own, with those agents' conversations, analytics and alerts.
-- **Maker–checker approvals.** Every change to live configuration is a proposal that a named second
-  person approves: agents, prompts, tool grants, escalation and alert rules, routers, queues, SLA policies,
-  channels, message templates, providers, profiles, prices, MCP connections, SSO, deployment settings, users
-  and permission grants (ADR-030). The checker approves exactly the content they saw, which is enforced by
-  content hashes. Stops (pause, disable, revoke) are always immediate. When nobody else can check, for
-  example a deployment with a single Tech admin, the maker may approve their own change as a recorded
-  bootstrap approval.
-- **Routing.** A customer reaches an agent through channel → router → queue → agent (ADR-031). Routers ask
-  menu questions, classify with a model or use known facts, then pick a queue. The queue is the service
-  unit: one AI agent, its human teams, SLA, hours and transfer targets.
-- **Auditor-grade audit store.** Audit events are written in the same transaction as each change, then
-  shipped to a separate append-only database (PostgreSQL or ClickHouse). There they are hash-chained,
-  checkpointed with Ed25519 signatures, exported daily and verifiable offline (ADR-032). A weekly signed
-  exception report lists where the controls were bypassed or failed, and a storage report shows growth
-  (ADR-033).
-- **Sign-in and account security.** Better Auth: email and password with invites, TOTP with backup
-  codes, passkeys, OIDC and SAML single sign-on, MFA required per role, session management and a
-  break-glass recovery path.
-- **Email.** Invites, password resets and alert emails through Resend or any SMTP relay.
-- **Tools over MCP.** Connect any MCP server (Streamable HTTP) with OAuth 2.1 or a static header.
-  Classify each tool's risk, approve it per agent, add argument rules, and require a human to confirm
+## Why OCSO
+
+Customer success is scattered. The WhatsApp number sits with one vendor, the web chat with another, the
+help desk with a third. The chatbot is a black box, the escalation happens in someone's DMs, and the
+audit trail is a spreadsheet. Adding AI to that usually means one more silo.
+
+OCSO rethinks it for the AI age. You run named AI agents on WhatsApp, web chat, Slack and Microsoft Teams.
+They get tools from your own systems over MCP. Your people can take over any conversation and hand it
+back. The whole thing runs on one deployment you host: one organization, many users, your model
+providers, your data. Every configuration change is approved by a second person, and every privileged
+action goes to a tamper-evident audit store. That is the level of control a bank needs before it lets
+an AI talk to its customers.
+
+OCSO is pre-1.0 and under active development. See [status and known gaps](#status-and-known-gaps).
+
+<p align="center">
+  <img src="apps/website/public/shots/home.webp" alt="The OCSO home screen for a Head: live conversations, SLA, containment and alerts across their teams' AI agents" width="900">
+</p>
+
+<table>
+  <tr>
+    <td width="50%"><img src="apps/website/public/shots/workspace.webp" alt="The conversation workspace: a web chat the AI agent escalated to a human queue, with the AI summary and customer context in side panels"></td>
+    <td width="50%"><img src="apps/website/public/shots/approvals.webp" alt="Approvals: a proposed configuration change waiting for a named checker, with the exact diff the checker approves"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>The conversation workspace: AI hands over to a person, with a summary</sub></td>
+    <td align="center"><sub>Maker–checker: every configuration change waits for a named second person</sub></td>
+  </tr>
+</table>
+
+## Features
+
+**Conversations**
+
+- **Named AI agents with versioned prompts.** A prompt compiler builds prompts from named components.
+  Every change is a new immutable version: preview the compiled prompt, replay a draft against past
+  conversations, activate, roll back.
+- **Channels.** WhatsApp through Twilio or the Meta Cloud API, an embeddable web chat (one script tag, or
+  the headless chat SDK), Slack and Microsoft Teams. Text, images, audio, video, documents and locations
+  are stored as typed message parts. WhatsApp message templates are supported for messages outside the
+  24-hour window.
+- **Routing.** Channel → router → queue → agent. Routers ask menu questions, classify with a model or use
+  known facts. The queue is the unit of service: one AI agent, its human teams, an SLA, opening hours and
+  transfer targets.
+- **Human handoff.** Explicit control states (AI active, escalation requested, waiting for a human, human
+  active, AI resuming, resolved). Escalation rules, SLA policies, auto-assign or open pickup, transfers,
+  internal notes, copilot reply drafts, and a return to the AI with a handover summary.
+- **Tools over MCP.** Connect any MCP server over Streamable HTTP, with OAuth 2.1 or a static header.
+  Classify each tool's risk, grant it per agent, add argument rules, and require a person to confirm
   sensitive actions. Authorization happens in code, never in the prompt.
-- **Six model providers.** AWS Bedrock, Google Vertex AI, Microsoft Foundry, OpenAI, Anthropic and
-  Sarvam, each with its own prompt-caching strategy. Agents use logical model profiles with ordered
-  fallbacks, checked against a deployment policy (provider allowlist, data residency, cross-provider and
-  cross-region fallback).
-- **Realtime.** The staff app, the web chat and Ask OCSO stream over server-sent events; changes fan out
-  through PostgreSQL `LISTEN/NOTIFY`. There is no WebSocket endpoint.
-- **Workers that survive failure.** Conversations are leased to workers in PostgreSQL. Scale workers up
-  or down, or kill one mid-turn, and another resumes the conversation. The chaos test checks that every
-  customer message still gets exactly one reply.
-- **Observability and alerts.** Separate views for Tech (workers, queues, latency, tokens,
-  prompt-cache hits, cost, provider and MCP health) and for Heads and Leads (containment, escalations, SLA,
-  CSAT, reviews, prompt corrections). Alert rules with a lifecycle, delivered in-app, by email, to Slack,
-  Microsoft Teams, PagerDuty or a signed webhook. OpenTelemetry export.
-- **Ask OCSO.** An internal agent (⌘J / Ctrl+J) that answers questions about the deployment with the
-  asking user's permissions and asks before it changes anything.
-- **Operations.** Signed outbound webhooks for events, per-class data retention, a storage growth
-  report, and a first-run setup flow.
+- **Six model providers.** AWS Bedrock, Google Vertex AI, Microsoft Foundry, OpenAI, Anthropic and Sarvam,
+  each with its own prompt-caching strategy. Agents use logical model profiles with ordered fallbacks,
+  checked against a deployment policy for provider allowlists and data residency.
 
-## Everything is a plugin
+**Governance**
 
-OCSO is a core plus contracts. The core owns the conversation runtime, handoff, roles and permissions,
-audit, queues and leases, and observability. Everything that touches an outside system is an
-implementation of a contract, looked up in a registry by kind. Core code never switches on a provider or
-channel name (build rules [§2 and §4](docs/99-BUILD-RULES.md)).
+- **Maker–checker on every configuration change.** Agents, prompts, tool grants, routers, queues, SLA
+  policies, channels, providers, MCP connections, SSO, users and permission grants: each change is a
+  proposal that a named second person approves. The checker approves exactly the content they saw, which
+  content hashes enforce. Stops (pause, disable, revoke) apply immediately. A single-admin deployment can
+  self-approve, but only as a recorded bootstrap approval that shows up in the weekly exception report.
+- **A tamper-evident audit store.** Audit events are written in the same transaction as the change, then
+  shipped to a separate append-only database (PostgreSQL or ClickHouse). There they are hash-chained,
+  checkpointed with Ed25519 signatures, exported daily and verifiable offline with `audit-verify`.
+- **Roles and permissions in code.** Four presets (Tech, Head, Lead, Service), per-user grants with
+  expiry, and team-scoped ownership of agents. Tech runs the platform but never reads conversation content.
+- **Sign-in.** Email and password, TOTP, passkeys, OIDC and SAML single sign-on, MFA required per role.
 
-| Extension point | Contract | Shipped implementations | What the core does for you |
-|---|---|---|---|
-| Channels | `ChannelAdapter` + `ChannelKindDescriptor` — `packages/channels/src/contract/` | WhatsApp via Twilio, WhatsApp via Meta Cloud API, web chat | Webhook routing, verify-then-persist ingress with dedupe, customer identity, media jobs, customer-safe rendering, delivery retries, SSRF-guarded egress, encrypted secrets; the admin UI (form, mark, setup steps, identity) comes from the descriptor; message templates and the embeddable widget are opt-in capabilities |
-| Model providers | `ProviderDefinition` — `packages/model-providers/src/providers/definition.ts` | Bedrock, Vertex AI, Foundry, OpenAI, Anthropic, Sarvam | Shared AI SDK call path, usage and error normalization, health checks, model listing, catalog prices, profiles and fallbacks, cost telemetry; admin form, mark and caching description come from the definition |
-| Tool servers | MCP (runtime, no code); `ToolProviderSource` — `packages/tools/src/registry.ts` | Any MCP server over Streamable HTTP; OCSO's built-in tools | OAuth 2.1, discovery, risk classification and approval, one authorization and audit path for every tool call, human confirmation, SSRF-guarded egress |
-| Alert destinations | `AlertDeliveryAdapter` — `packages/alerts/src/contract.ts` | In-app, email, Slack, Teams, webhook, PagerDuty | Per-event dispatch (events declared by the adapter), retries, encrypted secrets, test button; the form renders from the adapter's JSON Schema |
-| Alert conditions | `EvaluatorDefinition` — `packages/application/src/alerts/evaluators/contract.ts` | Technical and business conditions | Scheduling, dedupe, open/acknowledged/resolved lifecycle, rule form from JSON Schema |
-| Email | `EmailDriverDefinition` / `EmailSender` — `packages/email/src/` | Resend, SMTP, log | Templates, start-up validation by the driver, test button |
-| Audit store | `AuditStore` + `AuditStoreDriverDefinition` — `packages/audit-store/src/contract.ts` | PostgreSQL (own database, trigger-enforced append-only), ClickHouse (tamper-evident) | Outbox shipping, reconciliation, hash chain and signed checkpoints, exports, verification, team-scoped reads; selected by `AUDIT_DRIVER`, provisioned by `audit-migrate` |
-| Blob, secrets, queue, deployment | Driver definitions for `BlobStore`, `SecretStore`, `QueueAdapter`, `DeploymentAdapter` | Volume or S3; local AES-256-GCM or AWS Secrets Manager; PostgreSQL or SQS; Compose or ECS | Driver registries chosen by one environment variable each; each driver checks its own settings; core asks drivers for capabilities, never their names |
-| Scheduled tasks | `ScheduledTask` — `apps/worker/src/scheduler/scheduler.service.ts` | Lease recovery, auto-assign, alert evaluation, retention, routing timeouts, approval sweeps, the audit store tasks, the weekly exception report and more | Leader election across workers, intervals, error isolation |
-| Ask OCSO tools | `InternalTool` — `packages/internal-agent/src/contract.ts` | 12 read and write tools | Permission filtering, re-authorization, confirmation for writes, audit |
-| Sign-in and SSO | Better Auth plugins; identity providers at runtime | Password, TOTP, passkeys, OIDC, SAML | Endpoint allowlist, MFA policy, audit |
+**Operations**
 
-Be clear about what "plugin" means today: plugins are **compiled in and live in this repository**. A new
-channel, model provider, alert destination or driver is one module behind its contract plus one registration
-line; `FIRST_PARTY_PLUGINS` (`packages/bootstrap`) assembles every plugin for the api and the worker. Kinds are
-open strings validated by the registries, so nothing in core, the database or the web app changes, and
-`pnpm lint` fails if core code ever names a specific kind (ADR-028). Two extension points need no code at all: MCP
-tool servers and SSO identity providers are added in the web app.
+- **Ask OCSO.** An internal copilot (⌘J / Ctrl+J, or from Slack and Teams). Its tool catalog is generated
+  from the API itself (about 250 capabilities). It acts with the asking user's permissions, and every
+  write is a server-built confirmation card that the user confirms. Governed changes go to a checker like
+  any other proposal.
+- **Workers that survive failure.** Conversations are leased to workers in PostgreSQL. Kill a worker
+  mid-turn and another one resumes. The chaos test checks that every customer message still gets exactly
+  one reply.
+- **Observability and alerts.** Separate views for Tech (workers, latency, tokens, cache hits, cost,
+  provider and MCP health) and for Heads and Leads (containment, escalations, SLA, CSAT). Alerts go
+  in-app, by email, to Slack, Teams, PagerDuty or a signed webhook. OpenTelemetry export.
+- **Everything outside the core is a plugin.** Channels, model providers, alert destinations, email and
+  infrastructure drivers sit behind contracts, and a lint guard fails the build if core code names a
+  specific kind. See [plugins](#extending-ocso).
 
-**Third-party plugins.** [`@winsendotai/ocso-plugin-sdk`](packages/ocso-plugin-sdk/README.md) exports the public
-contracts (channels, model providers, alert destinations, email drivers) and a `checkPlugin` test kit. An operator
-installs a plugin package into the image and lists it with its exact version in `OCSO_PLUGINS`; OCSO refuses to start on
-a version mismatch, an incompatible API version or an invalid contribution, and the System page lists what is installed
-([installing plugins](docs/plugins/installing.md)). Plugins run in-process with full trust: install only code you trust.
+## Quickstart: the demo in a few minutes
 
-**Chat SDK.** [`@winsendotai/ocso-chat`](packages/ocso-chat/README.md) (headless client for browsers and React Native)
-and [`@winsendotai/ocso-chat-react`](packages/ocso-chat-react/README.md) (hooks, themeable web components, a `/native`
-entry) build your own web chat on OCSO. The web chat channel supports three modes: anonymous, an authorised client
-(your backend mints a short-lived session pass with the channel's secret key) and a signed-in user (your login token,
-verified against your JWKS or a shared HS256 secret), plus host context the agent sees and optional pass-through of the
-user's token to your tools.
+You need Docker Engine 26+ with Compose v2.30+ and about 8 GB of RAM. The demo needs no model provider
+keys: it seeds a fictional bank (Meridian Bank) with users, teams, queues, three live AI agents, a web
+chat channel and an example MCP server, and it uses a development-only scripted model.
 
-Start at [docs/plugins/](docs/plugins/README.md). It has one page per extension point, a worked example
-([add a channel in seven steps](docs/plugins/add-a-channel.md)), and an honest list of places where the
-plugin boundary still leaks.
+```bash
+git clone https://github.com/winsenlabs/ocso.git && cd ocso
+cp .env.example .env
+OCSO_DEMO_SEED=true docker compose --profile demo up -d --build
+docker compose logs seed       # what was created, including the web chat's public key
+```
 
-## Architecture
+The first build takes several minutes. Then open <http://localhost:3000> and sign in, for example as
+`anjali.rao@meridian.example` (a Head) with the password `meridian-demo-2026`. The other demo users are
+Tarun Shetty (Tech), Rohan Kapoor (Head), and Nikhil Menon and Meera Pillai (Service). Their emails
+follow the same pattern.
+
+Things to try:
+
+- Open `http://localhost:3000/chat/<public key>` (the key is in the seed log) and chat with Maya, the
+  support agent, then ask for a human. Pick the conversation up as Nikhil Menon (Service) in the
+  workspace, reply, and hand it back to Maya.
+- As Anjali, change Maya's prompt. The change waits in Approvals until Rohan, the other Head, approves it.
+- As Tarun, open System and verify the audit store's hash chain and signed checkpoints.
+- Add a real model provider as Tarun (Connections → Models) and point a profile at it. The agents and
+  Ask OCSO (⌘J / Ctrl+J) then give real answers instead of scripted ones.
+
+The demo's scripted model echoes messages and demonstrates handoff and tool calls; it is for demos only.
+Never enable it in a real deployment. To start over, run
+`docker compose --profile demo down -v`. This deletes all data.
+
+**A real deployment** starts the same way without the demo flags:
+
+```bash
+docker compose up -d --build
+docker compose logs api | grep "setup token"   # the one-time token for /setup
+```
+
+Open <http://localhost:3000>, complete `/setup`, then follow the
+[setup guide](docs/operations/setup-guide.md): model providers and profiles, channels, MCP servers,
+teams, and your first AI agent. HTTPS with Caddy and Let's Encrypt, email, backups, upgrades and
+scaling workers are covered in [docs/operations/compose.md](docs/operations/compose.md).
+
+## Architecture at a glance
 
 ```
-  Customers                                                 Staff (browser)
-  WhatsApp via Meta or Twilio, web chat widget              Service, Lead, Head, Tech
+  Customers                                              Staff (browser, Slack, Teams)
+  WhatsApp (Meta or Twilio), web chat, Slack, Teams      Service, Lead, Head, Tech
         │                                                          │
         ▼                                                          ▼
-  ┌─────────────────────── web · Next.js · the only published port (3000) ───────────────────────┐
-  │ staff UI and BFF (server actions, SSE relay)       /channels /public /oauth /.well-known /blobs │
-  │ /api/auth/* → Better Auth on the api               are proxied to the api (public ingress)      │
-  └───────────────────────────────────────────┬────────────────────────────────────────────────────┘
-                                              │ internal network: /v1 with a Bearer session
-                                              ▼
-  ┌──────────── api · NestJS ────────────┐           ┌──────────── worker × N · NestJS ─────────────┐
-  │ /v1 control plane (deny by default)  │           │ AI turns under conversation leases           │
-  │ channel webhooks: verify → persist   │  queue    │ prompt compiler → model gateway → tool runner │
-  │ Better Auth, realtime SSE, Ask OCSO  │ ────────► │ delivery, media, summaries, copilot, alerts   │
-  │ admin for agents, channels, models   │           │ scheduler leader, worker scaling              │
-  └──────────────────┬───────────────────┘           └──────────────────────┬───────────────────────┘
-                     │                                                      │
-                     ▼                                                      ▼
-  ┌──────────────────────────────── PostgreSQL 18 · system of record ─────────────────────────────────┐
-  │ conversations and parts, configuration, approvals, encrypted secrets, jobs, leases, outbox + NOTIFY│
-  │ audit_events: the audit outbox and a local window of recent events                                 │
-  └────────────────────────────────────────────────────────────────────────────────────────────────────┘
-     Audit store: its own database (PostgreSQL or ClickHouse). The worker ships to it as an
-     INSERT/SELECT-only writer; the api reads it as a SELECT-only reader.
-     Blob store: a local volume or S3 (also holds the signed audit exports).
-     Outbound, through plugins: model providers · MCP servers · WhatsApp APIs · email · alert destinations
+  ┌──────────────────── web · Next.js · the only published port (3000) ────────────────────┐
+  │ staff UI and BFF (server actions, SSE relay); public ingress is proxied to the api      │
+  └──────────────────────────────────────────┬──────────────────────────────────────────────┘
+                                             │ internal network: /v1 with a Bearer session
+                                             ▼
+  ┌──────────── api · NestJS ────────────┐          ┌────────── worker × N · NestJS ──────────┐
+  │ /v1 control plane (deny by default)  │  queue   │ AI turns under conversation leases      │
+  │ channel webhooks: verify → persist   │ ───────► │ prompt compiler → model gateway → tools │
+  │ Better Auth, realtime SSE, Ask OCSO  │          │ delivery, media, alerts, scheduler      │
+  └──────────────────┬───────────────────┘          └────────────────────┬────────────────────┘
+                     ▼                                                   ▼
+  ┌───────────────────────────── PostgreSQL 18 · system of record ────────────────────────────┐
+  │ conversations, configuration, approvals, encrypted secrets, jobs, leases, audit outbox     │
+  └────────────────────────────────────────────────────────────────────────────────────────────┘
+     Audit store: its own database (PostgreSQL or ClickHouse), written by the worker only.
+     Blob store: a local volume or S3.   Outbound, through plugins: model providers, MCP servers,
+     WhatsApp, Slack and Teams APIs, email, alert destinations.
 ```
 
 - **PostgreSQL is the durable truth.** An inbound message is committed before anything else happens.
-  Queue messages are only wake-ups. Worker memory is a cache.
-- **API and worker scale independently.** They share packages and one Docker build, but run as separate
-  processes. Any worker can pick up any conversation.
-- **The audit store is separate.** Audit events commit with the change in PostgreSQL, then the worker
-  ships them to the audit store within seconds. OCSO keeps serving while the store is down.
-- **The browser only talks to the web app.** The staff API (`/v1`) is not reachable from outside; the
-  web app calls it over the internal network (ADR-020).
+  Queue messages are only wake-ups, and worker memory is a cache.
+- **The api and the workers scale independently.** Any worker can pick up any conversation.
+- **The browser talks only to the web app.** The staff API is not reachable from outside.
+- **The audit store is separate.** OCSO keeps serving while it is down, and it catches up.
 
-More: [docs/02-SYSTEM-ARCHITECTURE.md](docs/02-SYSTEM-ARCHITECTURE.md) and the decision records in
-[PM/ARCHITECTURE-DECISIONS.md](PM/ARCHITECTURE-DECISIONS.md).
+Built with TypeScript, NestJS, Next.js, PostgreSQL 18 with Drizzle, the Vercel AI SDK, the official MCP
+TypeScript SDK and Better Auth. Read more in [docs/02-SYSTEM-ARCHITECTURE.md](docs/02-SYSTEM-ARCHITECTURE.md)
+and the architecture decision records in [PM/ARCHITECTURE-DECISIONS.md](PM/ARCHITECTURE-DECISIONS.md).
 
-Built with TypeScript 7, NestJS 12, Next.js 16, PostgreSQL 18 with Drizzle, the Vercel AI SDK (model
-calls and the web chat's `useChat`), the official MCP TypeScript SDK and Better Auth.
+## Extending OCSO
+
+OCSO is a core plus contracts. The core owns the conversation runtime, handoff, permissions, approvals,
+audit, queues and observability. Everything that touches an outside system implements a contract and is
+looked up in a registry by kind:
+
+| Extension point | Shipped implementations |
+|---|---|
+| Channels | WhatsApp (Twilio), WhatsApp (Meta Cloud API), web chat, Slack, Microsoft Teams |
+| Model providers | Bedrock, Vertex AI, Foundry, OpenAI, Anthropic, Sarvam |
+| Tool servers | Any MCP server (no code); OCSO's built-in tools |
+| Alert destinations | In-app, email, Slack, Teams, webhook, PagerDuty |
+| Email | Resend, SMTP, log |
+| Audit store | PostgreSQL (append-only by trigger), ClickHouse |
+| Blob, secrets, queue, deployment | Volume or S3; local AES-256-GCM or AWS Secrets Manager; PostgreSQL or SQS; Compose or ECS |
+| Sign-in | Password, TOTP, passkeys, OIDC, SAML |
+
+First-party plugins are compiled in. Third-party plugins build on
+[`@winsendotai/ocso-plugin-sdk`](packages/ocso-plugin-sdk/README.md), are installed into the image and
+pinned by exact version in `OCSO_PLUGINS`. They run in-process with full trust. The chat SDK
+([`@winsendotai/ocso-chat`](packages/ocso-chat/README.md) and
+[`@winsendotai/ocso-chat-react`](packages/ocso-chat-react/README.md)) lets you build your own web chat
+for browsers and React Native.
+
+Start at [docs/plugins/](docs/plugins/README.md). It has a page per extension point, a worked example
+([add a channel in seven steps](docs/plugins/add-a-channel.md)), and an honest list of the places where
+the boundary still leaks.
 
 ## Repository map
 
 | Path | What it is |
 |---|---|
-| `apps/api` | NestJS control plane: `/v1` staff API, public ingress (channel webhooks, web chat API, OAuth callback, JWKS, signed blob URLs), Better Auth, SSE, Ask OCSO, demo seed |
-| `apps/worker` | NestJS worker: AI turns, outbound delivery, media fetch, summaries and insights, copilot, alert delivery, the scheduler, worker scaling |
-| `apps/web` | Next.js staff UI and BFF; the customer web chat page and its embed loader (`public/ocso-webchat.js`) |
-| `packages/agent-runtime` | Turn processing, conversation leases, model gateway (fallbacks, usage), tool runner, context building and turn cache, delivery |
-| `packages/alerts` | Alert delivery adapters and their registry; rule and rendering helpers |
-| `packages/application` | Application services: sign-in (Better Auth), users and teams, agents and prompts, conversations and handoffs, routing, channels, MCP, models, alert engine and evaluators, analytics, audit, retention, webhooks |
-| `packages/audit-store` | The audit store contract, the postgres and clickhouse drivers, hash chain, Ed25519 signing, and the `audit-migrate` and `audit-verify` bins |
-| `packages/auth` | Role presets, permissions, the permission catalogue and the principal |
-| `packages/blob` | `BlobStore` contract; local and S3 drivers; media checks |
-| `packages/bootstrap` | Composition shared by api and worker: registries and driver selection |
-| `packages/channels` | `ChannelAdapter` contract and registry; WhatsApp (Meta), WhatsApp (Twilio), web chat |
-| `packages/config` | Typed, validated environment configuration |
-| `packages/db` | Drizzle schema, committed SQL migrations, the migration runner |
-| `packages/deployment` | `DeploymentAdapter`: Compose (advisory) and ECS scaling |
-| `packages/domain` | Framework-free domain: control states and transitions, message parts, routing, SLA, errors |
-| `packages/email` | `EmailSender` contract; Resend, SMTP and log senders; templates |
-| `packages/events` | Event catalogue and envelope |
-| `packages/internal-agent` | Ask OCSO: permission-filtered tools over application services |
-| `packages/mcp` | MCP client: discovery, OAuth 2.1, egress guard, health, tool provider |
-| `packages/model-providers` | Provider contract and registry, the six providers and a dev-only scripted one, the shared AI SDK core |
-| `packages/observability` | Logging (pino), OpenTelemetry setup, metrics |
-| `packages/prompt-compiler` | Versioned prompt components → system blocks, cache-prefix hashes, token estimates |
-| `packages/queue` | `QueueAdapter` contract; PostgreSQL and SQS drivers |
-| `packages/secrets` | `SecretStore` contract; local (AES-256-GCM) and AWS Secrets Manager drivers |
-| `packages/tools` | `ToolProvider` contract, tool authorization, argument rules, sanitization |
-| `examples/mcp-bank-demo` | An external MCP server for a fictional bank, used by the demo and the tests |
-| `examples/webchat-host` | A host page showing the web chat embed and `identify()` |
-| `infra/compose` | Compose helpers: key generation, entrypoint, Caddy TLS overlay, debug overlay, OTel Collector config |
-| `infra/aws/terraform` | ECS Fargate infrastructure (validated, not yet applied; see known gaps) |
-| `docs/`, `PM/`, `design/` | Specifications and runbooks; build plan and architecture decisions; UI mockups |
-| `tests/resilience`, `scripts/` | Chaos and load scripts; source guards |
-
-## Quickstart with Docker Compose
-
-You need Docker Engine 26+ with Compose v2.30+. 4 vCPU and 8 GB RAM are enough for a pilot.
-
-```bash
-git clone https://github.com/winsenlabs/ocso.git && cd ocso
-cp .env.example .env
-docker compose up -d --build     # keygen → postgres + audit-db → migrate → api + worker → web
-docker compose ps                # api, worker, web healthy; keygen and migrate exited (0)
-```
-
-| Service | What it does |
-|---|---|
-| `keygen` | One-shot: writes missing secrets to the `secrets` volume |
-| `postgres` | PostgreSQL 18, the system of record (`pgdata`) |
-| `audit-db` | PostgreSQL 18 for the audit store, a separate server (`auditdata`) |
-| `migrate` | One-shot: applies `packages/db/migrations`, then runs `audit-migrate`, which creates the audit store schema, the writer and reader roles and the minimum retention |
-| `api` | Control plane; reads the audit store as the SELECT-only reader |
-| `worker` | AI turns and the scheduler. Its leader also runs the audit tasks: `audit-ship` (outbox to store), `audit-reconcile`, `audit-seal` (hash chain, signed checkpoints), `audit-export` and `audit-verify-full`, plus `exception-weekly` (the weekly exception report), `storage-sample` and `health-rollup` |
-| `web` | Staff UI and BFF, the only published port |
-
-On first start the `keygen` one-shot writes every missing secret to the `secrets` volume: the database
-password, SecretStore master key, blob signing key, Better Auth secret, first-run setup token, the audit
-database's owner, writer and reader credentials, and the audit signing key. Nothing secret goes into
-`compose.yaml`, `.env` or git. Back up that volume with both databases. Without the master key, stored
-credentials cannot be decrypted. Without the audit signing key, old checkpoints can no longer be matched
-to this deployment.
-
-Open <http://localhost:3000>. You are sent to `/setup`, which asks for the one-time setup token:
-
-```bash
-docker compose logs api | grep "setup token"
-```
-
-Then follow [docs/operations/setup-guide.md](docs/operations/setup-guide.md): model providers and
-profiles, channels, MCP servers, teams, then your first virtual agent. Configuration changes need a
-second person's approval. While you are the only Tech admin, you approve your own platform changes as
-recorded bootstrap approvals. Add a second checker as soon as you can.
-
-**Try the demo instead** (a fictional bank with users, teams, queues, three live agents, a web chat
-channel and an example MCP server; only on a fresh database):
-
-```bash
-OCSO_DEMO_SEED=true docker compose --profile demo up -d --build
-docker compose logs seed         # prints the logins
-```
-
-The demo enables a development-only scripted model, so it needs no provider keys. Never use it for a
-real deployment.
-
-**Put it on a server with HTTPS.** Point a DNS record at the host and set these in `.env`:
-
-```dotenv
-OCSO_DOMAIN=support.example.com
-OCSO_PUBLIC_URL=https://support.example.com
-OCSO_HTTP_BIND=127.0.0.1
-OCSO_TRUSTED_PROXY_HOPS=1
-```
-
-```bash
-docker compose -f compose.yaml -f infra/compose/tls.yaml up -d --build
-```
-
-The overlay adds Caddy on ports 80 and 443. It gets and renews a Let's Encrypt certificate for
-`OCSO_DOMAIN` and proxies to the web app, whose own port is then bound to localhost only.
-
-**Configure email before inviting anyone.** Without it, invites and password resets only reach the log.
-Set `EMAIL_DRIVER=resend` (or `smtp`), `EMAIL_FROM` and the key file as described in
-[compose.md §9](docs/operations/compose.md#9-email-resend-or-smtp).
-
-Everyday operations, upgrades, backups, scaling workers (`--scale worker=N`), observability and
-troubleshooting are in [docs/operations/compose.md](docs/operations/compose.md).
-
-## Configuration: what goes where
-
-There are two places to configure OCSO, split by who needs them and when.
-
-| | Deployment bootstrap | Application configuration |
-|---|---|---|
-| **Where** | Environment (`.env`) and secret files on the `secrets` volume | The web app; stored in PostgreSQL |
-| **Who** | The operator | Tech, Heads and Leads; every change to live configuration is approved by a second person (ADR-030) |
-| **What** | Database, audit store database and its roles, audit signing key, SecretStore master key, blob signing key, Better Auth secret, setup and recovery tokens, email driver and Resend/SMTP credentials, public URL, session lifetimes, trusted proxy hops, queue/blob/secrets/deployment drivers, OpenTelemetry | Model providers and their credentials, model profiles and prices, channels and their tokens, MCP servers and their OAuth tokens, virtual agents, prompts, tool grants, escalation rules, routers, queues, SLA policies, teams, users and per-user permissions, alert rules and destinations, outbound webhooks, SSO providers, MFA policy, retention, worker scaling settings |
-| **Secrets** | Generated by `keygen` or written by the operator as files | Entered once, stored encrypted in the SecretStore, never shown again |
-
-The line is deliberate. What the deployment needs before anyone can sign in (the database, the keys
-that decrypt stored data, the Better Auth secret, email for invites and resets) is bootstrap, so nothing
-done in the web app can lock you out of it. One exception to "every secret entered in the web app goes
-to the SecretStore": OIDC client secrets for SSO are stored by Better Auth in its `auth_sso_providers`
-table (ADR-025).
-
-The full variable list is in [.env.example](.env.example) and `packages/config/src/env.ts`.
-
-## Security model
-
-- **Deny by default.** The api's global `AuthGuard` (`apps/api/src/common/auth.guard.ts`) refuses any
-  route without an explicit `@Public`, `@Authenticated`, `@RequirePermission` or
-  `@RequireAnyPermission`. `apps/api/test/unit/route-access.test.ts` fails the build if a route has
-  none, and pins the complete list of public routes.
-- **Permissions in code.** Presets map to permissions in `packages/auth`, adjusted by per-user grants and
-  revokes (ADR-029). Services add resource checks and team scope (ADR-026).
-- **Maker–checker.** A change to live configuration applies only after a named, eligible second person
-  approves the exact content they saw (ADR-030). Self-approval is possible only as a recorded bootstrap
-  when nobody else can check, and it appears in the weekly exception report. Nothing a model says can grant a permission; the internal agent acts with the
-  user's own permissions.
-- **Small public surface.** Only the web app is published. `/v1` accepts only a signed Bearer session
-  token, never cookies. Better Auth endpoints are an allowlist, pinned by
-  `apps/api/test/unit/auth-surface.test.ts`. Channel webhooks are verified by signature before anything
-  is stored.
-- **Tools are authorized, not trusted.** Every tool call passes a deterministic check (approval, agent
-  grant, scopes, argument schema and rules, conversation state). Sensitive actions wait for a human.
-  Outbound calls to MCP servers and alert destinations go through an SSRF guard.
-- **Secrets stay server-side.** Credentials are envelope-encrypted with the master key (or kept in AWS
-  Secrets Manager), resolved only when used, and kept out of logs, traces, prompts, audit payloads and
-  API responses.
-- **Audit.** Privileged configuration changes, approvals, sign-in events and conversation control changes
-  are written to an audit outbox in the same transaction. The worker ships them to a separate audit store
-  whose credentials cannot rewrite it (ADR-032). The PostgreSQL driver refuses updates, deletes and truncates
-  by trigger, while ClickHouse is tamper-evident only. A hash chain and signed checkpoints let anyone verify
-  the log offline (`audit-verify`). Every tool call is recorded with sanitized arguments.
-- **Hardened containers.** Non-root, read-only root filesystem, no new privileges, all capabilities
-  dropped; PostgreSQL on a network with no internet access.
-
-Details: [docs/15-SECURITY-AND-GOVERNANCE.md](docs/15-SECURITY-AND-GOVERNANCE.md), ADR-020, ADR-021,
-ADR-025 and ADR-026 in [PM/ARCHITECTURE-DECISIONS.md](PM/ARCHITECTURE-DECISIONS.md). To report a
-vulnerability, see [SECURITY.md](SECURITY.md).
+| `apps/api` | NestJS control plane: the `/v1` staff API, public ingress (channel webhooks, web chat API, OAuth callback, JWKS), Better Auth, SSE, Ask OCSO, the demo seed |
+| `apps/worker` | NestJS worker: AI turns, delivery, media, summaries, copilot drafts, alerts, the scheduler |
+| `apps/web` | Next.js staff UI and BFF; the customer web chat page and its embed loader |
+| `apps/website` | The public website at ocso.winsenlabs.dev (static export) |
+| `packages/domain` | Framework-free domain: control states, message parts, routing, SLA |
+| `packages/application` | Application services: identity, agents and prompts, conversations, routing, approvals, audit, alerts, analytics |
+| `packages/agent-runtime` | Turn processing, leases, model gateway, tool runner, context and turn cache |
+| `packages/channels`, `packages/model-providers`, `packages/alerts`, `packages/email` | Plugin contracts, registries and the shipped implementations |
+| `packages/audit-store` | The audit store drivers, hash chain, Ed25519 signing, `audit-migrate` and `audit-verify` |
+| `packages/auth` | Role presets, the permission catalogue, the principal |
+| `packages/internal-agent` | Ask OCSO: the generated capability catalog, meta tools, the eval suite |
+| `packages/mcp`, `packages/tools` | MCP client (discovery, OAuth 2.1, egress guard); tool authorization |
+| `packages/db` | Drizzle schema, hand-written SQL migrations, the migration runner |
+| `packages/bootstrap` | The composition root shared by the api and the worker (`FIRST_PARTY_PLUGINS`) |
+| `packages/ocso-plugin-sdk`, `packages/ocso-chat`, `packages/ocso-chat-react` | The public SDKs |
+| `packages/*` (other) | Config, events, observability, prompt compiler, queue, blob, secrets, deployment drivers |
+| `examples/` | A fictional bank's MCP server (used by the demo and tests), a web chat host page, an example third-party channel plugin |
+| `infra/compose`, `infra/aws/terraform` | Compose helpers (keygen, TLS overlay, OTel); ECS Fargate Terraform (validated, never applied) |
+| `docs/` | Product and engineering specification, operations runbooks, plugin guides |
+| `PM/` | Build plan, architecture decision records and the technical research behind them |
+| `design/` | HTML design references for the main screens |
+| `scripts/`, `tests/resilience` | Source guards, the capability catalog generator; chaos and load tests |
 
 ## Development
 
-You need Node.js 26 (`.nvmrc`; `engines` allows 24+), pnpm 11.1.2 (pinned in `packageManager`), and
-Docker or a local PostgreSQL 18 for integration tests.
+You need Node.js 26 (`.nvmrc`), pnpm 11.1.2 (pinned in `packageManager`) and Docker or a local
+PostgreSQL 18.
 
 ```bash
 pnpm install
-pnpm build          # every package and app (turbo)
-pnpm typecheck      # turbo; builds dependencies first
-pnpm lint           # source guards: file size, import boundaries, package cycles, plugin boundary
-pnpm test           # unit tests (vitest)
-pnpm test:int       # integration tests against PostgreSQL
+pnpm build        # every package and app (turbo)
+pnpm typecheck
+pnpm lint         # source guards: file size, import boundaries, package cycles, the plugin boundary
+pnpm test         # unit tests
+pnpm test:int     # integration tests against a real PostgreSQL
 ```
 
-Integration tests create and drop their own database per file on the server in
-`OCSO_TEST_DATABASE_URL` (default `postgres://localhost:5432/postgres`), and run against source, so they
-need no build.
-
-Browser tests (Playwright) start a throwaway stack: a fresh database, the built api and worker, and a
-production build of the web app. They need a PostgreSQL server at `E2E_PG_URL` and `psql` on your
-`PATH`.
-
-```bash
-pnpm turbo run build --filter=@ocso/api... --filter=@ocso/worker...
-pnpm --filter @ocso/web exec playwright install chromium
-E2E_PG_URL=postgres://postgres:postgres@localhost:5432 pnpm --filter @ocso/web test:e2e
-E2E_PG_URL=… pnpm --filter @ocso/web exec playwright test e2e/webchat.spec.ts   # one spec
-```
-
-Resilience scripts run real processes against a throwaway database
-([docs/operations/resilience-testing.md](docs/operations/resilience-testing.md)):
-
-```bash
-pnpm test:chaos                                          # kill a worker mid-turn, then drain another
-pnpm test:load -- --conversations 100 --messages 3 --workers 2
-```
-
-There is no single `pnpm dev` for the whole stack yet. For a running system, most work uses the Compose
-stack plus the test suites. To run from source, build first, apply migrations with
-`DATABASE_URL=… node packages/db/dist/bin/migrate.js`, then start `pnpm --filter @ocso/api dev` (it
-reads the repo-root `.env`), `pnpm --filter @ocso/worker start` and `pnpm --filter @ocso/web dev`.
-`apps/web/e2e/stack/start-api.mjs` shows the minimal environment the api and worker need.
-
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+[CONTRIBUTING.md](CONTRIBUTING.md) covers running the stack from source, each test layer (including
+Playwright and ClickHouse), the rules a pull request must follow, and where to start.
 
 ## Documentation
 
 | Topic | Where |
 |---|---|
 | Start here, reading order | [docs/00-INDEX.md](docs/00-INDEX.md) |
-| Plugins and extension points | [docs/plugins/](docs/plugins/README.md) |
 | Run it: Compose, setup, scaling, resilience | [docs/operations/](docs/operations/compose.md) |
-| Product scope and personas | [docs/01-PRODUCT-PRD.md](docs/01-PRODUCT-PRD.md) |
-| Architecture, domain model, runtime | [docs/02](docs/02-SYSTEM-ARCHITECTURE.md) to [docs/05](docs/05-PROMPTS-AND-CACHING.md) |
-| Models, channels, MCP | [docs/06](docs/06-MODEL-PROVIDERS.md), [docs/07](docs/07-CHANNELS-AND-MULTIMODAL.md), [docs/08](docs/08-MCP-TOOLS-AND-AUTH.md) |
-| Human operations and roles | [docs/09-HUMAN-OPERATIONS-AND-RBAC.md](docs/09-HUMAN-OPERATIONS-AND-RBAC.md) |
-| Workers, observability, internal agent | [docs/10](docs/10-WORKERS-QUEUES-AND-SCALING.md), [docs/11](docs/11-OBSERVABILITY-ALERTS-AND-ANALYTICS.md), [docs/12](docs/12-INTERNAL-OCSO-AGENT.md) |
-| Security and governance | [docs/15-SECURITY-AND-GOVERNANCE.md](docs/15-SECURITY-AND-GOVERNANCE.md) |
-| Mandatory engineering rules | [docs/99-BUILD-RULES.md](docs/99-BUILD-RULES.md) |
+| Plugins and extension points | [docs/plugins/](docs/plugins/README.md) |
+| Security model | [docs/15-SECURITY-AND-GOVERNANCE.md](docs/15-SECURITY-AND-GOVERNANCE.md) |
+| Engineering rules | [docs/99-BUILD-RULES.md](docs/99-BUILD-RULES.md) |
 | Architecture decision records | [PM/ARCHITECTURE-DECISIONS.md](PM/ARCHITECTURE-DECISIONS.md) |
-
-The numbered docs are the original specification. Where the code refined them, an ADR records the
-change and an "Implementation notes (as built)" section says what was built.
+| What's next | [ROADMAP.md](ROADMAP.md) |
 
 ## Status and known gaps
 
 OCSO is pre-1.0. APIs, the database schema and the plugin contracts can still change between commits on
-`main`.
+`main`. Only the latest `main` gets security fixes.
 
-- **Deployment.** Docker Compose on a single host is the supported deployment. Terraform for ECS Fargate
-  and the ECS scaling adapter exist, but AWS work is on hold: the Terraform has only been validated
-  (`terraform validate`), never applied to a real account, and does not yet wire the Better Auth secret
-  or email ([aws.md §10](docs/operations/aws.md#10-known-gaps-and-follow-ups)). The audit store additions
-  (a second RDS instance, bootstrap keys, signing-key secret) have not been validated at all.
-- **Plugins are compile-time.** Third-party plugins as npm packages wait for the plugin SDK. Some web
-  app screens and a few core defaults still name specific kinds
-  ([details](docs/plugins/README.md#where-the-boundary-leaks-today)).
-- **Model providers** are tested against recorded provider-format responses, not live APIs; live
-  verification needs your credentials. Sarvam's prompt caching is unverified.
-- **WhatsApp** adapters are tested offline with fixtures; the items that need checking against a real
-  number are listed in [packages/channels/README.md](packages/channels/README.md). Message templates,
-  the only way to reach a customer 24 hours after their last message, are in progress.
-- **Model discovery and catalog pricing** (listing a provider's models, suggesting prices) are in
-  progress.
-- **Channels not yet built:** `SMS`, `RCS`, `VOICE` and `CUSTOM_APP` are reserved kinds with no adapter.
-  Web chat is the only embeddable channel.
+What works today: everything in the feature list above, on a single Docker host with Compose, covered by
+unit, integration (real PostgreSQL and ClickHouse), Playwright and chaos tests in CI.
+
+What does not yet:
+
+- **The SDKs are not on npm yet.** `@winsendotai/ocso-plugin-sdk`, `@winsendotai/ocso-chat` and
+  `@winsendotai/ocso-chat-react` build from this repository; publishing is pending.
+- **Live verification is owed.** Model providers, WhatsApp (both integrations), message templates and
+  model discovery are tested offline against recorded provider-format responses, not against live
+  accounts. Sarvam's prompt caching is unverified. Ask OCSO's eval suite has not yet been run against a
+  real model.
+- **Slack and Teams** read and send text and choice buttons only: no files, no proactive messages.
+- **Channels not built:** SMS, RCS, voice.
 - **MCP** uses Streamable HTTP only; there is no stdio transport.
-- **Teams:** agents are team-owned. Queues are visible to every `queues.read` holder, and writes are
-  team-scoped and approved (ADR-031).
-- **Governance, awaiting owner rulings:** Service members see their team's proposals read-only, and a
-  platform-wide fallback checker is used when nobody in the owning teams can check (ADR-030 deviations
-  10 and 11).
-- **Audit exports** are an independent copy only on write-once storage. OCSO does not configure or check
-  S3 Object Lock on `audit-exports/`; enable it yourself.
+- **AWS.** The ECS Fargate Terraform passes `terraform validate` but has never been applied to a real
+  account, and it does not wire every secret yet. Docker Compose is the supported deployment.
+- **Audit exports** are only an independent copy on write-once storage. OCSO does not configure S3 Object
+  Lock for you.
 - **Sign-in:** no email one-time codes as a second factor, and no "SSO only" enforcement per domain.
-- **CI:** the Playwright job runs on every pull request but does not block merges yet.
 
-## Contributing and security
+The [roadmap](ROADMAP.md) lists what we plan next and where help is welcome.
 
-- Contributions: [CONTRIBUTING.md](CONTRIBUTING.md). Proposals for new channels, providers or other
-  plugins: open a "New plugin proposal" issue.
-- Vulnerabilities: [SECURITY.md](SECURITY.md). Please do not open public issues for them.
-- Conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+## Contributing
+
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first. It explains setup, the test
+layers, the rules (the plugin boundary, hand-written migrations, maker–checker for new configuration)
+and where to start. For a new channel, model provider or other plugin, open a "New plugin proposal"
+issue. Everyone taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Security
+
+Please report vulnerabilities privately to **security@winsenlabs.dev**, not in a public issue. See
+[SECURITY.md](SECURITY.md) for the scope and what to include.
 
 ## License
 
-Copyright 2026 Winsen Labs. Licensed under the Apache License 2.0. See [LICENSE](LICENSE) and
-[NOTICE](NOTICE).
+Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Copyright 2026 Winsen Labs.
+
+---
+
+Built by [Winsen Labs](https://winsenlabs.com). We build OCSO with a small number of teams. If you want
+to run it with us, or just see it live, request a demo at [ocso.winsenlabs.dev](https://ocso.winsenlabs.dev).

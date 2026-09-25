@@ -8,9 +8,16 @@ coverage/
 .env.*
 !.env.example
 /data/
-/test-results/
-/playwright-report/
+test-results/
+playwright-report/
+blob-report/
 .DS_Store
+*.log
+.eslintcache
+.idea/
+
+# Scratch copy used to refresh Drizzle metadata (CONTRIBUTING.md, migrations)
+packages/db/.meta-refresh/
 
 # Local development state (the dev audit signing key, ADR-032)
 .ocso/

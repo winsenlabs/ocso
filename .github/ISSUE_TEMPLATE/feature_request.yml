@@ -6,6 +6,7 @@ body:
     attributes:
       value: |
         For a new channel, model provider or other plugin, use the "New plugin proposal" form instead.
+        Check ROADMAP.md first: it may already be planned, and the issue can link to it.
   - type: textarea
     id: problem
     attributes:
@@ -19,9 +20,9 @@ body:
       label: Who is it for?
       multiple: true
       options:
-        - Platform Tech Admin
-        - CS Lead
-        - CS Exec
+        - Tech (runs the platform)
+        - Heads and Leads (run agents, queues and teams)
+        - Service (handles conversations)
         - Customers
         - Operators (deployment)
         - Contributors (developer experience)

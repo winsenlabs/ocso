@@ -20,7 +20,10 @@
   },
   "dependencies": {
     "@ocso/domain": "workspace:*",
-    "zod": "catalog:",
-    "jose": "6.2.12"
+    "jose": "6.2.12",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "yaml": "2.9.1"
   }
 }

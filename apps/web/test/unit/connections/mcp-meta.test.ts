@@ -54,12 +54,12 @@ describe('connections URL state and tabs', () => {
     expect(idParam({ id: '0192f0c1-0000-7000-8000-000000000001' }, 'id')).toBe('0192f0c1-0000-7000-8000-000000000001');
   });
 
-  it('offers tabs by permission and falls back to the first permitted one', () => {
+  it('offers sections by permission and falls back to the first permitted one', () => {
     const exec = permittedTabs({ permissions: new Set([Permission.MCP_CONNECT_PERSONAL]) });
-    expect(exec.map((t) => t.key)).toEqual(['mine']);
-    expect(resolveTab('providers', exec)).toBe('mine');
+    expect(exec.map((t) => t.key)).toEqual(['mcp']);
+    expect(resolveTab('providers', exec)).toBe('mcp');
     const lead = permittedTabs({ permissions: new Set([Permission.PROVIDERS_READ, Permission.MCP_READ, Permission.CHANNELS_READ, Permission.MCP_CONNECT_PERSONAL]) });
-    expect(lead.map((t) => t.key)).toEqual(['providers', 'mcp', 'channels', 'mine']);
+    expect(lead.map((t) => t.key)).toEqual(['providers', 'mcp', 'channels']);
     expect(resolveTab('mcp', lead)).toBe('mcp');
     expect(resolveTab(undefined, [])).toBeNull();
   });

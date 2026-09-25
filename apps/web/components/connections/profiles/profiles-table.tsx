@@ -21,34 +21,39 @@ function cacheCaption(p: Profile): string {
   return `prefix${p.cacheTtl ? ` · ${p.cacheTtl}` : ''}${modes.length ? ` · ${modes.join(' / ')}` : ''}`;
 }
 
-/** Logical model profiles (design/04 table). Managers open the edit dialog; readers get a read-only view. */
+/** Model profiles (design/04 table). Managers open the edit dialog; readers get a read-only view. */
 export function ProfilesSection({ profiles, canManage, hasProviders }: { profiles: Profile[]; canManage: boolean; hasProviders: boolean }) {
   const open = (p: Profile) => connectionsHref({ tab: 'providers', dialog: canManage ? 'profile-edit' : 'profile-view', id: p.id });
   return (
     <section aria-labelledby="profiles-h" style={{ marginTop: 18 }}>
       <SecHead
         id="profiles-h"
-        title="Logical model profiles"
+        title="Model profiles"
         count={profiles.length}
-        desc="agents reference profiles, never provider model IDs"
+        desc="what a virtual agent runs on · agents pick a profile, never a provider model id"
         actions={
-          canManage ? (
-            <Link className="btn tiny accent" href={connectionsHref({ tab: 'providers', dialog: 'profile-new' })} scroll={false}>
-              New profile
+          canManage && hasProviders ? (
+            <Link className="btn tiny" href={connectionsHref({ tab: 'providers', dialog: 'profile-new' })} scroll={false}>
+              New model profile
             </Link>
           ) : null
         }
       />
       <DataTable
-        label="Logical model profiles"
+        label="Model profiles"
         template={TEMPLATE}
         rows={profiles}
         rowKey={(p) => p.id}
         empty={
           <EmptyState title="No model profiles yet">
+            {`A model profile is what a virtual agent runs on: a primary model, ordered fallbacks, generation limits and a cache policy. Every agent needs one before it can go live, and Ask OCSO needs one to answer. `}
             {hasProviders
-              ? 'A profile names a primary model target, ordered fallbacks, generation limits and a cache policy. Agents pick a profile, never a model id.'
-              : 'Configure a model provider first; profiles point at a provider’s model or deployment.'}
+              ? canManage
+                ? 'Create one with “New model profile”.'
+                : 'A Tech admin creates them.'
+              : canManage
+                ? 'Add a model provider above first; a profile points at one of its models.'
+                : 'A Tech admin adds a model provider, then creates them.'}
           </EmptyState>
         }
         columns={[

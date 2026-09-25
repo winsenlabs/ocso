@@ -87,7 +87,7 @@ export function StepApprove({ connection, tools, agents, api }: { connection: Co
         </div>
       </div>
       {template ? (
-        <span className="mono-sm">Published as a template: CS users connect their own account from Connections → My connections. Virtual agents never use it.</span>
+        <span className="mono-sm">Published as a template: CS users connect their own account from MCP connections → My connections. Virtual agents never use it.</span>
       ) : (
         <fieldset className="fld" style={{ border: 'none', padding: 0, margin: 0 }}>
           <legend style={{ fontSize: 12, color: 'var(--ink-2)', fontWeight: 500, padding: 0, marginBottom: 5 }}>Agents allowed to use this connection</legend>

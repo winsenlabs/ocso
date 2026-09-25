@@ -121,6 +121,15 @@ describe('SDK checkPlugin agrees with the internal registries', () => {
     ['a setup file with a bad filename', () => [brokenChannel(webhook(), { setupFiles: [{ key: 'manifest', label: 'M', filename: '../m.json', contentType: 'application/json', template: '{}' }] })]],
     ['a setup file with an unknown content type', () => [brokenChannel(webhook(), { setupFiles: [{ key: 'manifest', label: 'M', filename: 'm.html', contentType: 'text/html' as never, template: '<p/>' }] })]],
     ['two setup files with one key', () => [brokenChannel(webhook(), { setupFiles: [0, 1].map(() => ({ key: 'manifest', label: 'M', filename: 'm.json', contentType: 'application/json' as const, template: '{}' })) })]],
+    ['a setup guide link that is not https', () => [brokenChannel(webhook(), { setupGuide: [{ title: 'T', body: '', links: [{ label: 'x', href: 'javascript:alert(1)' }] }] })]],
+    ['a setup guide value with a secret placeholder', () => [brokenChannel(webhook(), { setupGuide: [{ title: 'T', body: '', values: [{ label: 'x', value: '{{secrets.token}}' }] }] })]],
+    ['a setup guide step naming an unknown file', () => [brokenChannel(webhook(), { setupFiles: [], setupGuide: [{ title: 'T', body: '', files: ['nope'] }] })]],
+    ['two form steps in a setup guide', () => [brokenChannel(webhook(), { setupGuide: [{ title: 'A', body: '', form: true }, { title: 'B', body: '', form: true }] })]],
+    ['a setup guide step without a title', () => [brokenChannel(webhook(), { setupGuide: [{ title: '', body: 'b' }] })]],
+    ['duplicate troubleshooting ids', () => [brokenChannel(webhook(), { troubleshooting: [{ id: 'a', problem: 'p', fix: 'f' }, { id: 'a', problem: 'p', fix: 'f' }] })]],
+    ['a zip setup file without entries', () => [brokenChannel(webhook(), { setupFiles: [{ key: 'pkg', label: 'P', filename: 'p.zip', contentType: 'application/zip', entries: [] }] })]],
+    ['a zip entry outside the package root', () => [brokenChannel(webhook(), { setupFiles: [{ key: 'pkg', label: 'P', filename: 'p.zip', contentType: 'application/zip', entries: [{ path: '../m.json', contentType: 'application/json', template: '{}' }] }] })]],
+    ['a zip image entry that is not base64', () => [brokenChannel(webhook(), { setupFiles: [{ key: 'pkg', label: 'P', filename: 'p.zip', contentType: 'application/zip', entries: [{ path: 'c.png', contentType: 'image/png', base64: 'not base64!' }] }] })]],
     ['a non-boolean staffDestination', () => [brokenChannel(webhook(), { staffDestination: 'yes' as never })]],
     ['an invalid staffSurface', () => [brokenChannel(webhook(), { staffDestination: true, staffSurface: 'MS Teams' })]],
     ['a staff-destination kind declaring its own destination setting', () => [brokenChannel(webhook(), { staffDestination: true, settingsSchema: { type: 'object', properties: { destination: { type: 'string' } } } })]],
@@ -132,6 +141,28 @@ describe('SDK checkPlugin agrees with the internal registries', () => {
       { key: 'yaml', label: 'YAML', filename: 'manifest.yaml', contentType: 'text/yaml' as const, template: 'url: {{webhookUrl}}\n' },
     ];
     expectAgreement(pluginWith({ channels: [() => brokenChannel(webhook(), { setupFiles: files })] }), false);
+  });
+
+  it('both accept a channel with a setup guide, troubleshooting and a zip package', () => {
+    const files = [
+      {
+        key: 'pkg',
+        label: 'App package',
+        filename: 'app.zip',
+        contentType: 'application/zip' as const,
+        entries: [
+          { path: 'manifest.json', contentType: 'application/json' as const, template: '{"id":"{{settings.appId}}","d":["{{webhookHost}}"]}' },
+          { path: 'color.png', contentType: 'image/png' as const, base64: 'iVBORw0KGgo=' },
+        ],
+      },
+    ];
+    const setupGuide = [
+      { title: 'Create the app', body: 'Upload the package.', files: ['pkg'], links: [{ label: 'Console', href: 'https://example.com' }], values: [{ label: 'URL', value: '{{webhookUrl}}' }] },
+      { title: 'Paste the keys', body: '', form: true, table: { head: ['a', 'b'] as const, rows: [['1', '2'] as const] } },
+    ];
+    expectAgreement(pluginWith({ channels: [() => brokenChannel(webhook(), { setupFiles: files, setupGuide, troubleshooting: [{ id: 'x', problem: 'p', fix: 'f' }] })] }), false);
+    // A plugin that still only has the deprecated plain-sentence steps is accepted too.
+    expectAgreement(pluginWith({ channels: [() => brokenChannel(webhook(), { setupGuide: undefined, troubleshooting: undefined, setupSteps: ['Point the webhook here.'] })] }), false);
   });
 
   it.each(channelCases)('both reject a channel with %s', (_case, adapters) => {

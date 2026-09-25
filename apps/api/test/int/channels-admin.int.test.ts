@@ -32,7 +32,8 @@ describe('channel administration (design/04 Channels)', () => {
     expect(Object.keys(webchat.settingsSchema.properties)).toEqual(expect.arrayContaining(['allowedOrigins', 'branding']));
     // Everything the web app renders per kind comes from the descriptor.
     expect(whatsapp).toMatchObject({ mark: { code: 'WA', name: 'WhatsApp' }, identitySetting: { label: 'number id' }, webhookEvents: expect.any(String), messageTemplates: true, templates: { reviewer: 'WhatsApp' } });
-    expect(whatsapp.setupSteps.length).toBeGreaterThan(2);
+    expect(whatsapp.setupGuide.length).toBeGreaterThan(2);
+    expect(whatsapp.setupGuide.filter((s: { form?: boolean }) => s.form)).toHaveLength(1);
     expect(webchat).toMatchObject({ mark: { code: 'WB', name: 'Web chat' }, messageTemplates: false, connectionCheck: false });
   });
 

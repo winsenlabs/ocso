@@ -5,9 +5,9 @@ body:
   - type: markdown
     attributes:
       value: |
-        Plugins are compile-time and live in this repository: an implementation of a contract, registered in one place.
+        A first-party plugin lives in this repository: an implementation of a contract, registered in one place.
+        A third-party plugin builds on `@winsendotai/ocso-plugin-sdk` (packages/ocso-plugin-sdk) and is loaded with OCSO_PLUGINS.
         Read docs/plugins/README.md and the page for your extension point before proposing.
-        (A third-party plugin SDK, `@winsendotai/ocso-plugin-sdk`, is planned but does not exist yet.)
         Tools do not need a plugin: expose them as an MCP server and connect it in the web app.
   - type: dropdown
     id: extension-point

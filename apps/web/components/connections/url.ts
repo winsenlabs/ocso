@@ -14,6 +14,8 @@ export interface ConnectionsParams {
   step?: string | undefined;
   /** Webhook delivery status filter. */
   deliveries?: string | undefined;
+  /** MCP connections view: shared | mine. */
+  view?: string | undefined;
 }
 
 export function connectionsHref(params: ConnectionsParams): string {

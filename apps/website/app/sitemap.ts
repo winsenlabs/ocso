@@ -1,9 +1,7 @@
 import type { MetadataRoute } from 'next';
-import { SITE_URL } from '@/lib/site';
+import { siteUrl } from '@/content/links';
 
-export const dynamic = 'force-static';
-
-/** One page today; its sections are anchors, which do not belong in a sitemap. */
+/** One page; its sections are anchors, which do not belong in a sitemap. */
 export default function sitemap(): MetadataRoute.Sitemap {
-  return [{ url: `${SITE_URL}/`, changeFrequency: 'weekly', priority: 1 }];
+  return [{ url: `${siteUrl}/`, changeFrequency: 'weekly', priority: 1 }];
 }

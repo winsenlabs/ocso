@@ -48,7 +48,7 @@ const AREA_LABELS: Readonly<Record<string, string>> = {
   sla: 'sla policies',
   team: 'team',
   system: 'system control center',
-  connections: 'connections & models',
+  connections: 'integrations',
   audit: 'audit log',
   settings: 'settings',
   search: 'search',

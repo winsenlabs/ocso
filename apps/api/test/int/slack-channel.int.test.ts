@@ -142,9 +142,34 @@ describe('Slack channel kind', () => {
     const slack = kinds.body.find((k: { kind: string }) => k.kind === 'SLACK');
     expect(slack).toMatchObject({ label: 'Slack', mark: { code: 'SL' }, inboundWebhook: true, webhookSegment: 'slack', connectionCheck: true, messageTemplates: false });
     expect(slack.secrets.map((s: { key: string }) => s.key)).toEqual(['botToken', 'signingSecret']);
-    expect(slack.setupFiles[0]).toMatchObject({ key: 'slack-app-manifest', contentType: 'application/json' });
-    expect(slack.setupFiles[0].template).toContain('"request_url": "{{webhookUrl}}"');
+    expect(slack.setupFiles.map((f: { key: string; contentType: string }) => [f.key, f.contentType])).toEqual([
+      ['slack-app-manifest-yaml', 'text/yaml'],
+      ['slack-app-manifest', 'application/json'],
+    ]);
+    expect(slack.setupFiles[1].template).toContain('"request_url": "{{webhookUrl}}"');
+    expect(slack.setupGuide.find((s: { form?: boolean }) => s.form)).toMatchObject({ title: 'Paste them into OCSO and save' });
     expect(channel.webhookPath).toBe(`/channels/slack/${channel.publicKey}/webhook`);
+  });
+
+  it('creates a draft before the Slack app exists: the manifest downloads with its webhook URL, and the URL check passes once the signing secret is saved', async () => {
+    const draft = await h.http().post('/v1/channels').set(auth(admin)).send({ kind: 'SLACK', name: 'Slack draft', settings: {}, secrets: {} }).expect(201);
+    const url = `http://localhost:3000${draft.body.webhookPath}`;
+    const yaml = await h.http().get(`/v1/channels/${draft.body.id}/setup-files/slack-app-manifest-yaml`).set(auth(admin)).expect(200);
+    expect(yaml.headers['content-type']).toBe('text/yaml; charset=utf-8');
+    expect(yaml.headers['content-disposition']).toBe('attachment; filename="slack-app-manifest.yaml"');
+    expect(yaml.text).toContain(`request_url: ${url}`);
+    const json = await h.http().get(`/v1/channels/${draft.body.id}/setup-files/slack-app-manifest`).set(auth(admin)).expect(200);
+    expect(JSON.parse(json.text)).toMatchObject({ settings: { event_subscriptions: { request_url: url }, interactivity: { request_url: url } } });
+    // Without a signing secret nothing Slack sends is accepted, not even the URL check.
+    const challenge = JSON.stringify({ token: 'legacy', type: 'url_verification', challenge: 'draftChallenge1' });
+    const at = draft.body.webhookPath as string;
+    const send = () => h.http().post(at).set('content-type', 'application/json').set('x-slack-request-timestamp', now()).set('x-slack-signature', sign(challenge)).send(challenge);
+    await send().expect(403);
+    await h.http().patch(`/v1/channels/${draft.body.id}`).set(auth(admin)).send({ secrets: { signingSecret: SIGNING_SECRET } }).expect(200);
+    const answered = await send().expect(200);
+    expect(answered.text).toBe('draftChallenge1');
+    // A given value is still checked on a draft.
+    await h.http().patch(`/v1/channels/${draft.body.id}`).set(auth(admin)).send({ secrets: { botToken: 'xoxp-user-token-1234567890' } }).expect(400);
   });
 
   it('refuses an invalid configuration', async () => {

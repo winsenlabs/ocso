@@ -1,0 +1,29 @@
+name: Question
+description: Ask how something works, or how to run or extend OCSO.
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before asking, the answer may already be in the README, docs/00-INDEX.md (the reading order),
+        docs/operations/ (running OCSO) or docs/plugins/ (extending it).
+        Never paste secrets, `.env` contents, tokens or real customer data.
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+      description: What you are trying to do, and what you have read or tried so far.
+    validations:
+      required: true
+  - type: dropdown
+    id: topic
+    attributes:
+      label: Topic
+      options:
+        - Running OCSO (Compose, setup, upgrades)
+        - Configuring agents, channels, routing or approvals
+        - Extending OCSO (plugins, MCP, the SDKs)
+        - Contributing (code, tests, rules)
+        - Other
+    validations:
+      required: true

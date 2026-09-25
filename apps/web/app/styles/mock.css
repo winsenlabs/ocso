@@ -1,5 +1,5 @@
-/* Mock chrome + house classes referenced by the reference mocks (construction copied from platos.css / alfred.css).
-   Not part of base/one/rho. */
+/* Mock chrome + house classes referenced by the reference mocks (shared with the design references in design/).
+   Not part of base/one. */
 .state-sw{position:fixed;bottom:14px;right:14px;z-index:100;display:flex;gap:2px;background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:3px}
 .state-sw button{border:none;background:transparent;color:var(--ink-3);font-family:var(--font-mono);font-size:10px;letter-spacing:0.04em;text-transform:uppercase;padding:4px 10px;border-radius:999px;cursor:pointer}
 .state-sw button.active{background:var(--ink);color:var(--bg)}

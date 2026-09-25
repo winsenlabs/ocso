@@ -48,11 +48,10 @@ function successText(c: OAuthReturn['connection']): string {
 }
 
 export function OAuthReturnBanner({ result }: { result: OAuthReturn }) {
-  const tab = result.personal ? 'mine' : 'mcp';
   const name = result.connection?.name;
   const c = result.connection;
   const step = !result.ok ? 'auth' : c && !c.approvedAt && c.kind !== 'PERSONAL' ? stepForStage(c.stage) : undefined;
-  const continueHref = connectionsHref({ tab, connection: result.connectionId, step });
+  const continueHref = connectionsHref({ tab: 'mcp', view: result.personal ? 'mine' : undefined, connection: result.connectionId, step });
   const action = result.connectionId ? (
     <Link className="btn tiny" href={continueHref} scroll={false}>
       {result.ok ? 'Continue' : 'Try again'}

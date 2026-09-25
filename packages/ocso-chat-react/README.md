@@ -8,6 +8,10 @@ client.
 npm install @winsendotai/ocso-chat-react @winsendotai/ocso-chat
 ```
 
+> **Not on npm yet.** OCSO is pre-1.0 and this package has not been published. Until it is, build it
+> from the [OCSO repository](https://github.com/winsenlabs/ocso) with `pnpm --filter @winsendotai/ocso-chat-react build`
+> and install the tarball from `pnpm --filter @winsendotai/ocso-chat-react pack`.
+
 `@winsendotai/ocso-chat` is a **peer dependency** (one client version per app, which you control), as are
 `react >= 18` and, for the `./native` entry only, `react-native >= 0.74`.
 

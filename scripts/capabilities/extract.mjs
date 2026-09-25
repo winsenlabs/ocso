@@ -96,13 +96,17 @@ const UI_HREFS = [
   [/^\/v1\/corrections/, () => '/corrections'],
   [/^\/v1\/(reviews|evaluations)/, () => '/reviews'],
   [/^\/v1\/(channels\/:\w+\/templates|message-templates)/, () => '/templates'],
-  [/^\/v1\/mcp\//, () => '/connections'],
+  [/^\/v1\/mcp\//, () => '/connections?tab=mcp'],
   [/^\/v1\/analytics\/escalation-reasons/, () => '/escalation-reasons'],
   [/^\/v1\/analytics/, () => '/analytics'],
   [/^\/v1\/telemetry/, () => '/system/telemetry'],
   [/^\/v1\/settings\/workers/, () => '/system/workers'],
   [/^\/v1\/(system|health)/, () => '/system'],
-  [/^\/v1\/(channels|model-\w+|webhooks|webhook-deliveries|settings|security|secrets)/, () => '/settings'],
+  [/^\/v1\/channels/, () => '/connections?tab=channels'],
+  [/^\/v1\/model-\w+/, () => '/connections?tab=providers'],
+  [/^\/v1\/(webhooks|webhook-deliveries)/, () => '/connections?tab=webhooks'],
+  [/^\/v1\/secrets/, () => '/connections?tab=secrets'],
+  [/^\/v1\/(settings|security)/, () => '/settings'],
   [/^\/v1\/home$/, () => '/'],
 ];
 
@@ -427,7 +431,7 @@ export async function extractCatalog({ lenient = false } = {}) {
     if (!/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/.test(c.name)) problems.push(`${c.method} ${c.path}: tool name ${c.name} is not <module>.<verb_object>`);
     if (seen.has(c.name)) problems.push(`duplicate tool name ${c.name}: ${seen.get(c.name)} and ${c.method} ${c.path}; set @Capability({ name })`);
     seen.set(c.name, `${c.method} ${c.path}`);
-    if (c.uiHref && !pages.includes(c.uiHref.replace(/:\w+/g, ':id'))) problems.push(`${c.name}: uiHref ${c.uiHref} is not an app page`);
+    if (c.uiHref && !pages.includes(c.uiHref.split('?')[0].replace(/:\w+/g, ':id'))) problems.push(`${c.name}: uiHref ${c.uiHref} is not an app page`);
   }
   if (problems.length && !lenient) {
     const err = new Error(`capabilities: ${problems.length} problem(s)\n  - ${problems.join('\n  - ')}`);

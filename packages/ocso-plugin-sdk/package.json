@@ -1,7 +1,7 @@
 {
   "name": "@winsendotai/ocso-plugin-sdk",
   "version": "0.1.0",
-  "description": "Types, helpers and a conformance checker for building OCSO plugins: channels, model providers, alert destinations and email drivers.",
+  "description": "Types, helpers and a conformance checker for building OCSO (Open Customer Success Orchestration) plugins: channels, model providers, alert destinations and email drivers.",
   "license": "Apache-2.0",
   "type": "module",
   "sideEffects": false,

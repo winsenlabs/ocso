@@ -1,18 +1,20 @@
 import { randomBytes } from 'node:crypto';
 import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Patch, Post, Res } from '@nestjs/common';
 import { Permission, type Principal } from '@ocso/auth';
-import { ApprovalService, ChannelInput, ChannelPatch, ChannelService, WithApproval, requestStagedApproval, type ActorContext } from '@ocso/application';
+import { ApprovalService, ChannelInput, ChannelPatch, ChannelService, WithApproval, requestStagedApproval, writeZip, type ActorContext } from '@ocso/application';
 import type { Response } from 'express';
 import { ChannelRuntime } from '@ocso/agent-runtime';
-import type { ChannelRegistry, ConnectionCheckResult } from '@ocso/channels';
-import { validation } from '@ocso/domain';
+import { renderSetupFile, type ChannelRegistry, type ConnectionCheckResult } from '@ocso/channels';
+import type { ApiEnv } from '@ocso/config';
+import { notFound, validation } from '@ocso/domain';
 import { z } from 'zod';
 import { Actor, Capability, CurrentPrincipal, RequireAnyPermission, RequirePermission } from '../../common/decorators.js';
-import { CHANNEL_REGISTRY } from '../../infrastructure/tokens.js';
+import { CHANNEL_REGISTRY, ENV } from '../../infrastructure/tokens.js';
 import { approvalResponse } from '../approvals/approval-response.js';
 import { createDraft, proposeOnly, withApprovalState, OptionalApproval, type ApprovalBody } from '../settings/platform-approvals.js';
 
 const Id = z.uuid();
+const FileKey = z.string().regex(/^[a-z][a-z0-9-]{0,39}$/);
 const CreateBody = ChannelInput.extend(WithApproval.shape);
 type CreateBody = z.infer<typeof CreateBody>;
 const PatchBody = ChannelPatch.extend(WithApproval.shape);
@@ -31,6 +33,7 @@ export class ChannelsAdminController {
     @Inject(CHANNEL_REGISTRY) private readonly registry: ChannelRegistry,
     @Inject(ChannelRuntime) private readonly runtime: ChannelRuntime,
     @Inject(ApprovalService) private readonly approvals: ApprovalService,
+    @Inject(ENV) private readonly env: ApiEnv,
   ) {}
 
   @Capability({ name: 'channels.list_channels', summary: 'List channels with their status and approval state.' })
@@ -97,6 +100,31 @@ export class ChannelsAdminController {
   @RequirePermission(Permission.CHANNELS_MANAGE)
   remove(@Actor() actor: ActorContext, @Param('id', { schema: Id }) id: string, @Body({ schema: OptionalApproval }) body: ApprovalBody, @Res({ passthrough: true }) res: Response) {
     return proposeOnly(res, this.approvals, actor, { kind: 'channel', id, action: 'DELETE' }, body?.approval);
+  }
+
+  /**
+   * One of the kind's setup files (descriptor `setupFiles`: an app manifest, a Teams app package) filled from this
+   * channel's webhook URL and non-secret settings, as a download; an `application/zip` package is built here.
+   * Secrets are never interpolated. 400 `setup_file_incomplete` while a value it needs is not saved yet.
+   */
+  @Get(':id/setup-files/:key')
+  @RequirePermission(Permission.CHANNELS_READ)
+  async setupFile(@Param('id', { schema: Id }) id: string, @Param('key', { schema: FileKey }) key: string, @Res() res: Response): Promise<void> {
+    const channel = await this.channels.get(id);
+    const file = this.registry.has(channel.kind) ? this.registry.describe(channel.kind).setupFiles?.find((f) => f.key === key) : undefined;
+    if (!file) throw notFound('setup_file', key);
+    const webhookUrl = this.registry.webhookUrl(channel.kind, channel.publicKey, this.env.OCSO_PUBLIC_URL);
+    const { files, missing } = renderSetupFile(file, { webhookUrl, settings: channel.settings });
+    if (missing.length) {
+      const names = missing.map((m) => m.replace(/^settings\./, ''));
+      throw validation('setup_file_incomplete', `Save ${names.join(', ')} on the channel first: ${file.label} needs ${names.length === 1 ? 'it' : 'them'}.`);
+    }
+    const body = file.contentType === 'application/zip' ? writeZip(files.map((f) => ({ name: f.path, data: Buffer.from(f.data) })), new Date()) : Buffer.from(files[0]!.data);
+    res.setHeader('content-type', file.contentType === 'application/zip' ? 'application/zip' : `${file.contentType}; charset=utf-8`);
+    res.setHeader('content-disposition', `attachment; filename="${file.filename}"`);
+    res.setHeader('cache-control', 'no-store');
+    res.setHeader('x-content-type-options', 'nosniff');
+    res.status(200).send(body);
   }
 
   /** Read-only provider check with the stored credentials (e.g. Twilio: fetch the account); never sends a message. */

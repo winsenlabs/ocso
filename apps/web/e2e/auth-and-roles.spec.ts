@@ -53,9 +53,8 @@ test('sign-in shows API errors, then the admin sees Platform navigation and not 
   expect(nav.items).toEqual([
     'Home', 'Search',
     'System', 'Workers', 'Queues & leases', 'Telemetry',
-    'Models', 'Connections', 'Channels', 'Message templates', 'Secrets', 'Webhooks',
+    'Models', 'MCP connections', 'Channels', 'Message templates', 'Secrets', 'Webhooks',
     'Alerts', 'Virtual agents', 'Audit log', 'Routers', 'Team & roles', 'Approvals', 'Exceptions',
-    'My connections',
     'Settings',
   ]);
   expect(nav.groups).not.toContain('My work');
@@ -100,13 +99,13 @@ test('admin creates a Head (the lead account) from Team & roles', async ({ page 
 test('the Head sees Operations / Quality / Governance and creates only presets within their own rights', async ({ page }) => {
   await login(page, ACCOUNTS.lead);
   const nav = await navModel(page);
-  expect(nav.groups).toEqual(['Operations', 'Quality', 'Governance']);
+  expect(nav.groups).toEqual(['Operations', 'Quality', 'Governance', 'Integrations']);
   expect(nav.items).toEqual([
     'Home', 'Search',
     'Conversations', 'Virtual agents', 'Queues', 'Routers', 'Customers', 'Message templates',
     'Analytics', 'Reviews', 'Prompt corrections', 'Escalation reasons',
     'Alerts', 'SLA policies', 'Team', 'Approvals', 'Exceptions',
-    'My connections',
+    'Models', 'MCP connections', 'Channels',
     'Settings',
   ]);
   await expectNavLinksResolve(page);
@@ -134,7 +133,7 @@ test('Service member sees My work only, cannot open Team, and returns to the req
 
   const nav = await navModel(page);
   expect(nav.groups).toEqual(['My work']);
-  expect(nav.items).toEqual(['Home', 'Search', 'Conversations', 'Pickup queue', 'Customers', 'Alerts', 'My connections', 'Settings']);
+  expect(nav.items).toEqual(['Home', 'Search', 'Conversations', 'Pickup queue', 'Customers', 'Alerts', 'MCP connections', 'Settings']);
   await expectNavLinksResolve(page);
 
   // Service Home: needs you, take next (nothing waiting yet), my shift; team names are not in the chrome.

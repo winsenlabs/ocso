@@ -54,7 +54,7 @@ export class McpConnectionsController {
     return withApprovalState(this.approvals, principal, 'mcp_connection', await this.connections.list(actor));
   }
 
-  @Capability({ name: 'mcp.create_connection', summary: 'Register a shared MCP connection by URL as a draft (a header token is set with mcp.set_connection_header_auth; OAuth sign-in happens on its Connections page).' })
+  @Capability({ name: 'mcp.create_connection', summary: 'Register a shared MCP connection by URL as a draft (a header token is set with mcp.set_connection_header_auth; OAuth sign-in happens on its MCP connections page).' })
   @Post()
   @RequirePermission(Permission.MCP_MANAGE)
   create(@Actor() actor: ActorContext, @Body({ schema: CreateConnectionInput }) body: CreateConnectionInput) {
@@ -104,7 +104,7 @@ export class McpConnectionsController {
     );
   }
 
-  @Capability({ exclude: 'starts a browser OAuth flow (a redirect Ask OCSO cannot follow); authorize the connection on its Connections page (/connections)' })
+  @Capability({ exclude: 'starts a browser OAuth flow (a redirect Ask OCSO cannot follow); authorize the connection on its MCP connections page (/connections?tab=mcp)' })
   @Post(':id/oauth/begin')
   @HttpCode(200)
   @RequirePermission(Permission.MCP_MANAGE)

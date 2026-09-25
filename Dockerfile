@@ -4,7 +4,7 @@
 #   worker   NestJS agent worker (health port 4100)  docker build --target worker  -t ocso-worker .
 #   migrate  one-shot schema migrations              docker build --target migrate -t ocso-migrate .
 #   web      Next.js standalone BFF (port 3000)      docker build --target web     -t ocso-web .
-#   website  public site, static export (port 8080)  docker build --target website -t ocso-website .
+#   website  public site, Next standalone (port 8080) docker build --target website -t ocso-website .
 #
 # Pipeline per app group: turbo prune --docker → pnpm install --frozen-lockfile →
 # turbo build → pnpm deploy --legacy --prod (server) / Next standalone output (web).
@@ -179,7 +179,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/login').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
 CMD ["node", "apps/web/server.js"]
 
-# ─── website: the public site, a static export served by Caddy ───────────────
+# ─── website: the public site, a Next.js standalone server ───────────────────
 # Last, so the classic builder never builds it for the other targets. Nothing
 # here depends on the product apps: turbo prune keeps only apps/website.
 FROM toolchain AS website-build
@@ -189,27 +189,35 @@ RUN turbo prune @ocso/website --docker --out-dir /prune
 WORKDIR /site
 RUN cp -r /prune/json/. ./ && pnpm install --frozen-lockfile \
  && cp -r /prune/full/. ./ && cp /repo/tsconfig.base.json ./
-# Canonical URLs, robots.txt and the sitemap are absolute: build for the domain it is served on.
+# Canonical URLs, robots.txt, the sitemap and llms.txt are absolute: build for the domain it is served on.
 ARG OCSO_SITE_URL=https://ocso.winsenlabs.dev
 ENV OCSO_SITE_URL=${OCSO_SITE_URL}
-# The package build also strips the React runtime and smoke-tests the export (apps/website/scripts).
 RUN turbo run build --filter=@ocso/website --env-mode=loose \
- && test -f apps/website/out/index.html
+ && test -f apps/website/.next/standalone/apps/website/server.js
 
-FROM caddy:2.11-alpine AS website
+FROM ${NODE_IMAGE} AS website
 ARG APP_VERSION=dev
+ARG OCSO_SITE_URL=https://ocso.winsenlabs.dev
+# Port 8080, as the Caddy site block for OCSO_WEBSITE_DOMAIN expects (infra/compose/Caddyfile.with-website).
+ENV NODE_ENV=production \
+    APP_VERSION=${APP_VERSION} \
+    OCSO_SITE_URL=${OCSO_SITE_URL} \
+    NEXT_TELEMETRY_DISABLED=1 \
+    HOSTNAME=0.0.0.0 \
+    PORT=8080
 LABEL org.opencontainers.image.source="https://github.com/winsenlabs/ocso" \
       org.opencontainers.image.version="${APP_VERSION}" \
       org.opencontainers.image.licenses="Apache-2.0"
-# Runs as an unprivileged user on :8080, so the binary needs no bind capability:
-# drop the file capability the image sets, which would otherwise make exec fail
-# under cap_drop: ALL. Caddy's state goes to /tmp (a tmpfs under Compose).
-ENV XDG_CONFIG_HOME=/tmp/caddy-config XDG_DATA_HOME=/tmp/caddy-data
-RUN setcap -r /usr/bin/caddy
-COPY infra/compose/website.Caddyfile /etc/caddy/Caddyfile
-COPY --from=website-build /site/apps/website/out /srv
-USER 65534:65534
+WORKDIR /app
+# Standalone output = server.js + traced node_modules; static assets and public/
+# are copied next to it. Root-owned; only the Next cache dir is writable (a
+# tmpfs under Compose, where the root filesystem is read-only).
+COPY --from=website-build /site/apps/website/.next/standalone ./
+COPY --from=website-build /site/apps/website/.next/static ./apps/website/.next/static
+COPY --from=website-build /site/apps/website/public ./apps/website/public
+RUN mkdir -p apps/website/.next/cache && chown node:node apps/website/.next/cache
+USER node
 EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD ["wget", "-qO-", "http://127.0.0.1:8080/healthz"]
-CMD ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:8080/api/healthz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+CMD ["node", "apps/website/server.js"]

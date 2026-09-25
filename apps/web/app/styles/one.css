@@ -1,4 +1,4 @@
-/* Winsen One — additions on top of Bridge styles.css */
+/* Layout additions on top of base.css */
 .topbar-btn{white-space:nowrap}
 @media (max-width:1180px){.main.with-rail > .rail{grid-column:1;grid-row:auto}.main.with-rail > section{grid-column:1}}
 

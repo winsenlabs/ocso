@@ -61,6 +61,25 @@ export type ChannelConfigValidator = (kind: string, settings: unknown, secrets: 
 /** Public paths of a channel (provider webhook, widget page), from the channel adapter registry. */
 export type ChannelPathResolver = (kind: string, publicKey: string) => { webhookPath: string | null; embedPath: string | null };
 
+/**
+ * A draft is inert (ingress refuses it, and activation validates the whole configuration), so it may be
+ * incomplete: problems about a setting or secret that was not given at all are set aside. A value that was
+ * given is always checked, so a draft never stores a malformed one. Anything else is returned as is.
+ */
+export function draftProblems(problems: readonly string[], settings: unknown, secrets: Readonly<Record<string, string>>, draft: boolean): string[] {
+  if (!draft) return [...problems];
+  const given = (record: unknown, key: string) => {
+    if (!record || typeof record !== 'object') return false;
+    const value = (record as Record<string, unknown>)[key];
+    return value !== undefined && value !== null && !(typeof value === 'string' && value.trim() === '');
+  };
+  return problems.filter((problem) => {
+    const m = /^(settings|secrets)\.([A-Za-z0-9_]+)(?:[.:\s]|$)/.exec(problem);
+    if (!m) return true;
+    return m[1] === 'settings' ? given(settings, m[2]!) : given(secrets, m[2]!);
+  });
+}
+
 export class ChannelService {
   constructor(
     private readonly db: Db,
@@ -96,12 +115,15 @@ export class ChannelService {
   }
 
   /**
-   * A new channel is always a DRAFT: inert (ingress refuses it) until its ACTIVATE proposal is approved. Its
-   * configuration is still checked on save (the provider's problems land on the form), and again at activation.
+   * A new channel is always a DRAFT: inert (ingress refuses it) until its ACTIVATE proposal is approved. Every
+   * value given is checked on save (the provider's problems land on the form); values not given yet may be
+   * missing (the admin creates the draft first to get its webhook URL), and activation checks everything.
    */
   async create(actor: ActorContext, input: ChannelInput): Promise<ChannelView> {
     assertCan(actor.principal!, Permission.CHANNELS_MANAGE);
-    const problems = this.validate(input.kind, input.settings, input.secrets);
+    // A draft may be saved before the provider's values exist (its webhook URL is needed to create them);
+    // one submitted for activation straight away must be complete.
+    const problems = draftProblems(this.validate(input.kind, input.settings, input.secrets), input.settings, input.secrets, input.status !== 'ACTIVE');
     if (problems.length) throw validation('invalid_channel_config', problems.join('; '));
     const id = uuidv7();
     const secretRefs = await this.storeSecrets(input.name, input.secrets);
@@ -141,7 +163,8 @@ export class ChannelService {
     const [existing] = await this.db.select().from(channels).where(eq(channels.id, id));
     if (!existing) throw notFound('channel', id);
     const merged = { ...(await this.resolveSecrets(existing)), ...(patch.secrets ?? {}) };
-    const problems = this.validate(existing.kind, patch.settings ?? existing.settings, merged);
+    const settings = patch.settings ?? existing.settings;
+    const problems = draftProblems(this.validate(existing.kind, settings, merged), settings, merged, existing.status === 'DRAFT');
     if (problems.length) throw validation('invalid_channel_config', problems.join('; '));
     const newRefs = patch.secrets ? await this.storeSecrets(patch.name ?? existing.name, patch.secrets) : {};
     let before: typeof existing;

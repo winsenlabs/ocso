@@ -3676,7 +3676,7 @@
         "inbox",
         "channels"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=channels"
     },
     {
       "name": "channels.create_message_template",
@@ -3957,7 +3957,7 @@
         "inbox",
         "channels"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=channels"
     },
     {
       "name": "channels.delete_message_template",
@@ -4040,7 +4040,7 @@
         "inbox",
         "channels"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=channels"
     },
     {
       "name": "channels.get_message_template",
@@ -4115,7 +4115,7 @@
         "kinds",
         "kind"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=channels"
     },
     {
       "name": "channels.list_channels",
@@ -4138,7 +4138,7 @@
         "inbox",
         "channels"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=channels"
     },
     {
       "name": "channels.list_message_templates",
@@ -4307,7 +4307,7 @@
         "inbox",
         "channels"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=channels"
     },
     {
       "name": "channels.update_channel",
@@ -4386,7 +4386,7 @@
         "inbox",
         "channels"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=channels"
     },
     {
       "name": "channels.update_message_template_draft",
@@ -7152,7 +7152,7 @@
         "connections",
         "approve"
       ],
-      "uiHref": "/connections"
+      "uiHref": "/connections?tab=mcp"
     },
     {
       "name": "mcp.check_connection_health",
@@ -7189,7 +7189,7 @@
         "connections",
         "health"
       ],
-      "uiHref": "/connections"
+      "uiHref": "/connections?tab=mcp"
     },
     {
       "name": "mcp.check_personal_connection_health",
@@ -7226,7 +7226,7 @@
         "tools",
         "health"
       ],
-      "uiHref": "/connections"
+      "uiHref": "/connections?tab=mcp"
     },
     {
       "name": "mcp.classify_connection_tools",
@@ -7315,7 +7315,7 @@
         "connections",
         "tool"
       ],
-      "uiHref": "/connections"
+      "uiHref": "/connections?tab=mcp"
     },
     {
       "name": "mcp.create_connection",
@@ -7327,7 +7327,7 @@
           "mcp.manage"
         ]
       },
-      "summary": "Register a shared MCP connection by URL as a draft (a header token is set with mcp.set_connection_header_auth; OAuth sign-in happens on its Connections page).",
+      "summary": "Register a shared MCP connection by URL as a draft (a header token is set with mcp.set_connection_header_auth; OAuth sign-in happens on its MCP connections page).",
       "risk": "HIGH_WRITE",
       "input": {
         "body": {
@@ -7375,7 +7375,7 @@
         "tools",
         "connections"
       ],
-      "uiHref": "/connections"
+      "uiHref": "/connections?tab=mcp"
     },
     {
       "name": "mcp.create_personal_connection",
@@ -7410,7 +7410,7 @@
         "integration",
         "tools"
       ],
-      "uiHref": "/connections"
+      "uiHref": "/connections?tab=mcp"
     },
     {
       "name": "mcp.delete_connection",
@@ -7448,7 +7448,7 @@
         "tools",
         "connections"
       ],
-      "uiHref": "/connections"
+      "uiHref": "/connections?tab=mcp"
     },
     {
       "name": "mcp.delete_personal_connection",
@@ -7484,7 +7484,7 @@
         "integration",
         "tools"
       ],
-      "uiHref": "/connections"
+      "uiHref": "/connections?tab=mcp"
     },
     {
       "name": "mcp.disable_connection",
@@ -7524,7 +7524,7 @@
         "connections",
         "disable"
       ],
-      "uiHref": "/connections"
+      "uiHref": "/connections?tab=mcp"
     },
     {
       "name": "mcp.discover_connection_tools",
@@ -7561,7 +7561,7 @@
         "connections",
         "discover"
       ],
-      "uiHref": "/connections"
+      "uiHref": "/connections?tab=mcp"
     },
     {
       "name": "mcp.discover_personal_connection_tools",
@@ -7598,7 +7598,7 @@
         "tools",
         "discover"
       ],
-      "uiHref": "/connections"
+      "uiHref": "/connections?tab=mcp"
     },
     {
       "name": "mcp.enable_connection",
@@ -7636,7 +7636,7 @@
         "connections",
         "enable"
       ],
-      "uiHref": "/connections"
+      "uiHref": "/connections?tab=mcp"
     },
     {
       "name": "mcp.get_connection",
@@ -7672,7 +7672,7 @@
         "tools",
         "connections"
       ],
-      "uiHref": "/connections"
+      "uiHref": "/connections?tab=mcp"
     },
     {
       "name": "mcp.get_connection_health_history",
@@ -7719,7 +7719,7 @@
         "connections",
         "health"
       ],
-      "uiHref": "/connections"
+      "uiHref": "/connections?tab=mcp"
     },
     {
       "name": "mcp.get_personal_connection",
@@ -7755,7 +7755,7 @@
         "integration",
         "tools"
       ],
-      "uiHref": "/connections"
+      "uiHref": "/connections?tab=mcp"
     },
     {
       "name": "mcp.list_connection_tools",
@@ -7804,7 +7804,7 @@
         "connections",
         "tool"
       ],
-      "uiHref": "/connections"
+      "uiHref": "/connections?tab=mcp"
     },
     {
       "name": "mcp.list_connections",
@@ -7826,7 +7826,7 @@
         "tools",
         "connections"
       ],
-      "uiHref": "/connections"
+      "uiHref": "/connections?tab=mcp"
     },
     {
       "name": "mcp.list_my_connections",
@@ -7849,7 +7849,7 @@
         "integration",
         "tools"
       ],
-      "uiHref": "/connections"
+      "uiHref": "/connections?tab=mcp"
     },
     {
       "name": "mcp.list_personal_connection_tools",
@@ -7886,7 +7886,7 @@
         "tools",
         "tool"
       ],
-      "uiHref": "/connections"
+      "uiHref": "/connections?tab=mcp"
     },
     {
       "name": "mcp.list_personal_templates",
@@ -7910,7 +7910,7 @@
         "templates",
         "template"
       ],
-      "uiHref": "/connections"
+      "uiHref": "/connections?tab=mcp"
     },
     {
       "name": "mcp.rediscover_connection_tools",
@@ -7947,7 +7947,7 @@
         "connections",
         "rediscover"
       ],
-      "uiHref": "/connections"
+      "uiHref": "/connections?tab=mcp"
     },
     {
       "name": "mcp.set_connection_header_auth",
@@ -8013,7 +8013,7 @@
         "tools",
         "connections"
       ],
-      "uiHref": "/connections"
+      "uiHref": "/connections?tab=mcp"
     },
     {
       "name": "models.activate_price",
@@ -8053,7 +8053,7 @@
         "pricing",
         "activate"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=providers"
     },
     {
       "name": "models.activate_profile",
@@ -8093,7 +8093,7 @@
         "profiles",
         "activate"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=providers"
     },
     {
       "name": "models.add_price_from_catalog",
@@ -8142,7 +8142,7 @@
         "from",
         "catalog"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=providers"
     },
     {
       "name": "models.create_price",
@@ -8233,7 +8233,7 @@
         "ai model",
         "pricing"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=providers"
     },
     {
       "name": "models.create_profile",
@@ -8417,7 +8417,7 @@
         "ai model",
         "profiles"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=providers"
     },
     {
       "name": "models.create_provider",
@@ -8518,7 +8518,7 @@
         "ai model",
         "providers"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=providers"
     },
     {
       "name": "models.delete_price",
@@ -8557,7 +8557,7 @@
         "ai model",
         "pricing"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=providers"
     },
     {
       "name": "models.delete_profile",
@@ -8596,7 +8596,7 @@
         "ai model",
         "profiles"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=providers"
     },
     {
       "name": "models.delete_provider",
@@ -8634,7 +8634,7 @@
         "ai model",
         "providers"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=providers"
     },
     {
       "name": "models.get_catalog_status",
@@ -8657,7 +8657,7 @@
         "provider",
         "ai model"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=providers"
     },
     {
       "name": "models.get_profile",
@@ -8692,7 +8692,7 @@
         "ai model",
         "profiles"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=providers"
     },
     {
       "name": "models.get_provider",
@@ -8728,7 +8728,7 @@
         "ai model",
         "providers"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=providers"
     },
     {
       "name": "models.list_missing_prices",
@@ -8754,7 +8754,7 @@
         "pricing",
         "missing"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=providers"
     },
     {
       "name": "models.list_prices",
@@ -8778,7 +8778,7 @@
         "provider",
         "ai model"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=providers"
     },
     {
       "name": "models.list_profiles",
@@ -8800,7 +8800,7 @@
         "ai model",
         "profiles"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=providers"
     },
     {
       "name": "models.list_provider_kinds",
@@ -8825,7 +8825,7 @@
         "kinds",
         "kind"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=providers"
     },
     {
       "name": "models.list_provider_models",
@@ -8871,7 +8871,7 @@
         "providers",
         "models"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=providers"
     },
     {
       "name": "models.list_providers",
@@ -8893,7 +8893,7 @@
         "ai model",
         "providers"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=providers"
     },
     {
       "name": "models.refresh_catalog",
@@ -8919,7 +8919,7 @@
         "ai model",
         "refresh"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=providers"
     },
     {
       "name": "models.test_provider",
@@ -8968,7 +8968,7 @@
         "ai model",
         "providers"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=providers"
     },
     {
       "name": "models.update_price",
@@ -9058,7 +9058,7 @@
         "ai model",
         "pricing"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=providers"
     },
     {
       "name": "models.update_profile",
@@ -9240,7 +9240,7 @@
         "ai model",
         "profiles"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=providers"
     },
     {
       "name": "models.update_provider",
@@ -9343,7 +9343,7 @@
         "ai model",
         "providers"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=providers"
     },
     {
       "name": "models.validate_profile",
@@ -9530,7 +9530,7 @@
         "profiles",
         "validate"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=providers"
     },
     {
       "name": "quality.create_correction",
@@ -12321,7 +12321,7 @@
         "keys",
         "secrets"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=secrets"
     },
     {
       "name": "security.list_signing_keys",
@@ -14440,7 +14440,7 @@
         "integration",
         "webhooks"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=webhooks"
     },
     {
       "name": "webhooks.list_deliveries",
@@ -14490,7 +14490,7 @@
         "webhooks",
         "deliveries"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=webhooks"
     },
     {
       "name": "webhooks.list_event_types",
@@ -14513,7 +14513,7 @@
         "types",
         "type"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=webhooks"
     },
     {
       "name": "webhooks.list_webhooks",
@@ -14534,7 +14534,7 @@
         "integration",
         "webhooks"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=webhooks"
     },
     {
       "name": "webhooks.retry_delivery",
@@ -14571,7 +14571,7 @@
         "integration",
         "deliveries"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=webhooks"
     },
     {
       "name": "webhooks.test_webhook",
@@ -14607,7 +14607,7 @@
         "integration",
         "webhooks"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=webhooks"
     },
     {
       "name": "webhooks.update_webhook",
@@ -14674,7 +14674,7 @@
         "integration",
         "webhooks"
       ],
-      "uiHref": "/settings"
+      "uiHref": "/connections?tab=webhooks"
     }
   ],
   "excluded": [
@@ -14732,6 +14732,11 @@
       "route": "GET /v1/auth/security",
       "handler": "AuthController.security",
       "reason": "auth, session, sign-in, MFA or setup"
+    },
+    {
+      "route": "GET /v1/channels/:id/setup-files/:key",
+      "handler": "ChannelsAdminController.setupFile",
+      "reason": "writes the raw response (download or stream)"
     },
     {
       "route": "GET /v1/exceptions/reports/:id/export",
@@ -14866,17 +14871,17 @@
     {
       "route": "POST /v1/mcp/connections/:id/oauth/begin",
       "handler": "McpConnectionsController.beginOAuth",
-      "reason": "starts a browser OAuth flow (a redirect Ask OCSO cannot follow); authorize the connection on its Connections page (/connections)"
+      "reason": "starts a browser OAuth flow (a redirect Ask OCSO cannot follow); authorize the connection on its MCP connections page (/connections?tab=mcp)"
     },
     {
       "route": "POST /v1/mcp/personal/:id/auth/header",
       "handler": "McpPersonalController.headerAuth",
-      "reason": "takes a credential (header token); set it on the Connections page"
+      "reason": "takes a credential (header token); set it on the MCP connections page (My connections)"
     },
     {
       "route": "POST /v1/mcp/personal/:id/oauth/begin",
       "handler": "McpPersonalController.beginOAuth",
-      "reason": "starts a browser OAuth flow; authorize connections on the Connections page"
+      "reason": "starts a browser OAuth flow; authorize connections on the MCP connections page (My connections)"
     },
     {
       "route": "POST /v1/settings/sso-providers",

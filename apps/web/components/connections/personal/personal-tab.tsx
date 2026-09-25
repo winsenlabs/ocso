@@ -39,7 +39,7 @@ export async function PersonalTab({ params }: { params: Params }) {
             key: 'name',
             header: 'Connection',
             cell: (c) => (
-              <Link className="cell-link" href={connectionsHref({ tab: 'mine', connection: c.id })} scroll={false}>
+              <Link className="cell-link" href={connectionsHref({ tab: 'mcp', view: 'mine', connection: c.id })} scroll={false}>
                 <CellTitle title={c.name} caption={c.description ?? undefined} />
               </Link>
             ),
@@ -82,7 +82,7 @@ export async function PersonalTab({ params }: { params: Params }) {
           {templates.length ? 'Servers an admin publishes later will appear here.' : 'A Tech admin publishes user-scoped MCP servers (for example your ticketing or calendar account); they will appear here.'}
         </EmptyState>
       )}
-      {open ? <PersonalConnectionPanel key={open.id} connection={open} tools={tools} closeHref={connectionsHref({ tab: 'mine' })} /> : null}
+      {open ? <PersonalConnectionPanel key={open.id} connection={open} tools={tools} closeHref={connectionsHref({ tab: 'mcp', view: 'mine' })} /> : null}
     </>
   );
 }

@@ -4,7 +4,8 @@ export { TEAMS_CLOUDS, type CloudEndpoints, type TeamsCloud } from './clouds.js'
 export { resolveTeamsConfig, TEAMS_SECRET_KEYS, teamsEndpoints, TeamsEndpoints, TeamsSettings, validateTeamsConfig, type ResolvedTeamsConfig, type TeamsSecrets } from './config.js';
 export { checkTeamsConnection } from './connection-check.js';
 export { BotConnectorClient, type ConnectorResult } from './connector.js';
-export { TEAMS_APP_MANIFEST, TEAMS_DESCRIPTOR, TEAMS_MARK, TEAMS_WEBHOOK_SEGMENT } from './descriptor.js';
+export { TEAMS_APP_MANIFEST, TEAMS_DESCRIPTOR, TEAMS_MANIFEST_VERSION, TEAMS_MARK, TEAMS_WEBHOOK_SEGMENT } from './descriptor.js';
+export { TEAMS_COLOR_ICON_PNG, TEAMS_OUTLINE_ICON_PNG } from './icons.js';
 export { mapConnectorFailure } from './errors.js';
 export { displayTeamsIdentity, TEAMS_IDENTITY, teamsUserIdentity } from './identity.js';
 export { choicePart as teamsChoicePart, messageText as teamsMessageText, parseTeamsActivity, TEAMS_CHANNEL_ID, TEAMS_CHOICE_REPLY_SCHEMA, teamsMessageId, type TeamsParseOptions } from './inbound.js';

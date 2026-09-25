@@ -104,7 +104,7 @@ export async function SystemOverview() {
             count={`${workers.healthy} healthy${starting ? ` · ${starting} starting` : ''} · max ${cfg.maxWorkers}`}
             actions={
               <Link className="btn tiny ghost" href="/system/workers">
-                Fleet &amp; scaling
+                Workers
               </Link>
             }
           />

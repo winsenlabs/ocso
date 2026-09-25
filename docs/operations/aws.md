@@ -285,7 +285,7 @@ stores only the ARN.
 
 ### Model providers on AWS
 
-Bedrock can authenticate with access keys or an API key (entered in Connections & models, stored in
+Bedrock can authenticate with access keys or an API key (entered under Integrations → Models, stored in
 Secrets Manager) or with the **task role** (provider auth mode `IAM_ROLE`). For the task role, list the
 model and inference-profile ARNs in `bedrock_model_arns`; Terraform then grants the api and worker roles
 `bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream` on exactly those ARNs. Other providers

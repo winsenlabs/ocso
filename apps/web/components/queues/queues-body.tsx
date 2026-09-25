@@ -89,13 +89,6 @@ export async function QueuesBody() {
       <PageHead
         title={title}
         sub={frontline ? 'Conversations waiting for a human in the queues you can work, and how each queue is routed.' : 'Routing mode, eligible teams, skills and languages, and the SLA clock per queue — with what is waiting right now.'}
-        actions={
-          hasPermission(session, Permission.SLA_MANAGE) ? (
-            <Link className="btn" href="/sla">
-              SLA policies
-            </Link>
-          ) : null
-        }
       />
       <Tiles>
         <Tile label="queues" value={formatNumber(queues.length)} />

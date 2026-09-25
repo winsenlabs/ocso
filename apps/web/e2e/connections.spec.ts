@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { ACCOUNTS } from './config';
 import { DEMO_PORT, DEMO_TOKEN, FAKE_KEY, USERS, approveAsLead, seedConnectionsStack, submitForApproval } from './connections-setup';
-import { login, logout, settled } from './helpers';
+import { login, logout, primaryNav, settled } from './helpers';
 
 /**
  * Connections & models (design/04) against the real API: providers (incl. the
@@ -92,7 +92,7 @@ test('Tech admin creates a profile with a fallback after the policy check, and s
   await login(page, ACCOUNTS.admin);
   await page.goto('/connections?tab=providers');
   await page.getByRole('link', { name: 'New model profile' }).click();
-  const dialog = page.getByRole('dialog', { name: 'New logical model profile' });
+  const dialog = page.getByRole('dialog', { name: 'New model profile' });
   await expect(dialog.getByRole('button', { name: 'Create profile' })).toBeDisabled();
   await dialog.getByLabel('Profile name').fill('support-primary');
   await dialog.getByLabel('Provider', { exact: true }).selectOption({ label: 'Scripted · Scripted model (development only) · ap-south-1' });
@@ -125,7 +125,7 @@ test('Tech admin creates a profile with a fallback after the policy check, and s
   await expect(saved.getByRole('listitem').filter({ hasText: 'gpt-5.5' })).toContainText('price added from models.dev');
   await saved.getByRole('button', { name: 'Done' }).click();
   await expect(saved).toBeHidden();
-  const profiles = page.getByRole('table', { name: 'Logical model profiles' });
+  const profiles = page.getByRole('table', { name: 'Model profiles' });
   await expect(profiles.getByRole('row', { name: /support-primary/ })).toContainText('OpenAI');
   await expect(profiles.getByRole('row', { name: /support-primary/ })).toContainText('prefix · 1h · explicit / key-based');
   await expect(card(page, 'OpenAI')).toContainText('fallback for support-primary');
@@ -256,34 +256,79 @@ test('connection details: health history, disable/enable with confirmation, OAut
   await expect(page.getByRole('status').filter({ hasText: 'Authorization complete for meridian-core.' })).toBeVisible();
 });
 
-test('Service member sees only My connections; Lead reads providers and MCP without admin controls', async ({ page }) => {
+test('Service member opens MCP connections on My connections; Lead reads providers and MCP without admin controls', async ({ page }) => {
   await login(page, USERS.exec);
+  // A section the Service member cannot open falls back to the one they can: their own MCP accounts.
   await page.goto('/connections?tab=providers');
   await settled(page);
-  const tabs = page.getByRole('tablist', { name: 'Connection types' });
-  await expect(tabs.getByRole('tab')).toHaveText(['My connections']);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('MCP connections');
+  // Only one view is permitted, so there is no tab strip at all.
+  await expect(page.getByRole('tablist')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'My connections' })).toBeVisible();
   for (const control of ['New model profile', 'Add MCP server', 'Add provider', 'Test', 'Edit']) {
     await expect(page.getByRole('button', { name: control, exact: true }).or(page.getByRole('link', { name: control, exact: true }))).toHaveCount(0);
   }
   await expect(page.getByText('Nothing published for personal use yet')).toBeVisible();
+  // The old "My connections" URL still works: a permanent redirect to its new home.
+  const moved = await page.request.get('/connections?tab=mine', { maxRedirects: 0 });
+  expect(moved.status()).toBe(308);
+  expect(moved.headers()['location']).toMatch(/\/connections\?tab=mcp&view=mine$/);
+  await page.goto('/connections?tab=mine');
+  await expect(page).toHaveURL(/\/connections\?tab=mcp&view=mine$/);
+  await expect(page.getByRole('heading', { name: 'My connections' })).toBeVisible();
   await logout(page);
 
   await login(page, USERS.lead);
   await page.goto('/connections?tab=providers');
   await settled(page);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Models');
+  // Sections are sidebar destinations: no tab strip across them.
+  await expect(page.getByRole('tablist')).toHaveCount(0);
   await expect(card(page, 'Scripted')).toContainText('connected');
   await expect(card(page, 'Scripted').getByRole('button', { name: 'Test' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'New model profile' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Add provider' })).toHaveCount(0);
   await expect(page.getByRole('table', { name: 'Model pricing' })).toHaveCount(0);
-  await page.getByRole('table', { name: 'Logical model profiles' }).getByRole('link', { name: /support-primary/ }).click();
+  await page.getByRole('table', { name: 'Model profiles' }).getByRole('link', { name: /support-primary/ }).click();
   const view = page.getByRole('dialog', { name: 'support-primary' });
   await expect(view).toContainText('read only');
   await expect(view.getByRole('table', { name: 'Targets and prompt caching' })).toContainText('key-based');
   await view.getByRole('button', { name: 'Close dialog' }).click();
 
   await page.goto('/connections?tab=mcp');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('MCP connections');
+  const views = page.getByRole('tablist', { name: 'MCP connection views' });
+  await expect(views.getByRole('tab')).toHaveText(['Shared servers', 'My connections']);
   await expect(page.getByRole('table', { name: 'MCP connections' })).toContainText('meridian-core');
+  await expect(page.getByRole('link', { name: 'Add MCP server' })).toHaveCount(0);
+  await views.getByRole('tab', { name: 'My connections' }).click();
+  await expect(page).toHaveURL(/view=mine/);
+  await expect(page.getByRole('heading', { name: 'My connections' })).toBeVisible();
+});
+
+test('Tech admin sees one primary action per Integrations section, in the page header only', async ({ page }) => {
+  await login(page, ACCOUNTS.admin);
+  const sections = [
+    { tab: 'providers', title: 'Models', action: 'Add provider' },
+    { tab: 'mcp', title: 'MCP connections', action: 'Add MCP server' },
+    { tab: 'channels', title: 'Channels', action: 'Add channel' },
+    { tab: 'secrets', title: 'Secrets', action: null },
+    { tab: 'webhooks', title: 'Webhooks', action: 'Add endpoint' },
+  ];
+  for (const s of sections) {
+    await page.goto(`/connections?tab=${s.tab}`);
+    await settled(page);
+    await expect(page.getByRole('heading', { level: 1 }), s.tab).toHaveText(s.title);
+    await expect(page.getByRole('tablist', { name: 'Connection types' })).toHaveCount(0);
+    for (const other of ['Add provider', 'Add MCP server', 'Add channel', 'Add endpoint', 'Start the flow']) {
+      await expect(page.getByRole('link', { name: other, exact: true }), `${s.tab}: ${other}`).toHaveCount(other === s.action ? 1 : 0);
+    }
+    if (s.action) await expect(page.locator('.page-head-actions').getByRole('link', { name: s.action })).toBeVisible();
+    await expect(primaryNav(page).getByRole('link', { name: s.title })).toHaveAttribute('aria-current', 'page');
+  }
+  // The personal view of MCP connections has no admin action.
+  await page.goto('/connections?tab=mcp&view=mine');
+  await expect(page.getByRole('tab', { name: 'My connections' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('link', { name: 'Add MCP server' })).toHaveCount(0);
 });
 

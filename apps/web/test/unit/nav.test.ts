@@ -10,18 +10,43 @@ const items = (role: Role) => navFor(role).flatMap((g) => g.items.map((i) => i.l
 describe('buildNav (design/OCSONav.dc.html, derived from permissions)', () => {
   it('gives Service member only "My work"', () => {
     expect(labels('SERVICE')).toEqual(['My work']);
-    expect(items('SERVICE')).toEqual(['Home', 'Search', 'Conversations', 'Pickup queue', 'Customers', 'Alerts', 'My connections', 'Settings']);
+    expect(items('SERVICE')).toEqual(['Home', 'Search', 'Conversations', 'Pickup queue', 'Customers', 'Alerts', 'MCP connections', 'Settings']);
+    // Personal accounts only: the entry opens MCP connections, not a separate "My connections" page.
+    expect(navFor('SERVICE').find((g) => g.key === 'bottom')?.items.find((i) => i.key === 'mcp')?.href).toBe('/connections?tab=mcp');
   });
 
-  it('gives Lead Operations, Quality and Governance', () => {
-    expect(labels('HEAD')).toEqual(['Operations', 'Quality', 'Governance']);
+  it('gives Head Operations, Quality, Governance and read-only Integrations', () => {
+    expect(labels('HEAD')).toEqual(['Operations', 'Quality', 'Governance', 'Integrations']);
     expect(items('HEAD')).toEqual([
       'Home', 'Search',
       'Conversations', 'Virtual agents', 'Queues', 'Routers', 'Customers', 'Message templates',
       'Analytics', 'Reviews', 'Prompt corrections', 'Escalation reasons',
       'Alerts', 'SLA policies', 'Team', 'Approvals', 'Exceptions',
-      'My connections', 'Settings',
+      'Models', 'MCP connections', 'Channels',
+      'Settings',
     ]);
+  });
+
+  it('gives Lead the same as Head without Exceptions', () => {
+    expect(labels('LEAD')).toEqual(['Operations', 'Quality', 'Governance', 'Integrations']);
+    expect(items('LEAD')).toEqual(items('HEAD').filter((i) => i !== 'Exceptions'));
+  });
+
+  it('gives Tech the full Integrations group and no separate My connections entry', () => {
+    expect(navFor('TECH').find((g) => g.key === 'integrations')?.items.map((i) => i.label)).toEqual([
+      'Models', 'MCP connections', 'Channels', 'Message templates', 'Secrets', 'Webhooks',
+    ]);
+    expect(navFor('TECH').find((g) => g.key === 'bottom')?.items.map((i) => i.label)).toEqual(['Settings']);
+  });
+
+  it('never lists a destination twice, for any role', () => {
+    for (const role of ['TECH', 'HEAD', 'LEAD', 'SERVICE'] as const) {
+      const hrefs = navFor(role).flatMap((g) => g.items.map((i) => i.href));
+      expect(new Set(hrefs).size, role).toBe(hrefs.length);
+      expect(items(role), role).not.toContain('My connections');
+    }
+    // Message templates sits in Operations for a Head, not again under Integrations.
+    expect(navFor('HEAD').find((g) => g.key === 'integrations')?.items.map((i) => i.key)).not.toContain('templates');
   });
 
   it('gives Tech admin Platform, Integrations and Oversight — no conversation content', () => {
@@ -68,8 +93,10 @@ describe('buildNav (design/OCSONav.dc.html, derived from permissions)', () => {
 describe('activeNavKey', () => {
   const admin = navFor('TECH');
 
-  it('highlights My connections for the personal tab', () => {
-    expect(activeNavKey(navFor('SERVICE'), '/connections', 'mine')).toBe('bottom:my-connections');
+  it('highlights MCP connections for both of its views', () => {
+    expect(activeNavKey(navFor('SERVICE'), '/connections', 'mcp')).toBe('bottom:mcp');
+    expect(activeNavKey(navFor('TECH'), '/connections', 'mcp')).toBe('integrations:mcp');
+    expect(activeNavKey(navFor('HEAD'), '/connections', 'mcp')).toBe('integrations:mcp');
   });
 
   it('prefers the longest matching path', () => {
@@ -80,7 +107,7 @@ describe('activeNavKey', () => {
 
   it('matches ?tab= on /connections, defaulting to providers', () => {
     expect(activeNavKey(admin, '/connections', null)).toBe('integrations:models');
-    expect(activeNavKey(admin, '/connections', 'mcp')).toBe('integrations:connections');
+    expect(activeNavKey(admin, '/connections', 'mcp')).toBe('integrations:mcp');
     expect(activeNavKey(admin, '/connections', 'webhooks')).toBe('integrations:webhooks');
   });
 
@@ -88,5 +115,6 @@ describe('activeNavKey', () => {
     expect(activeNavKey(admin, '/nowhere', null)).toBeNull();
     expect(areaLabel('/system/workers')).toBe('system control center');
     expect(areaLabel('/')).toBe('home');
+    expect(areaLabel('/connections')).toBe('integrations');
   });
 });

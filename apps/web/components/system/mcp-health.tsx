@@ -22,7 +22,7 @@ export function McpHealthTable({ data, manageHref }: { data: McpTelemetry; manag
         actions={
           manageHref ? (
             <Link className="btn tiny ghost" href={manageHref}>
-              Manage connections
+              MCP connections
             </Link>
           ) : null
         }
@@ -32,7 +32,7 @@ export function McpHealthTable({ data, manageHref }: { data: McpTelemetry; manag
         template="minmax(0,1.1fr) minmax(0,1.3fr) 92px 92px 66px 84px 110px"
         rows={rows}
         rowKey={(c) => c.connectionId}
-        empty={<EmptyState title="No MCP connection yet">Shared and user-scoped tool servers appear here with their health once added under Connections.</EmptyState>}
+        empty={<EmptyState title="No MCP connection yet">Shared and user-scoped tool servers appear here with their health once added under Integrations → MCP connections.</EmptyState>}
         columns={[
           {
             key: 'name',

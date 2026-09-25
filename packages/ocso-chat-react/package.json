@@ -1,7 +1,7 @@
 {
   "name": "@winsendotai/ocso-chat-react",
   "version": "0.1.0",
-  "description": "React and React Native hooks and components for OCSO web chat.",
+  "description": "React and React Native hooks and components for OCSO (Open Customer Success Orchestration) web chat.",
   "license": "Apache-2.0",
   "type": "module",
   "sideEffects": [

@@ -107,10 +107,13 @@ const NAV: readonly GroupDef[] = [
   {
     key: 'integrations',
     label: 'Integrations',
-    gate: [P.PROVIDERS_MANAGE, P.MCP_MANAGE, P.CHANNELS_MANAGE],
+    // Readers too: a Lead or Head opens Models, MCP connections and Channels read-only.
+    gate: [P.PROVIDERS_READ, P.MCP_READ, P.CHANNELS_READ, P.SECRETS_MANAGE, P.WEBHOOKS_MANAGE],
     items: [
+      // Each is its own destination with its own title (components/connections/connection-tab.tsx); no tab strip repeats them.
       { key: 'models', label: 'Models', href: '/connections?tab=providers', requires: P.PROVIDERS_READ },
-      { key: 'connections', label: 'Connections', href: '/connections?tab=mcp', requires: P.MCP_READ },
+      // Shared servers plus the user's own accounts ("My connections" view).
+      { key: 'mcp', label: 'MCP connections', href: '/connections?tab=mcp', requires: P.MCP_READ },
       { key: 'channels', label: 'Channels', href: '/connections?tab=channels', requires: P.CHANNELS_READ },
       { key: 'templates', label: 'Message templates', href: '/templates', requires: P.MESSAGE_TEMPLATES_MANAGE },
       { key: 'secrets', label: 'Secrets', href: '/connections?tab=secrets', requires: P.SECRETS_MANAGE },
@@ -134,23 +137,30 @@ const NAV: readonly GroupDef[] = [
   {
     key: 'bottom',
     items: [
-      // Personal MCP accounts (design/04 "My connections"); not in the OCSONav mockup, which predates user-scoped connections.
-      { key: 'my-connections', label: 'My connections', href: '/connections?tab=mine', requires: P.MCP_CONNECT_PERSONAL },
+      // Personal MCP accounts only (e.g. Service): MCP connections opens on its "My connections" view.
+      // Anyone who also reads shared servers already has this entry under Integrations.
+      { key: 'mcp', label: 'MCP connections', href: '/connections?tab=mcp', requires: P.MCP_CONNECT_PERSONAL },
       { key: 'settings', label: 'Settings', href: '/settings' },
     ],
   },
 ];
 
-/** The nav a user with these permissions sees; empty groups are dropped. */
+/**
+ * The nav a user with these permissions sees; empty groups are dropped. A
+ * destination appears once: when two groups both offer it (e.g. Message
+ * templates in Operations and Integrations), the first group keeps it.
+ */
 export function buildNav(permissions: ReadonlySet<Permission>): NavGroup[] {
   const has = (p: Permission) => permissions.has(p);
   const groups: NavGroup[] = [];
+  const seen = new Set<string>();
   for (const def of NAV) {
     if (def.gate && !def.gate.some(has)) continue;
     if (def.unless?.some(has)) continue;
     const items = def.items
-      .filter((item) => !item.requires || has(item.requires))
+      .filter((item) => (!item.requires || has(item.requires)) && !seen.has(item.key))
       .map(({ requires: _requires, ...item }) => item);
+    for (const item of items) seen.add(item.key);
     if (items.length === 0) continue;
     groups.push(def.label ? { key: def.key, label: def.label, items } : { key: def.key, items });
   }

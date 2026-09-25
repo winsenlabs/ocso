@@ -2,7 +2,7 @@
   "name": "ocso",
   "license": "Apache-2.0",
   "private": true,
-  "description": "OCSO \u2014 One Customer Success Orchestrator",
+  "description": "OCSO \u2014 Open Customer Success Orchestration",
   "type": "module",
   "packageManager": "pnpm@11.1.2",
   "engines": {

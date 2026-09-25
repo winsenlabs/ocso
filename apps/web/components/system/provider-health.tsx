@@ -34,14 +34,14 @@ export function ProviderHealthGrid({ providers, kinds, manageHref }: { providers
         actions={
           manageHref ? (
             <Link className="btn tiny ghost" href={manageHref}>
-              Manage providers
+              Models
             </Link>
           ) : null
         }
       />
       {providers.length === 0 ? (
         <div style={{ marginBottom: 14 }}>
-          <EmptyState title="No model provider configured">Add a provider under Connections &amp; models; its health and cache hit rate appear here.</EmptyState>
+          <EmptyState title="No model provider configured">Add a provider under Integrations → Models; its health and cache hit rate appear here.</EmptyState>
         </div>
       ) : (
         <div className="g g3" role="list" aria-label="Model providers" style={{ marginBottom: 14 }}>

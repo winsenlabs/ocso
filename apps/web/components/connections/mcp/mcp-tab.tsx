@@ -21,7 +21,7 @@ function attentionText(c: Connection): { title: string; body: string } {
   return { title: `${c.name}: ${c.tools.changed} tool${c.tools.changed === 1 ? '' : 's'} changed since approval`, body: 'Changed tools are withheld from agents until re-approved.' };
 }
 
-/** MCP connections tab: attention banners, the connections table, the add-server flow and the per-connection views. */
+/** MCP connections, shared servers view: attention banners, the connections table, the add-server flow and the per-connection views. */
 export async function McpTab({ session, params }: { session: Session; params: Params }) {
   const canManage = hasPermission(session, Permission.MCP_MANAGE);
   const canAgents = hasPermission(session, Permission.AGENTS_READ);
@@ -68,23 +68,17 @@ export async function McpTab({ session, params }: { session: Session; params: Pa
         );
       })}
       <SecHead
-        title="MCP connections"
+        title="Shared servers"
         count={`${connections.length} server${connections.length === 1 ? '' : 's'} · ${toolCount} tools`}
-        actions={
-          canManage ? (
-            <Link className="btn tiny accent" href={connectionsHref({ tab: 'mcp', dialog: 'mcp-new' })} scroll={false}>
-              Add MCP server
-            </Link>
-          ) : null
-        }
+        desc="used by virtual agents and published for personal use"
       />
       <ConnectionsTable connections={connections} canManage={canManage} />
-      <SecHead title="How adding a server works" desc="no code, no restart — discovery and consent are the whole job" style={{ marginTop: 18 }} />
-      <FlowMap />
-      {canManage ? (
-        <Link className="btn accent" href={connectionsHref({ tab: 'mcp', dialog: 'mcp-new' })} scroll={false}>
-          Start the flow
-        </Link>
+      {/* The explainer helps before the first server; "Add MCP server" is the page header action, never repeated here. */}
+      {connections.length === 0 ? (
+        <>
+          <SecHead title="How adding a server works" desc="no code, no restart — discovery and consent are the whole job" style={{ marginTop: 18 }} />
+          <FlowMap />
+        </>
       ) : null}
       {openId && !open ? (
         <AlertBanner tone="error" title="Connection not found.">

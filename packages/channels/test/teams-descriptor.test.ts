@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { allowedTeamsServiceUrl, ChannelMediaError, ChannelRegistry, createMsTeamsAdapter, setupFileProblems, TEAMS_CLOUDS } from '../src/index.js';
+import { allowedTeamsServiceUrl, ChannelMediaError, ChannelRegistry, createMsTeamsAdapter, renderSetupFile, setupFileProblems, setupGuideProblems, TEAMS_CLOUDS, TEAMS_MANIFEST_VERSION } from '../src/index.js';
+
+/** Width and height from a PNG's IHDR chunk. */
+function pngSize(data: Uint8Array): { width: number; height: number } {
+  expect([...data.slice(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  return { width: view.getUint32(16), height: view.getUint32(20) };
+}
 import { APP_ID, APP_PASSWORD, mtConfig, TENANT, USER_AAD } from './helpers/teams.js';
 
 const adapter = createMsTeamsAdapter();
@@ -22,15 +29,50 @@ describe('Teams descriptor', () => {
     expect(descriptor.secrets.map((s) => [s.key, s.required])).toEqual([['appPassword', true]]);
   });
 
-  it('ships a Teams app manifest whose app and bot id are the Microsoft App ID', () => {
+  it('ships a Teams app package: manifest (current schema) whose app and bot id are the Microsoft App ID, and both icons', () => {
     expect(setupFileProblems(descriptor.setupFiles)).toEqual([]);
     const [file] = descriptor.setupFiles ?? [];
-    expect(file).toMatchObject({ key: 'teams-app-manifest', filename: 'manifest.json', contentType: 'application/json' });
-    expect(file?.template).not.toContain('appPassword');
-    const manifest = JSON.parse((file?.template ?? '').replaceAll('{{settings.appId}}', APP_ID)) as { id: string; manifestVersion: string; bots: Array<{ botId: string; scopes: string[] }> };
-    expect(manifest.id).toBe(APP_ID);
-    expect(manifest.manifestVersion).toBe('1.17');
+    expect(file).toMatchObject({ key: 'teams-app-package', filename: 'ocso-teams-app.zip', contentType: 'application/zip' });
+    expect(file?.entries?.map((e) => [e.path, e.contentType])).toEqual([
+      ['manifest.json', 'application/json'],
+      ['color.png', 'image/png'],
+      ['outline.png', 'image/png'],
+    ]);
+    const rendered = renderSetupFile(file!, { webhookUrl: 'https://ocso.example.com/channels/ms-teams/k/webhook', settings: { appId: APP_ID } });
+    expect(rendered.missing).toEqual([]);
+    const byPath = new Map(rendered.files.map((f) => [f.path, f.data]));
+    const manifest = JSON.parse(new TextDecoder().decode(byPath.get('manifest.json'))) as Record<string, unknown> & { bots: unknown[]; developer: Record<string, string> };
+    expect(manifest['$schema']).toBe(`https://developer.microsoft.com/json-schemas/teams/v${TEAMS_MANIFEST_VERSION}/MicrosoftTeams.schema.json`);
+    expect(manifest['manifestVersion']).toBe(TEAMS_MANIFEST_VERSION);
+    expect(manifest['id']).toBe(APP_ID);
     expect(manifest.bots).toEqual([{ botId: APP_ID, scopes: ['personal', 'team', 'groupChat'], supportsFiles: false, isNotificationOnly: false }]);
+    expect(manifest['validDomains']).toEqual(['ocso.example.com']);
+    expect(manifest.developer['websiteUrl']).toBe('https://ocso.example.com');
+    expect(manifest['icons']).toEqual({ color: 'color.png', outline: 'outline.png' });
+    expect(JSON.stringify(file)).not.toMatch(/appPassword|secrets\./);
+    expect(pngSize(byPath.get('color.png')!)).toEqual({ width: 192, height: 192 });
+    expect(pngSize(byPath.get('outline.png')!)).toEqual({ width: 32, height: 32 });
+    // Without a saved App ID the package is not ready.
+    expect(renderSetupFile(file!, { webhookUrl: 'https://x.example/w', settings: {} }).missing).toEqual(['settings.appId']);
+  });
+
+  it('guides the Azure Bot setup step by step, with the messaging endpoint to copy and troubleshooting for the check', () => {
+    const guide = descriptor.setupGuide ?? [];
+    expect(setupGuideProblems(descriptor)).toEqual([]);
+    expect(guide.map((s) => s.title)).toEqual([
+      'Create an Azure Bot',
+      'Record the Microsoft App ID and the Tenant ID',
+      'Create a client secret',
+      'Set the messaging endpoint',
+      'Add the Microsoft Teams channel',
+      'Paste the values into OCSO and save',
+      'Download the Teams app package and upload it',
+      'Test',
+    ]);
+    expect(guide[3]?.values).toEqual([{ label: 'Messaging endpoint', value: '{{webhookUrl}}' }]);
+    expect(guide.filter((s) => s.form)).toHaveLength(1);
+    expect(guide[6]?.files).toEqual(['teams-app-package']);
+    expect(descriptor.troubleshooting?.map((t) => t.id)).toEqual(['unauthorized', 'secret-invalid', 'secret-expired', 'custom-apps-blocked', 'no-reply-in-channel', 'endpoint-not-https']);
   });
 
   it('shows identities by the last characters of the Entra object id', () => {
