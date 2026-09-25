@@ -32,6 +32,25 @@ for (const img of text.match(/<img\b[^>]*>/g) ?? []) {
 need(!/npm (?:install|i) @winsendotai/.test(html), 'the SDKs are not on npm yet: no install commands');
 need(html.includes('Coming to npm'), 'the SDK cards must say "Coming to npm"');
 need(!existsSync(join(root, 'public/shots/ask-ocso.webp')), 'ask-ocso.webp (an edited capture) must not ship');
+need(!existsSync(join(root, 'public/shots/webchat.webp')), 'webchat.webp (scripted-model tool output in a reply) must not ship');
+need(text.includes('Screens from OCSO running with demo data.'), 'the showcase note "Screens from OCSO running with demo data." is missing');
+need(/Today customer success is scattered across channels, tools and teams, with AI bolted on at the edges\./.test(text), 'the hero lede\'s first sentence changed');
+
+// Product screenshots: every file in public/shots is used, every <img> of one has real alt text, sizes, and
+// lazy loading (they are all below the fold).
+const shotFiles = readdirSync(join(root, 'public/shots')).filter((f) => f.endsWith('.webp'));
+const shotImgs = (text.match(/<img\b[^>]*src="\/shots\/[^"]+"[^>]*>/g) ?? []);
+need(shotFiles.length >= 15, `expected at least 15 product screenshots in public/shots (found ${shotFiles.length})`);
+for (const f of shotFiles) need(text.includes(`/shots/${f}`), `public/shots/${f} is not used on the page`);
+for (const img of shotImgs) {
+  need(/\balt="[^"]{60,}"/.test(img), `screenshot alt text is too short to describe it: ${img.slice(0, 100)}`);
+  need(/\bwidth="\d+"/.test(img) && /\bheight="\d+"/.test(img), `screenshot without width and height: ${img.slice(0, 100)}`);
+  need(/\bloading="lazy"/.test(img), `screenshot below the fold must be lazy-loaded: ${img.slice(0, 100)}`);
+}
+for (const f of shotFiles) {
+  const kb = readFileSync(join(root, 'public/shots', f)).length / 1024;
+  need(kb <= 200, `public/shots/${f} is ${Math.round(kb)} KB: keep screenshots under 200 KB`);
+}
 
 // Every form field is a column of site_demo_requests, and appears in exactly one step.
 const { demoForm, allFields } = await import(join(root, 'content/forms.ts'));
@@ -48,4 +67,4 @@ if (problems.length) {
   console.error(`check-site: ${problems.length} problem(s)\n${problems.map((p) => `  - ${p}`).join('\n')}`);
   process.exit(1);
 }
-console.log(`check-site: ok (one h1, two calls to action, alt text, ${names.length} form fields match the D1 table)`);
+console.log(`check-site: ok (one h1, two calls to action, ${shotFiles.length} screenshots used with alt text, ${names.length} form fields match the D1 table)`);

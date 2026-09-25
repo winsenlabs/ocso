@@ -11,7 +11,7 @@ export function ProductShot({ shot, eager = false, className = '' }: { shot: Sho
         <span className="size-2.5 rounded-full bg-fg/15" />
         <span className="ml-3 truncate rounded-md bg-fg/[0.06] px-3 py-0.5 font-mono text-[11px] text-fg/45">ocso · {shot.path}</span>
       </div>
-      <img src={shot.src} alt={shot.alt} width={2400} height={1500} loading={eager ? 'eager' : 'lazy'} decoding="async" className="block h-auto w-full" />
+      <img src={shot.src} alt={shot.alt} width={shot.width} height={shot.height} loading={eager ? 'eager' : 'lazy'} decoding="async" className="block h-auto w-full" />
     </figure>
   );
 }

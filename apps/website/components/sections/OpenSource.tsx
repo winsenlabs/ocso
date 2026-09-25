@@ -1,5 +1,7 @@
 import { REPO_URL, repo } from '@/content/links';
+import { SHOTS } from '@/content/shots';
 import { ViewOnGitHub } from '../Ctas';
+import { ProductShot } from '../ProductShot';
 import { Heading } from '../Heading';
 
 const KITS = [
@@ -39,6 +41,17 @@ export function OpenSource() {
               Read the guide <span className="inline-block transition group-hover:translate-x-1">→</span>
             </p>
           </a>
+        ))}
+      </div>
+
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        {[SHOTS.models, SHOTS.mcp].map((shot) => (
+          <figure key={shot.src}>
+            <ProductShot shot={shot} />
+            <figcaption className="mt-3 text-sm text-fg/55">
+              <span className="font-medium text-fg/80">{shot.caption}.</span> {shot.body}
+            </figcaption>
+          </figure>
         ))}
       </div>
 

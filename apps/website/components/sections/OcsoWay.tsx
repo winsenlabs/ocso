@@ -1,5 +1,7 @@
 import { Heading } from '../Heading';
+import { wayGallery } from '@/content/shots';
 import { ShotGallery } from '../ShotGallery';
+import { ViewShowcase } from '../ViewShowcase';
 import { AskOcso } from './AskOcso';
 
 // The example path is the Meridian Bank demo's (a fictional bank): web chat → router → Cards & EMI → Maya.
@@ -65,12 +67,15 @@ export function OcsoWay() {
       </div>
 
       <div className="mt-16">
-        <ShotGallery />
+        <ShotGallery shots={wayGallery} />
       </div>
 
       <div className="mt-24">
         <Heading title="Built for everyone in customer success." lede="Four role presets, checked in code, with per-user grants on top. Each team sees what it owns." />
-        <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-12">
+          <ViewShowcase />
+        </div>
+        <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {TEAMS.map((t) => (
             <div key={t.role} className="flex flex-col rounded-3xl border border-fg/10 p-7 transition hover:border-accent/50 hover:bg-accent/[0.06]">
               <p className="font-mono text-xs uppercase tracking-[0.18em] text-accent">{t.role}</p>

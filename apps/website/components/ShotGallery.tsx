@@ -3,11 +3,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { shots } from '@/content/shots';
+import type { Shot } from '@/content/shots';
 
 const num = (i: number) => String(i + 1).padStart(2, '0');
 
-function Caption({ i, large = false }: { i: number; large?: boolean }) {
+function Caption({ shots, i, large = false }: { shots: Shot[]; i: number; large?: boolean }) {
   const s = shots[i]!;
   return (
     <div>
@@ -16,15 +16,17 @@ function Caption({ i, large = false }: { i: number; large?: boolean }) {
       </p>
       <p className={`mt-2 font-medium text-fg ${large ? 'text-2xl' : 'text-lg'}`}>{s.title}</p>
       <p className="mt-2 text-[15px] leading-relaxed text-fg/65">{s.body}</p>
-      <p className="mt-4 border-t border-fg/10 pt-4 text-sm text-fg/60">
-        <span className="font-medium text-fg/80">Catches:</span> {s.catches}
-      </p>
+      {s.catches && (
+        <p className="mt-4 border-t border-fg/10 pt-4 text-sm text-fg/60">
+          <span className="font-medium text-fg/80">Catches:</span> {s.catches}
+        </p>
+      )}
     </div>
   );
 }
 
 /** The real product screens: a card each, and a larger view with next and previous. */
-export function ShotGallery() {
+export function ShotGallery({ shots }: { shots: Shot[] }) {
   const [open, setOpen] = useState<number | null>(null);
   const opener = useRef<HTMLElement | null>(null);
   const closeBtn = useRef<HTMLButtonElement>(null);
@@ -33,7 +35,7 @@ export function ShotGallery() {
     setOpen(null);
     opener.current?.focus();
   }, []);
-  const step = useCallback((d: number) => setOpen((o) => (o === null ? o : (o + d + shots.length) % shots.length)), []);
+  const step = useCallback((d: number) => setOpen((o) => (o === null ? o : (o + d + shots.length) % shots.length)), [shots.length]);
 
   useEffect(() => {
     if (open === null) return;
@@ -55,7 +57,7 @@ export function ShotGallery() {
   const current = open === null ? null : shots[open]!;
   return (
     <>
-      <div className="no-scrollbar -mx-6 flex snap-x snap-mandatory gap-5 overflow-x-auto px-6 pb-4 md:mx-0 md:grid md:grid-cols-3 md:gap-5 md:overflow-visible md:px-0 md:pb-0">
+      <div className="no-scrollbar -mx-6 flex snap-x snap-mandatory gap-5 overflow-x-auto px-6 pb-4 md:mx-0 md:grid md:grid-cols-3 md:gap-x-5 md:gap-y-10 md:overflow-visible md:px-0 md:pb-0">
         {shots.map((s, i) => (
           <article key={s.src} className="group/card flex w-[85%] shrink-0 snap-center flex-col gap-3 md:w-auto">
             <button
@@ -67,13 +69,13 @@ export function ShotGallery() {
               aria-label={`Open the ${s.caption.toLowerCase()} screen`}
               className="group relative block aspect-[16/10] overflow-hidden rounded-xl border border-fg/12 bg-surface transition hover:border-accent/60 focus-visible:border-accent"
             >
-              <img src={s.src} alt={s.alt} width={2400} height={1500} decoding="async" className="block h-full w-full object-cover object-left-top transition duration-500 group-hover:scale-[1.02]" />
+              <img src={s.src} alt={s.alt} width={s.width} height={s.height} loading="lazy" decoding="async" className="block h-full w-full object-cover object-left-top transition duration-500 group-hover:scale-[1.02]" />
               <span className="absolute bottom-3 right-3 rounded-full border border-fg/15 bg-bg/85 px-3 py-1 text-xs text-fg/80 opacity-0 backdrop-blur transition group-hover:opacity-100 group-focus-visible:opacity-100">
                 Expand ↗
               </span>
             </button>
             <div className="flex-1 rounded-xl border border-fg/10 bg-fg/[0.02] px-6 py-7 transition group-hover/card:border-fg/20">
-              <Caption i={i} />
+              <Caption shots={shots} i={i} />
             </div>
           </article>
         ))}
@@ -91,7 +93,7 @@ export function ShotGallery() {
               className="flex h-full flex-col gap-3 overflow-y-auto p-3 lg:flex-row lg:items-stretch lg:overflow-hidden"
             >
               <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center">
-                <img src={current.src} alt={current.alt} width={2400} height={1500} className="block h-auto max-h-full w-auto max-w-full rounded-2xl border border-white/10 shadow-[0_40px_120px_-30px_rgba(61,93,207,0.5)]" />
+                <img src={current.src} alt={current.alt} width={current.width} height={current.height} className="block h-auto max-h-full w-auto max-w-full rounded-2xl border border-white/10 shadow-[0_40px_120px_-30px_rgba(61,93,207,0.5)]" />
               </div>
               <aside className="flex shrink-0 flex-col rounded-2xl border border-fg/10 bg-surface p-7 lg:w-72">
                 <div className="flex items-center justify-between text-sm text-fg/55">
@@ -103,7 +105,7 @@ export function ShotGallery() {
                   </button>
                 </div>
                 <div className="mt-8 flex-1">
-                  <Caption i={open} large />
+                  <Caption shots={shots} i={open} large />
                 </div>
                 <div className="mt-8 flex gap-2">
                   <button type="button" onClick={() => step(-1)} className="flex-1 whitespace-nowrap rounded-full border border-fg/20 px-3 py-2.5 text-sm text-fg hover:bg-fg/10">
