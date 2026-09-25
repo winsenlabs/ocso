@@ -5,7 +5,7 @@ import { conversations } from './conversations.js';
 import { users } from './identity.js';
 import { queues } from './routing.js';
 
-/** Why/when human intervention was requested and how it progressed (docs/03 Handoff). */
+/** Why/when human intervention was requested and how it progressed (docs/archive/specs/03 Handoff). */
 export const handoffs = pgTable(
   'handoffs',
   {
@@ -46,7 +46,7 @@ export const handoffs = pgTable(
   ],
 );
 
-/** History of ownership transitions (docs/03 Assignment). */
+/** History of ownership transitions (docs/archive/specs/03 Assignment). */
 export const assignments = pgTable(
   'assignments',
   {
@@ -71,7 +71,7 @@ export const assignments = pgTable(
   ],
 );
 
-/** One agent execution for a conversation (docs/04 §3). */
+/** One agent execution for a conversation (docs/archive/specs/04 §3). */
 export const turns = pgTable(
   'turns',
   {

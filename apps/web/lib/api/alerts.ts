@@ -4,7 +4,7 @@ import { ObjectApprovalStateSchema, ProposalRefSchema, ProposedSchema } from '@/
 import { api } from './client';
 
 /**
- * Alerts (docs/11 §6–7; apps/api/src/modules/alerts). A user sees an alert only
+ * Alerts (docs/archive/specs/11 §6–7; apps/api/src/modules/alerts). A user sees an alert only
  * when their role is in its audience AND they may read its kind — the API
  * scopes every list, so the UI never filters for security.
  */

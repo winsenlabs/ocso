@@ -11,7 +11,7 @@ export interface CatalogEntry {
   grant: AgentToolGrant | null;
   /** Name on the provider (the MCP server's name; the model-facing name for first-party tools). */
   serverName: string;
-  /** Trusted connection: calls carry short-lived customer identity claims (docs/08 §4). */
+  /** Trusted connection: calls carry short-lived customer identity claims (docs/archive/specs/08 §4). */
   sendCustomerClaims: boolean;
   /** The connection receives the customer's verified user token (web chat tool identity passthrough). */
   forwardUserToken: boolean;
@@ -53,7 +53,7 @@ function firstPartyEntry(tool: FirstPartyTool, agentId: string): CatalogEntry {
 }
 
 /**
- * Effective tools for a virtual agent (docs/08 §3): first-party tools (the
+ * Effective tools for a virtual agent (docs/archive/specs/08 §3): first-party tools (the
  * built-ins unless the registry's list is passed) plus approved, enabled
  * tools on usable SHARED connections that the connection allows for this
  * agent AND the Lead granted to this agent. Personal (USER) connections

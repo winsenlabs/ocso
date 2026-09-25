@@ -37,7 +37,7 @@ function verifiesWith(token: string, keys: PublicJwk[]): boolean {
   return verify('sha256', Buffer.from(signingInput), { key, dsaEncoding: 'ieee-p1363' }, signature);
 }
 
-describe('customer identity claims (docs/08 §4, E5.6)', () => {
+describe('customer identity claims (docs/archive/specs/08 §4, E5.6)', () => {
   it('issues a minimal, short-lived ES256 JWT verifiable through the JWKS', async () => {
     const token = await issuer().issue(input);
     const { header, payload } = decode(token);

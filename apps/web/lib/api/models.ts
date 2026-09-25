@@ -4,7 +4,7 @@ import { ObjectApprovalStateSchema, ProposedSchema } from '@/components/approval
 import { api } from './client';
 
 /**
- * Model providers, logical model profiles and pricing (docs/06, ADR-006).
+ * Model providers, logical model profiles and pricing (docs/archive/specs/06, ADR-006).
  * Shapes mirror packages/application/src/models/views.ts. Provider responses
  * carry credential NAMES and secret references only, never values. Kinds are
  * open (the API's provider registry): labels, marks and caching wording come

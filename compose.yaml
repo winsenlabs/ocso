@@ -1,5 +1,5 @@
-# OCSO — single-host deployment with Docker Compose (docs/13 §2,
-# docs/operations/compose.md).
+# OCSO — single-host deployment with Docker Compose (docs/archive/specs/13 §2,
+# docs/guides/deploy/docker-compose.md).
 #
 #   docker compose up -d                  # keygen → postgres + audit-db → migrate → api/worker → web
 #   open http://localhost:3000            # first run: /setup with the token from `docker compose logs api`
@@ -115,7 +115,7 @@ x-server-env: &server-env
   OCSO_ENABLE_DEV_PROVIDERS: ${OCSO_ENABLE_DEV_PROVIDERS:-${OCSO_DEMO_SEED:-false}}
   OCSO_ALLOW_DEV_PROVIDERS_IN_PRODUCTION: ${OCSO_ALLOW_DEV_PROVIDERS_IN_PRODUCTION:-${OCSO_DEMO_SEED:-false}}
   # Transactional email: invites, password resets, sign-in codes, alert emails
-  # (docs/operations/compose.md §9). Until EMAIL_DRIVER is resend or smtp, email
+  # (docs/guides/email.md). Until EMAIL_DRIVER is resend or smtp, email
   # only reaches the api/worker log (a trial starts without it); Settings → Email
   # and the logs warn that invites and resets are not delivered. Set
   # EMAIL_ALLOW_LOG_IN_PRODUCTION=false to make missing email a start-up error. Keys never go in this file: set
@@ -218,7 +218,7 @@ services:
     restart: unless-stopped
     logging: *logging
 
-  # ── one-shot: explicit migration step (docs/13 §5) ───────────────────────────
+  # ── one-shot: explicit migration step (docs/archive/specs/13 §5) ───────────────────────────
   # Also provisions the audit store (packages/audit-store audit-migrate): its schema, the
   # writer and reader roles and the minimum retention, with owner credentials only this step
   # holds (secrets subpath audit-migrate).
@@ -286,9 +286,9 @@ services:
       OCSO_SETUP_TOKEN: ${OCSO_SETUP_TOKEN:-}
       OCSO_SETUP_TOKEN_FILE: /run/secrets/ocso/setup_token
       TRUST_PROXY: "true"
-      # Public web chat rate limits, e.g. session=120 when many visitors share one office address (docs/operations/compose.md §10a).
+      # Public web chat rate limits, e.g. session=120 when many visitors share one office address (docs/reference/configuration.md).
       OCSO_WEBCHAT_RATE_LIMITS: ${OCSO_WEBCHAT_RATE_LIMITS:-}
-      # Authentication (Better Auth, ADR-025; docs/operations/compose.md §2). The secret
+      # Authentication (Better Auth, ADR-025; docs/guides/deploy/docker-compose.md). The secret
       # comes from keygen; a non-empty BETTER_AUTH_SECRET wins. The API sets the
       # session cookie, so its Secure flag is configured here.
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
@@ -369,7 +369,7 @@ services:
       timeout: 5s
       retries: 6
       start_period: 30s
-    # Time to finish or checkpoint in-flight turns and release leases (docs/10 §9).
+    # Time to finish or checkpoint in-flight turns and release leases (docs/archive/specs/10 §9).
     stop_grace_period: 90s
     restart: unless-stopped
 

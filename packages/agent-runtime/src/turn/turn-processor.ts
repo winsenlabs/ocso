@@ -36,7 +36,7 @@ const MAX_DRAIN_ITERATIONS = 8;
 type RunOutcome = 'processed' | 'nothing' | 'skipped';
 
 /**
- * `conversation.turn` handler (docs/04 §3, docs/10 §2–3). Holds the lease for
+ * `conversation.turn` handler (docs/archive/specs/04 §3, docs/archive/specs/10 §2–3). Holds the lease for
  * the whole turn, drains all unanswered customer messages, and never writes a
  * customer-visible message without fencing + a fresh control-state check.
  */

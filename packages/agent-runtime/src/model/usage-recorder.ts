@@ -15,7 +15,7 @@ export interface UsageContext {
 
 type PricingRow = typeof modelPricing.$inferSelect;
 
-/** Writes one normalized usage event per model request (docs/05 §3) plus OTel metrics. */
+/** Writes one normalized usage event per model request (docs/archive/specs/05 §3) plus OTel metrics. */
 export class UsageRecorder {
   private pricing: { rows: PricingRow[]; loadedAt: number } | null = null;
 

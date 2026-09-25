@@ -1,7 +1,7 @@
 import type { ChannelRuntimeConfig } from './types.js';
 
 /**
- * The public widget protocol of an `embeddable` kind (docs/07 §4). OCSO serves
+ * The public widget protocol of an `embeddable` kind (docs/archive/specs/07 §4). OCSO serves
  * the widget (`/ocso-webchat.js`, `/chat/<publicKey>`) and its API
  * (`/public/webchat/<publicKey>/*`: origins, uploads, history, SSE stream);
  * the adapter owns what is kind-specific — settings, visitor tokens and the

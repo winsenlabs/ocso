@@ -2,7 +2,7 @@ import type { HistoryEntry, CustomerContext, SummaryContext } from '@ocso/prompt
 import type { AgentToolCatalog } from '../tools/catalog.js';
 
 /**
- * Derived, never authoritative (docs/05 §4). Each part records the version it
+ * Derived, never authoritative (docs/archive/specs/05 §4). Each part records the version it
  * was built from; validation compares against current PostgreSQL state and
  * cache generations before every use.
  */

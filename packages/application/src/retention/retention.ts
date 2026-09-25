@@ -22,7 +22,7 @@ export interface BlobDeleter {
 const daysAgo = (now: Date, days: number) => new Date(now.getTime() - days * 24 * 3600 * 1000);
 
 /**
- * Applies the deployment's retention policy (docs/15 §8). Idempotent and
+ * Applies the deployment's retention policy (docs/archive/specs/15 §8). Idempotent and
  * batch-bounded; safe to run on any schedule. Blob deletes happen after the
  * owning rows are updated so a failed delete never loses the reference.
  *

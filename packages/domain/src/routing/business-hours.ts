@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Agent business hours (docs/01 §4, docs/09 §3). The AI answers 24×7;
+ * Agent business hours (docs/archive/specs/01 §4, docs/archive/specs/09 §3). The AI answers 24×7;
  * `humanHours` only says when people are available to take handoffs.
  * An empty `humanHours` means humans are available 24×7.
  *

@@ -8,7 +8,7 @@ import { AgentPatch, AgentService, autoAssignUnclaimed, expireOffers, requestHan
 import { createTeam } from './support/ownership.js';
 
 /**
- * Agent business hours at runtime (docs/01 §4, docs/09 §3): the AI answers
+ * Agent business hours at runtime (docs/archive/specs/01 §4, docs/archive/specs/09 §3): the AI answers
  * 24×7, humans only inside `humanHours`. Out of hours a handoff still routes
  * to its queue, but offers and the pickup SLA clock start at the next opening.
  */

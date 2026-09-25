@@ -1,7 +1,7 @@
 import type { ArgumentRule, EscalationCondition, RuleOp } from '../data/agent-schemas';
 
 /**
- * Tool argument rules (docs/08 §6) and escalation conditions (docs/01 §6):
+ * Tool argument rules (docs/archive/specs/08 §6) and escalation conditions (docs/archive/specs/01 §6):
  * text-field parsing and one-line summaries. Pure, client-safe. The API
  * validates again (apps/api ArgumentRuleInput / EscalationRuleInput).
  */

@@ -1,7 +1,7 @@
 import 'server-only';
 
 /**
- * Marks a loader whose API endpoint has not shipped yet (docs/14). It resolves
+ * Marks a loader whose API endpoint has not shipped yet (docs/archive/specs/14). It resolves
  * to `null` so pages render an explicit "no data yet" state instead of
  * invented numbers. Replace the call with a real `api.get(...)` when the
  * endpoint lands; the page components already render the non-null shape.

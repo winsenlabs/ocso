@@ -19,7 +19,7 @@ export async function callAuthEndpoint(auth: AuthServer, publicUrl: string, path
   return auth.handler(new Request(new URL(`/api/auth${path}`, publicUrl), { method: 'POST', headers, body: JSON.stringify(body) }));
 }
 
-/** Maps a Better Auth error response to OCSO's error envelope (docs/14 §5). */
+/** Maps a Better Auth error response to OCSO's error envelope (docs/archive/specs/14 §5). */
 export async function authErrorFrom(res: Response): Promise<DomainError> {
   let code = '';
   let message = '';

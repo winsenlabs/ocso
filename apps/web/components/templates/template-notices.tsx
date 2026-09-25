@@ -8,7 +8,7 @@ import '@/app/styles/templates.css';
 
 /**
  * Review results of the templates this person submitted, wherever they are
- * in OCSO (docs/07 §3): the provider decides minutes to hours later, so the
+ * in OCSO (docs/archive/specs/07 §3): the provider decides minutes to hours later, so the
  * result is announced in-app instead of waiting on the templates page.
  */
 export function TemplateNotices({ meId }: { meId: string }) {

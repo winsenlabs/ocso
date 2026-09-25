@@ -12,7 +12,7 @@ import { isTemplate, isUniqueViolation, loadConnection } from './records.js';
 import { viewOf, viewsOf, type ConnectionView } from './views.js';
 
 /**
- * Personal (USER-scope) connections (docs/08 §3): a user attaches their own
+ * Personal (USER-scope) connections (docs/archive/specs/08 §3): a user attaches their own
  * credentials to an admin-published template. The instance is owned by that
  * user and serves only their human tool actions and the internal agent —
  * virtual agents never use USER connections (the runtime catalogue filters

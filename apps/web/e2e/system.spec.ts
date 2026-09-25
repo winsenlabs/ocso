@@ -4,7 +4,7 @@ import { login, settled } from './helpers';
 
 /**
  * System control center, alerts, audit and the role homes (design/03, design/06,
- * docs/10–11, docs/15) against the real API and worker, on a fresh database:
+ * docs/10–11, docs/archive/specs/15) against the real API and worker, on a fresh database:
  *   E2E_API_PORT=4470 E2E_WEB_PORT=3470 E2E_DB_NAME=ocso_e2e_sys npx playwright test e2e/system.spec.ts
  * (add E2E_WEB_DEV=1 when other agents share the .next build output).
  */

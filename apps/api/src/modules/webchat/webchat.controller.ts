@@ -39,7 +39,7 @@ type AfterQuery = z.infer<typeof AfterQuery>;
 const DECLARED_TYPE = /^[a-z]+\/[a-z0-9.+-]{1,120}$/;
 
 /**
- * Public customer web-chat API (docs/07 §4, SPEC §C) for every `embeddable`
+ * Public customer web-chat API (docs/archive/specs/07 §4, SPEC §C) for every `embeddable`
  * channel kind. Authenticated by the kind's visitor tokens (the adapter's
  * `embed` hooks: channel-bound visitor tokens, session passes, user tokens);
  * customers only ever see customer-visible messages of their own

@@ -5,7 +5,7 @@ import type { EgressPolicy, McpNetwork } from '@ocso/mcp';
 const NO_INTERNAL: EgressPolicy = { allowedInternalHosts: [], allowInsecureHttpHosts: [] };
 
 /**
- * Outbound policy for one connection (docs/15 §5, ADR-021). Only INTERNAL
+ * Outbound policy for one connection (docs/archive/specs/15 §5, ADR-021). Only INTERNAL
  * connections may reach the Tech admin's allowlisted private hosts; those
  * hosts may also use plain http (Compose service names have no TLS). Every
  * other destination is public https only.

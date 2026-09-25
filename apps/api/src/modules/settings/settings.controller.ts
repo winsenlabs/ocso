@@ -53,7 +53,7 @@ export class SettingsController {
     return this.settings.deployment();
   }
 
-  /** Retention classes with defaults, floors and the effective values (docs/15 §8). */
+  /** Retention classes with defaults, floors and the effective values (docs/archive/specs/15 §8). */
   @Capability({ name: 'settings.get_retention', summary: 'Data retention classes: defaults, floors and the effective values.', tags: ['retention', 'data'] })
   @Get('retention')
   @Authenticated()

@@ -1,7 +1,7 @@
 import type { PromptComponents } from '@ocso/prompt-compiler';
 
 /**
- * Prompt components for the demo agents (docs/05, design/02 Prompt tab).
+ * Prompt components for the demo agents (docs/archive/specs/05, design/02 Prompt tab).
  * Stable, organization-level facts sit in business_context so the compiled
  * prefix stays cacheable; nothing here is a secret or customer data.
  */

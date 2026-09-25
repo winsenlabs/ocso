@@ -22,7 +22,7 @@ export const TEMPLATE_CACHE_TTL_MS = 5 * 60_000;
 export { TEMPLATES_CONFIG_AREA } from './message-template-drafts.js';
 
 /**
- * Message templates of a channel (docs/07 §3), for any kind whose adapter
+ * Message templates of a channel (docs/archive/specs/07 §3), for any kind whose adapter
  * implements the template methods: the provider's list (cached ~5 minutes per
  * API instance, `refresh` bypasses it) merged with OCSO's drafts and
  * submissions. Drafts are written here; submitting one to the provider and

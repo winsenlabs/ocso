@@ -9,7 +9,7 @@ export interface SlaView {
   progress: number;
 }
 
-/** Share of the pickup window after which the timer turns amber (docs/09; policy default). */
+/** Share of the pickup window after which the timer turns amber (docs/archive/specs/09; policy default). */
 const AT_RISK_FRACTION = 0.75;
 
 /** Control states in which the pickup SLA clock is running. */

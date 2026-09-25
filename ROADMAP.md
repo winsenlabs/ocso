@@ -32,8 +32,8 @@ can be agreed. [CONTRIBUTING.md](CONTRIBUTING.md) has the rules and the test lay
 
 - **Files and media on Slack and Microsoft Teams.** Both channels read and send text and choice buttons
   only. Slack needs `files:write` and its two-step upload. Teams needs the file consent flow or SharePoint
-  links. See the "Not in v1" sections of [slack.md](docs/plugins/slack.md) and
-  [ms-teams.md](docs/plugins/ms-teams.md).
+  links. See the "Not in v1" sections of [slack.md](docs/guides/channels/slack.md) and
+  [ms-teams.md](docs/guides/channels/microsoft-teams.md).
 - **Smaller Slack and Teams gaps.** Slack display names through `users.info`, proactive Teams messages,
   and updating a sent Teams card after a tap.
 - **Agent audience: internal and external.** Today a Slack or Teams channel either serves customers
@@ -41,7 +41,7 @@ can be agreed. [CONTRIBUTING.md](CONTRIBUTING.md) has the rules and the test lay
   customers) to be an explicit property of agents and channels, with identity, rendering and data rules
   to match, so an agent can serve employees as well as customers.
 - **New channels.** SMS, RCS and voice are reserved kinds with no adapter. Each one is a plugin
-  ([add a channel](docs/plugins/add-a-channel.md)).
+  ([add a channel](docs/guides/extending/build-a-channel-plugin.md)).
 
 ## Governance and security
 
@@ -57,13 +57,13 @@ can be agreed. [CONTRIBUTING.md](CONTRIBUTING.md) has the rules and the test lay
 - **AWS.** The ECS Fargate Terraform (`infra/aws/terraform`) passes `terraform validate` but has never
   been applied to a real account. It does not yet wire the Better Auth secret or email, and the audit
   store additions (a second RDS instance, bootstrap keys, the signing-key secret) are unvalidated.
-  See [aws.md §10](docs/operations/aws.md#10-known-gaps-and-follow-ups).
+  See [aws.md, known gaps](docs/guides/deploy/aws.md#limits-and-known-gaps).
 - **MCP over stdio.** OCSO speaks Streamable HTTP only. A stdio transport (for example through a sidecar)
   would let you connect local MCP servers.
 
 ## The plugin boundary
 
-From [docs/plugins/README.md](docs/plugins/README.md#where-the-boundary-still-leaks):
+From [docs/concepts/plugins.md](docs/concepts/plugins.md#where-the-boundary-still-leaks):
 
 - Alert conditions, scheduled tasks and Ask OCSO tools have registries but are not `OcsoPlugin`
   contributions yet, so third-party plugins cannot add them.
@@ -75,11 +75,11 @@ From [docs/plugins/README.md](docs/plugins/README.md#where-the-boundary-still-le
 These are self-contained, well-specified and touch one area each:
 
 - Split one of the files that `pnpm lint` reports as over 300 lines, along a clear responsibility line.
-- Slack display names: look up `users.info` once per user and cache it (docs/plugins/slack.md).
+- Slack display names: look up `users.info` once per user and cache it (docs/guides/channels/slack.md).
 - Add an S3 Object Lock check for `audit-exports/` to the System page's audit store panel.
 - Add a new alert destination (for example Opsgenie or a Discord webhook) behind the
-  `AlertDeliveryAdapter` contract ([alerts.md](docs/plugins/alerts.md)).
+  `AlertDeliveryAdapter` contract ([alerts.md](docs/guides/alerts-and-webhooks.md)).
 - Add a new email driver (for example Amazon SES or Postmark) behind the email contract
-  ([email.md](docs/plugins/email.md)).
+  ([email.md](docs/guides/email.md)).
 - Improve a runbook in `docs/operations/` after following it on a fresh machine, and fix whatever did not
   match.

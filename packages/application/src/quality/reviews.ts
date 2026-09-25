@@ -7,7 +7,7 @@ import { assertAgentReadable, manageableAgentsSql, readableAgentFilter } from '.
 import { recordAudit } from '../audit/audit.js';
 import type { ActorContext } from '../shared/context.js';
 
-/** Explicit review rubric (docs/11 §3: no opaque quality score). Each criterion is scored 1–5. */
+/** Explicit review rubric (docs/archive/specs/11 §3: no opaque quality score). Each criterion is scored 1–5. */
 export const REVIEW_RUBRIC = {
   accuracy: 'Facts, amounts and references the agent stated were correct.',
   policy: 'Policies and compliance rules were followed; escalation happened when the policy required it.',

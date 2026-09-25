@@ -70,7 +70,7 @@ export const agentTeams = pgTable(
   (t) => [primaryKey({ columns: [t.agentId, t.teamId] }), index('agent_teams_team_idx').on(t.teamId)],
 );
 
-/** Immutable prompt version (docs/05 §2). Never updated after insert except activation stamps. */
+/** Immutable prompt version (docs/archive/specs/05 §2). Never updated after insert except activation stamps. */
 export const promptVersions = pgTable(
   'prompt_versions',
   {

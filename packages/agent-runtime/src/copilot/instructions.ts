@@ -15,7 +15,7 @@ export const COPILOT_REQUEST_MARKER = '[OCSO copilot request from your colleague
 
 /**
  * Appended after the agent's own compiled prompt, so the provider prompt cache
- * for the agent prefix is reused (docs/05 §3): only this block and the request
+ * for the agent prefix is reused (docs/archive/specs/05 §3): only this block and the request
  * message are new.
  */
 export function copilotInstruction(input: { forName: string | null; style: CopilotStyle; baseText: string | null }): SystemBlock {

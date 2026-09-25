@@ -6,7 +6,7 @@ import type { MediaKind } from '@ocso/channels';
 import type { ChannelRuntime } from './channel-runtime.js';
 
 /**
- * Materialize inbound media (docs/07 §6): fetch via the channel adapter,
+ * Materialize inbound media (docs/archive/specs/07 §6): fetch via the channel adapter,
  * validate by sniffed content + size, store in BlobStore, update the part.
  * Idempotent: parts already STORED/REJECTED are left alone.
  */

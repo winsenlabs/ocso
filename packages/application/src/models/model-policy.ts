@@ -18,7 +18,7 @@ import { targetReasonText } from './policy-text.js';
 
 /**
  * Save-time evaluation of a profile's targets against the deployment model
- * policy, using the same pure planner the runtime gateway uses (docs/06 §5).
+ * policy, using the same pure planner the runtime gateway uses (docs/archive/specs/06 §5).
  * The primary must be permitted; rejected fallbacks become warnings.
  */
 

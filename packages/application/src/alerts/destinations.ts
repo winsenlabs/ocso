@@ -44,7 +44,7 @@ export interface DestinationServiceOptions {
 }
 
 /**
- * Pluggable alert delivery targets (docs/11 §7). Secrets live only in the SecretStore.
+ * Pluggable alert delivery targets (docs/archive/specs/11 §7). Secrets live only in the SecretStore.
  * Maker–checker (PM/research/11 §4, destination-approval.ts): a new destination is a disabled draft.
  */
 export class NotificationDestinationService {

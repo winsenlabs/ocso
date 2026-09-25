@@ -32,7 +32,7 @@ export function realtimeUrl(conversationId?: string, types?: readonly string[]):
 }
 
 /**
- * Subscribe to the staff realtime stream (docs/14 §3) through the same-origin
+ * Subscribe to the staff realtime stream (docs/archive/specs/14 §3) through the same-origin
  * proxy — the browser never holds the API token. Reconnects with exponential
  * backoff; stops for good on 401/403 (session over or no access).
  */

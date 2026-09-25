@@ -5,8 +5,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        Before asking, the answer may already be in the README, docs/00-INDEX.md (the reading order),
-        docs/operations/ (running OCSO) or docs/plugins/ (extending it).
+        Before asking, the answer may already be in the README, docs/README.md (the docs home),
+        docs/guides/ (running OCSO) or docs/concepts/plugins.md (extending it).
         Never paste secrets, `.env` contents, tokens or real customer data.
   - type: textarea
     id: question

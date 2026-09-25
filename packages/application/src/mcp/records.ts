@@ -91,7 +91,7 @@ export async function affectedAgentIds(db: DbOrTx, connectionIds: readonly strin
   return [...ids].sort();
 }
 
-/** Invalidate the cached tool catalogues of these agents (docs/05 §5). */
+/** Invalidate the cached tool catalogues of these agents (docs/archive/specs/05 §5). */
 export async function bumpAgents(tx: DbOrTx, correlationId: string, agentIds: readonly string[]): Promise<void> {
   for (const id of agentIds) await bumpGeneration(tx, correlationId, `agent:${id}`, 'tools_changed');
 }

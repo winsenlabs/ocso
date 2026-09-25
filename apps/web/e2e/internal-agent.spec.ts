@@ -6,7 +6,7 @@ import { login, logout, settled } from './helpers';
 import { approvedProfile, approvedProvider, userIdOf } from './platform-setup';
 
 /**
- * Ask OCSO (design/05, docs/12) on the real stack with the DEV_SCRIPTED model
+ * Ask OCSO (design/05, docs/archive/specs/12) on the real stack with the DEV_SCRIPTED model
  * (API started with OCSO_ENABLE_DEV_PROVIDERS=true): setup, streaming, stop,
  * threads, and proposals stored before confirmation cards (seeded the way the
  * earlier agent stored them). Cards end to end — read, direct write, governed

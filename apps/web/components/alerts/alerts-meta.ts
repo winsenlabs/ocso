@@ -1,5 +1,5 @@
 /**
- * Alert display rules and URL model (docs/11 §6). Pure and client-safe.
+ * Alert display rules and URL model (docs/archive/specs/11 §6). Pure and client-safe.
  * The /alerts screen keeps its filters, tab and open drawer in the URL so
  * links from the home and control center land on the same view.
  */

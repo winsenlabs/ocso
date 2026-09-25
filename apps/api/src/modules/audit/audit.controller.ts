@@ -33,7 +33,7 @@ type AcknowledgeInput = z.infer<typeof AcknowledgeInput>;
 const Id = z.uuid();
 
 /**
- * The audit log (docs/15 §7, ADR-032). Reads come from the audit store merged
+ * The audit log (docs/archive/specs/15 §7, ADR-032). Reads come from the audit store merged
  * with events not shipped yet; `x-ocso-audit-source: local` marks an answer
  * served from the main database because the store did not respond.
  */

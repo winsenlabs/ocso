@@ -15,7 +15,7 @@ export interface ScalingSampleDetail extends ScalingSample {
 }
 
 /**
- * One scaling sample from PostgreSQL truth (ADR-023, docs/10 §6):
+ * One scaling sample from PostgreSQL truth (ADR-023, docs/archive/specs/10 §6):
  * - TurnsInFlight = busy conversation leases (a turn is executing);
  * - SlotDemand = TurnsInFlight + ready conversation.turn wake-ups (queue.stats);
  * - Workers = HEALTHY workers whose heartbeat is ≤ 3 × heartbeat interval old

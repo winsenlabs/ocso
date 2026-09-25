@@ -23,7 +23,7 @@ export interface TemplateBuilderProps {
 }
 
 /**
- * "New template" (docs/07 §3): write a message template, see it as the
+ * "New template" (docs/archive/specs/07 §3): write a message template, see it as the
  * customer will, and save it as a draft or submit it. Maker–checker
  * (PM/research/11 §4): the provider (e.g. WhatsApp) sees it only after a
  * checker approves the submission. The same rules as the API run on every

@@ -16,7 +16,7 @@ interface Props {
 const EMPTY = { path: '', op: 'gt' as RuleOp, value: '', effect: 'REQUIRE_CONFIRMATION' as ArgumentRule['effect'], message: '' };
 
 /**
- * Deterministic argument policy for one tool (docs/08 §6): e.g. require a
+ * Deterministic argument policy for one tool (docs/archive/specs/08 §6): e.g. require a
  * human confirmation when amount > 5000, or deny a field value outright.
  * Applied to the grant locally; "Save tool grants" persists it.
  */

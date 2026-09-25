@@ -12,10 +12,10 @@ export const SESSION_WINDOW_CLOSED = 'session_window_closed';
 export type DeliveryOutcome = { kind: 'sent' | 'skipped' } | { kind: 'retry'; reason: string } | { kind: 'failed'; reason: string };
 
 /**
- * Outbound delivery (docs/07 §2, §5): only customer-safe parts reach the
+ * Outbound delivery (docs/archive/specs/07 §2, §5): only customer-safe parts reach the
  * adapter; the provider message id is recorded for delivery receipts.
  * A template message (one `ocso.message_template` part) goes through the
- * adapter's sendTemplate instead of render/send (docs/07 §3). The session
+ * adapter's sendTemplate instead of render/send (docs/archive/specs/07 §3). The session
  * window is judged from the customer's last message on this channel across
  * conversations. At-least-once on crash between send and record (ADR-007).
  */

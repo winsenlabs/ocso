@@ -2,7 +2,7 @@ import { isCustomerRenderable, type InteractionPart } from '@ocso/domain';
 import type { ChannelCapabilities } from './types.js';
 
 /**
- * Rendering policy (docs/07 §5): only customer-safe parts the channel supports
+ * Rendering policy (docs/archive/specs/07 §5): only customer-safe parts the channel supports
  * ever reach an adapter's render(). Tool results, internal notes, policy
  * metadata and unsupported part types are dropped here, in one place.
  */

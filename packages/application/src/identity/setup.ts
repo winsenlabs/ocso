@@ -65,7 +65,7 @@ export class SetupService {
         summary: `First-run setup completed for ${input.orgName}; first Tech admin ${input.adminEmail}`,
       });
     });
-    // Default alert rules ship with every deployment (docs/11 §6); admins disable rather than delete them.
+    // Default alert rules ship with every deployment (docs/archive/specs/11 §6); admins disable rather than delete them.
     await seedDefaultAlertRules(this.db, correlationId);
     return { userId };
   }

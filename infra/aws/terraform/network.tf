@@ -15,7 +15,7 @@ module "network" {
 #   api, worker, migrate → RDS:5432 (rule in the rds module)
 # Egress is open: model providers, MCP servers and AWS APIs are reached over
 # the internet via NAT; destination policy (SSRF guard, allowlists) is
-# enforced by OCSO in code (docs/15 §5).
+# enforced by OCSO in code (docs/archive/specs/15 §5).
 # ---------------------------------------------------------------------------
 resource "aws_security_group" "task" {
   for_each    = toset(["api", "web", "worker", "migrate"])

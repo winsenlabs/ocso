@@ -1,5 +1,5 @@
 /**
- * Audit log URL model and before/after diff (docs/15 §7). Pure and client-safe.
+ * Audit log URL model and before/after diff (docs/archive/specs/15 §7). Pure and client-safe.
  * Many entries record the full row as `before` and only the submitted patch as
  * `after`, so a key missing from `after` means "not part of this change", not
  * "removed".

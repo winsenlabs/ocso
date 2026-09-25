@@ -9,7 +9,7 @@ import { completeSetup, startApi, type ApiHarness } from './harness.js';
 import { liveChannel, platformChecker, type Checker } from './platform.js';
 
 /**
- * Installed plugins end to end (docs/plugins/installing.md): the api loads a
+ * Installed plugins end to end (docs/guides/extending/install-a-plugin.md): the api loads a
  * plugin pinned in OCSO_PLUGINS from OCSO_PLUGINS_DIR, serves it in
  * GET /v1/system/plugins and the kinds endpoints, runs its channel, and turns
  * the SDK's error marker into a typed HTTP error.

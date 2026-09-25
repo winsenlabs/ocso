@@ -16,7 +16,7 @@ export const ProviderInput = z.object({
   kind: ProviderKindInput,
   name: z.string().trim().min(1).max(80),
   region: z.string().trim().min(1).max(40).nullable().default(null),
-  /** Where the provider keeps customer data, e.g. `IN`, `EU`, `GLOBAL` (docs/06 §5). */
+  /** Where the provider keeps customer data, e.g. `IN`, `EU`, `GLOBAL` (docs/archive/specs/06 §5). */
   residencyZone: zone.nullable().default(null),
   /** Non-secret settings, validated against the provider definition's settingsSchema. */
   settings: z.record(z.string(), z.unknown()).default({}),

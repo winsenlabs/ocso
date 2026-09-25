@@ -3,7 +3,7 @@ import type { DeploymentAdapter, DeploymentLogger } from '@ocso/deployment';
 import { createDriverRegistries, selectDriver, type DriverRegistries } from './adapters.js';
 
 /**
- * Deployment adapter selection (docs/13 §4, ADR-023): the registered driver
+ * Deployment adapter selection (docs/archive/specs/13 §4, ADR-023): the registered driver
  * DEPLOYMENT_DRIVER names. Worker-only: the worker leader is the one process
  * with the platform's scaling permissions; the API serves the outcome it records.
  */

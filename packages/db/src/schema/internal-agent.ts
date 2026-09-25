@@ -4,7 +4,7 @@ import { channelAccountLinks } from './channel-links.js';
 import { createdAt, id, ts, updatedAt } from './columns.js';
 import { users } from './identity.js';
 
-/** Conversations between a staff user and the internal OCSO agent (docs/12). */
+/** Conversations between a staff user and the internal OCSO agent (docs/archive/specs/12). */
 export const internalAgentThreads = pgTable(
   'internal_agent_threads',
   {

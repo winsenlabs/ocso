@@ -46,7 +46,7 @@ export function Input(p: {
   );
 }
 
-/** Generation limits, retries and timeouts (docs/06 §2). */
+/** Generation limits, retries and timeouts (docs/archive/specs/06 §2). */
 export function GenerationFields({ state, set, errors }: { state: ProfileFormState; set: SetField; errors: Record<string, string> }) {
   return (
     <fieldset className="conn-fieldset">

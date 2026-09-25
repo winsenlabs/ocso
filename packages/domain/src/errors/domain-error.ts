@@ -1,5 +1,5 @@
 /**
- * Normalized error categories (docs/14 §5). Every error that crosses a module
+ * Normalized error categories (docs/archive/specs/14 §5). Every error that crosses a module
  * boundary is one of these; raw provider/tool exceptions never leave adapters.
  */
 export const ErrorCategory = {

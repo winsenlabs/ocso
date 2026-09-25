@@ -1,6 +1,6 @@
 import type { ErrorCategory } from '@ocso/domain';
 
-/** Category of a failed API call: the API's docs/14 §5 categories plus transport failure. */
+/** Category of a failed API call: the API's docs/archive/specs/14 §5 categories plus transport failure. */
 export type ApiErrorCategory = ErrorCategory | 'unreachable';
 
 export interface ApiErrorInit {

@@ -31,7 +31,7 @@ afterAll(async () => {
 
 const activeVersionId = async () => (await t.db.select({ v: virtualAgents.activePromptVersionId }).from(virtualAgents).where(eq(virtualAgents.id, agentId)))[0]!.v;
 
-describe('prompt versioning (docs/05 §2)', () => {
+describe('prompt versioning (docs/archive/specs/05 §2)', () => {
   it('starts every agent on an immutable, activated v1', async () => {
     const versions = await prompts.versions(lead.principal!, agentId);
     expect(versions.map((v) => v.version)).toEqual([1]);

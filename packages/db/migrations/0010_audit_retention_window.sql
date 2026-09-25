@@ -1,4 +1,4 @@
--- Audit events stay append-only (docs/15 §7). The only permitted mutation is
+-- Audit events stay append-only (docs/archive/specs/15 §7). The only permitted mutation is
 -- the retention job deleting rows older than a cutoff it declares for its own
 -- transaction (SET LOCAL ocso.audit_retention_cutoff); cutoffs younger than
 -- 365 days are refused here, independently of application settings.

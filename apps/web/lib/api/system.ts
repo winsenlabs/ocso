@@ -6,7 +6,7 @@ import { api } from './client';
 /**
  * Worker scaling settings and how far the deployment has applied them
  * (GET/PATCH /v1/settings/workers, GET /v1/settings/workers/deployment;
- * docs/10 §5, ADR-023). Scaling is driven by conversation demand and queue
+ * docs/archive/specs/10 §5, ADR-023). Scaling is driven by conversation demand and queue
  * age — never CPU alone.
  */
 
@@ -45,7 +45,7 @@ export const ScalingStatusSchema = z.object({
 });
 export type ScalingStatus = z.infer<typeof ScalingStatusSchema>;
 
-/** The editable fields, in form order (docs/10 §5). */
+/** The editable fields, in form order (docs/archive/specs/10 §5). */
 export const WORKER_FIELDS = [
   'minWarmWorkers',
   'maxWorkers',

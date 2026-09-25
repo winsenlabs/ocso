@@ -20,7 +20,7 @@ import type { AskOcsoCopy } from './ask-ocso-copy';
 import type { AskOcsoRequest } from './ask-ocso-context';
 
 /**
- * Ask OCSO drawer (design/05, docs/12). Questions stream through
+ * Ask OCSO drawer (design/05, docs/archive/specs/12). Questions stream through
  * /api/internal-agent/chat to the internal agent, which acts with exactly
  * this user's permissions: answers carry step lines, object links, tables,
  * role refusals and confirmation cards for writes. Threads persist per user.

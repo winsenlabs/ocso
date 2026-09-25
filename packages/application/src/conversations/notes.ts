@@ -11,7 +11,7 @@ export const NoteInput = z.object({
 });
 export type NoteInput = z.infer<typeof NoteInput>;
 
-/** Internal notes (docs/09 §5, ADR-013): staff-only, never rendered to customers. */
+/** Internal notes (docs/archive/specs/09 §5, ADR-013): staff-only, never rendered to customers. */
 export async function addNote(db: Db, actor: ActorContext, conversationId: string, input: NoteInput): Promise<{ id: string }> {
   const principal = actor.principal!;
   assertCan(principal, Permission.CONVERSATIONS_NOTE);

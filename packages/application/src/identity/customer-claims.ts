@@ -37,7 +37,7 @@ function thumbprint(jwk: { crv: string; kty: string; x: string; y: string }): st
 }
 
 /**
- * Short-lived customer identity claims for trusted tool servers (docs/08 §4,
+ * Short-lived customer identity claims for trusted tool servers (docs/archive/specs/08 §4,
  * PM/BUILD-PLAN E5.6): ES256 JWT with only identifiers and scopes, verifiable
  * through the public JWKS at `/.well-known/jwks.json`. No secrets, no PII
  * beyond the customer reference the business system already knows.

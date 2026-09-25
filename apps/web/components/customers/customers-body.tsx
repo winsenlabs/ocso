@@ -37,7 +37,7 @@ function columns(q: string | undefined, zone: string): Column<CustomerListItem>[
   ];
 }
 
-/** Customer search and detail (docs/03 Customer + CustomerIdentity). Execs see customers they have a permitted conversation with. */
+/** Customer search and detail (docs/archive/specs/03 Customer + CustomerIdentity). Execs see customers they have a permitted conversation with. */
 export async function CustomersBody({ searchParams }: { searchParams: SearchParams }) {
   const [session, params] = await Promise.all([requireSession(), searchParams]);
   if (!hasPermission(session, Permission.CUSTOMERS_READ)) return <NotPermitted role={session.roleLabel} />;

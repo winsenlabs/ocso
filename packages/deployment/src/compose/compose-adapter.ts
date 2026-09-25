@@ -16,7 +16,7 @@ export interface ComposeDeploymentOptions {
 }
 
 /**
- * Docker Compose (docs/13 §2): the operator owns the replica count, so every
+ * Docker Compose (docs/archive/specs/13 §2): the operator owns the replica count, so every
  * scaling setting is advisory. The adapter turns the settings into the exact
  * command to run and says which settings Compose cannot enforce.
  */

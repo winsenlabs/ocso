@@ -19,11 +19,11 @@ export const CustomerPatch = z.object({
 export type CustomerPatch = z.infer<typeof CustomerPatch>;
 
 /**
- * Customers (docs/03 Customer). Everyone sees exactly the customers they have
+ * Customers (docs/archive/specs/03 Customer). Everyone sees exactly the customers they have
  * a visible conversation with (conversationScope: a Lead's teams' agents
  * and queues, an exec's queues and assignments — ADR-026); others are not
  * found. Attribute changes are "material customer context" and invalidate
- * turn caches (docs/05 §5).
+ * turn caches (docs/archive/specs/05 §5).
  */
 export class CustomerService {
   constructor(private readonly db: Db) {}

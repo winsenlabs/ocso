@@ -8,7 +8,7 @@ import { approveOver, approvedChannel, approvedProfile, approvedProvider } from 
 import { routeChannelToAgent } from './routing';
 
 /**
- * Message templates end to end (docs/07 §3, docs/09 §4) on a WhatsApp
+ * Message templates end to end (docs/archive/specs/07 §3, docs/archive/specs/09 §4) on a WhatsApp
  * (Twilio) channel, against the real API + worker and a local Twilio
  * stand-in (Messages + Content API) the channel points at: a WhatsApp
  * customer writes, the exec holds the conversation after the adapter's

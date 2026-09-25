@@ -51,7 +51,7 @@ describe('prompt compiler', () => {
     expect(compilePrompt(base())).toEqual(compilePrompt(base()));
   });
 
-  it('orders stable components before dynamic context (docs/05 §1)', () => {
+  it('orders stable components before dynamic context (docs/archive/specs/05 §1)', () => {
     const keys = compilePrompt(base()).system.map((b) => b.key);
     expect(keys).toEqual([
       'runtime_contract',

@@ -1,5 +1,5 @@
 /**
- * BlobStore contract (docs/07 §6, ADR-011). PostgreSQL keeps media metadata and
+ * BlobStore contract (docs/archive/specs/07 §6, ADR-011). PostgreSQL keeps media metadata and
  * keys; bytes live here. Access to customers/staff is always through
  * short-lived signed URLs or the authorized API.
  */
@@ -7,7 +7,7 @@ export interface BlobPutInput {
   key: string;
   data: Uint8Array;
   contentType: string;
-  /** Retention class drives lifecycle rules (docs/15 §8). */
+  /** Retention class drives lifecycle rules (docs/archive/specs/15 §8). */
   retention?: 'CONVERSATION_MEDIA' | 'EXPORT' | 'TEMP' | undefined;
 }
 

@@ -4,7 +4,7 @@ import { DEFINITIONS, SettingsService, previousWindow, readableAgentsSql, window
 import type { Db } from '@ocso/db';
 
 /**
- * Escalation reasons over time (Lead "Escalation reasons" page, docs/11 §3).
+ * Escalation reasons over time (Lead "Escalation reasons" page, docs/archive/specs/11 §3).
  * Same population as `definitions.escalationReasons` — handoffs whose trigger is
  * not HUMAN_REQUEST on conversations of the agents the caller can read (a CS
  * Lead's teams' agents, ADR-026) opened inside the window — ranked, compared with the previous same-length window, split by

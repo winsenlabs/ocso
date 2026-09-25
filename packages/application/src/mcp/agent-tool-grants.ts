@@ -46,7 +46,7 @@ export interface ToolGrantChange {
 }
 
 /**
- * Per-agent tool grants (docs/08 §6 "agent allowed"): the Lead enables
+ * Per-agent tool grants (docs/archive/specs/08 §6 "agent allowed"): the Lead enables
  * specific approved tools for a virtual agent, with deterministic argument
  * rules. Every change invalidates the agent's cached tool catalogue. Reads
  * need a readable agent, changes a lead of an owning team (ADR-026); 404

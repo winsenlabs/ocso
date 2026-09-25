@@ -23,7 +23,7 @@ export interface AuditEntry {
 }
 
 /**
- * Append an immutable audit event (docs/15 §7). Always call inside the same
+ * Append an immutable audit event (docs/archive/specs/15 §7). Always call inside the same
  * transaction as the change being audited so neither can exist without the other.
  * Payloads pass through the same redaction as tool-call audit records.
  *

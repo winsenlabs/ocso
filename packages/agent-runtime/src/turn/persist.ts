@@ -7,7 +7,7 @@ import type { QueueAdapter } from '@ocso/queue';
 import type { LeaseManager } from '../leases/lease-manager.js';
 import type { TurnContext } from '../context/context-builder.js';
 
-/** A human took control mid-turn; the AI must not send (docs/04 §6). */
+/** A human took control mid-turn; the AI must not send (docs/archive/specs/04 §6). */
 export class TurnSupersededError extends DomainError {
   constructor() {
     super('conflict', 'turn_superseded', 'A human took over the conversation during the turn');

@@ -9,7 +9,7 @@ import { saveSlaPolicy, submitQueue, submitSlaPolicy, updateQueue, createQueue, 
 import { getSession } from '../session';
 
 /**
- * Queue and SLA policy writes (docs/09 §3; PM/research/11 §4, §5.5). A new
+ * Queue and SLA policy writes (docs/archive/specs/09 §3; PM/research/11 §4, §5.5). A new
  * queue or policy is a draft (applied directly); its first approval is a
  * separate submit. Once approved, a change answers `approval_required` and the
  * screen re-sends it with the maker's `approval` (a proposal). Removing a

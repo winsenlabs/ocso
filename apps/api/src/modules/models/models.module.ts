@@ -25,7 +25,7 @@ export class CatalogEgress implements OnModuleDestroy {
   }
 }
 
-/** Model providers, logical model profiles, pricing and the model catalog (docs/06, ADR-006, ADR-012, ADR-027). */
+/** Model providers, logical model profiles, pricing and the model catalog (docs/archive/specs/06, ADR-006, ADR-012, ADR-027). */
 @Module({
   controllers: [ModelProvidersController, ModelProfilesController, ModelPricingController, ModelCatalogController],
   providers: [
