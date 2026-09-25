@@ -25,7 +25,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           {children}
         </main>
       </div>
-      {/* WhatsApp template review results for their submitter (docs/07 §3). */}
+      {/* WhatsApp template review results for their submitter (docs/archive/specs/07 §3). */}
       <Suspense fallback={null}>
         <TemplateNoticesSlot />
       </Suspense>

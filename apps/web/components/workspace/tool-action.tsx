@@ -16,7 +16,7 @@ export interface ToolActionProps {
 /**
  * Composer "Tool action" (design/01): pick an approved tool, fill its
  * JSON-schema form and run it as yourself. Sensitive tools need an explicit
- * "Confirm and run" step (docs/08 §7) — the run is attributed to you and audited.
+ * "Confirm and run" step (docs/archive/specs/08 §7) — the run is attributed to you and audited.
  */
 export function ToolAction({ conversationId, tools, canRun }: ToolActionProps) {
   const [toolId, setToolId] = useState<string | null>(null);

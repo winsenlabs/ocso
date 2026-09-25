@@ -201,6 +201,9 @@ jobs:
         run: terraform init -backend=false -input=false
       - name: terraform validate
         run: terraform validate
+      # Plans against a mocked AWS provider: the env and secrets each task gets (tests/*.tftest.hcl).
+      - name: terraform test
+        run: terraform test
 
   docker:
     name: docker build (${{ matrix.name }})

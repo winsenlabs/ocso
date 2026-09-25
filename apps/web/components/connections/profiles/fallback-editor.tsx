@@ -16,7 +16,7 @@ export function providerOptionLabel(p: ProviderOption): string {
   return `${p.name} · ${p.kindLabel}${p.region ? ` · ${p.region}` : ''}${p.enabled ? '' : ' (disabled)'}`;
 }
 
-/** Ordered fallback targets (docs/06 §5): tried in order, only when the policy permits. */
+/** Ordered fallback targets (docs/archive/specs/06 §5): tried in order, only when the policy permits. */
 export function FallbackEditor({
   rows,
   providers,

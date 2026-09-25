@@ -1,4 +1,4 @@
-/** Line-level diff for prompt versions (docs/05 §2 "component changes"). Pure, client-safe. */
+/** Line-level diff for prompt versions (docs/archive/specs/05 §2 "component changes"). Pure, client-safe. */
 
 export interface DiffLine {
   kind: 'same' | 'add' | 'del';

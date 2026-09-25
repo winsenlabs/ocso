@@ -3,7 +3,7 @@ import { conversationLeases, type Db } from '@ocso/db';
 import type { QueueAdapter } from '@ocso/queue';
 
 /**
- * Liveness guarantee (docs/10 §9): finds conversations where AI owns the
+ * Liveness guarantee (docs/archive/specs/10 §9): finds conversations where AI owns the
  * conversation, a customer message is unanswered, no live busy lease exists
  * and no turn job is pending — then re-enqueues a turn. Covers crashes between
  * commit and publish, dead workers and dead-lettered jobs.
@@ -39,7 +39,7 @@ export async function sweepStrandedTurns(db: Db, queue: QueueAdapter, options: {
 /**
  * Mark workers without a recent heartbeat as LOST, drop their leases and hand
  * their in-flight Postgres-queue jobs back immediately instead of waiting for
- * the visibility timeout (recovery, docs/10 §9). Fencing (ADR-008) keeps a
+ * the visibility timeout (recovery, docs/archive/specs/10 §9). Fencing (ADR-008) keeps a
  * worker that was only partitioned from committing afterwards. SQS messages
  * reappear on their own visibility timeout.
  */
@@ -84,7 +84,7 @@ export async function relayScheduledJobs(db: Db, queue: QueueAdapter, limit = 10
 }
 
 /**
- * Requests conversation insights once per resolution (docs/11 §3). Covers every
+ * Requests conversation insights once per resolution (docs/archive/specs/11 §3). Covers every
  * resolve path; a later re-resolution (after a reopen) is analysed again. Publish
  * happens before marking, so a crash can only duplicate (the job upserts).
  */

@@ -11,7 +11,7 @@ import { RulesTab } from './rules-tab';
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 /**
- * Alerts (docs/11 §6–7): the role-scoped inbox, rule management per kind
+ * Alerts (docs/archive/specs/11 §6–7): the role-scoped inbox, rule management per kind
  * (technical for the Tech admin, business for the Lead) and, for the Tech
  * Admin, notification destinations. Tab, filters and the open drawer live in the URL.
  */

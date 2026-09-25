@@ -13,7 +13,7 @@ export interface AgentSummary {
 }
 
 /**
- * Explicit, auditable agent KPIs (docs/11 §3), same formulas as the analytics
+ * Explicit, auditable agent KPIs (docs/archive/specs/11 §3), same formulas as the analytics
  * read model (analytics/definitions.ts):
  * - containment = conversations opened in the window with no handoff of any trigger / all opened
  * - escalation  = conversations with ≥1 handoff whose trigger is not HUMAN_REQUEST / all opened

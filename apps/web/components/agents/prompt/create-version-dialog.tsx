@@ -26,8 +26,8 @@ interface Props {
 }
 
 /**
- * Snapshot the saved draft as an immutable version (docs/05 §2) with a reason.
- * Staged corrections included here become APPLIED (docs/09 §7). Activation
+ * Snapshot the saved draft as an immutable version (docs/archive/specs/05 §2) with a reason.
+ * Staged corrections included here become APPLIED (docs/archive/specs/09 §7). Activation
  * is a separate, explicit step.
  */
 export function CreateVersionDialog({ agentId, nextVersion, changed, liveVersionId, corrections, canActivate, onClose }: Props) {

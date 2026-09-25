@@ -3,7 +3,7 @@ import { bigint, boolean, check, index, integer, jsonb, pgTable, text, uniqueInd
 import { id, ts } from './columns.js';
 
 /**
- * Immutable record of privileged actions (docs/15 §7), written in the same
+ * Immutable record of privileged actions (docs/archive/specs/15 §7), written in the same
  * transaction as the change. Since ADR-032 it is also the transactional outbox
  * of the audit store: the worker ships rows (`shipped_at`), reconciliation
  * proves the store holds them (`verified_at`), and verified rows older than the

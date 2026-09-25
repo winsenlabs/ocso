@@ -1,5 +1,5 @@
 /**
- * Trace deep links (docs/11 §5). The template comes from configuration
+ * Trace deep links (docs/archive/specs/11 §5). The template comes from configuration
  * (OCSO_TRACE_URL_TEMPLATE, e.g. `http://localhost:16686/trace/{traceId}`); the
  * trace id is URL-encoded and must look like a W3C/OTel trace id.
  */

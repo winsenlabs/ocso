@@ -47,7 +47,7 @@ type ProfileRow = typeof modelProfiles.$inferSelect;
 type ProviderRow = typeof modelProviders.$inferSelect;
 
 /**
- * Logical profile → provider execution with policy-bound fallback (docs/06 §5).
+ * Logical profile → provider execution with policy-bound fallback (docs/archive/specs/06 §5).
  * Every attempt (success or failure) produces a usage event; every fallback is
  * observable (event) and auditable (audit record).
  */

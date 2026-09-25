@@ -44,7 +44,7 @@ The test runs `checkPlugin` from `@winsendotai/ocso-plugin-sdk/testing`. It also
 ## Install into OCSO
 
 Install the package into the plugins directory at an exact version and list it in
-`OCSO_PLUGINS`. See `docs/plugins/installing.md`. The package's default export is the plugin:
+`OCSO_PLUGINS`. See `docs/guides/extending/install-a-plugin.md`. The package's default export is the plugin:
 
 ```ts
 export default definePlugin({ apiVersion: 1, name: '@ocso-examples/ocso-plugin-example-channel', channels: [createJsonWebhookAdapter] });

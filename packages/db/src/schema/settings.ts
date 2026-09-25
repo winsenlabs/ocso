@@ -17,7 +17,7 @@ export const deploymentSettings = pgTable('deployment_settings', {
   execsCanViewAiActive: boolean().notNull().default(true),
   retention: jsonb().$type<Record<string, number>>().notNull().default({}),
   egressAllowedInternalHosts: text().array().notNull().default(sql`'{}'::text[]`),
-  /** Logical model profile used by the internal OCSO agent (docs/12). */
+  /** Logical model profile used by the internal OCSO agent (docs/archive/specs/12). */
   internalAgentProfileId: uuid(),
   /** Require explicit confirmation for LOW_WRITE internal-agent actions too. */
   internalAgentConfirmLowWrites: boolean().notNull().default(false),
@@ -32,7 +32,7 @@ export const deploymentSettings = pgTable('deployment_settings', {
   updatedBy: uuid(),
 });
 
-/** Singleton (id = 1): worker capacity and scaling configuration (docs/10 §5). */
+/** Singleton (id = 1): worker capacity and scaling configuration (docs/archive/specs/10 §5). */
 export const workerSettings = pgTable('worker_settings', {
   id: smallint().primaryKey().default(1),
   minWarmWorkers: integer().notNull().default(2),

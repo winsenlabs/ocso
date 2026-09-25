@@ -12,7 +12,7 @@ afterAll(async () => {
   await t?.drop();
 });
 
-describe('lost worker recovery (docs/10 §9)', () => {
+describe('lost worker recovery (docs/archive/specs/10 §9)', () => {
   it('marks silent workers LOST and hands their running jobs back immediately', async () => {
     await t.pool.query(`INSERT INTO workers (id, hostname, version, status, capacity, heartbeat_at) VALUES
       ('w-dead', 'h1', 'v', 'HEALTHY', 10, now() - interval '60 seconds'),

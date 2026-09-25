@@ -43,7 +43,7 @@ export interface McpConnectionServiceDeps {
 export const oauthRedirectUri = (publicUrl: string): string => `${publicUrl.replace(/\/+$/, '')}/oauth/mcp/callback`;
 
 /**
- * MCP connection manager (docs/08 §2, design/04 "Add MCP server"): Enter URL
+ * MCP connection manager (docs/archive/specs/08 §2, design/04 "Add MCP server"): Enter URL
  * → Discover → Authenticate → Review capabilities → Approve → Active, plus
  * re-discovery, enable/disable/delete and health. One facade over small
  * collaborators; every operation is authorized here, audited, and

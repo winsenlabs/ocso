@@ -20,7 +20,7 @@ export const secrets = pgTable('secrets', {
 });
 
 /**
- * Asymmetric signing keys (customer identity claims, docs/08 §4). The private
+ * Asymmetric signing keys (customer identity claims, docs/archive/specs/08 §4). The private
  * key lives in the SecretStore; only the public JWK is stored here. RETIRING
  * keys stay in the JWKS so recently issued tokens still verify.
  */

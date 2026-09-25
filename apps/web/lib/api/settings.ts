@@ -29,7 +29,7 @@ export interface DeploymentSettingsPatch {
   execsCanViewAiActive?: boolean;
 }
 
-/** GET /v1/settings/workers (worker_settings singleton, docs/10 §5). */
+/** GET /v1/settings/workers (worker_settings singleton, docs/archive/specs/10 §5). */
 export const WorkerSettingsSchema = z.object({
   minWarmWorkers: z.number(),
   maxWorkers: z.number(),

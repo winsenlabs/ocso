@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:http';
 
-/** Tiny health endpoint for container orchestrators (docs/13 §6). */
+/** Tiny health endpoint for container orchestrators (docs/archive/specs/13 §6). */
 export function startHealthServer(port: number, readiness: () => Promise<boolean>): Server {
   const server = createServer((req, res) => {
     if (req.url === '/health/live') {

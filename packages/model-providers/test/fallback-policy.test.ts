@@ -36,7 +36,7 @@ const policy = (over: Partial<DeploymentModelPolicy> = {}): DeploymentModelPolic
   ...over,
 });
 
-describe('fallback policy (docs/06 §5)', () => {
+describe('fallback policy (docs/archive/specs/06 §5)', () => {
   const primary = target('bedrock');
 
   it('keeps permitted fallbacks in order', () => {

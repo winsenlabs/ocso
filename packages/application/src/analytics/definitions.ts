@@ -1,5 +1,5 @@
 /**
- * Formulas behind every business metric (docs/11 §3: "avoid a universal quality
+ * Formulas behind every business metric (docs/archive/specs/11 §3: "avoid a universal quality
  * score unless its method is explicit and auditable"). The same text is returned
  * in API responses as `definition`, so a number on screen can always be traced
  * back to the rows it came from.

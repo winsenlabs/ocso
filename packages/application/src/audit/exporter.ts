@@ -36,7 +36,7 @@ export interface ExportOptions {
  * independently (GET /v1/audit/keys, or their own records) — never the key the
  * manifest carries, which a forger would simply replace. Exports are only an
  * independent copy when the BlobStore enforces write-once retention on
- * `audit-exports/` (S3 Object Lock; docs/15 §7). When no newer signed
+ * `audit-exports/` (S3 Object Lock; docs/archive/specs/15 §7). When no newer signed
  * checkpoint exists for two export periods, EXPORT_FAILED says exports are
  * blocked.
  */

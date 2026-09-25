@@ -1,5 +1,5 @@
 /**
- * A channel's customer-service window (docs/07 §3; the adapter declares its
+ * A channel's customer-service window (docs/archive/specs/07 §3; the adapter declares its
  * length, e.g. 24 hours on WhatsApp): free-form replies are allowed for
  * `hours` after the customer's last message; afterwards only an approved
  * message template reaches them. `null` = the channel has no window.

@@ -25,7 +25,7 @@ const PURPOSE: Record<string, string> = {
   'evaluation.run': 'prompt evaluations',
 };
 
-/** /system/queues: per-topic depth, age and dead letters, plus conversation lease accounting (docs/10 §2, §6). */
+/** /system/queues: per-topic depth, age and dead letters, plus conversation lease accounting (docs/archive/specs/10 §2, §6). */
 export async function QueuesBody() {
   const session = await requireSession();
   if (!hasPermission(session, Permission.TELEMETRY_TECHNICAL_READ)) return <NotPermitted role={session.roleLabel} />;

@@ -1,5 +1,5 @@
 /**
- * Deployment adapter contract (docs/13 §4, ADR-023). The Tech admin edits
+ * Deployment adapter contract (docs/archive/specs/13 §4, ADR-023). The Tech admin edits
  * logical worker settings; the adapter maps them onto what the platform can
  * enforce. Compose cannot enforce anything (replicas are operator-controlled),
  * so it answers with advice; ECS applies them through Application Auto
@@ -9,7 +9,7 @@
 /** Name of a deployment driver (DEPLOYMENT_DRIVER). Open: the composition root validates it against the registry. */
 export type DeploymentDriver = string;
 
-/** The scaling-relevant subset of worker_settings (docs/10 §5). */
+/** The scaling-relevant subset of worker_settings (docs/archive/specs/10 §5). */
 export interface ScalingSettings {
   autoscalingEnabled: boolean;
   minWarmWorkers: number;

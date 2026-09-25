@@ -33,7 +33,7 @@ export type CreateVersionInput = z.infer<typeof CreateVersionInput>;
 
 export type PromptVersionRow = typeof promptVersions.$inferSelect;
 
-/** Insert an immutable version (docs/05 §2): author, time, reason, component diff and hashes. */
+/** Insert an immutable version (docs/archive/specs/05 §2): author, time, reason, component diff and hashes. */
 export async function createPromptVersion(
   tx: DbOrTx,
   actor: ActorContext,

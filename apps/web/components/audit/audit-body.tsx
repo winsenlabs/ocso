@@ -25,7 +25,7 @@ function actorLabel(e: AuditEvent): string {
   return e.actorName ?? (e.actorType === 'SYSTEM' ? 'automation' : (e.actorId ?? e.actorType.toLowerCase()));
 }
 
-/** The immutable audit log (GET /v1/audit, docs/15 §7): filterable, newest first, with a before/after view per entry. */
+/** The immutable audit log (GET /v1/audit, docs/archive/specs/15 §7): filterable, newest first, with a before/after view per entry. */
 export async function AuditBody({ searchParams }: { searchParams: SearchParams }) {
   const [session, raw] = await Promise.all([requireSession(), searchParams]);
   if (!hasPermission(session, Permission.AUDIT_READ)) return <NotPermitted role={session.roleLabel} />;

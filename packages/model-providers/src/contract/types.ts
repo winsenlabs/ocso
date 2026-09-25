@@ -58,7 +58,7 @@ export interface ToolCallRequest {
 
 export type FinishReason = 'stop' | 'length' | 'tool-calls' | 'content-filter' | 'error' | 'other';
 
-/** Normalized usage (docs/05 §3). `null` means "not reported by the provider", never zero. */
+/** Normalized usage (docs/archive/specs/05 §3). `null` means "not reported by the provider", never zero. */
 export interface NormalizedUsage {
   inputTokens: number;
   uncachedInputTokens: number;
@@ -148,7 +148,7 @@ export interface ListModelsOptions {
   abortSignal?: AbortSignal | undefined;
 }
 
-/** docs/06 §3 — one adapter instance is bound to one provider configuration. */
+/** docs/archive/specs/06 §3 — one adapter instance is bound to one provider configuration. */
 export interface ModelProviderAdapter {
   readonly kind: ProviderKind;
   readonly providerId: string;

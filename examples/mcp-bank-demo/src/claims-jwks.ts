@@ -2,7 +2,7 @@ import { createPublicKey, verify, type KeyObject } from 'node:crypto';
 import type { CustomerClaims } from './request-context.js';
 
 /**
- * Verifies OCSO customer claims (ES256 JWT, docs/08 §4) against OCSO's public
+ * Verifies OCSO customer claims (ES256 JWT, docs/archive/specs/08 §4) against OCSO's public
  * JWKS (`<OCSO public URL>/.well-known/jwks.json`). Keys are cached; an
  * unknown `kid` (OCSO rotated its key) triggers at most one refetch per 30 s.
  */

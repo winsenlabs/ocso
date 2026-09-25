@@ -35,7 +35,7 @@ export const users = pgTable(
 
 /**
  * Sign-in attempts (success and failure) recorded by OCSO's Better Auth policy
- * plugin: per-account throttling and the auth-failure alert (docs/11).
+ * plugin: per-account throttling and the auth-failure alert (docs/archive/specs/11).
  */
 export const loginAttempts = pgTable(
   'login_attempts',

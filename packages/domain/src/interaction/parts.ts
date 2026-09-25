@@ -1,12 +1,12 @@
 import { z } from 'zod';
 
 /**
- * Canonical multimodal interaction parts (docs/07 §1, build rule §8).
+ * Canonical multimodal interaction parts (docs/archive/specs/07 §1, build rule §8).
  * Channels translate into these; the runtime, API and UI only ever see these.
  * Media bytes are externalized to BlobStore — parts carry references only.
  */
 
-/** EXPIRED: bytes deleted under the retention policy (docs/15 §8); the reference stays. */
+/** EXPIRED: bytes deleted under the retention policy (docs/archive/specs/15 §8); the reference stays. */
 export const MediaStatus = z.enum(['PENDING', 'STORED', 'REJECTED', 'FAILED', 'EXPIRED']);
 export type MediaStatus = z.infer<typeof MediaStatus>;
 

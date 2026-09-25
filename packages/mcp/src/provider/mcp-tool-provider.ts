@@ -6,7 +6,7 @@ import { USER_BEARER_MARKER } from '../client/credential-session.js';
 import type { McpConnectionTarget, McpServiceDeps } from '../types.js';
 import { mapCallError, mapCallResult } from './result-mapper.js';
 
-/** Header carrying OCSO's short-lived signed customer claims to trusted servers (docs/08 §4). */
+/** Header carrying OCSO's short-lived signed customer claims to trusted servers (docs/archive/specs/08 §4). */
 export const CUSTOMER_CLAIMS_HEADER = 'X-OCSO-Customer-Claims';
 /** Header carrying the customer's verified user token to connections that authenticate OCSO some other way. */
 export const USER_TOKEN_HEADER = 'X-OCSO-User-Token';

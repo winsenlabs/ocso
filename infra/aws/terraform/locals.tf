@@ -68,10 +68,20 @@ locals {
     ECS_WORKER_SERVICE        = local.services.worker
     OCSO_PUBLIC_URL           = local.public_url
     OCSO_ENABLE_DEV_PROVIDERS = "false"
-  })
+  }, local.email_env)
+
+  # Email (docs/guides/email.md): invites, password resets, sign-in codes and approval notices.
+  email_env = { for k, v in {
+    EMAIL_DRIVER                  = var.email.driver
+    EMAIL_FROM                    = var.email.from
+    EMAIL_REPLY_TO                = var.email.reply_to
+    EMAIL_ALLOW_LOG_IN_PRODUCTION = var.email.driver == "log" ? "true" : null
+  } : k => v if v != null }
+  # The provider credential: the Resend API key, or an smtp(s):// URL with the SMTP user and password.
+  email_secrets = var.email.secret_arn == null ? {} : { (var.email.driver == "smtp" ? "SMTP_URL" : "RESEND_API_KEY") = var.email.secret_arn }
 
   # Secrets Manager JSON keys injected at task start (<arn>:<key>::).
-  api_secrets = {
+  api_secrets = merge({
     DATABASE_URL = "${local.bootstrap_arn}:DATABASE_URL::"
     # Must be stable across API tasks: a per-task generated token would make
     # first-run setup fail on every other request.
@@ -79,12 +89,14 @@ locals {
     # The api reads the audit store through the SELECT-only reader.
     AUDIT_DATABASE_URL = "${local.bootstrap_arn}:AUDIT_READER_URL::"
     AUDIT_SIGNING_KEY  = var.audit_signing_key_secret_arn
-  }
-  worker_secrets = {
+    # Same value on every api task, or sessions signed by one task fail on the next.
+    BETTER_AUTH_SECRET = aws_secretsmanager_secret.auth.arn
+  }, local.email_secrets)
+  worker_secrets = merge({
     DATABASE_URL       = "${local.bootstrap_arn}:DATABASE_URL::"
     AUDIT_DATABASE_URL = "${local.bootstrap_arn}:AUDIT_DATABASE_URL::"
     AUDIT_SIGNING_KEY  = var.audit_signing_key_secret_arn
-  }
+  }, local.email_secrets)
   # The migrate task also provisions the audit store: owner credentials exist only here.
   migrate_secrets = {
     DATABASE_URL             = "${local.bootstrap_arn}:DATABASE_URL::"

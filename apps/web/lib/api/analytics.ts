@@ -5,7 +5,7 @@ import { api } from './client';
 /**
  * Lead business analytics (apps/api analytics.controller.ts, packages/
  * application/src/analytics/*). Every metric carries its formula in
- * `definition(s)`; the UI shows it next to the number (docs/11 §3).
+ * `definition(s)`; the UI shows it next to the number (docs/archive/specs/11 §3).
  */
 
 export const ANALYTICS_WINDOWS = [1, 7, 30, 90] as const;

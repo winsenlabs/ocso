@@ -27,7 +27,7 @@ export interface HandoffOutcome {
 }
 
 /**
- * Escalation → routing (docs/09 §3, docs/01 §6): AI_ACTIVE → ESCALATION_REQUESTED
+ * Escalation → routing (docs/archive/specs/09 §3, docs/archive/specs/01 §6): AI_ACTIVE → ESCALATION_REQUESTED
  * → WAITING_FOR_HUMAN in one transaction, then an immediate auto-assign offer
  * when the queue (or rule) says AUTO_ASSIGN. Caller owns the transaction.
  *

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { api } from './client';
 
 /**
- * Immutable audit log (GET /v1/audit, docs/15 §7). Rows are append-only in the
+ * Immutable audit log (GET /v1/audit, docs/archive/specs/15 §7). Rows are append-only in the
  * database; payloads were redacted when written (packages/tools sanitizeForAudit).
  */
 

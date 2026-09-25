@@ -51,7 +51,7 @@ async function conversationWith(phone: string, text: string, withImage = false):
   return r.conversationId;
 }
 
-describe('retention policy (docs/15 §8)', () => {
+describe('retention policy (docs/archive/specs/15 §8)', () => {
   it('validates per-class floors and falls back to defaults', () => {
     expect(RetentionInput.safeParse({ auditEvents: 30 }).success).toBe(false);
     expect(RetentionInput.safeParse({ unknownClass: 30 }).success).toBe(false);

@@ -65,7 +65,7 @@ API integration test.
 - DMARC is yours to add; Resend does not create it.
 - API keys are either *full access* or *sending access*, and a sending-access key can be restricted to
   one domain. OCSO needs only sending access.
-- Operator steps: docs/operations/compose.md §9.
+- Operator steps: docs/guides/email.md.
 
 ## Templates: plain typed HTML, not React Email — decision
 

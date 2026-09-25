@@ -31,7 +31,7 @@ export interface ErrorBody {
 }
 
 /**
- * Normalizes every error to the docs/14 §5 categories. Unknown errors become
+ * Normalizes every error to the docs/archive/specs/14 §5 categories. Unknown errors become
  * `internal` with a generic message; raw exception text never reaches clients.
  */
 @Catch()

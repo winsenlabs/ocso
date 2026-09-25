@@ -109,7 +109,7 @@ async function readLocal(db: Db, q: AuditQuery, scope: AuditScopeFilter, onlyUns
 }
 
 /**
- * The audit log read (docs/15 §7, ADR-032): the audit store — the system of
+ * The audit log read (docs/archive/specs/15 §7, ADR-032): the audit store — the system of
  * record — merged with main-database rows not shipped yet, so the screen never
  * shows shipping lag. The outbox is read first: a row shipped between the two
  * reads is then already in the store; rows shipped but not yet verified are

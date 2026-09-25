@@ -28,7 +28,7 @@ afterAll(async () => {
   await h?.close();
 });
 
-describe('customer claims keys (docs/08 §4)', () => {
+describe('customer claims keys (docs/archive/specs/08 §4)', () => {
   it('publishes only public keys, without authentication', async () => {
     const res = await h.http().get('/.well-known/jwks.json').expect(200);
     expect(res.headers['cache-control']).toContain('max-age');

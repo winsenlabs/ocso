@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Message templates, channel-neutral (docs/07 §3, PM/research/10): content a
+ * Message templates, channel-neutral (docs/archive/specs/07 §3, PM/research/10): content a
  * channel's provider reviews before it may be sent, e.g. WhatsApp's approved
  * templates, the only way to reach a customer after the customer-service
  * window closes. Adapters normalize provider shapes into these types; the

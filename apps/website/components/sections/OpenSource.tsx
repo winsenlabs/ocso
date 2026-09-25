@@ -7,7 +7,7 @@ import { Heading } from '../Heading';
 const KITS = [
   { title: 'Plugin SDK', pkg: '@winsendotai/ocso-plugin-sdk', body: 'The public contracts for channels, model providers, alert destinations and email drivers, plus a conformance kit. OCSO refuses to start on a version mismatch.', href: repo('packages/ocso-plugin-sdk/README.md') },
   { title: 'Chat SDK', pkg: '@winsendotai/ocso-chat', body: 'A headless client for browsers and React Native, with React hooks and themeable components on top, to build your own chat on OCSO.', href: repo('packages/ocso-chat/README.md') },
-  { title: 'MCP tools', pkg: null, body: 'Connect any MCP server over Streamable HTTP with OAuth 2.1. Classify each tool’s risk, approve it per agent, and require a person to confirm sensitive actions.', href: repo('docs/plugins/tools-and-mcp.md') },
+  { title: 'MCP tools', pkg: null, body: 'Connect any MCP server over Streamable HTTP with OAuth 2.1. Classify each tool’s risk, approve it per agent, and require a person to confirm sensitive actions.', href: repo('docs/guides/tools/mcp.md') },
 ];
 
 const COMPOSE = `git clone ${REPO_URL}.git && cd ocso
@@ -65,7 +65,7 @@ export function OpenSource() {
           <pre className="on-dark mt-5 overflow-x-auto rounded-2xl bg-[#0b1024] p-5 font-mono text-[13px] leading-relaxed text-fg/85" aria-label="Commands: start OCSO with Docker Compose">
             <code>{COMPOSE}</code>
           </pre>
-          <a href={repo('docs/operations/compose.md')} className="mt-5 inline-block text-sm text-accent hover:underline">
+          <a href={repo('docs/guides/deploy/docker-compose.md')} className="mt-5 inline-block text-sm text-accent hover:underline">
             Compose operations guide →
           </a>
         </div>
@@ -73,7 +73,7 @@ export function OpenSource() {
           <div className="rounded-3xl border border-fg/10 p-7">
             <p className="text-lg font-medium text-fg">AWS</p>
             <p className="mt-2 text-[15px] text-fg/60">Terraform for ECS Fargate with S3, SQS and Secrets Manager drivers. Validated, not yet applied to a real account: a starting point.</p>
-            <a href={repo('docs/operations/aws.md')} className="mt-4 inline-block text-sm text-accent hover:underline">
+            <a href={repo('docs/guides/deploy/aws.md')} className="mt-4 inline-block text-sm text-accent hover:underline">
               AWS guide →
             </a>
           </div>

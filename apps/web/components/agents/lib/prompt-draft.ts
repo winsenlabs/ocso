@@ -1,7 +1,7 @@
 import { COMPONENT_KEYS, type ComponentKey, type PromptComponent } from '../data/agent-schemas';
 
 /**
- * Prompt editor state (docs/05): the server keeps one saved draft per agent;
+ * Prompt editor state (docs/archive/specs/05): the server keeps one saved draft per agent;
  * the browser holds unsaved edits on top of it. Pure helpers, client-safe.
  */
 

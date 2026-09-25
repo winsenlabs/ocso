@@ -5,7 +5,7 @@ import { api } from './client';
 /**
  * The plugins the deployment runs: GET /v1/system/plugins (system.read).
  * First-party plugins are compiled into OCSO; installed ones come from
- * OCSO_PLUGINS at a pinned version (docs/plugins/installing.md).
+ * OCSO_PLUGINS at a pinned version (docs/guides/extending/install-a-plugin.md).
  */
 
 const kinds = z.array(z.string()).default([]);

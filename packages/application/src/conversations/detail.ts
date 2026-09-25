@@ -57,7 +57,7 @@ export interface ConversationDetail {
   resolvedBy: { id: string; name: string } | null;
   firstHumanResponseAt: string | null;
   /**
-   * The channel's customer-service window (docs/07 §3; its length comes from
+   * The channel's customer-service window (docs/archive/specs/07 §3; its length comes from
    * the adapter): free-form replies only while open; afterwards an approved
    * message template. Null for channels without a window.
    */

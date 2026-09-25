@@ -18,7 +18,7 @@ import { ProviderGrid } from './provider-grid';
 
 type Params = Record<string, string | string[] | undefined>;
 
-/** Model-call error categories that may move to a fallback target (docs/06 §5; tool errors never reach a model call). */
+/** Model-call error categories that may move to a fallback target (docs/archive/specs/06 §5; tool errors never reach a model call). */
 const FALLBACK_CATEGORIES = [...RETRIABLE_CATEGORIES].filter((c) => c !== ErrorCategory.TOOL_UNAVAILABLE);
 
 function formModel(p: Provider): ProviderFormModel {

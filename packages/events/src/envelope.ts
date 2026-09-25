@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { OcsoEventType, OcsoEventPayloads } from './catalogue.js';
 
-/** Canonical event envelope (docs/14 §4). */
+/** Canonical event envelope (docs/archive/specs/14 §4). */
 export interface OcsoEvent<T extends OcsoEventType = OcsoEventType> {
   id: string;
   type: T;

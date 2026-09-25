@@ -57,7 +57,7 @@ export function Governance() {
             away applies at once; widening it needs approval. The audit-verify tool re-checks the hash chain against the signed checkpoints,
             trusting only the public keys you pin.
           </p>
-          <a href={repo('docs/15-SECURITY-AND-GOVERNANCE.md')} className="mt-5 inline-block text-sm text-accent hover:underline">
+          <a href={repo('docs/concepts/governance.md')} className="mt-5 inline-block text-sm text-accent hover:underline">
             Security and governance, in detail →
           </a>
         </div>

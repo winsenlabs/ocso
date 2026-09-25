@@ -22,8 +22,15 @@ export interface LoopResult {
   transfer: QueueTransferRequest | null;
   awaitingConfirmation: { reason: string } | null;
   toolFailures: number;
+  /** Longest run of failed or denied tool calls, for escalation rules. */
+  consecutiveToolFailures: number;
   last: GatewayResult | null;
   stepLimitReached: boolean;
+}
+
+/** A turn before (or without) any model step. */
+export function emptyLoopResult(): LoopResult {
+  return { finalText: null, steps: 0, handoff: null, transfer: null, awaitingConfirmation: null, toolFailures: 0, consecutiveToolFailures: 0, last: null, stepLimitReached: false };
 }
 
 export interface LoopParams {
@@ -36,13 +43,14 @@ export interface LoopParams {
 }
 
 /**
- * The model/tool loop (docs/04 §3 steps 8–10). OCSO owns every tool execution
+ * The model/tool loop (docs/archive/specs/04 §3 steps 8–10). OCSO owns every tool execution
  * between model steps; the loop ends on a terminal reply or the step limit.
  */
 export async function runAgentLoop(gateway: ModelGateway, tools: ToolRunner, params: LoopParams, cb: LoopCallbacks): Promise<LoopResult> {
   const { compiled } = params.context;
   const messages: ModelMessage[] = [...compiled.messages];
-  const result: LoopResult = { finalText: null, steps: 0, handoff: null, transfer: null, awaitingConfirmation: null, toolFailures: 0, last: null, stepLimitReached: false };
+  let failureRun = 0;
+  const result = emptyLoopResult();
 
   for (let step = 1; step <= params.maxSteps; step++) {
     cb.onStatus('THINKING');
@@ -85,7 +93,10 @@ export async function runAgentLoop(gateway: ModelGateway, tools: ToolRunner, par
         const reason = outcome.output.type === 'json' ? String((outcome.output.value as { reason?: unknown }).reason ?? 'confirmation required') : 'confirmation required';
         result.awaitingConfirmation ??= { reason };
       }
-      if (outcome.status === 'FAILED' || outcome.status === 'DENIED') result.toolFailures++;
+      if (outcome.status === 'FAILED' || outcome.status === 'DENIED') {
+        result.toolFailures++;
+        result.consecutiveToolFailures = Math.max(result.consecutiveToolFailures, ++failureRun);
+      } else failureRun = 0;
       toolResults.push({ type: 'tool-result', toolCallId: call.toolCallId, toolName: call.toolName, output: outcome.output });
     }
     messages.push({ role: 'tool', content: toolResults });

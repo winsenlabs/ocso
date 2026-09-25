@@ -60,7 +60,7 @@ async function proposeReversal(): Promise<string> {
   return call!.id;
 }
 
-describe('sensitive tool confirmation (docs/08 §7)', () => {
+describe('sensitive tool confirmation (docs/archive/specs/08 §7)', () => {
   it('executes exactly the proposed arguments, attributed to the confirming human', async () => {
     const id = await proposeReversal();
     const [before] = await h.t.db.select().from(toolCalls).where(eq(toolCalls.id, id));

@@ -6,7 +6,7 @@ import { forbidden } from '@ocso/domain';
 import { readableAgentsSql } from '../agents/access.js';
 import type { ActorContext } from '../shared/context.js';
 
-/** Reading alerts of a kind (docs/99 §15: role-specific observability). */
+/** Reading alerts of a kind (docs/contributing/engineering-rules.md §15: role-specific observability). */
 export const ALERT_READ_PERMISSION: Readonly<Record<AlertKind, Permission>> = {
   TECHNICAL: Permission.ALERTS_TECHNICAL_READ,
   BUSINESS: Permission.ALERTS_BUSINESS_READ,

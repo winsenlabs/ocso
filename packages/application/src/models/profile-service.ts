@@ -66,7 +66,7 @@ function definedFields(patch: ProfilePatch): Partial<ProfileFields> {
 }
 
 /**
- * Logical model profiles (docs/06 §2): agents reference these, never provider
+ * Logical model profiles (docs/archive/specs/06 §2): agents reference these, never provider
  * model ids. Maker–checker (PM/research/11 §4, profile-approval.ts): a profile
  * nothing live uses and never approved is a draft, edited here directly; after
  * that every change, and any delete, is a proposal. Saves are checked against the deployment model policy with the

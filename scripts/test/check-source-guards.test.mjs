@@ -213,6 +213,19 @@ describe('check-source-guards', () => {
       assert.deepEqual(report.pluginBoundary.violations, []);
     });
 
+    test('a kind declared through a constant counts, as Teams declares MS_TEAMS', () => {
+      const { code, report } = run(
+        pluginFixture({
+          'packages/channels/src/gamma/render.ts': "export const GAMMA_KIND = 'GAMMA_CHAT';\nexport const UNUSED = 'NOT_A_KIND';\n",
+          'packages/channels/src/gamma/descriptor.ts': "import { GAMMA_KIND } from './render.js';\nexport const gamma = { kind: GAMMA_KIND, label: 'Gamma' };\nexport const other = { kind: helpers.kind };\n",
+          'apps/api/src/gamma.ts': "export const isGamma = (k: string) => k === 'GAMMA_CHAT';\n",
+        }),
+      );
+      assert.equal(code, 1);
+      assert.deepEqual(report.pluginBoundary.kinds, ['ACME_CHAT', 'BETA_SMS', 'GAMMA_CHAT']);
+      assert.deepEqual(report.pluginBoundary.violations.map((v) => `${v.rule} ${v.at} ${v.literal}`), ['plugin-kind apps/api/src/gamma.ts:1 GAMMA_CHAT']);
+    });
+
     test('core code naming a kind, a per-kind key or a driver (in driver context) fails with file:line', () => {
       const { code, report } = run(
         pluginFixture({

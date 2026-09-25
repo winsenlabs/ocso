@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { ApiEnv, assertDriverConfig, loadEnv } from '@ocso/config';
 
-/** Documented default demo password (docs/operations/compose.md). Change it with OCSO_DEMO_PASSWORD. */
+/** Documented default demo password (docs/guides/deploy/docker-compose.md). Change it with OCSO_DEMO_PASSWORD. */
 export const DEFAULT_DEMO_PASSWORD = 'meridian-demo-2026';
 
 const flag = z

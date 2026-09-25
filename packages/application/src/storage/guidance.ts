@@ -69,7 +69,7 @@ export function auditStoreGuidance(input: GuidanceInput): AuditStoreGuidance {
   if (projectedBytes !== null && projectedBytes >= g.bytes.recommend && !recommend.length) {
     consider.push(`At the current rate the store reaches ${fmtBytes(projectedBytes)} within ${g.horizonDays} days.`);
   }
-  const move = 'Plan a move to the columnar audit store driver (ClickHouse, built in; docs/11 §10).';
+  const move = 'Plan a move to the columnar audit store driver (ClickHouse, built in; docs/archive/specs/11 §10).';
   if (recommend.length) return { level: 'recommend', driver: input.driver, reasons: [...recommend, ...consider, move], basis, thresholds: g };
   if (consider.length) return { level: 'consider', driver: input.driver, reasons: consider, basis, thresholds: g };
   return {

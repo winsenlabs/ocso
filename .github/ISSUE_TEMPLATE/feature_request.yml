@@ -44,7 +44,7 @@ body:
     id: rules
     attributes:
       label: Fit with the build rules
-      description: See docs/99-BUILD-RULES.md.
+      description: See docs/contributing/engineering-rules.md.
       options:
         - label: This keeps OCSO single-tenant (one deployment, one organization).
         - label: Business-system logic stays outside OCSO (exposed over MCP), not in the core.

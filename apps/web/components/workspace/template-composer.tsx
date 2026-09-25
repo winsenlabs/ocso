@@ -38,7 +38,7 @@ function newClientMessageId(): string {
 }
 
 /**
- * Composer "Template" mode (docs/07 §3): pick an approved message template
+ * Composer "Template" mode (docs/archive/specs/07 §3): pick an approved message template
  * of this channel, fill every variable, check the live preview, send. The
  * only way to reach the customer after the channel's reply window closes;
  * allowed inside it too. The list loads from the API (cached ~5 min) when the

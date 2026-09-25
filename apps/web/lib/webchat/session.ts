@@ -91,7 +91,7 @@ export class VisitorSession {
     return this.start();
   }
 
-  /** Exchange a host-site JWT (docs/08 §4) for an identified visitor token. */
+  /** Exchange a host-site JWT (docs/archive/specs/08 §4) for an identified visitor token. */
   identify(hostToken: string): Promise<SessionInfo> {
     return this.exchange({ visitorToken: this.current?.token ?? this.stored()?.token, hostToken });
   }

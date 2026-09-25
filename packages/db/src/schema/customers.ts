@@ -4,7 +4,7 @@ import { users } from './identity.js';
 import { virtualAgents } from './agents.js';
 import { routers } from './routers.js';
 
-/** Canonical external person/account (docs/03 Customer). */
+/** Canonical external person/account (docs/archive/specs/03 Customer). */
 export const customers = pgTable(
   'customers',
   {

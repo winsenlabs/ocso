@@ -2,7 +2,7 @@ import { escalationRules } from '@ocso/db';
 import { z } from 'zod';
 import { patchOf } from '../shared/patch.js';
 
-/** Deterministic trigger conditions evaluated in code (docs/01 §6); the prompt covers judgement calls. */
+/** Deterministic trigger conditions evaluated in code (docs/archive/specs/01 §6); the prompt covers judgement calls. */
 export const EscalationCondition = z.object({
   keywords: z.array(z.string().trim().min(2).max(80)).max(50).optional(),
   consecutiveToolFailures: z.number().int().min(1).max(10).optional(),

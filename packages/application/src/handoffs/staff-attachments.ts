@@ -9,7 +9,7 @@ export interface StoredMediaLookup {
 
 /**
  * Staff replies must only send media OCSO stored for this conversation
- * (docs/15: no cross-conversation data exposure). Client-supplied metadata is
+ * (docs/archive/specs/15: no cross-conversation data exposure). Client-supplied metadata is
  * replaced with what the blob store actually holds.
  */
 export async function verifyStaffMedia(parts: readonly InteractionPart[], conversationId: string, media: StoredMediaLookup | undefined): Promise<InteractionPart[]> {

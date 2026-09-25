@@ -13,7 +13,7 @@ const KNOWN = new Set(['TEXT', 'IMAGE', 'AUDIO', 'VIDEO', 'DOCUMENT', 'LOCATION'
 const isKnown = (p: MessagePart): p is Known => KNOWN.has(p.type) && ('text' in p || 'media' in p || 'latitude' in p || 'contacts' in p || 'schema' in p || 'toolName' in p);
 
 /**
- * Canonical multimodal parts (docs/07 §1) as the workspace shows them. Media
+ * Canonical multimodal parts (docs/archive/specs/07 §1) as the workspace shows them. Media
  * comes from short-lived signed URLs the timeline API attaches — never raw
  * blob keys. Media that is not stored yet (or was rejected) says so.
  */

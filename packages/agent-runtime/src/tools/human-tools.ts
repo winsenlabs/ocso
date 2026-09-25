@@ -34,7 +34,7 @@ const toConnection = (c: ConnectionRow): ConnectionRecord => ({
 });
 
 /**
- * Human-side tool execution (docs/08 §7, design/01 "Confirm and run" and the
+ * Human-side tool execution (docs/archive/specs/08 §7, design/01 "Confirm and run" and the
  * composer's Tool action mode). Same authorizer as the agent path; execution
  * is attributed to the human and audited. Callers check conversation access.
  */

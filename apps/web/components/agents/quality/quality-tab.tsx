@@ -12,9 +12,9 @@ import { Def, Definitions } from '../shared/definition';
 import { CorrectionActions, NewCorrectionButton } from './correction-dialogs';
 
 /**
- * Quality tab: the prompt correction workflow for this agent (docs/09 §7:
+ * Quality tab: the prompt correction workflow for this agent (docs/archive/specs/09 §7:
  * source turn → observed/desired → staged into the draft → applied by a
- * version) and the rubric reviews of its conversations (docs/11 §3).
+ * version) and the rubric reviews of its conversations (docs/archive/specs/11 §3).
  */
 export async function QualityTab({ data }: { data: AgentPageData }) {
   const { agent, prompt, can, timeZone } = data;

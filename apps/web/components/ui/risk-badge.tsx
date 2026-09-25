@@ -1,4 +1,4 @@
-/** Tool side-effect class (docs/08): read, write, or two-step (human confirmation). */
+/** Tool side-effect class (docs/archive/specs/08): read, write, or two-step (human confirmation). */
 export type ToolRisk = 'read' | 'write' | '2-step';
 
 const CLASS: Record<ToolRisk, string> = { read: 'r', write: 'w', '2-step': 's' };

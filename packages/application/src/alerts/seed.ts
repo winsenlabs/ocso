@@ -11,7 +11,7 @@ type SeedRule = Pick<AlertRuleRow, 'name' | 'kind' | 'condition' | 'params' | 'w
 
 const TECH = ['TECH'];
 
-/** Sensible defaults (docs/11 §6 technical + business examples). Thresholds are editable afterwards. */
+/** Sensible defaults (docs/archive/specs/11 §6 technical + business examples). Thresholds are editable afterwards. */
 export const DEFAULT_ALERT_RULES: readonly SeedRule[] = [
   { name: 'Healthy workers below minimum', kind: 'TECHNICAL', condition: 'workers_below_min', params: {}, windowSeconds: 60, severity: 'CRITICAL', audienceRoles: TECH, dedupeWindowSeconds: 600 },
   { name: 'Conversation queue age above 30s', kind: 'TECHNICAL', condition: 'queue_age_above', params: { topic: 'conversation.turn', thresholdSeconds: 30 }, windowSeconds: 60, severity: 'WARNING', audienceRoles: TECH, dedupeWindowSeconds: 600 },

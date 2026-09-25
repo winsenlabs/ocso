@@ -6,7 +6,7 @@ import { Capability, RequirePermission } from '../../common/decorators.js';
 import { ENV, PLUGINS } from '../../infrastructure/tokens.js';
 
 /**
- * The plugins this deployment runs (docs/plugins/installing.md): the ones
+ * The plugins this deployment runs (docs/guides/extending/install-a-plugin.md): the ones
  * compiled into OCSO (first-party, at the OCSO version) and the ones the
  * operator installed through OCSO_PLUGINS (at their pinned version), with
  * the kinds each contributes. Fixed for the life of the process.

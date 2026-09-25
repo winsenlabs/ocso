@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Channel marks as the UI draws them (docs/07). Each kind's mark comes from
+ * Channel marks as the UI draws them (docs/archive/specs/07). Each kind's mark comes from
  * its adapter's descriptor (GET /v1/channels/kinds): a short code, the
  * network's name, and optionally a design-system tone. Nothing here knows a
  * channel kind.

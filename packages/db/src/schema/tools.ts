@@ -3,7 +3,7 @@ import { boolean, index, integer, jsonb, pgTable, text, uniqueIndex, uuid } from
 import { createdAt, id, ts, updatedAt } from './columns.js';
 import { users } from './identity.js';
 
-/** MCP server connection (docs/08 §2). Tokens are secret references only. */
+/** MCP server connection (docs/archive/specs/08 §2). Tokens are secret references only. */
 export const mcpConnections = pgTable(
   'mcp_connections',
   {
@@ -95,7 +95,7 @@ export const tools = pgTable(
   ],
 );
 
-/** Auditable tool invocation (docs/03 ToolCall, docs/08 §8). Arguments are sanitized. */
+/** Auditable tool invocation (docs/archive/specs/03 ToolCall, docs/archive/specs/08 §8). Arguments are sanitized. */
 export const toolCalls = pgTable(
   'tool_calls',
   {

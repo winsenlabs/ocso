@@ -44,7 +44,7 @@ export class ChannelsAdminController {
   }
 
   /**
-   * Every registered kind's descriptor (docs/plugins/channels.md): the "Add
+   * Every registered kind's descriptor (docs/guides/channels/README.md): the "Add
    * channel" form, the channel list, setup steps, and the marks and template
    * wording the workspace, agents and analytics show. Static plugin metadata
    * (no channel instances, no secrets), so every area that displays channels

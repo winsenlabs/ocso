@@ -31,7 +31,7 @@ export async function EmailSection() {
         <div style={{ display: 'grid', gap: 12 }}>
           <section className="ch" aria-label="Email configuration">
             {settings ? <EmailStatus settings={settings} /> : <AlertBanner tone="error" style={{ margin: 0 }}>{`Email status unavailable: ${error ?? 'unknown error'}`}</AlertBanner>}
-            <span className="mono-sm">Configured by the deployment (see docs/operations/compose.md).</span>
+            <span className="mono-sm">Configured by the deployment (see docs/guides/deploy/docker-compose.md).</span>
           </section>
           <EmailTestForm />
         </div>

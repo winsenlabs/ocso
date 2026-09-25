@@ -12,7 +12,7 @@ Status values: **PROPOSED** (awaiting verification), **ACCEPTED**, **SUPERSEDED*
 
 **Decision.** pnpm workspace with `apps/api` (NestJS HTTP control plane, webhooks, SSE), `apps/worker` (NestJS standalone context: turns, deliveries, schedulers), `apps/web` (Next.js UI + customer web chat widget), and `packages/*` containing plain TypeScript with explicit contracts (`domain`, `contracts`, `db`, `events`, `queue`, `auth`, `secrets`, `blob`, `config`, `observability`, `prompt-compiler`, `model-providers`, `agent-runtime`, `channels`, `mcp`, `alerts`, `deployment`). NestJS decorators/modules exist only inside `apps/*`; packages expose classes/functions and interfaces that Nest modules wire up.
 
-**Why.** docs/02 §2 recommends this shape. Keeping packages framework-free makes the domain testable without Nest, prevents the DI container from becoming the architecture ("huge dependency containers" is an explicit anti-goal), and lets api and worker share logic while scaling independently (build rule §18).
+**Why.** docs/archive/specs/02 §2 recommends this shape. Keeping packages framework-free makes the domain testable without Nest, prevents the DI container from becoming the architecture ("huge dependency containers" is an explicit anti-goal), and lets api and worker share logic while scaling independently (build rule §18).
 
 **Alternatives.** Nest libraries inside a Nest monorepo (couples every package to Nest); single app with modes (merges execution responsibilities).
 
@@ -26,7 +26,7 @@ Status values: **PROPOSED** (awaiting verification), **ACCEPTED**, **SUPERSEDED*
 
 **Decision.** No `tenant_id` columns, tenant middleware or tenant switching. Organization identity (name, region label, data-residency zone, provider allowlist, retention policy) lives in a singleton `deployment_settings` record.
 
-**Why.** docs/00, docs/03 §1, build rule §3.
+**Why.** docs/archive/specs/00, docs/archive/specs/03 §1, build rule §3.
 
 **Consequences.** Separate organizations run separate deployments (separate databases). Nothing in queries, caches or events carries a tenant discriminator.
 
@@ -60,7 +60,7 @@ Status values: **PROPOSED** (awaiting verification), **ACCEPTED**, **SUPERSEDED*
 
 **Status:** ACCEPTED (2026-09-22)
 
-**Decision.** Store the six control states from docs/03 §3 (`AI_ACTIVE`, `ESCALATION_REQUESTED`, `WAITING_FOR_HUMAN`, `HUMAN_ACTIVE`, `AI_RESUMING`, `RESOLVED`) as `conversations.control_state`. The coarser `control_mode` from docs/03 §2 (`AI | WAITING_HUMAN | HUMAN | RESOLVED`) is a derived projection, not stored separately. All transitions go through one pure transition function in `packages/domain` with an explicit table of `(from, command) → to`, required actor type and guards. Business status is orthogonal.
+**Decision.** Store the six control states from docs/archive/specs/03 §3 (`AI_ACTIVE`, `ESCALATION_REQUESTED`, `WAITING_FOR_HUMAN`, `HUMAN_ACTIVE`, `AI_RESUMING`, `RESOLVED`) as `conversations.control_state`. The coarser `control_mode` from docs/archive/specs/03 §2 (`AI | WAITING_HUMAN | HUMAN | RESOLVED`) is a derived projection, not stored separately. All transitions go through one pure transition function in `packages/domain` with an explicit table of `(from, command) → to`, required actor type and guards. Business status is orthogonal.
 
 Commands: `REQUEST_ESCALATION`, `ROUTE_TO_QUEUE`, `CLAIM`, `ACCEPT_ASSIGNMENT`, `TAKE_OVER`, `RELEASE_TO_QUEUE`, `RETURN_TO_AI`, `CANCEL_RETURN`, `RESUME_AI`, `CANCEL_ESCALATION`, `RESOLVE`, `REOPEN`.
 
@@ -91,7 +91,7 @@ Autonomous customer-facing AI output is permitted **only** in `AI_ACTIVE`. `AI_R
 | Anthropic API | `@ai-sdk/anthropic` `createAnthropic` | explicit `anthropic.cacheControl` breakpoints (≤ 4) on stable system / conversation context / history tail |
 | Sarvam API | `@ai-sdk/openai-compatible` `createOpenAICompatible({ name: 'sarvam', baseURL: 'https://api.sarvam.ai/v1', headers: { 'api-subscription-key' }, includeUsage: true })` | no documented control; adapter sends none, maps `cached_tokens` if Sarvam returns it, and declares `promptCaching: 'unverified'` |
 
-**Why.** docs/06; build rules §10–12. `sarvam-ai-sdk` loses streamed usage and never maps cached tokens; no official Foundry package exists.
+**Why.** docs/archive/specs/06; build rules §10–12. `sarvam-ai-sdk` loses streamed usage and never maps cached tokens; no official Foundry package exists.
 
 **Consequences.** Contract tests per provider assert the exact request body markers and usage mapping against recorded provider-format responses. Live verification of each provider requires its credentials (tracked per task in the build plan).
 
@@ -106,13 +106,13 @@ Autonomous customer-facing AI output is permitted **only** in `AI_ACTIVE`. `AI_R
 - Web chat: our own endpoints + AI SDK UI (`useChat` with an OCSO transport) for the customer widget.
 - Vercel Chat SDK (`chat`): not used for customer channels in v1; reserved for future staff-facing integrations (Slack/Teams handoff notifications and approvals), where its bot/thread model fits.
 
-**Why.** The Chat SDK WhatsApp adapter only processes inbound messages inside a `Chat` pipeline that owns dedupe/locks/handlers; it drops delivery statuses and contacts messages, marks messages deduped before the handler runs (a failed persist would lose a Meta retry for 10 minutes), acknowledges before processing completes, drops concurrent messages by default and sends from a single configured phone number. OCSO requires persist-before-ack, delivery statuses, multi-number channels and its own queue/turn serialization (docs/07 §2–3, docs/10 §3). The web adapter requires the reply to be produced within the same HTTP request, which conflicts with worker-executed turns.
+**Why.** The Chat SDK WhatsApp adapter only processes inbound messages inside a `Chat` pipeline that owns dedupe/locks/handlers; it drops delivery statuses and contacts messages, marks messages deduped before the handler runs (a failed persist would lose a Meta retry for 10 minutes), acknowledges before processing completes, drops concurrent messages by default and sends from a single configured phone number. OCSO requires persist-before-ack, delivery statuses, multi-number channels and its own queue/turn serialization (docs/archive/specs/07 §2–3, docs/archive/specs/10 §3). The web adapter requires the reply to be produced within the same HTTP request, which conflicts with worker-executed turns.
 
 **Alternatives.** (a) Chat SDK as the WhatsApp transport — rejected for the reasons above. (c) A shim implementing Chat SDK's `ChatInstance` interface — rejected; ~25 members of foreign surface to maintain for little gain.
 
 **Consequences.** OCSO owns Graph API version upgrades (version is configuration, default v26.0) and webhook security. Outbound sends are at-least-once on crash between send and record (Meta exposes no idempotency key); documented in the channel runbook.
 
-**Spec impact.** docs/07 §4 ("use Vercel Chat SDK where it provides useful transport/UI primitives") — satisfied by AI SDK UI for the widget; Chat SDK usage deferred with rationale recorded here.
+**Spec impact.** docs/archive/specs/07 §4 ("use Vercel Chat SDK where it provides useful transport/UI primitives") — satisfied by AI SDK UI for the widget; Chat SDK usage deferred with rationale recorded here.
 
 ---
 
@@ -131,7 +131,7 @@ Autonomous customer-facing AI output is permitted **only** in `AI_ACTIVE`. `AI_R
 4. **Fencing:** every customer-visible write (response interaction, outbound send, state transition) checks the caller's `lease_version` in the same transaction; a worker whose lease moved cannot write.
 5. Turn jobs are idempotent; duplicate wake-ups no-op.
 
-**Why.** docs/10 §2–4 (leases, preferred routing to the owning worker, no business code on SQS APIs) and §3 (no duplicate replies). The queue carries work signals, not conversation state (Postgres does).
+**Why.** docs/archive/specs/10 §2–4 (leases, preferred routing to the owning worker, no business code on SQS APIs) and §3 (no duplicate replies). The queue carries work signals, not conversation state (Postgres does).
 
 **Consequences.** Postgres mode gives exact affinity; SQS mode gives best-effort affinity (idle-lease transfer means a cold turn cache on the new worker, which is correct because caches are derived). Both modes share the lease, drain and fencing code paths and the same queue contract test suite.
 
@@ -141,7 +141,7 @@ Autonomous customer-facing AI output is permitted **only** in `AI_ACTIVE`. `AI_R
 
 **Status:** ACCEPTED (2026-09-22)
 
-**Decision.** Domain events (docs/02 §8, docs/14 §4 envelope) are written to an `outbox_events` table in the same transaction as the state change. A relay publishes them to (1) realtime subscribers via `pg_notify` on a small set of channels, consumed by every API instance and fanned out over SSE to permitted browser sessions; (2) outbound webhooks and alert evaluation. Ephemeral stream deltas (`agent.response_delta`) are NOTIFY-only and never persisted.
+**Decision.** Domain events (docs/archive/specs/02 §8, docs/archive/specs/14 §4 envelope) are written to an `outbox_events` table in the same transaction as the state change. A relay publishes them to (1) realtime subscribers via `pg_notify` on a small set of channels, consumed by every API instance and fanned out over SSE to permitted browser sessions; (2) outbound webhooks and alert evaluation. Ephemeral stream deltas (`agent.response_delta`) are NOTIFY-only and never persisted.
 
 **Why.** Works identically on Compose and RDS without another broker; the outbox guarantees events are never emitted for rolled-back changes.
 
@@ -165,7 +165,7 @@ Autonomous customer-facing AI output is permitted **only** in `AI_ACTIVE`. `AI_R
 
 **Decision.** `BlobStore` contract with two drivers: `local` (filesystem volume; default for Compose) and `s3` (AWS S3 with SSE-KMS bucket default; presigned GET/PUT with `requestChecksumCalculation: "WHEN_REQUIRED"` on the presigning client, otherwise browser PUTs fail the empty-body checksum). The `s3` driver accepts a custom endpoint + path-style addressing so an S3-compatible store (SeaweedFS, Apache-2.0) can be used via an optional Compose profile. MinIO is not used: its Docker Hub image is gone and the repo is archived (2025–26).
 
-**Why.** docs/07 §6 and docs/13 §2 ("optional local S3-compatible storage"); the default Compose install stays one volume with no extra service.
+**Why.** docs/archive/specs/07 §6 and docs/archive/specs/13 §2 ("optional local S3-compatible storage"); the default Compose install stays one volume with no extra service.
 
 ---
 
@@ -175,7 +175,7 @@ Autonomous customer-facing AI output is permitted **only** in `AI_ACTIVE`. `AI_R
 
 **Decision.** `SecretStore` contract: `put(name, value) → ref`, `rotate(ref, value)`, `resolve(ref)` (server-side only), `describe(ref)` (metadata only), `delete(ref)`. Drivers: `local` (AES-256-GCM envelope encryption, master key from a mounted file/env, ciphertext in Postgres `secrets` table) for Compose; `aws` (Secrets Manager) for AWS. All other tables store only `secret_ref`. No API ever returns secret values after creation.
 
-**Why.** docs/06 §6, docs/08 §5, docs/15 §3.
+**Why.** docs/archive/specs/06 §6, docs/archive/specs/08 §5, docs/archive/specs/15 §3.
 
 **Consequences.** Local driver security depends on protecting the master key file; documented in the Compose hardening guide.
 
@@ -187,7 +187,7 @@ Autonomous customer-facing AI output is permitted **only** in `AI_ACTIVE`. `AI_R
 
 **Decision.** Internal notes live in `internal_notes`, not in `interactions`. The timeline API merges them for staff views; channel rendering reads only `interactions` with customer visibility.
 
-**Why.** docs/09 §5 requires notes to be represented separately and never rendered to customers; a separate table makes leakage structurally impossible rather than a filter someone can forget.
+**Why.** docs/archive/specs/09 §5 requires notes to be represented separately and never rendered to customers; a separate table makes leakage structurally impossible rather than a filter someone can forget.
 
 ---
 
@@ -195,7 +195,7 @@ Autonomous customer-facing AI output is permitted **only** in `AI_ACTIVE`. `AI_R
 
 **Status:** ACCEPTED (2026-09-22)
 
-**Decision.** Tool definitions passed to the AI SDK carry schemas but no `execute` functions. The runtime receives tool-call parts, runs them through `ToolAuthorizer` (docs/08 §6 eight checks), persists the tool call before any side effect, executes via the MCP/tool provider, persists the result, and continues the loop with typed, sanitized results.
+**Decision.** Tool definitions passed to the AI SDK carry schemas but no `execute` functions. The runtime receives tool-call parts, runs them through `ToolAuthorizer` (docs/archive/specs/08 §6 eight checks), persists the tool call before any side effect, executes via the MCP/tool provider, persists the result, and continues the loop with typed, sanitized results.
 
 **Why.** Authorization, confirmation, audit and idempotency must be enforced in OCSO code between the model's request and the side effect (build rules §12, §14).
 
@@ -217,7 +217,7 @@ Autonomous customer-facing AI output is permitted **only** in `AI_ACTIVE`. `AI_R
 
 **Decision.** Role dashboards are computed by OCSO from Postgres read models (usage_events, turns, tool_calls, health samples, worker heartbeats, queue stats, alerts). OpenTelemetry traces/metrics/logs are exported via OTLP to any backend (Jaeger/collector in Compose; ADOT/CloudWatch on AWS). Turns, usage events and tool calls store `trace_id` so the UI can link to the external trace view.
 
-**Why.** The product must show role-specific observability without requiring an external metrics stack, while still integrating with enterprise telemetry (docs/11 §5).
+**Why.** The product must show role-specific observability without requiring an external metrics stack, while still integrating with enterprise telemetry (docs/archive/specs/11 §5).
 
 ---
 
@@ -227,7 +227,7 @@ Autonomous customer-facing AI output is permitted **only** in `AI_ACTIVE`. `AI_R
 
 **Decision.** The internal agent runs in the API process on behalf of the authenticated user. Its tools are thin adapters over the same application services the controllers use, each declaring a permission and a risk class (`READ`, `LOW_WRITE`, `HIGH_WRITE`). The catalogue is filtered by the user's permissions before the model sees it and every execution is re-authorized. `HIGH_WRITE` actions create a pending action that executes only after an explicit UI confirmation. Audit records use `via = INTERNAL_AGENT` with the human as actor.
 
-**Why.** docs/12 §3–6: no backdoor, inherited RBAC, confirmation and audit.
+**Why.** docs/archive/specs/12 §3–6: no backdoor, inherited RBAC, confirmation and audit.
 
 ---
 
@@ -247,7 +247,7 @@ Autonomous customer-facing AI output is permitted **only** in `AI_ACTIVE`. `AI_R
 
 **Decision.** Customer messages arriving mid-turn are, by default, queued and handled together in the next turn (`QUEUE_BEHIND`). `CANCEL_AND_RESTART` is available per agent and only cancels if no customer-visible output has been sent and no side-effecting tool has executed in the current turn.
 
-**Why.** docs/04 §7 requires deterministic, configurable behavior; queue-behind never discards work and is safe with side-effecting tools.
+**Why.** docs/archive/specs/04 §7 requires deterministic, configurable behavior; queue-behind never discards work and is safe with side-effecting tools.
 
 ---
 
@@ -273,7 +273,7 @@ Autonomous customer-facing AI output is permitted **only** in `AI_ACTIVE`. `AI_R
 - At runtime the transport receives only a minimal token provider (`{ token, onUnauthorized }`) backed by SecretStore; credentials never reach model context.
 - The AI SDK's `@ai-sdk/mcp` client is not used: its `tools()` executes calls directly, bypassing OCSO's authorization/confirmation gate (ADR-014), and its OAuth support lags the 2026 spec. The model receives schema-only tool definitions built from admin-approved tool records.
 
-**Why.** docs/08 §2 and §6, docs/15 §5; the MCP ecosystem is mid-migration between protocol generations, so auto-negotiation is required for real-world servers.
+**Why.** docs/archive/specs/08 §2 and §6, docs/archive/specs/15 §5; the MCP ecosystem is mid-migration between protocol generations, so auto-negotiation is required for real-world servers.
 
 **Consequences.** OCSO owns the OAuth state machine (DB-backed PKCE/state records with expiry). Compose demo MCP server needs an explicit egress host allowlist because it lives on a private network (SSRF guard blocks private ranges by default).
 
@@ -285,7 +285,7 @@ Autonomous customer-facing AI output is permitted **only** in `AI_ACTIVE`. `AI_R
 - Personal copies auto-approve only tools whose definition exactly matches the admin-approved template tool.
 - Known gap: a worker losing a refresh race may fail one call before re-reading rotated tokens (fix belongs in `@ocso/mcp` credential session).
 
-**Spec impact.** docs/08 §2 "OAuth 2.1 flows where supported" — refined with the concrete client-registration order (CIMD → pre-registered → DCR fallback).
+**Spec impact.** docs/archive/specs/08 §2 "OAuth 2.1 flows where supported" — refined with the concrete client-registration order (CIMD → pre-registered → DCR fallback).
 
 ---
 
@@ -305,7 +305,7 @@ Autonomous customer-facing AI output is permitted **only** in `AI_ACTIVE`. `AI_R
 
 **Decision.** The leader publishes CloudWatch metrics every 60 s (custom metrics are 1-minute resolution): `SlotDemand` (active + queued conversations), `Workers`, `OldestQueueAgeSeconds`, `TurnsInFlight`, `TurnLatencyP95`. ECS worker service scaling = target tracking on metric-math "slot demand per worker" with target = conversations-per-worker × target utilization, plus step scaling on queue age for bursts and scale-from-floor. Workers enable ECS task scale-in protection only while a turn is running (Fargate gives ≤ 120 s on stop). Tech Admin settings map to `RegisterScalableTarget` / `PutScalingPolicy` / `PutMetricAlarm` via the ECS deployment adapter; Compose deployment adapter reports settings as advisory (replica count is operator-controlled).
 
-**Why.** docs/10 §6 — scale on conversation demand and queue age, not CPU.
+**Why.** docs/archive/specs/10 §6 — scale on conversation demand and queue age, not CPU.
 
 **Implementation (as built).** Operator note: `docs/operations/worker-scaling.md`.
 
@@ -346,7 +346,7 @@ Autonomous customer-facing AI output is permitted **only** in `AI_ACTIVE`. `AI_R
 
 **Decision.** Derived context (agent prefix: prompt components + tool catalog; customer context; rolling summary; recent history) is cached in each worker's in-memory LRU (`HotContextCache`), keyed by conversation. Validity is decided by monotonic generation counters in `cache_generations`, one row per scope (`agent:<id>`, `customer:<id>`, `channel:<id>`, `profile:<id>`, `policy`, `global`). Any change that affects a scope bumps its counter in the same transaction as the change (prompt activation, tool grants, MCP approval/drift, customer edits, channel/profile changes); a turn reads the counters for its scopes (one query) and treats any mismatch as COLD. Turns record HOT/COLD in `turns.cache_layer`; context hashes are stored per turn.
 
-**Why.** docs/05 §4–5 require OCSO-side turn caching with correct invalidation. Counters in Postgres keep every worker consistent without a shared cache service (build rule: Postgres is the durable truth), cost one indexed read per turn, and survive worker restarts (a new worker is simply COLD).
+**Why.** docs/archive/specs/05 §4–5 require OCSO-side turn caching with correct invalidation. Counters in Postgres keep every worker consistent without a shared cache service (build rule: Postgres is the durable truth), cost one indexed read per turn, and survive worker restarts (a new worker is simply COLD).
 
 **Alternatives.** Redis/ElastiCache shared cache (another stateful dependency for Compose and AWS); TTL-only expiry (serves stale prompts after activation); pub/sub invalidation only (lost messages leave stale caches — kept as a latency optimisation via `cache.invalidated` events, not for correctness).
 
@@ -384,9 +384,9 @@ Autonomous customer-facing AI output is permitted **only** in `AI_ACTIVE`. `AI_R
 4. OIDC discovery runs in OCSO (Better Auth's only trusts origins known at start-up); IdPs on private networks must be listed in `OCSO_AUTH_TRUSTED_ORIGINS`.
 5. Email OTP as a second factor is not enabled (TOTP + backup codes only); SSO-only enforcement per domain is not built (password sign-in stays available to users who have one).
 
-**Consequences.** Upgrading applies migrations 0014/0015: everyone signs in again once (old session tokens were only stored hashed); passwords keep working. `BETTER_AUTH_SECRET` becomes deployment bootstrap (Compose keygen generates it; rotating it signs everyone out and invalidates enrolled authenticators, whose secrets it encrypts). OIDC client secrets are stored in `auth_sso_providers.oidc_config` in Better Auth's format (database, not OCSO's secret store) — protect database backups accordingly. AWS: `/api/auth/*` must reach the web target group (default rule), not the API, so the client-IP header stays trustworthy (docs/operations/aws.md).
+**Consequences.** Upgrading applies migrations 0014/0015: everyone signs in again once (old session tokens were only stored hashed); passwords keep working. `BETTER_AUTH_SECRET` becomes deployment bootstrap (Compose keygen generates it; rotating it signs everyone out and invalidates enrolled authenticators, whose secrets it encrypts). OIDC client secrets are stored in `auth_sso_providers.oidc_config` in Better Auth's format (database, not OCSO's secret store) — protect database backups accordingly. AWS: `/api/auth/*` must reach the web target group (default rule), not the API, so the client-IP header stays trustworthy (docs/guides/deploy/aws.md).
 
-**Spec impact.** docs/15 (implementation notes), docs/operations/setup-guide.md §1, docs/operations/compose.md, docs/operations/aws.md.
+**Spec impact.** docs/archive/specs/15 (implementation notes), docs/guides/first-run-setup.md, docs/guides/deploy/docker-compose.md, docs/guides/deploy/aws.md.
 
 ---
 
@@ -468,7 +468,7 @@ routing there. An agent may answer on many channels.
 
 **Consequences.** Migration `0017_model_catalog_and_pricing_origin` adds `model_catalog_snapshots` and the `model_pricing` columns `origin`, `catalog_*`, `tiers` and `updated_at`. Existing rows become `manual`. The API and worker make outbound https calls to models.dev and raw.githubusercontent.com. Air-gapped deployments keep working on the vendored snapshot and set `OCSO_MODEL_CATALOG_REFRESH=false`, which turns refresh off in the API and worker. Known approximations are listed in PM/research/09 §8: 1-hour cache writes are costed at the 5-minute rate, batch, fast mode and data-residency uplifts are not modeled, and the budget alert re-prices older unpriced usage at average input size. The Vertex and Bedrock listings are built to their documented shapes and still owe a live check.
 
-**Spec impact.** docs/06 (implementation notes), docs/11 (new alert condition), docs/operations/setup-guide.md §2 and §7, PM/research/09.
+**Spec impact.** docs/archive/specs/06 (implementation notes), docs/archive/specs/11 (new alert condition), docs/guides/first-run-setup.md, PM/research/09.
 
 ## ADR-028 — The plugin boundary: open kinds, self-describing plugins, one composition root
 
@@ -620,7 +620,7 @@ is shared by every embeddable kind; built-in tools have no `tools` rows, so they
 
 **Consequences.** Going live, resuming, deleting and changing a live agent now need a second person: the API answers 409/202 and the UI asks for a checker. Seeds and test fixtures take agents live through proposals: the demo seed has each Head check the other Head's agents (no bootstrap rows); e2e setups create a checker Head (`e2e/approval-setup.ts`); only the single-checker `agents.spec` deployment still bootstraps. The internal-agent `set_agent_status LIVE` and `update_agent` tools meet `approval_required` for live agents (they surface the 409; routing them into proposals is future work). Until migration 0031 grandfathers existing live configuration, agents that are LIVE/PAUSED from before 0023 count as never approved: they change directly (only go-live is gated). 0031 (the grandfather) must insert, per kind, APPROVED `origin='MIGRATION'` rows with `activated_at` set (the proposal trigger admits only MIGRATION rows inserted non-SUBMITTED); any action works for "approved" (`isApproved` ignores it) — follow 11b's `'CREATE'`; MIGRATION rows are never finished by the deferred worker.
 
-**Spec impact.** docs/14 (approval write contract, `/v1/approvals`, realtime events), docs/15 (maker–checker governance notes), docs/05 (prompt activation). README/PM docs are merged by the integrator.
+**Spec impact.** docs/archive/specs/14 (approval write contract, `/v1/approvals`, realtime events), docs/archive/specs/15 (maker–checker governance notes), docs/archive/specs/05 (prompt activation). README/PM docs are merged by the integrator.
 
 ### ADR-030 amendment A (2026-09-23) — platform objects under maker–checker (wave 2, COVERAGE-PLATFORM)
 
@@ -793,7 +793,7 @@ for this migration; it landed as 0031, and the references in ADR-029–031 are u
 
 **Consequences.** Every channel needs an active router to take messages; the migration gives each existing one a pass-through router. New conversations may exist without an agent (ROUTING): analytics, insights, summaries, CSAT and reviews skip or refuse them until routed. A conversation's agent can change (transfers), so turns, timeline messages and web chat messages carry their own agent. Router activation and channel attachment are approvals (wave 2); until then only seeds, tests and migration create live routers. The web keeps working with nullable agents (shown as "Router" until the wave-2 routing card) and renders ROUTER timeline messages; the agent Channels tab's editor now gets 400 until wave 2 turns it into "Reached through". Not done in wave 1: activation does not yet check that referenced queues and model profiles are *approved* (the descriptors are wave 2), and the classifier runs any existing profile; classifier errors are recorded per session and logged, with no error-rate alert yet; the route consumer is serialised per conversation by the queue's group key and by row locks, not the turn lease (deviation 4) — a sweep `expire` racing a consumer can at worst repeat one model call. Known limits: the WhatsApp list button reads "Choose"; router messages are single-language text (templates per channel only for outside the window); the returning check applies to AI_ACTIVE and recently resolved conversations, not to ones a human holds.
 
-**Spec impact.** docs/07 (implementation notes: routing, CHOICES), docs/plugins/channels.md (routing, choices capability, limits). docs/01/03/09/14 and README are merged by the integrator.
+**Spec impact.** docs/archive/specs/07 (implementation notes: routing, CHOICES), docs/guides/channels/README.md (routing, choices capability, limits). docs/archive/specs/01/03/09/14 and README are merged by the integrator.
 
 ### ADR-031 amendment A (2026-09-23) — routing under maker–checker, and the routing UI (wave 2, ROUTING-WEB)
 
@@ -909,7 +909,7 @@ for this migration; it landed as 0031, and the references in ADR-029–031 are u
 5. *`unsealed()` order is arrival (ingest) order, not `occurredAt`*: chain order is seal order, and a re-shipped old record must still be sealed. The postgres driver looks for unsealed rows from 10 000 ingest positions behind the sealed watermark (commits can land out of order); clickhouse from an hour behind.
 6. *`AUDIT_SIGNING_KEY` inline* in addition to `AUDIT_SIGNING_KEY_FILE` (ECS injects secrets as variables, not files).
 7. *Writer = the user in `AUDIT_DATABASE_URL`*: audit-migrate derives the role name (and default password) from the writer URL, so a deployment never names the role twice; `AUDIT_WRITER_PASSWORD` overrides the password.
-8. *Terraform* gives the audit store its own RDS instance by default (`audit_store.separate_instance = true`; master `ocso_audit`, whose URL only the migrate task receives). `false` keeps it on the main instance, whose master user the api and worker hold (they could disable the triggers): a `check` block warns on every plan and docs/15 states the weaker boundary.
+8. *Terraform* gives the audit store its own RDS instance by default (`audit_store.separate_instance = true`; master `ocso_audit`, whose URL only the migrate task receives). `false` keeps it on the main instance, whose master user the api and worker hold (they could disable the triggers): a `check` block warns on every plan and docs/archive/specs/15 states the weaker boundary.
 9. *The api reads with a SELECT-only reader role* (spec §6.5 gave api and worker the same writer credentials). The api never writes to the store; Compose keeps the writer URL in a secrets subpath only the worker mounts.
 10. *The signing key on AWS is its own Secrets Manager secret* (`audit_signing_key_secret_arn`, created outside Terraform), not a bootstrap key: a bootstrap rotation can no longer blank or silently replace it.
 
@@ -921,14 +921,14 @@ for this migration; it landed as 0031, and the references in ADR-029–031 are u
 
 - *What changes in the guarantee (PM/research/11 §6.6).* Before, the audit row and the change committed together in one database. They still do (the outbox row). The store copy arrives within seconds, at least once, idempotently; it is not atomic with the change. Compensated by outbox atomicity, reconciliation before any local prune, incidents (`SHIP_FAILED`, `STORE_DOWN`, `RECONCILE_MISSING`, `CHAIN_BROKEN`, `EXPORT_FAILED`) on the System screen and for the exception report, and the merged read path.
 - *Team scope is fixed when the event is written.* Moving a user or agent between teams does not re-scope history. Platform-wide objects with no team (e.g. a platform escalation rule) are visible to non-Tech readers only through the actor's teams; previously every reader could see them. History from before the store was backfilled without the acting user's teams, so a lead sees a teammate's pre-upgrade action on an unscoped target only if it concerned a team object. `audit.read_all` is unaffected.
-- *Deployments gain a database.* Compose: an `audit-db` service (volume `auditdata`, secrets subpath `audit-postgres`); keygen writes the owner URL and both roles' credentials for migrate (`audit-migrate/`), the writer URL into `audit-writer/` (mounted only by the worker), the reader URL into `app/audit_reader_url` (api, demo seed) and the signing key (`app/audit_signing_key` — back it up); the migrate container runs `audit-migrate` after the main migrations; the entrypoint resolves the new `_FILE` settings. Terraform: a second RDS instance (`audit.tf`), bootstrap keys `AUDIT_DATABASE_URL` (writer), `AUDIT_READER_URL`, `AUDIT_DATABASE_OWNER_URL`, the signing key secret ARN with an execution-role read policy, `AUDIT_MIN_RETENTION_DAYS` and `AUDIT_TRUSTED_PUBLIC_KEYS` in the environment. Backups now include the audit database (docs/15 and compose.md §5 carry the restore runbook). Every api/worker start needs `AUDIT_DATABASE_URL` (or the clickhouse settings).
+- *Deployments gain a database.* Compose: an `audit-db` service (volume `auditdata`, secrets subpath `audit-postgres`); keygen writes the owner URL and both roles' credentials for migrate (`audit-migrate/`), the writer URL into `audit-writer/` (mounted only by the worker), the reader URL into `app/audit_reader_url` (api, demo seed) and the signing key (`app/audit_signing_key` — back it up); the migrate container runs `audit-migrate` after the main migrations; the entrypoint resolves the new `_FILE` settings. Terraform: a second RDS instance (`audit.tf`), bootstrap keys `AUDIT_DATABASE_URL` (writer), `AUDIT_READER_URL`, `AUDIT_DATABASE_OWNER_URL`, the signing key secret ARN with an execution-role read policy, `AUDIT_MIN_RETENTION_DAYS` and `AUDIT_TRUSTED_PUBLIC_KEYS` in the environment. Backups now include the audit database (docs/archive/specs/15 and compose.md §5 carry the restore runbook). Every api/worker start needs `AUDIT_DATABASE_URL` (or the clickhouse settings).
 - *Tests.* Every harness (api integration, Playwright stack, resilience stack, the custom-module telemetry test) provisions a throwaway audit database (same server, separate database, a per-run writer role). Application integration tests that only call `recordAudit` need no store (they write the outbox).
-- *Key rotation is supported by trust, not re-signing.* Old checkpoints stay signed by the old key; operators keep its public half in `AUDIT_TRUSTED_PUBLIC_KEYS(_FILE)`. A checkpoint by a key not trusted is `CHECKPOINT_UNKNOWN_KEY` in verification and opens `SIGNING_KEY_CHANGED` in the sealer (a lost or silently regenerated key shows up). Exports carry their public key for convenience only: verifiers must pin keys independently (docs/15), and an export is an independent copy only with write-once storage (S3 Object Lock) on `audit-exports/`.
+- *Key rotation is supported by trust, not re-signing.* Old checkpoints stay signed by the old key; operators keep its public half in `AUDIT_TRUSTED_PUBLIC_KEYS(_FILE)`. A checkpoint by a key not trusted is `CHECKPOINT_UNKNOWN_KEY` in verification and opens `SIGNING_KEY_CHANGED` in the sealer (a lost or silently regenerated key shows up). Exports carry their public key for convenience only: verifiers must pin keys independently (docs/archive/specs/15), and an export is an independent copy only with write-once storage (S3 Object Lock) on `audit-exports/`.
 - *A chain break no longer stops sealing or exports.* It is recorded with its position range, later ranges keep being checkpointed and exported, and a person closes it with an audited acknowledgement. There is no automatic "re-anchor" signature over the break: the next checkpoint signs the head hash (which chains through the break), and the incident plus acknowledgement are the record of it.
 - *`recordAudit` costs one more query* (the team resolution) inside the caller's transaction.
 - *Operational bounds.* Store calls are bounded (15 s; connect 5 s); the sealer verifies at most 50 000 entries per run; full verification pages 50 000 entries a minute; the upgrade backfill is one UPDATE over `audit_events` (minutes per million rows; VACUUM afterwards, documented).
 
-**Spec impact.** docs/15 (implementation notes: retention, audit store — trust boundaries per driver and deployment, keys, restore), docs/operations/compose.md (§2 keygen, §5 backup, §10 the audit store), docs/plugins/infrastructure-drivers.md (the audit store driver kind), .env.example, infra/aws/terraform/terraform.tfvars.example; README (services list) for the integrator.
+**Spec impact.** docs/archive/specs/15 (implementation notes: retention, audit store — trust boundaries per driver and deployment, keys, restore), docs/guides/deploy/docker-compose.md, docs/operations/backups-and-restore.md, docs/concepts/audit.md, docs/contributing/infrastructure-drivers.md (the audit store driver kind), .env.example, infra/aws/terraform/terraform.tfvars.example; README (services list) for the integrator.
 
 ## ADR-033 — The exception report, storage growth and health roll-ups
 
@@ -1147,7 +1147,7 @@ need to add channels and providers without forking, and to build their own chat 
    address; successful mints unlimited because the caller proved the secret key).
 
 **Consequences.** Adopters can ship channels and providers as npm packages and embed chat natively. In-process plugins
-can do anything the api/worker can; the trust statement is explicit in `docs/plugins/installing.md`. The public contract
+can do anything the api/worker can; the trust statement is explicit in `docs/guides/extending/install-a-plugin.md`. The public contract
 is now a compatibility promise: breaking it means `apiVersion: 2`. Migrations 0032 (host context, held user tokens,
 single-use passes, `forward_user_token`) and 0033 (per-channel verified ids) are additive and data-only respectively.
 

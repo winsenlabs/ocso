@@ -30,7 +30,7 @@ export interface ModelAdminDeps {
   now?: (() => Date) | undefined;
 }
 
-/** Audit-safe snapshot: credential NAMES only (docs/15 §3). */
+/** Audit-safe snapshot: credential NAMES only (docs/archive/specs/15 §3). */
 const auditSnapshot = (r: Pick<ProviderRow, 'kind' | 'name' | 'region' | 'residencyZone' | 'settings' | 'enabled' | 'maxConcurrency' | 'secretRefs'>) => ({
   kind: r.kind,
   name: r.name,
@@ -46,7 +46,7 @@ const auditSnapshot = (r: Pick<ProviderRow, 'kind' | 'name' | 'region' | 'reside
 export type ProviderEdit = Omit<ProviderPatch, 'enabled'>;
 
 /**
- * Model provider administration (docs/06, ADR-006, ADR-012). Tech admin owns writes.
+ * Model provider administration (docs/archive/specs/06, ADR-006, ADR-012). Tech admin owns writes.
  * Maker–checker (PM/research/11 §4, provider-approval.ts): a new provider is a disabled draft.
  */
 export class ProviderService {

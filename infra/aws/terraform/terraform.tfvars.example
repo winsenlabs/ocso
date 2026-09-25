@@ -1,4 +1,4 @@
-# Copy to terraform.tfvars (git-ignored) and adjust. See docs/operations/aws.md.
+# Copy to terraform.tfvars (git-ignored) and adjust. See docs/guides/deploy/aws.md.
 
 environment         = "prod"
 aws_region          = "ap-south-1"
@@ -76,3 +76,12 @@ tags = {
 #   openssl genpkey -algorithm ed25519 -out audit_signing_key.pem
 #   aws secretsmanager create-secret --name ocso/prod/audit-signing-key --secret-string file://audit_signing_key.pem
 audit_signing_key_secret_arn = "arn:aws:secretsmanager:ap-south-1:123456789012:secret:ocso/prod/audit-signing-key-AbCdEf"
+
+# Email (docs/guides/email.md). The provider credential is its own secret, created outside Terraform:
+#   aws secretsmanager create-secret --name ocso/prod/email --secret-string "re_..."   (Resend API key)
+#   or, for smtp, --secret-string "smtps://user:password@smtp.example.com:465"
+email = {
+  driver     = "resend"
+  from       = "Meridian OCSO <ocso@meridian.example>"
+  secret_arn = "arn:aws:secretsmanager:ap-south-1:123456789012:secret:ocso/prod/email-AbCdEf"
+}

@@ -6,7 +6,7 @@ import { z } from 'zod';
 import type { InternalTool, ObjectLink, ToolContext } from '../contract.js';
 
 /**
- * "What needs my attention?" — role-aware triage (docs/12 examples).
+ * "What needs my attention?" — role-aware triage (docs/archive/specs/12 examples).
  * Each role gets only the items its permissions allow.
  */
 export const attentionSummary: InternalTool<Record<string, never>> = {

@@ -27,7 +27,7 @@ contributor agreement to sign.
 - **Larger changes** (a new feature, a change to a contract or the data model): open an issue first so
   that we can agree the approach before you write it.
 - **A new channel, model provider or other plugin:** open a "New plugin proposal" issue, and read
-  [docs/plugins/](docs/plugins/README.md) first.
+  [Plugins](docs/concepts/plugins.md) first.
 - **Questions:** open an issue with the "Question" template.
 - **Security issues:** do not open an issue. Follow [SECURITY.md](SECURITY.md).
 
@@ -62,7 +62,7 @@ pnpm test:int
 ## Running OCSO while you develop
 
 **The quickest way to see the whole product** is the Compose demo from the README
-([Quickstart](README.md#quickstart-the-demo-in-a-few-minutes)). It seeds users, agents, queues and an
+([Quickstart](README.md#quickstart)). It seeds users, agents, queues and an
 MCP server, with no provider keys. Rebuild after a change with `docker compose up -d --build <service>`.
 
 **From source.** There is no single `pnpm dev` for the whole stack yet. The pieces are:
@@ -141,8 +141,8 @@ responses through an injected `fetch`. Never call a live API from a test.
 
 ## The rules every change must follow
 
-[docs/99-BUILD-RULES.md](docs/99-BUILD-RULES.md) is the full list. These are the ones that come up in
-almost every review.
+These are the rules that come up in almost every review. [Engineering rules](docs/contributing/engineering-rules.md)
+has the longer rationale.
 
 ### 1. The plugin boundary: core never names a plugin kind
 
@@ -256,15 +256,16 @@ shows the same thing).
 
 1. Open a "New plugin proposal" issue describing the kind, what it needs from the core, and how it will
    be tested offline.
-2. Read [docs/plugins/README.md](docs/plugins/README.md) and the page for your extension point:
-   [channels](docs/plugins/channels.md), [model providers](docs/plugins/model-providers.md),
-   [alerts](docs/plugins/alerts.md), [email](docs/plugins/email.md),
-   [infrastructure drivers](docs/plugins/infrastructure-drivers.md).
-3. For a channel, follow [add a channel in seven steps](docs/plugins/add-a-channel.md). The Slack and
-   Microsoft Teams channels ([slack.md](docs/plugins/slack.md), [ms-teams.md](docs/plugins/ms-teams.md))
+2. Read [docs/concepts/plugins.md](docs/concepts/plugins.md) and the page for your extension point:
+   [channels](docs/guides/channels/README.md), [model providers](docs/guides/models/README.md),
+   [alerts](docs/guides/alerts-and-webhooks.md), [email](docs/guides/email.md),
+   [infrastructure drivers](docs/contributing/infrastructure-drivers.md).
+3. For a channel, follow [Build a channel plugin](docs/guides/extending/build-a-channel-plugin.md). The Slack and
+   Microsoft Teams channels (`packages/channels/src/slack`, `packages/channels/src/ms-teams`; operator guides
+   [Slack](docs/guides/channels/slack.md) and [Microsoft Teams](docs/guides/channels/microsoft-teams.md))
    are recent, complete examples.
 4. A plugin that lives outside this repository builds on `packages/ocso-plugin-sdk` and is loaded with
-   `OCSO_PLUGINS` ([installing plugins](docs/plugins/installing.md)).
+   `OCSO_PLUGINS` ([installing plugins](docs/guides/extending/install-a-plugin.md)).
    `examples/ocso-plugin-example-channel` is a working example.
 5. Register a first-party plugin with one entry in `FIRST_PARTY_PLUGINS`
    (`packages/bootstrap/src/first-party.ts`). Nothing in the core, the database or the web app should
@@ -298,14 +299,15 @@ change.
   web build, the Docker image builds, `docker compose config` and Terraform validation. The Playwright
   job runs on every pull request but does not block merges yet; run the specs you touched locally.
 - **Never commit** secrets, `.env` files, database dumps or real customer data, including in fixtures.
-- **Docs.** Operator-facing changes update `docs/operations/`. Behaviour that refines the spec updates
-  the "Implementation notes (as built)" section of the relevant `docs/NN-*.md`. Plugin changes update
-  `docs/plugins/`.
+- **Docs.** Update the page that describes what you changed: `docs/concepts/` for how something works,
+  `docs/guides/` for operator steps (a new setting, label or env var), `docs/reference/` for configuration,
+  permissions and APIs, `docs/operations/` for runbooks. The specs under `docs/archive/specs/` are history;
+  do not update them. See the [docs home](docs/README.md) for the layout.
 
 ## Where to start
 
-- Read [docs/00-INDEX.md](docs/00-INDEX.md), then [docs/plugins/README.md](docs/plugins/README.md) and
-  [docs/99-BUILD-RULES.md](docs/99-BUILD-RULES.md).
+- Read [docs/README.md](docs/README.md), then [docs/concepts/plugins.md](docs/concepts/plugins.md) and
+  [docs/contributing/engineering-rules.md](docs/contributing/engineering-rules.md).
 - Run the demo and click through it as each role.
 - Pick an item from [ROADMAP.md](ROADMAP.md). The "Good first issues" section lists self-contained
   pieces of work, and issues labelled `good first issue` are the same kind of thing.

@@ -1,6 +1,6 @@
 /**
  * Conversation control state — who is driving the conversation.
- * See docs/03 §3 and ADR-005.
+ * See docs/archive/specs/03 §3 and ADR-005.
  */
 export const ControlState = {
   AI_ACTIVE: 'AI_ACTIVE',
@@ -16,7 +16,7 @@ export type ControlState = (typeof ControlState)[keyof typeof ControlState];
 
 export const CONTROL_STATES: readonly ControlState[] = Object.values(ControlState);
 
-/** Coarse projection from docs/03 §2 (`control_mode`). Derived, never stored. */
+/** Coarse projection from docs/archive/specs/03 §2 (`control_mode`). Derived, never stored. */
 export type ControlMode = 'AI' | 'WAITING_HUMAN' | 'HUMAN' | 'RESOLVED';
 
 export function controlModeOf(state: ControlState): ControlMode {

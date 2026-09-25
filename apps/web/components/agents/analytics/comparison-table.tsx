@@ -8,7 +8,7 @@ import { formatMoneyMicros } from '../lib/metrics';
 import { agentHref } from '../lib/tabs';
 import { Def } from '../shared/definition';
 
-/** Agent-by-agent comparison with the same formulas (docs/11 §3 "agent-by-agent trends"). */
+/** Agent-by-agent comparison with the same formulas (docs/archive/specs/11 §3 "agent-by-agent trends"). */
 export function ComparisonTable({ comparison, agentId }: { comparison: AgentComparison; agentId: string }) {
   const d = comparison.definitions;
   const rows = [...comparison.agents].sort((x, y) => y.conversations - x.conversations);

@@ -20,7 +20,7 @@ export class LeaseLostError extends DomainError {
 }
 
 /**
- * Conversation leases (docs/10 §2, ADR-008). A lease is the only permission to
+ * Conversation leases (docs/archive/specs/10 §2, ADR-008). A lease is the only permission to
  * run a turn; `lease_version` is a fencing token checked in every
  * customer-visible write.
  */

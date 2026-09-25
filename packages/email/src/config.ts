@@ -80,7 +80,7 @@ export class EmailConfigError extends Error {
 
 /** From address of a non-delivering driver (log) when EMAIL_FROM is unset. */
 export const LOG_DRIVER_FROM = 'OCSO <no-reply@ocso.invalid>';
-const DOCS = 'docs/operations/compose.md §9';
+const DOCS = 'docs/guides/email.md';
 
 /**
  * Validate the environment and resolve secrets. EMAIL_DRIVER names a

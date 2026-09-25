@@ -3,7 +3,7 @@ import { z } from 'zod';
 /**
  * Wire shapes of the public web chat API (apps/api/src/modules/webchat).
  * Every response is validated at the boundary; parts stay OCSO's canonical
- * interaction parts (docs/07 §1) until the view maps them to UI parts.
+ * interaction parts (docs/archive/specs/07 §1) until the view maps them to UI parts.
  */
 
 export const MEDIA_KINDS = ['IMAGE', 'AUDIO', 'VIDEO', 'DOCUMENT'] as const;

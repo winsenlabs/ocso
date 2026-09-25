@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: 'Audit log' };
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-/** Every privileged change and sensitive action, attributed to a person (docs/15 §7). */
+/** Every privileged change and sensitive action, attributed to a person (docs/archive/specs/15 §7). */
 export default function Page({ searchParams }: { searchParams: SearchParams }) {
   return (
     <>

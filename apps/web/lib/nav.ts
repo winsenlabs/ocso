@@ -64,7 +64,7 @@ const NAV: readonly GroupDef[] = [
       // channel → router → queue → agent (PM/research/11 §5.7).
       { key: 'routers', label: 'Routers', href: '/routers', requires: P.ROUTERS_READ },
       { key: 'customers', label: 'Customers', href: '/customers', requires: P.CUSTOMERS_READ },
-      // Message templates are business content (docs/07 §3); not in the OCSONav mockup, which predates them.
+      // Message templates are business content (docs/archive/specs/07 §3); not in the OCSONav mockup, which predates them.
       { key: 'templates', label: 'Message templates', href: '/templates', requires: P.MESSAGE_TEMPLATES_MANAGE },
     ],
   },

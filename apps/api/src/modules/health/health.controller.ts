@@ -9,7 +9,7 @@ import { Capability, Public, RequirePermission } from '../../common/decorators.j
 import { AUDIT_STORE, DB, QUEUE } from '../../infrastructure/tokens.js';
 
 /**
- * Health endpoints (docs/13 §6): liveness never depends on external services;
+ * Health endpoints (docs/archive/specs/13 §6): liveness never depends on external services;
  * readiness requires PostgreSQL — not the audit store (ADR-032: the outbox
  * holds events while it is away); dependency health is informational.
  */

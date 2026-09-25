@@ -74,7 +74,13 @@ variable "db" {
 }
 
 variable "bootstrap_secret_version" {
-  description = "Bump to regenerate the database password, internal signing key and setup token together (write-only rotation). Then force a new deployment."
+  description = "Bump to regenerate the database passwords and the setup token together (write-only rotation). Then force a new deployment."
+  type        = number
+  default     = 1
+}
+
+variable "auth_secret_version" {
+  description = "Bump to regenerate BETTER_AUTH_SECRET. Everyone is signed out and enrolled authenticators and backup codes stop working; then force a new deployment."
   type        = number
   default     = 1
 }
@@ -109,6 +115,7 @@ variable "queue_topics" {
     "evaluation.run",
     "approval.notify",
     "approval.activate",
+    "conversation.route",
   ]
 }
 
