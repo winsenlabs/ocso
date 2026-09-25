@@ -1,5 +1,8 @@
 import { repo } from '@/content/links';
+import { SHOTS, governanceGallery } from '@/content/shots';
 import { Heading } from '../Heading';
+import { ProductShot } from '../ProductShot';
+import { ShotGallery } from '../ShotGallery';
 
 const PILLARS = [
   {
@@ -23,10 +26,21 @@ export function Governance() {
     <section id="governance" className="mx-auto max-w-6xl scroll-mt-24 px-6 pt-24">
       <Heading
         eyebrow="Governed for real"
-        title="Controls an auditor can check, not just trust."
+        title={
+          <>
+            Controls an auditor can check,
+            <br className="hidden md:block" /> not just trust.
+          </>
+        }
         lede="Built for regulated service teams. Permissions are checked in code, never in a prompt, and nothing a model says can grant one."
       />
-      <div className="mt-14 grid gap-4 md:grid-cols-3">
+      <div className="mt-14">
+        <ProductShot shot={SHOTS.approvals} />
+        <p className="mt-4 text-center text-sm text-fg/55">
+          Approvals: the checker sees the maker, the reason, the content hash and exactly what would change.
+        </p>
+      </div>
+      <div className="mt-12 grid gap-4 md:grid-cols-3">
         {PILLARS.map((p, i) => (
           <div key={p.title} className="rounded-3xl border border-fg/10 bg-gradient-to-b from-accent/[0.06] to-transparent p-7">
             <p className="font-mono text-sm text-accent">{String(i + 1).padStart(2, '0')}</p>
@@ -53,6 +67,9 @@ export function Governance() {
             {VERIFY}
           </code>
         </pre>
+      </div>
+      <div className="mt-16">
+        <ShotGallery shots={governanceGallery} />
       </div>
     </section>
   );

@@ -70,7 +70,26 @@ function describeValue(value: unknown): string {
   return String(value).slice(0, 200);
 }
 
+/**
+ * What the customer should hear when a tool result carries an instruction for them (a hand-off, a transfer, an
+ * action awaiting a colleague): a real model follows the instruction, so the scripted one does too instead of
+ * reading the tool result back.
+ */
+function instructed(outcomes: readonly ToolOutcome[]): string | null {
+  for (const { output } of outcomes) {
+    if (output.type !== 'json' || output.value === null || typeof output.value !== 'object') continue;
+    const value = output.value as Record<string, unknown>;
+    if (typeof value['instruction'] !== 'string') continue;
+    if (value['status'] === 'handoff_requested') return "I've asked a colleague to join. They will continue here shortly.";
+    if (value['status'] === 'transfer_requested') return `A colleague from ${typeof value['queue'] === 'string' ? value['queue'] : 'the right team'} will take it from here.`;
+    if (value['status'] === 'awaiting_human_confirmation') return 'A colleague needs to confirm this. They will confirm it here shortly.';
+  }
+  return null;
+}
+
 function summarize(outcomes: readonly ToolOutcome[]): string {
+  const followed = instructed(outcomes);
+  if (followed) return followed;
   const lines = outcomes.map(({ toolName, output }) => {
     const name = humanize(toolName);
     if (output.type === 'error-text' || output.type === 'error-json') return `${name} did not go through (${describeValue(output.value)}).`;

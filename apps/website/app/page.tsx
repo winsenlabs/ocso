@@ -14,9 +14,9 @@ export default function Home() {
         eyebrow={NAME}
         title={
           <>
-            Customer success,{' '}
-            <span className="underline decoration-accent decoration-[3px] underline-offset-[10px] md:decoration-4 md:underline-offset-[14px]">rethought</span>
-            <br className="hidden md:block" /> for the AI age.
+            <span className="whitespace-nowrap">Customer success,</span>
+            <br />
+            <span className="underline decoration-accent decoration-[3px] underline-offset-[10px] md:decoration-4 md:underline-offset-[14px]">rethought</span> for the AI age.
           </>
         }
         stats={[
@@ -25,8 +25,9 @@ export default function Home() {
           ['Open source', 'Apache-2.0, self-hosted'],
         ]}
       >
-        Today customer success is scattered across channels, tools and teams, with AI bolted on at the edges. OCSO is one open
-        layer where AI agents and your people serve every customer, under controls you can audit.
+        <span className="lg:block">Today customer success is scattered across channels, tools and teams, with AI bolted on at the edges.</span>{' '}
+        OCSO is the open orchestration layer where AI agents and your people serve customers together on WhatsApp, web chat, Slack and Teams.
+        Every configuration change is approved by a second person and written to a signed audit trail.
       </Hero>
       <BuildWithYou />
       <Problem />

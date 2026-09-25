@@ -119,6 +119,27 @@ describe('DEV_SCRIPTED provider (development only)', () => {
     expect(result.text).toContain('get balance: available balance: 5230.5, currency: INR, 2 holds');
   });
 
+  it('follows a tool result that carries an instruction for the customer instead of reading it back', async () => {
+    const after = (toolName: string, value: Record<string, unknown>) => {
+      const req = ask('Can I speak to a human?');
+      return finish({
+        ...req,
+        messages: [
+          ...req.messages,
+          { role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'c1', toolName, input: {} }] },
+          { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'c1', toolName, output: { type: 'json', value } }] },
+        ],
+      });
+    };
+    const handoff = await after('ocso__request_handoff', { status: 'handoff_requested', instruction: 'Tell the customer a colleague will continue here shortly. Do not promise a time.' });
+    expect(handoff.text).toBe("I've asked a colleague to join. They will continue here shortly.");
+    expect(handoff.text).not.toMatch(/handoff_requested|instruction/);
+    const transfer = await after('ocso__transfer', { status: 'transfer_requested', queue: 'Cards & EMI', instruction: 'Tell the customer…' });
+    expect(transfer.text).toBe('A colleague from Cards & EMI will take it from here.');
+    const confirm = await after('bank__refund', { status: 'awaiting_human_confirmation', reason: 'over limit', instruction: 'Tell the customer a colleague will confirm it here shortly.' });
+    expect(confirm.text).toBe('A colleague needs to confirm this. They will confirm it here shortly.');
+  });
+
   it('answers in text when a keyword has no matching tool', async () => {
     const result = await finish(ask('what is my balance', { tools: [] }));
     expect(result.finishReason).toBe('stop');
