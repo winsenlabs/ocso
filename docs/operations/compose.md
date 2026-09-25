@@ -16,7 +16,8 @@ premises — running every OCSO process in containers. The same images run on EC
 
 Profiles: `demo` (example MCP server and seed), `observability` (OTel Collector and Jaeger), and
 `s3` (SeaweedFS instead of the local blob volume). Overlay files: `infra/compose/tls.yaml` (HTTPS with
-Caddy, see [HTTPS](#https-with-the-bundled-caddy-overlay)) and `infra/compose/debug.yaml` (API and
+Caddy, see [HTTPS](#https-with-the-bundled-caddy-overlay)), `infra/compose/website.yaml` (the public
+website, see [Public website](#public-website)) and `infra/compose/debug.yaml` (API and
 PostgreSQL on 127.0.0.1).
 
 Only port 3000 is published (with the TLS overlay, Caddy publishes 80 and 443 instead and port 3000
@@ -70,6 +71,32 @@ volume; no account email is needed. Channel webhooks and the web chat widget use
 so set it before creating channels. With your own reverse proxy instead, apply the same
 `OCSO_PUBLIC_URL`, `OCSO_HTTP_BIND` and `OCSO_TRUSTED_PROXY_HOPS` rules (one hop per proxy that appends
 `X-Forwarded-For`).
+
+### Public website
+
+`infra/compose/website.yaml` adds the public OCSO website (`apps/website`, a static export) to the
+same Compose project. The `website` service is the Dockerfile's `website` target: a small Caddy file
+server on port 8080 inside the network, non-root, read-only, with no published port. The overlay
+also makes the TLS overlay's Caddy serve a second site, `OCSO_WEBSITE_DOMAIN`, by proxying to
+`website:8080` with the same security headers (`infra/compose/Caddyfile.with-website`, which imports the
+unchanged `infra/compose/Caddyfile`). Without the overlay nothing changes.
+
+1. Point a DNS `A` (and `AAAA`, if the host has IPv6) record for the website domain at the same host.
+2. Set in `.env`:
+
+   ```dotenv
+   OCSO_WEBSITE_DOMAIN=ocso.example.com
+   # Canonical URLs, robots.txt and the sitemap are built in; default https://ocso.winsenlabs.dev
+   OCSO_SITE_URL=https://ocso.example.com
+   ```
+
+3. Add the overlay after the TLS one, here and in every later command (or append it to `COMPOSE_FILE`):
+
+   ```bash
+   docker compose -f compose.yaml -f infra/compose/tls.yaml -f infra/compose/website.yaml up -d --build
+   ```
+
+Caddy obtains the website's certificate the same way as the product's.
 
 **Configure email before inviting anyone.** Invites, password resets and sign-in codes go out by email
 (section 9). A first `docker compose up` starts without it so you can try OCSO: messages then only reach

@@ -1,0 +1,26 @@
+{
+  "name": "@ocso/website",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "description": "The public OCSO website: a static export (docs/operations/compose.md, Public website).",
+  "scripts": {
+    "dev": "next dev --port 3100",
+    "build": "next build && node scripts/strip-runtime.mjs && node scripts/check-export.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fontsource-variable/geist": "5.3.0",
+    "@fontsource-variable/geist-mono": "5.3.0",
+    "next": "16.3.5",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "typescript": "catalog:"
+  }
+}

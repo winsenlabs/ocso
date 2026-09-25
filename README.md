@@ -5,7 +5,7 @@
   </picture>
 </p>
 
-# OCSO — Open Customer Service Orchestrator
+# OCSO — One Customer Success Orchestrator
 
 OCSO is an open-source, self-hosted runtime for AI employees that talk to your customers: support,
 sales, collections, onboarding. You run named virtual agents on WhatsApp and web chat, give them tools

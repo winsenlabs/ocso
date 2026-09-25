@@ -1,0 +1,25 @@
+# Caddy configuration when the public website overlay is used
+# (infra/compose/website.yaml). It serves the demo site exactly as before, by
+# importing the unchanged infra/compose/Caddyfile, and adds a second site for
+# OCSO_WEBSITE_DOMAIN that proxies to the static `website` container.
+
+import /etc/caddy/Caddyfile.ocso
+
+{$OCSO_WEBSITE_DOMAIN} {
+	encode zstd gzip
+
+	reverse_proxy website:8080
+
+	# The same security headers as the OCSO site block.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}
