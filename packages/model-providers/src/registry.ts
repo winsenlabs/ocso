@@ -71,7 +71,7 @@ export class ProviderRegistry {
   }
 }
 
-/** The six production providers (docs/06 §1). */
+/** The six production providers (docs/archive/specs/06 §1). */
 export const PRODUCTION_PROVIDERS: readonly ProviderDefinition[] = [
   bedrockProvider,
   vertexProvider,

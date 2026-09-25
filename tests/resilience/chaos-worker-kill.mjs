@@ -1,5 +1,5 @@
 // Chaos: workers crash (SIGKILL) and drain (SIGTERM) while turns are in flight.
-// Invariants (docs/10 §9, ADR-008): every customer message gets exactly one AI
+// Invariants (docs/archive/specs/10 §9, ADR-008): every customer message gets exactly one AI
 // reply — no loss, no duplicates — and recovery completes within the lease /
 // visibility window. Usage: node tests/resilience/chaos-worker-kill.mjs [--conversations 20]
 import { parseArgs } from 'node:util';

@@ -8,7 +8,7 @@ import { channelsReachingAgents } from '../routing/reach.js';
 export type ChannelRow = typeof channels.$inferSelect;
 
 /**
- * Who may manage a channel's message templates (docs/09 §6): templates are
+ * Who may manage a channel's message templates (docs/archive/specs/09 §6): templates are
  * business content, so `message_templates.manage` (Lead, Tech admin).
  * A Tech admin (channels.manage) manages every channel; a Lead only
  * channels that reach a virtual agent one of their teams owns (through the

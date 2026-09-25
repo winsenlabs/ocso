@@ -6,7 +6,7 @@ import { approveAs, isApproved } from './agents.js';
 import { DEV_PROVIDER, PROFILES, type ProfileKey } from '../data/organization.js';
 
 /**
- * DEV_SCRIPTED provider + logical profiles (ADR-015, docs/06 §2) through
+ * DEV_SCRIPTED provider + logical profiles (ADR-015, docs/archive/specs/06 §2) through
  * ProviderService/ProfileService, so the save-time residency check runs
  * against the IN residency zone exactly as it would for a real provider.
  */

@@ -65,7 +65,7 @@ function assertSendable(template: TemplateView | null, input: TemplateMessageInp
 }
 
 /**
- * Send an approved message template to the customer (docs/07 §3, docs/09
+ * Send an approved message template to the customer (docs/archive/specs/07 §3, docs/archive/specs/09
  * §4): the only way to reach them after the channel's customer-service
  * window closes, and allowed inside it too. Same holder rule as a human reply (HUMAN_ACTIVE, the
  * assigned human or a lead). A resolved conversation can be reopened and

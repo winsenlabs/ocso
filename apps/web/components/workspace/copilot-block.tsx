@@ -12,7 +12,7 @@ export interface CopilotBlockProps {
 }
 
 /**
- * Copilot suggested reply (design/01 .copilot, docs/09 §4 "optional AI
+ * Copilot suggested reply (design/01 .copilot, docs/archive/specs/09 §4 "optional AI
  * copilot assistance"). Drafts are never sent by OCSO: Insert only fills the
  * composer. When the copilot routes are unavailable (not shipped, not
  * permitted, disabled for the agent) the block renders nothing.

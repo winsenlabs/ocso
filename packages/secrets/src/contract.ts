@@ -1,7 +1,7 @@
 import type { SecretRowStore } from './local-store.js';
 
 /**
- * SecretStore contract (docs/15 §3, ADR-012). Every other table stores only a
+ * SecretStore contract (docs/archive/specs/15 §3, ADR-012). Every other table stores only a
  * secret reference. Values are resolved server-side by trusted code and are
  * never returned to browsers, prompts, logs, traces or audit payloads.
  */

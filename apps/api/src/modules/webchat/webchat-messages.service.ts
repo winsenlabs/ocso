@@ -29,7 +29,7 @@ type Row = typeof interactions.$inferSelect;
 
 /**
  * Customer-facing message view: only customer-visible MESSAGE interactions and
- * only parts the web-chat channel may render (docs/07 §5). Internal events,
+ * only parts the web-chat channel may render (docs/archive/specs/07 §5). Internal events,
  * notes and tool traces never leave this service; control changes leave only
  * as customer-safe notices.
  */

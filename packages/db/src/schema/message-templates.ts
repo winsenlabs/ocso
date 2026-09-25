@@ -6,7 +6,7 @@ import { users } from './identity.js';
 
 /**
  * Message templates created in OCSO and submitted to the channel's provider
- * for review (docs/07 §3; any kind whose adapter implements the template
+ * for review (docs/archive/specs/07 §3; any kind whose adapter implements the template
  * methods). The provider stays the source of truth for what can be sent; this
  * keeps OCSO's own history (who submitted what, when, and every status
  * change) even before or after the provider lists the template.

@@ -13,7 +13,7 @@ export interface HookRequest {
 export type AuthLog = (level: 'debug' | 'info' | 'warn' | 'error', message: string, err?: unknown) => void;
 
 /**
- * Audit trail for authentication events (docs/15 §7). Never records
+ * Audit trail for authentication events (docs/archive/specs/15 §7). Never records
  * passwords, codes, tokens or secrets — only who, what and from where.
  */
 export class AuthAudit {

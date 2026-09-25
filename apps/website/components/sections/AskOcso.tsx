@@ -31,7 +31,7 @@ export function AskOcso() {
               </li>
             ))}
           </ul>
-          <a href={repo('docs/operations/ask-ocso-in-chat.md')} className="mt-8 inline-block text-sm text-accent hover:underline">
+          <a href={repo('docs/guides/channels/ask-ocso-in-slack-and-teams.md')} className="mt-8 inline-block text-sm text-accent hover:underline">
             Ask OCSO in Slack and Teams →
           </a>
         </div>

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Host-site origins allowed to embed the web chat widget (docs/15 §1 origin
+ * Host-site origins allowed to embed the web chat widget (docs/archive/specs/15 §1 origin
  * allowlist). Entries are bare origins — `https://shop.example.com`,
  * `http://localhost:8080` — or a single-label wildcard for subdomains,
  * `https://*.example.com`. The same list drives the widget page's CSP

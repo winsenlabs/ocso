@@ -59,7 +59,7 @@ export async function reopenAsHuman(tx: DbOrTx, actor: ActorContext, conversatio
 }
 
 /**
- * Human operations on a conversation (docs/09 §4, build rule §7). Every method
+ * Human operations on a conversation (docs/archive/specs/09 §4, build rule §7). Every method
  * is one transaction: control transition + handoff/assignment records +
  * timeline + audit + events.
  */

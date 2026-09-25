@@ -13,7 +13,7 @@ import type { UserTokenSource } from './user-tokens.js';
 /** Per-connection MCP provider factory; registered through `connectionToolSource` in a ToolProviderRegistry. */
 export type ToolProviderFactory = ConnectionToolProviders;
 
-/** Issues short-lived customer identity claims for trusted connections (docs/08 §4). */
+/** Issues short-lived customer identity claims for trusted connections (docs/archive/specs/08 §4). */
 export interface ClaimsIssuer {
   issue(input: { customerId: string; conversationId: string; agentId: string; connectionId: string; scopes: readonly string[] }): Promise<string>;
 }

@@ -38,7 +38,7 @@ export function Footer() {
           <a href={repo('docs/')} className={link}>
             Documentation
           </a>
-          <a href={repo('docs/operations/compose.md')} className={link}>
+          <a href={repo('docs/guides/deploy/docker-compose.md')} className={link}>
             Self-hosting guide
           </a>
           <a href={repo('SECURITY.md')} className={link}>

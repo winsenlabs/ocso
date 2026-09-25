@@ -11,7 +11,7 @@ const PatchBody = ProfilePatch.extend(WithApproval.shape);
 type PatchBody = z.infer<typeof PatchBody>;
 
 /**
- * Logical model profiles (docs/06 §2). Maker–checker (PM/research/11 §4, approvals.check.platform): a profile
+ * Logical model profiles (docs/archive/specs/06 §2). Maker–checker (PM/research/11 §4, approvals.check.platform): a profile
  * nothing live uses and never approved is a draft, edited directly; `POST :id/activate` approves it for use;
  * once approved or in use by something live every edit is an UPDATE proposal; deleting is a DELETE proposal.
  */

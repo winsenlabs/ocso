@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { ProposedSchema } from '@/components/approvals/lib/schemas';
 import { api } from './client';
 
-/** GET /v1/settings/retention — retention classes with defaults, floors and effective days (docs/15 §8). */
+/** GET /v1/settings/retention — retention classes with defaults, floors and effective days (docs/archive/specs/15 §8). */
 export const RetentionClassSchema = z.object({
   key: z.string(),
   label: z.string(),

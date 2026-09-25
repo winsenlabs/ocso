@@ -25,7 +25,7 @@ export class AlertEgress implements OnModuleDestroy {
   }
 }
 
-/** Alert evaluation + delivery and outbound event webhook delivery (docs/11 §6, E8.10). */
+/** Alert evaluation + delivery and outbound event webhook delivery (docs/archive/specs/11 §6, E8.10). */
 @Module({
   providers: [
     AlertEgress,

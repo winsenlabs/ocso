@@ -1,7 +1,7 @@
 import type { Principal } from '@ocso/auth';
 import type { ControlState } from '@ocso/domain';
 
-/** Side-effect class (docs/08 §7). */
+/** Side-effect class (docs/archive/specs/08 §7). */
 export type ToolRiskClass = 'READ' | 'WRITE' | 'SENSITIVE';
 
 export type ConnectionStatus = 'PENDING' | 'AUTH_REQUIRED' | 'ACTIVE' | 'DEGRADED' | 'DOWN' | 'DISABLED';

@@ -4,7 +4,7 @@ import { EmailSettingsService, EmailTestInput, type ActorContext } from '@ocso/a
 import { Actor, Capability, RequirePermission } from '../../common/decorators.js';
 
 /**
- * Deployment email, read-only (docs/operations/compose.md#email): email is
+ * Deployment email, read-only (docs/guides/email.md): email is
  * auth-critical, so it is configured by the deployment (EMAIL_* env and
  * secret files), never from the UI. The view never contains credentials.
  */

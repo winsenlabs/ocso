@@ -29,7 +29,7 @@ interface EditorProps {
 }
 
 /**
- * Per-agent tool grants (docs/08 §3/§6): which approved tools this agent may
+ * Per-agent tool grants (docs/archive/specs/08 §3/§6): which approved tools this agent may
  * call, whether every call needs a human confirmation, and argument rules.
  * Read-only roles see the same table without controls. Maker–checker
  * (PM/research/11 §4): on an approved agent a new tool, turning one on,

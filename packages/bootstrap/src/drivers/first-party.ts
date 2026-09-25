@@ -9,7 +9,7 @@ import { AwsSecretStore, LocalSecretStore, parseMasterKey, type SecretStoreDrive
 import type { DriverEnv } from '../plugin.js';
 
 /**
- * First-party infrastructure drivers (docs/02 §6, build rule §17): how each
+ * First-party infrastructure drivers (docs/archive/specs/02 §6, build rule §17): how each
  * `*_DRIVER` value maps the environment onto an adapter. A driver's settings
  * checks live with it, so a new driver never edits a central switch.
  */

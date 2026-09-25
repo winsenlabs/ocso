@@ -72,7 +72,7 @@ function Detail({ c, canStage, zone }: { c: Correction; canStage: boolean; zone:
   );
 }
 
-/** Prompt correction workflow across agents (docs/09 §7): record, stage into a draft, reject; versions are made on the agent's Prompt tab. */
+/** Prompt correction workflow across agents (docs/archive/specs/09 §7): record, stage into a draft, reject; versions are made on the agent's Prompt tab. */
 export async function CorrectionsBody({ searchParams }: { searchParams: SearchParams }) {
   const [session, params] = await Promise.all([requireSession(), searchParams]);
   if (!hasPermission(session, Permission.CORRECTIONS_MANAGE)) {

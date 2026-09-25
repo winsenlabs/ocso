@@ -1,5 +1,5 @@
 /**
- * Prompt component catalogue (docs/05 §1). Order here IS the compile order.
+ * Prompt component catalogue (docs/archive/specs/05 §1). Order here IS the compile order.
  * Stable components come first so provider prefix caches stay warm.
  */
 

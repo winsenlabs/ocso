@@ -179,7 +179,7 @@ export async function activateVersionAction(agentId: string, versionId: string, 
 
 // Escalation rules and tool grants (maker–checker): lib/actions/agent-config.ts.
 
-// ─────────── Corrections (docs/09 §7) ───────────
+// ─────────── Corrections (docs/archive/specs/09 §7) ───────────
 
 const CorrectionInput = z.object({
   agentId: Id,

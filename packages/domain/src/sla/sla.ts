@@ -1,6 +1,6 @@
 import type { ConversationType, Priority } from '../conversation/types.js';
 
-/** SLA policy attached to a queue (docs/09, design/02 Routing tab). */
+/** SLA policy attached to a queue (docs/archive/specs/09, design/02 Routing tab). */
 export interface SlaPolicy {
   firstHumanResponseSeconds: number;
   pickupSecondsByPriority: Readonly<Partial<Record<Priority, number>>>;

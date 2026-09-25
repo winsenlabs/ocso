@@ -36,7 +36,7 @@ export const DeploymentSettingsInput = z.object({
 });
 export type DeploymentSettingsInput = z.infer<typeof DeploymentSettingsInput>;
 
-/** Worker configuration with safe bounds (docs/10 §5). DB constraints mirror these. */
+/** Worker configuration with safe bounds (docs/archive/specs/10 §5). DB constraints mirror these. */
 export const WorkerSettingsInput = z
   .object({
     minWarmWorkers: z.number().int().min(0).max(500),

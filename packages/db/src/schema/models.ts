@@ -34,7 +34,7 @@ export interface ProfileFallback {
   model: string;
 }
 
-/** Logical model profile — agents reference these, never provider model ids (docs/06 §2). */
+/** Logical model profile — agents reference these, never provider model ids (docs/archive/specs/06 §2). */
 export const modelProfiles = pgTable(
   'model_profiles',
   {
@@ -123,7 +123,7 @@ export const modelCatalogSnapshots = pgTable('model_catalog_snapshots', {
   updatedAt: updatedAt(),
 });
 
-/** One row per model request (docs/03 UsageEvent, docs/05 §3). */
+/** One row per model request (docs/archive/specs/03 UsageEvent, docs/archive/specs/05 §3). */
 export const usageEvents = pgTable(
   'usage_events',
   {

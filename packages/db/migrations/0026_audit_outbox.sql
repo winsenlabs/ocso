@@ -102,7 +102,7 @@ $$ LANGUAGE plpgsql;
 -- new rows carry the actor's teams at write time). Ids are cast once, guarded by a uuid check
 -- in a CASE (evaluation order is guaranteed there), so every lookup uses a primary key or
 -- foreign-key index. One UPDATE rewrites every audit row: expect minutes per million rows on
--- large installs, and run VACUUM (ANALYZE) audit_events afterwards (docs/15 §7).
+-- large installs, and run VACUUM (ANALYZE) audit_events afterwards (docs/archive/specs/15 §7).
 -- The trigger is off for this one statement: it would (rightly) refuse any other UPDATE.
 ALTER TABLE "audit_events" DISABLE TRIGGER "audit_events_immutable";
 --> statement-breakpoint

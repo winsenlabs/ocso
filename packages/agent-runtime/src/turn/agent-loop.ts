@@ -36,7 +36,7 @@ export interface LoopParams {
 }
 
 /**
- * The model/tool loop (docs/04 §3 steps 8–10). OCSO owns every tool execution
+ * The model/tool loop (docs/archive/specs/04 §3 steps 8–10). OCSO owns every tool execution
  * between model steps; the loop ends on a terminal reply or the step limit.
  */
 export async function runAgentLoop(gateway: ModelGateway, tools: ToolRunner, params: LoopParams, cb: LoopCallbacks): Promise<LoopResult> {

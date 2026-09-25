@@ -14,7 +14,7 @@ export interface PromptComponentCardProps {
   children: ReactNode;
 }
 
-/** Versioned prompt component (.pcomp) as compiled into the runtime prompt (docs/05). */
+/** Versioned prompt component (.pcomp) as compiled into the runtime prompt (docs/archive/specs/05). */
 export function PromptComponentCard({ index, name, owner, tokens, edited, badge, action, children }: PromptComponentCardProps) {
   return (
     <section className={edited ? 'pcomp edited' : 'pcomp'} aria-label={`Prompt component ${name}`}>

@@ -1,7 +1,7 @@
 import type { Priority, ToolResultOutput } from '@ocso/domain';
 
 /**
- * ToolProvider contract (docs/02 §5). MCP connections implement it; built-in
+ * ToolProvider contract (docs/archive/specs/02 §5). MCP connections implement it; built-in
  * OCSO tools implement it. Providers execute only after the runtime has
  * authorized the call (authorizeToolCall) and written its tool_calls row —
  * a provider never authorizes or audits by itself.
@@ -12,7 +12,7 @@ export interface ToolInvocation {
   toolName: string;
   args: unknown;
   timeoutMs: number;
-  /** Short-lived signed customer claims for trusted connections (docs/08 §4). */
+  /** Short-lived signed customer claims for trusted connections (docs/archive/specs/08 §4). */
   customerClaims?: string | undefined;
   /**
    * The customer's verified end-user token (web chat tool identity `passthrough`), for connections that opted

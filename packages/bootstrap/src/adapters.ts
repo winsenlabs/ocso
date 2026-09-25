@@ -92,7 +92,7 @@ export function assertWorkerDrivers(env: WorkerEnv, drivers: DriverRegistries = 
 }
 
 /**
- * Adapter selection by configuration (docs/02 §6, build rule §17): the
+ * Adapter selection by configuration (docs/archive/specs/02 §6, build rule §17): the
  * registered driver each `*_DRIVER` names builds the adapter. This package is
  * the only place that knows which infrastructure the deployment uses.
  */

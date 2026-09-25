@@ -2,7 +2,7 @@ import type { UIMessage } from 'ai';
 import { z } from 'zod';
 
 /**
- * Ask OCSO message contract (docs/12, design/05). The API streams AI SDK UI
+ * Ask OCSO message contract (docs/archive/specs/12, design/05). The API streams AI SDK UI
  * message chunks: text plus typed `data-*` parts. These schemas validate
  * every data part at the browser boundary and type the chat messages.
  */

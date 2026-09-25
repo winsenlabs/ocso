@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-/** A metric label whose formula shows on hover/focus (docs/11 §3: every number is explainable). */
+/** A metric label whose formula shows on hover/focus (docs/archive/specs/11 §3: every number is explainable). */
 export function Def({ definition, children }: { definition: string | null | undefined; children: ReactNode }) {
   if (!definition) return <>{children}</>;
   return (

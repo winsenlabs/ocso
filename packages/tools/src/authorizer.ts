@@ -22,7 +22,7 @@ function needsConfirmationByPolicy(tool: ToolRecord, connection: ConnectionRecor
 }
 
 /**
- * Deterministic tool authorization (docs/08 §6). The model can never grant
+ * Deterministic tool authorization (docs/archive/specs/08 §6). The model can never grant
  * itself anything: every input here comes from OCSO state, never from the
  * model except `args`, which is validated and policy-checked.
  */

@@ -15,7 +15,7 @@ const BREAKPOINT = '--> statement-breakpoint';
  * OCSO migration runner (ADR-004). Applies `*.sql` files in filename order
  * under an advisory lock, one transaction per file, and refuses to run when a
  * previously applied file was edited. Invoked only by the explicit migrate
- * deployment step — never from api/worker startup (docs/13 §5).
+ * deployment step — never from api/worker startup (docs/archive/specs/13 §5).
  */
 export async function runMigrations(pool: pg.Pool, dir: string, log: (msg: string) => void = () => {}): Promise<MigrationResult> {
   const client = await pool.connect();

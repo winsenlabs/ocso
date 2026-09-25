@@ -1,18 +1,18 @@
 # @ocso/channels
 
-Channel adapters for OCSO (docs/07, ADR-007). An adapter handles transport only: request verification, identity extraction, inbound normalization into canonical `InteractionPart`s, media retrieval, rendering, sending, delivery statuses and capability declaration. Adapters never persist anything, never run the agent loop and never log.
+Channel adapters for OCSO (docs/archive/specs/07, ADR-007). An adapter handles transport only: request verification, identity extraction, inbound normalization into canonical `InteractionPart`s, media retrieval, rendering, sending, delivery statuses and capability declaration. Adapters never persist anything, never run the agent loop and never log.
 
 | Adapter | Factory | Transport |
 |---|---|---|
 | `TwilioWhatsAppChannelAdapter` | `createTwilioWhatsAppAdapter({ fetch, now })` | WhatsApp through Twilio Programmable Messaging (form-encoded webhooks, Messages API) |
 | `WhatsAppChannelAdapter` | `createWhatsAppAdapter({ fetch, now })` | WhatsApp Cloud API, called directly (Graph API version comes from config) |
 | `WebChatChannelAdapter` | `createWebChatAdapter({ now, generateId? })` | OCSO's own widget: JSON in, realtime stream out |
-| `SlackChannelAdapter` | `createSlackChannelAdapter({ fetch, now, sleep? })` | A Slack app: Events API + interactivity in (signed `v0` HMAC), `chat.postMessage` out; see docs/plugins/slack.md |
-| `MsTeamsChannelAdapter` | `createMsTeamsAdapter({ fetch, now, sleep? })` | An Azure Bot in Microsoft Teams: Bot Framework activities in (bearer JWT verified against Microsoft's signing keys, so `verifyRequest` is async), Bot Connector REST out with a cached client-credentials token; see docs/plugins/ms-teams.md |
+| `SlackChannelAdapter` | `createSlackChannelAdapter({ fetch, now, sleep? })` | A Slack app: Events API + interactivity in (signed `v0` HMAC), `chat.postMessage` out; see docs/guides/channels/slack.md |
+| `MsTeamsChannelAdapter` | `createMsTeamsAdapter({ fetch, now, sleep? })` | An Azure Bot in Microsoft Teams: Bot Framework activities in (bearer JWT verified against Microsoft's signing keys, so `verifyRequest` is async), Bot Connector REST out with a cached client-credentials token; see docs/guides/channels/microsoft-teams.md |
 
 `fetch` is the only way an adapter reaches the network. The composition root (`packages/bootstrap`) passes the SSRF-guarded channel egress: public https hosts, plus hosts a Tech admin allowlisted (deployment settings). A factory called without `fetch` gets `NO_NETWORK`, which rejects every call; tests pass a stub.
 
-Register adapters with `ChannelRegistry`. Kinds are open strings, validated by the registry; callers look adapters up by `kind` and never switch on it. Each adapter describes itself (`describe()`: form, label, mark, setup steps, identifying setting, webhook events, template terms — see `src/contract/descriptor.ts` and docs/plugins/channels.md); the registry checks the descriptor at registration, maps its `webhookSegment` to the kind (`/channels/<segment>/<publicKey>/webhook`), and gives each channel its public paths (`webhookPath`, and `embedPath` = `/chat/<publicKey>` for embeddable kinds).
+Register adapters with `ChannelRegistry`. Kinds are open strings, validated by the registry; callers look adapters up by `kind` and never switch on it. Each adapter describes itself (`describe()`: form, label, mark, setup steps, identifying setting, webhook events, template terms — see `src/contract/descriptor.ts` and docs/guides/channels/README.md); the registry checks the descriptor at registration, maps its `webhookSegment` to the kind (`/channels/<segment>/<publicKey>/webhook`), and gives each channel its public paths (`webhookPath`, and `embedPath` = `/chat/<publicKey>` for embeddable kinds).
 
 ---
 

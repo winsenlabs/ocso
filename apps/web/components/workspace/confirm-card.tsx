@@ -28,7 +28,7 @@ export interface ConfirmCardProps {
 }
 
 /**
- * Sensitive-action confirmation (docs/08 §7, design/01 .confirm): the agent
+ * Sensitive-action confirmation (docs/archive/specs/08 §7, design/01 .confirm): the agent
  * proposed a call that policy holds for a human. Shows the risk, the
  * sanitized arguments and the expiry; "Confirm and run" executes exactly the
  * proposed arguments as this human, "Deny" records a reason.

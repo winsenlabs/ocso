@@ -53,7 +53,7 @@ export function composeComponent(current: string, text: string, mode: 'APPEND' |
 }
 
 /**
- * Prompt correction workflow (docs/09 §7): capture source turn, observed and
+ * Prompt correction workflow (docs/archive/specs/09 §7): capture source turn, observed and
  * desired behavior and the component to change; stage it into the agent's
  * prompt draft (never the live prompt); a new version with correctionIds marks
  * it APPLIED. Nothing mutates a prompt invisibly: every step is audited.

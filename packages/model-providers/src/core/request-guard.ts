@@ -3,7 +3,7 @@ import type { ModelCapabilities, ModelRequest } from '../contract/types.js';
 
 /**
  * Fail clearly before calling the provider when the request needs a
- * capability the model lacks (docs/06 §4). The prompt compiler normally
+ * capability the model lacks (docs/archive/specs/06 §4). The prompt compiler normally
  * strips unsupported media; this is the adapter-side guard.
  */
 export function assertRequestSupported(request: ModelRequest, caps: ModelCapabilities, model: string): void {

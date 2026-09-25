@@ -120,7 +120,7 @@ export const conversationRouting = pgTable(
   ],
 );
 
-/** One logical conversational event (docs/03 Interaction). Append-only. */
+/** One logical conversational event (docs/archive/specs/03 Interaction). Append-only. */
 export const interactions = pgTable(
   'interactions',
   {

@@ -24,7 +24,7 @@ export interface QueueDepth {
 }
 
 /**
- * Queue depth and age per topic (docs/10 §6 scaling signals). Uses the queue
+ * Queue depth and age per topic (docs/archive/specs/10 §6 scaling signals). Uses the queue
  * adapter's stats when provided; otherwise reads the Postgres `jobs` table with
  * the same formula as PgQueue.stats (depth = queued and available now; age =
  * now − oldest ready enqueued_at).

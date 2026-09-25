@@ -1,6 +1,6 @@
 # @ocso/model-providers
 
-Model-provider adapters for OCSO (docs/06, ADR-006, ADR-014, ADR-015). All six providers share one AI SDK v7
+Model-provider adapters for OCSO (docs/archive/specs/06, ADR-006, ADR-014, ADR-015). All six providers share one AI SDK v7
 core. Each provider module supplies only its model factory, its provider-options builder (cache markers, cache
 keys, reasoning) and its request-id/usage extractors.
 
@@ -18,7 +18,7 @@ Provider kinds are open strings (`PROVIDER_KIND_PATTERN`); the registry, not a u
 deployment accepts. Everything kind-specific lives on the definition: label, `mark`, `cachingSummary`,
 `describeCaching(model, settings)`, `catalog` (catalog keys per model id), `baseModel(model, settings)` and
 `devOnly`. A new provider is one `providers/<name>/definition.ts` plus one line in `FIRST_PARTY_PROVIDERS`
-(see docs/plugins/model-providers.md).
+(see docs/guides/models/README.md).
 
 ## Using it
 

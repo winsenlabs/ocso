@@ -24,7 +24,7 @@ export interface CsatRecorded {
 export type CsatResponseView = Omit<typeof csatResponses.$inferSelect, 'receivedAt'> & { receivedAt: string };
 
 /**
- * Record one customer satisfaction response (docs/11 §3 "CSAT or configured
+ * Record one customer satisfaction response (docs/archive/specs/11 §3 "CSAT or configured
  * satisfaction signal"). One response per resolution cycle: a second response
  * received after the conversation's latest resolution (or since it opened, if
  * never resolved) is rejected. handledByHuman = a human sent a customer-visible

@@ -25,7 +25,7 @@ export interface ProfileUsage extends TokenTotals {
   tokenShare: number | null;
 }
 
-/** usage_events.purpose values in display order (docs/05 §3); unknown purposes sort after these. */
+/** usage_events.purpose values in display order (docs/archive/specs/05 §3); unknown purposes sort after these. */
 export const USAGE_PURPOSES = ['TURN', 'SUMMARY', 'COPILOT', 'INTERNAL_AGENT', 'CLASSIFIER', 'EVALUATION', 'TEST'] as const;
 
 export interface PurposeUsage extends TokenTotals {

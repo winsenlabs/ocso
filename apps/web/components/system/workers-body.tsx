@@ -23,7 +23,7 @@ async function deploymentOrNull() {
   }
 }
 
-/** /system/workers: fleet, scaling apply status, platform snapshot and the scaling settings (docs/10 §5–6). */
+/** /system/workers: fleet, scaling apply status, platform snapshot and the scaling settings (docs/archive/specs/10 §5–6). */
 export async function WorkersBody() {
   const session = await requireSession();
   if (!hasPermission(session, Permission.SYSTEM_READ)) return <NotPermitted role={session.roleLabel} />;

@@ -1,5 +1,5 @@
 /**
- * What a channel kind tells the rest of OCSO about itself (docs/plugins/channels.md).
+ * What a channel kind tells the rest of OCSO about itself (docs/guides/channels/README.md).
  * Everything the API and the web app know about a kind — form, labels, marks,
  * setup steps, public paths, template wording — comes from here, served by
  * `GET /v1/channels/kinds`. Core code never switches on a kind.

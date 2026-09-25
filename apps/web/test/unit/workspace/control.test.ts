@@ -8,7 +8,7 @@ const OTHER = 'user-other';
 const view = (role: Role, controlState: ControlState, assignedUserId: string | null = null, handoffStatus: string | null = null) =>
   controlView({ controlState, assignedUserId, handoffStatus, meId: ME, permissions: new Set(permissionsForRole(role)) });
 
-describe('workspace actions per control state (ADR-005, docs/09 §4)', () => {
+describe('workspace actions per control state (ADR-005, docs/archive/specs/09 §4)', () => {
   it('lets an exec take over an AI conversation but not write to the customer', () => {
     expect(view('SERVICE', 'AI_ACTIVE')).toEqual({ actions: ['take-over'], canCompose: false, holdsIt: false, offeredToMe: false });
   });

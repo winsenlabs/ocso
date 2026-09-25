@@ -9,7 +9,7 @@ import { guardFunction, guardObject, translateEmailPluginError, type GuardSpec }
 import { pluginShapeProblems, registryProblem } from './validate.js';
 
 /**
- * The plugin loader (docs/plugins/installing.md). The operator lists the
+ * The plugin loader (docs/guides/extending/install-a-plugin.md). The operator lists the
  * plugins a deployment runs, each pinned to an exact version:
  *
  *   OCSO_PLUGINS=@acme/ocso-channel-line@1.2.3,@acme/ocso-alerts-opsgenie@0.4.0

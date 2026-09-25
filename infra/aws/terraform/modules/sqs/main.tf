@@ -69,7 +69,7 @@ resource "aws_sqs_queue_policy" "this" {
 resource "aws_cloudwatch_metric_alarm" "dlq_depth" {
   for_each            = local.queues
   alarm_name          = "${each.value}-dlq-not-empty"
-  alarm_description   = "Messages dead-lettered from ${each.key}. Inspect, fix, then redrive (docs/operations/aws.md)."
+  alarm_description   = "Messages dead-lettered from ${each.key}. Inspect, fix, then redrive (docs/guides/deploy/aws.md)."
   namespace           = "AWS/SQS"
   metric_name         = "ApproximateNumberOfMessagesVisible"
   dimensions          = { QueueName = aws_sqs_queue.dlq[each.key].name }

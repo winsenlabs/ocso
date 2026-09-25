@@ -7,7 +7,7 @@ body:
       value: |
         A first-party plugin lives in this repository: an implementation of a contract, registered in one place.
         A third-party plugin builds on `@winsendotai/ocso-plugin-sdk` (packages/ocso-plugin-sdk) and is loaded with OCSO_PLUGINS.
-        Read docs/plugins/README.md and the page for your extension point before proposing.
+        Read docs/concepts/plugins.md and the page for your extension point before proposing.
         Tools do not need a plugin: expose them as an MCP server and connect it in the web app.
   - type: dropdown
     id: extension-point
@@ -76,5 +76,5 @@ body:
       label: Contribution
       options:
         - label: I intend to implement this and maintain it.
-        - label: I have read docs/plugins/README.md.
+        - label: I have read docs/concepts/plugins.md.
           required: true

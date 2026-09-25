@@ -40,7 +40,7 @@ export interface PricingServiceDeps {
 }
 
 /**
- * Price table used for usage cost metadata (docs/05 §3, ADR-027): rows the
+ * Price table used for usage cost metadata (docs/archive/specs/05 §3, ADR-027): rows the
  * Tech admin enters (manual) and rows pre-filled from the open-source model
  * catalog (catalog). Editing a catalog row makes it manual.
  * Maker–checker (PM/research/11 §4, pricing-approval.ts): a row a person adds

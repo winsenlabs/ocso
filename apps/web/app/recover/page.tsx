@@ -33,7 +33,7 @@ async function RecoverContent() {
         <RecoverForm />
       ) : (
         <AlertBanner tone="warn" title="Recovery is not enabled.">
-          The operator enables it by setting OCSO_RECOVERY_TOKEN (at least 32 characters) on the API and restarting it. See docs/operations/setup-guide.md.
+          The operator enables it by setting OCSO_RECOVERY_TOKEN (at least 32 characters) on the API and restarting it. See docs/guides/first-run-setup.md.
         </AlertBanner>
       )}
     </AuthCard>

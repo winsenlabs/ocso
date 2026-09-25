@@ -9,7 +9,7 @@ import { McpConnectionsController } from './mcp-connections.controller.js';
 import { McpOAuthCallbackController } from './mcp-oauth-callback.controller.js';
 import { McpPersonalController } from './mcp-personal.controller.js';
 
-/** MCP connection manager (docs/08): connections wizard, personal connections, agent tool grants, OAuth callback. */
+/** MCP connection manager (docs/archive/specs/08): connections wizard, personal connections, agent tool grants, OAuth callback. */
 @Module({
   controllers: [McpConnectionsController, McpPersonalController, AgentToolsController, McpOAuthCallbackController],
   providers: [

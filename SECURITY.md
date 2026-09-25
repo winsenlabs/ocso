@@ -54,6 +54,6 @@ Out of scope, or the operator's responsibility:
 - denial of service that needs traffic volumes a rate limiter or firewall in front of OCSO would stop;
 - findings that require an already-compromised Tech admin account.
 
-The security model is described in [docs/15-SECURITY-AND-GOVERNANCE.md](docs/15-SECURITY-AND-GOVERNANCE.md)
+The security model is described in [docs/archive/specs/15-SECURITY-AND-GOVERNANCE.md](docs/archive/specs/15-SECURITY-AND-GOVERNANCE.md)
 and, for Compose deployments, the hardening advice in
-[docs/operations/compose.md](docs/operations/compose.md#6-secret-hardening-for-production).
+[docs/guides/deploy/docker-compose.md](docs/operations/backups-and-restore.md#protect-the-secrets).

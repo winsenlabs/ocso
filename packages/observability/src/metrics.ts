@@ -1,7 +1,7 @@
 import { metrics, trace, SpanStatusCode, type Attributes, type Span } from '@opentelemetry/api';
 
 /**
- * OCSO metric instruments (docs/11 §5). Attributes must stay low-cardinality:
+ * OCSO metric instruments (docs/archive/specs/11 §5). Attributes must stay low-cardinality:
  * provider, profile, outcome, topic — never conversation or user ids.
  */
 const meter = () => metrics.getMeter('ocso');

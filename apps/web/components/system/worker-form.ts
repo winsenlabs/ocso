@@ -1,5 +1,5 @@
 /**
- * Worker configuration form model (design/03 "Worker configuration", docs/10 §5).
+ * Worker configuration form model (design/03 "Worker configuration", docs/archive/specs/10 §5).
  * Pure and client-safe. The API owns the bounds (WorkerSettingsInput): the form
  * only turns inputs into numbers and maps the API's "field: problem" messages
  * back onto the fields.

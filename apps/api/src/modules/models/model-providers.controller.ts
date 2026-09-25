@@ -21,7 +21,7 @@ const TestBody = ProviderTestInput.optional();
 type TestBody = z.infer<typeof TestBody>;
 
 /**
- * Model providers (docs/06). Responses carry secret references, never credential values.
+ * Model providers (docs/archive/specs/06). Responses carry secret references, never credential values.
  * Maker–checker (PM/research/11 §4, approvals.check.platform): a provider is created disabled (a draft);
  * enabling is an ACTIVATE proposal, deleting a DELETE proposal, and once approved every edit is an UPDATE
  * proposal whose new credentials travel as secret refs. Disabling is immediate.

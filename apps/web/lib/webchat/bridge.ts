@@ -2,7 +2,7 @@ import { originAllowed, originOf } from './origins';
 
 /**
  * Widget-side postMessage bridge to the host page (public/ocso-webchat.js).
- * Security rules (docs/15): accept commands only from the parent window AND
+ * Security rules (docs/archive/specs/15): accept commands only from the parent window AND
  * the verified host origin; post only to that exact origin (never "*"); when
  * the channel has an allowlist, a host outside it gets no bridge at all.
  */

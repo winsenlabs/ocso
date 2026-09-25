@@ -14,7 +14,7 @@ import { Actor, Capability, CurrentPrincipal, RequirePermission } from '../../co
 const Id = z.uuid();
 
 /**
- * Prompt correction workflow (docs/09 §7): record from a conversation turn,
+ * Prompt correction workflow (docs/archive/specs/09 §7): record from a conversation turn,
  * stage into the prompt draft (prompts.edit is also enforced), or reject.
  */
 @Controller('v1/corrections')

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Configurable retention (docs/15 §8). Days per data class; audit retention is
+ * Configurable retention (docs/archive/specs/15 §8). Days per data class; audit retention is
  * independent of conversation retention and has a floor. Logs and traces live
  * in the log/trace backends (CloudWatch log-group retention, OTel backend) and
  * are configured there, not here.

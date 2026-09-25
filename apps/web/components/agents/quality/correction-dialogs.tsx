@@ -10,7 +10,7 @@ import { useAgentAction } from '../shared/use-action';
 
 type Labels = Readonly<Record<string, string>>;
 
-/** Stage (write into the prompt draft, never the live prompt) or reject one correction (docs/09 §7). */
+/** Stage (write into the prompt draft, never the live prompt) or reject one correction (docs/archive/specs/09 §7). */
 export function CorrectionActions({ correction: c, labels }: { correction: Correction; labels: Labels }) {
   const [mode, setMode] = useState<'stage' | 'reject' | null>(null);
   if (c.status !== 'OPEN' && c.status !== 'STAGED') return null;

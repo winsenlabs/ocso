@@ -12,7 +12,7 @@ import { MessageLog, noticeText } from './message-log';
 import { useHostBridge } from './use-host-bridge';
 import { useWebChat, type Incoming } from './use-webchat';
 
-/** Customer web chat (docs/07 §4): the page inside the embed iframe, or standalone at /chat/:publicKey. */
+/** Customer web chat (docs/archive/specs/07 §4): the page inside the embed iframe, or standalone at /chat/:publicKey. */
 
 /** Readable text colour on the brand accent (WCAG relative luminance). */
 function onAccent(hex: string): string {

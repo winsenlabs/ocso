@@ -15,7 +15,7 @@ export const slaPolicies = pgTable('sla_policies', {
   updatedAt: updatedAt(),
 });
 
-/** Business queue with eligibility and pickup/assignment policy (docs/03 Queue). */
+/** Business queue with eligibility and pickup/assignment policy (docs/archive/specs/03 Queue). */
 export const queues = pgTable(
   'queues',
   {

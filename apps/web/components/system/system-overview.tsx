@@ -52,7 +52,7 @@ export async function SystemOverview() {
     canAuditStore ? loadAuditStoreStatus().catch(() => null) : Promise.resolve(undefined),
     // Storage growth (PM/research/11 §7): daily samples; like the audit store, never blocks the page.
     canStorage ? loadStorageReport().catch(() => null) : Promise.resolve(undefined),
-    // Installed and first-party plugins (docs/plugins/installing.md): system.read, never blocks the page.
+    // Installed and first-party plugins (docs/guides/extending/install-a-plugin.md): system.read, never blocks the page.
     canStorage ? listPlugins().catch(() => null) : Promise.resolve(undefined),
   ]);
   const cfg = workers.config;

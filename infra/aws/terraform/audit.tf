@@ -50,7 +50,7 @@ locals {
 check "audit_store_boundary" {
   assert {
     condition     = var.audit_store.separate_instance
-    error_message = "audit_store.separate_instance = false: the api/worker database credentials can alter the audit database (append-only is not enforced against a compromised api). Use a separate instance for a bank deployment (docs/15 §7)."
+    error_message = "audit_store.separate_instance = false: the api/worker database credentials can alter the audit database (append-only is not enforced against a compromised api). Use a separate instance for a bank deployment (docs/archive/specs/15 §7)."
   }
 }
 

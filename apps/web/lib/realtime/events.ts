@@ -46,7 +46,7 @@ export interface RealtimePayloads {
 
 export type RealtimeEventType = keyof RealtimePayloads;
 
-/** Canonical envelope (docs/14 §4). */
+/** Canonical envelope (docs/archive/specs/14 §4). */
 export interface RealtimeEvent<T extends RealtimeEventType = RealtimeEventType> {
   id: string;
   type: T;

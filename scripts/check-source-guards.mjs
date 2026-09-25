@@ -2,7 +2,7 @@
 /**
  * OCSO source guards (T1.1.2). Run as the root `pnpm lint`.
  *
- * Enforces the mechanical parts of the build rules (docs/99-BUILD-RULES.md §2)
+ * Enforces the mechanical parts of the build rules (docs/contributing/engineering-rules.md §2)
  * and the workspace boundaries from ADR-001, over apps/*, packages/* and
  * examples/* (their src/ trees; a package without src/ is scanned from its root):
  *   1. File size: hand-written source files over 300 lines warn, over 500 fail.

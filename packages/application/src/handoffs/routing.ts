@@ -38,7 +38,7 @@ export async function resolutionDueFor(tx: DbOrTx, queue: QueueRow | null, type:
 
 /**
  * Eligible Service member candidates for a queue with live workload counts
- * (docs/09 §3). Workload = open conversations currently assigned.
+ * (docs/archive/specs/09 §3). Workload = open conversations currently assigned.
  */
 export async function queueCandidates(tx: DbOrTx, queueId: string): Promise<ExecCandidate[]> {
   const teamRows = await tx.select({ teamId: queueTeams.teamId }).from(queueTeams).where(eq(queueTeams.queueId, queueId));

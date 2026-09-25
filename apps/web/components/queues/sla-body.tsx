@@ -18,7 +18,7 @@ import { toWaitingRows } from './waiting-rows';
 const LIVE_DEFINITION =
   'Conversations waiting for a human (ESCALATION_REQUESTED / WAITING_FOR_HUMAN) with a pickup due time: breached = past sla_due_at now; at risk = elapsed share of the pickup window ≥ the queue policy’s at-risk fraction.';
 
-/** SLA policies and the live pickup clock (docs/09, design/02 Routing tab SLA card). */
+/** SLA policies and the live pickup clock (docs/archive/specs/09, design/02 Routing tab SLA card). */
 export async function SlaBody() {
   const session = await requireSession();
   if (!hasPermission(session, Permission.QUEUES_READ)) return <NotPermitted role={session.roleLabel} />;

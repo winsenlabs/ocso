@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-/** Business purpose. Changes instructions, routing, KPIs — never the runtime (docs/01 §5). */
+/** Business purpose. Changes instructions, routing, KPIs — never the runtime (docs/archive/specs/01 §5). */
 export const ConversationType = z.enum(['SUPPORT', 'SALES', 'COLLECTIONS', 'ONBOARDING', 'CUSTOM']);
 export type ConversationType = z.infer<typeof ConversationType>;
 
@@ -21,7 +21,7 @@ export function raisePriority(current: Priority, requested: Priority): Priority 
 export const HandoffMode = z.enum(['AUTO_ASSIGN', 'OPEN_PICKUP']);
 export type HandoffMode = z.infer<typeof HandoffMode>;
 
-/** What triggered an escalation (docs/01 §6). */
+/** What triggered an escalation (docs/archive/specs/01 §6). */
 export const HandoffTrigger = z.enum([
   'CUSTOMER_REQUEST',
   'AGENT_DECISION',

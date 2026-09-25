@@ -210,7 +210,7 @@ to start when:
 - a plugin's contributions fail these checks.
 
 Tech admins see the loaded plugins under System → Plugins. See
-[`docs/plugins/installing.md`](https://github.com/winsenlabs/ocso/blob/main/docs/plugins/installing.md).
+[`docs/guides/extending/install-a-plugin.md`](https://github.com/winsenlabs/ocso/blob/main/docs/guides/extending/install-a-plugin.md).
 
 A plugin runs in-process with full access. Install only code you trust, and pin versions.
 

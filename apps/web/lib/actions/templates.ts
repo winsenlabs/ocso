@@ -11,7 +11,7 @@ import { TemplateViewSchema } from '../api/templates';
 import { getSession } from '../session';
 
 /**
- * Message templates under maker–checker (docs/07 §3, PM/research/11 §4): a
+ * Message templates under maker–checker (docs/archive/specs/07 §3, PM/research/11 §4): a
  * draft is saved in OCSO only (`message_templates.manage`, the Lead's teams'
  * channels); submitting it to the provider and deleting a template
  * (`message_templates.delete`, Head) are proposals — `approval_required` until

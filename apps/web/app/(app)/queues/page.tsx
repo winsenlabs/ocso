@@ -6,7 +6,7 @@ import '@/app/styles/ops.css';
 
 export const metadata: Metadata = { title: 'Queues' };
 
-/** Queues and routing (docs/09 §3); the title follows the role (leads manage, execs pick up). */
+/** Queues and routing (docs/archive/specs/09 §3); the title follows the role (leads manage, execs pick up). */
 export default function Page() {
   return (
     <>

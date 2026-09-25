@@ -45,7 +45,7 @@ export interface AlertCounts {
 }
 
 /**
- * Alert inbox (docs/11 §6). A user sees an alert only when their role is in
+ * Alert inbox (docs/archive/specs/11 §6). A user sees an alert only when their role is in
  * its audience AND they hold the read permission for its kind AND, for an
  * alert about a virtual agent, they can read that agent (ADR-026). Alerts the
  * user cannot see are reported as not found.
