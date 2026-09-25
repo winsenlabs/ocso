@@ -1,7 +1,8 @@
 # OCSO continuous integration.
 #
 # Jobs are independent so a failure points at one concern:
-#   lint-typecheck-unit  source guards (pnpm lint), turbo typecheck, vitest unit, guard-script tests
+#   lint-typecheck-unit  source guards (pnpm lint), applied migrations unchanged, turbo typecheck, vitest unit,
+#                        guard-script tests
 #   integration          vitest integration project against postgres:18 and clickhouse services
 #   web-build            production Next.js build (standalone output)
 #   e2e                  Playwright against a locally started API + web stack (optional, non-blocking)
@@ -33,6 +34,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # full history, for the migration check
       # pnpm version comes from package.json "packageManager" (pnpm@11.1.2); do not also set `version`.
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v5
@@ -44,6 +47,8 @@ jobs:
         run: pnpm lint
       - name: Source guard script tests
         run: node --test scripts/test/
+      - name: Applied migrations unchanged
+        run: node scripts/check-migrations-immutable.mjs
       - name: Typecheck (turbo; builds dependencies first)
         run: pnpm typecheck
       - name: Unit tests
