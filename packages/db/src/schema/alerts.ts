@@ -3,7 +3,7 @@ import { boolean, index, integer, jsonb, pgTable, text, uniqueIndex, uuid } from
 import { createdAt, id, ts, updatedAt } from './columns.js';
 import { users } from './identity.js';
 
-/** Pluggable delivery targets (docs/11 §7). Secrets by reference. */
+/** Pluggable delivery targets (docs/archive/specs/11 §7). Secrets by reference. */
 export const notificationDestinations = pgTable('notification_destinations', {
   id: id(),
   name: text().notNull(),

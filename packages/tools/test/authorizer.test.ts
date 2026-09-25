@@ -67,7 +67,7 @@ const proposal = (over: Partial<ToolCallProposal> = {}): ToolCallProposal => ({
   ...over,
 });
 
-describe('tool authorization (docs/08 §6)', () => {
+describe('tool authorization (docs/archive/specs/08 §6)', () => {
   it('denies unknown and unapproved tools', () => {
     expect(authorizeToolCall(proposal({ tool: null }), validate)).toMatchObject({ outcome: 'DENY', code: 'tool_not_found' });
     expect(authorizeToolCall(proposal({ tool: tool({ approved: false }) }), validate)).toMatchObject({

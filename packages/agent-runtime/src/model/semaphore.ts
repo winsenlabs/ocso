@@ -1,7 +1,7 @@
 import { DomainError } from '@ocso/domain';
 
 /**
- * Provider concurrency limit (docs/10 §8): bounded in-flight requests per
+ * Provider concurrency limit (docs/archive/specs/10 §8): bounded in-flight requests per
  * provider per worker. Waiters queue with a timeout so overload becomes a
  * typed capacity error instead of a cascade.
  */

@@ -5,7 +5,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
  * Per-request context read from HTTP headers set by the MCP client (OCSO):
  * - `Idempotency-Key`: write tools replay the first result for a key.
  * - `X-OCSO-Customer-Claims`: short-lived JWT naming the customer the
- *   conversation is about (docs/08 §4). OCSO signs ES256 and publishes its
+ *   conversation is about (docs/archive/specs/08 §4). OCSO signs ES256 and publishes its
  *   JWKS; configure `claimsJwksUrl` to verify (see claims-jwks.ts). An HS256
  *   shared secret is also accepted for tests. Customer-scoped tools then refuse
  *   other customers' data. With no verifier configured the header is ignored

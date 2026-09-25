@@ -53,7 +53,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
   bucket = aws_s3_bucket.this.id
 
   # TEMP blobs (retention class TEMP). Matches objects under tmp/ or tagged
-  # ocso-retention=TEMP; see docs/operations/aws.md "Known gaps".
+  # ocso-retention=TEMP; see docs/guides/deploy/aws.md "Limits and known gaps".
   rule {
     id     = "expire-temp-prefix"
     status = "Enabled"

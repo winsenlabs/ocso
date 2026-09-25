@@ -20,6 +20,6 @@ id as `sub`. Never send the secret to the browser.
 To copy the embed into your own site, take the `<script>` tag from `index.html` and replace
 `{{OCSO_URL}}` and `{{WEBCHAT_KEY}}`. For a custom chat UI, see the chat SDK in
 [packages/ocso-chat](../../packages/ocso-chat/README.md). The web chat channel is described in
-[docs/07-CHANNELS-AND-MULTIMODAL.md](../../docs/07-CHANNELS-AND-MULTIMODAL.md).
+[docs/archive/specs/07-CHANNELS-AND-MULTIMODAL.md](../../docs/archive/specs/07-CHANNELS-AND-MULTIMODAL.md).
 
 This is a demonstration, not hardened code.

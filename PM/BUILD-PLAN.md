@@ -2,7 +2,7 @@
 
 Living implementation plan for OCSO — Open Customer Success Orchestration.
 
-- **Spec sources:** `README.md`, `docs/00-INDEX.md` … `docs/99-BUILD-RULES.md`, `design/*.dc.html` + `design/shared/*.css`.
+- **Spec sources:** `README.md`, `docs/README.md` … `docs/contributing/engineering-rules.md`, `design/*.dc.html` + `design/shared/*.css`.
 - **Architecture decisions:** `PM/ARCHITECTURE-DECISIONS.md` (ADR-NNN references below).
 - **Research notes:** `PM/research/*.md` (verified against upstream docs/type definitions, Sep 2026).
 - **Branch:** `build/ocso-v1`.
@@ -93,7 +93,7 @@ Phases are vertical slices: each includes persistence, authorization, API, UI wh
 ### E1.2 Configuration, logging, errors — COMPLETE
 **T1.2.1 Typed configuration** (`packages/config`) — zod-validated env for api/worker/web; adapter selection (`QUEUE_DRIVER=postgres|sqs`, `BLOB_DRIVER=local|s3`, `SECRETS_DRIVER=local|aws`, `DEPLOYMENT_DRIVER=compose|ecs`); fail-fast with readable errors. Tests: invalid config rejected; secrets never echoed in error output.
 
-**T1.2.2 Typed error model** (`packages/domain/errors`) — categories from docs/14 §5 (validation, authentication, authorization, not_found, conflict, provider_unavailable, provider_rate_limited, tool_unavailable, tool_rejected, timeout, policy_denied, capacity, internal); Nest exception filter mapping to HTTP + stable error codes; never leak raw provider exceptions. Tests: mapping table unit test.
+**T1.2.2 Typed error model** (`packages/domain/errors`) — categories from docs/archive/specs/14 §5 (validation, authentication, authorization, not_found, conflict, provider_unavailable, provider_rate_limited, tool_unavailable, tool_rejected, timeout, policy_denied, capacity, internal); Nest exception filter mapping to HTTP + stable error codes; never leak raw provider exceptions. Tests: mapping table unit test.
 
 **T1.2.3 Structured logging** (`packages/observability`) — pino JSON with redaction paths for secrets/tokens/authorization headers; correlation fields (request_id, conversation_id, turn_id, worker_id, trace_id). Tests: redaction unit test.
 
@@ -143,11 +143,11 @@ Phases are vertical slices: each includes persistence, authorization, API, UI wh
 
 **T2.1.2 Canonical interaction model** — Interaction + typed parts TEXT, IMAGE, AUDIO, VIDEO, DOCUMENT, LOCATION, CONTACT, STRUCTURED, TOOL_RESULT; zod schemas shared by channels/API/runtime; visibility (CUSTOMER vs INTERNAL); actor types CUSTOMER/AGENT/HUMAN/SYSTEM/TOOL.
 
-**T2.1.3 Event envelope & catalogue** (`packages/events`) — `OCSOEvent<T>` (id, type, version, occurredAt, correlationId, conversationId?, agentId?, payload); versioned catalogue from docs/02 §8; transactional outbox; realtime fan-out (Postgres LISTEN/NOTIFY per ADR-009) to SSE.
+**T2.1.3 Event envelope & catalogue** (`packages/events`) — `OCSOEvent<T>` (id, type, version, occurredAt, correlationId, conversationId?, agentId?, payload); versioned catalogue from docs/archive/specs/02 §8; transactional outbox; realtime fan-out (Postgres LISTEN/NOTIFY per ADR-009) to SSE.
 
 ### E2.2 Persistence (migration 0002) — COMPLETE
 Tables: virtual_agents, customers, customer_identities, channels, conversations, interactions, interaction_parts, internal_notes, turns, conversation_summaries, jobs (Postgres queue), conversation_leases, workers.
-- Indexes per docs/03 §5.
+- Indexes per docs/archive/specs/03 §5.
 - Tests: repository integration tests; identity uniqueness; interaction idempotency key uniqueness.
 
 ### E2.3 Virtual agents (basic) — COMPLETE — API + /agents screens (list, overview, settings) with e2e
@@ -423,7 +423,7 @@ HIGH_WRITE (and configurable LOW_WRITE) create pending actions that require an e
 `design/05`: ⌘J drawer on every screen, role-aware suggestions, context of the current screen, RBAC refusals explained.
 - Tests (required): internal agent permissions (exec cannot reach admin tools; lead cannot read infra telemetry; confirmation required for sensitive writes; audit written).
 
-**P9 exit:** example questions from docs/12 answered with the right data per role.
+**P9 exit:** example questions from docs/archive/specs/12 answered with the right data per role.
 
 ---
 
@@ -457,10 +457,10 @@ Load script (web-chat channel, mock model with latency) measuring turn latency a
 | ID | Task | Status |
 |---|---|---|
 | T11.1 | Playwright e2e for every "definition of complete" capability | COMPLETE — 10 Playwright specs, 63 tests, all passing on the production build (see PM/DEFINITION-OF-COMPLETE.md) |
-| T11.2 | Security review: SSRF, authz coverage, secret redaction, webhook replay, CSRF, session security | IN PROGRESS — done: CSRF same-origin guard, per-address sign-in throttle, staff attachment scoping, health endpoint exposure, SSRF guards reviewed, log redaction; see docs/15 notes |
+| T11.2 | Security review: SSRF, authz coverage, secret redaction, webhook replay, CSRF, session security | IN PROGRESS — done: CSRF same-origin guard, per-address sign-in throttle, staff attachment scoping, health endpoint exposure, SSRF guards reviewed, log redaction; see docs/archive/specs/15 notes |
 | T11.3 | Data retention jobs (conversations, media, logs, tool payloads; audit separate) | COMPLETE — retention per class, hourly worker job, audit floor in the database |
 | T11.4 | Operator docs: Compose runbook, AWS runbook, backup/restore, upgrades, provider/channel/MCP setup guides | COMPLETE — compose.md, aws.md, worker-scaling.md, resilience-testing.md, setup-guide.md |
-| T11.5 | Docs sync: update `docs/*` where implementation refined the spec (per build rule §24) | COMPLETE — implementation notes in docs/05, 07, 08, 09, 10, 15 |
+| T11.5 | Docs sync: update `docs/*` where implementation refined the spec (per build rule §24) | COMPLETE — implementation notes in docs/archive/specs/05, 07, 08, 09, 10, 15 |
 
 ### E11.6 Authentication hardening on Better Auth (ADR-025) — COMPLETE — Better Auth 1.7.5 replaces the hand-built sessions; OCSO keeps authorization
 | ID | Task | Status |
@@ -548,6 +548,6 @@ Load script (web-chat channel, mock model with latency) measuring turn latency a
 | 2026-09-22 | E7.11 team-scoped virtual-agent ownership (ADR-026): agents owned by teams; lead scope for agents, conversations, analytics, quality and alerts; Tech Admin owner reassignment. |
 | 2026-09-22 | E4.7 model discovery, open-source catalog prices and the monthly spend budget alert (ADR-027, PM/research/09); migration 0017. |
 | 2026-09-22 | E11.7 plugin boundary (ADR-028): open kinds, self-describing plugins, message templates as a capability (migration 0019), built-in tools authorized and audited, guarded channel egress, driver registries, one composition root, lint guard. Demo fixes: partial PATCH defaults, no-agent routing, agent history cut-off. |
-| 2026-09-23 | Governance and routing release (PM/research/11, 11b; ADR-029–033). Role presets Tech/Head/Lead/Service replace Platform Tech Admin/CS Lead/CS Exec (migration 0021, roles mapped automatically). Per-user permission grants (with expiry) and revokes; reductions apply at once, increases need approval (0022). Maker–checker approvals on every configuration change, with bootstrap self-approval only when nobody else can check (0023, 0027, 0029). Routing channel → router → queue → agent, with each channel backfilled to a pass-through router (0024, 0025, 0030). A separate audit store (`packages/audit-store`, postgres and clickhouse drivers; outbox shipping, hash chain, signed checkpoints, exports, `audit-verify`) with `audit-db` and an `audit-migrate` step in Compose (0026). Weekly signed exception report and storage growth report (0028). Migration 0031 grandfathers live configuration as approved (guard: `grandfather.int.test.ts`). Open: owner rulings on ADR-030 deviations 10 (Service members read their team's proposals) and 11 (platform-wide fallback checker); audit-store Terraform not validated; S3 Object Lock for audit exports not enforced. Not expand/contract: after 0021 renames the roles, the previous image fails every authenticated request, so rollback past this release means restoring the pre-upgrade backup (the audit database is new), not redeploying the old image; operators must back up first and stop api/worker/web before migrating (docs/operations/compose.md §4, aws.md §4). |
+| 2026-09-23 | Governance and routing release (PM/research/11, 11b; ADR-029–033). Role presets Tech/Head/Lead/Service replace Platform Tech Admin/CS Lead/CS Exec (migration 0021, roles mapped automatically). Per-user permission grants (with expiry) and revokes; reductions apply at once, increases need approval (0022). Maker–checker approvals on every configuration change, with bootstrap self-approval only when nobody else can check (0023, 0027, 0029). Routing channel → router → queue → agent, with each channel backfilled to a pass-through router (0024, 0025, 0030). A separate audit store (`packages/audit-store`, postgres and clickhouse drivers; outbox shipping, hash chain, signed checkpoints, exports, `audit-verify`) with `audit-db` and an `audit-migrate` step in Compose (0026). Weekly signed exception report and storage growth report (0028). Migration 0031 grandfathers live configuration as approved (guard: `grandfather.int.test.ts`). Open: owner rulings on ADR-030 deviations 10 (Service members read their team's proposals) and 11 (platform-wide fallback checker); audit-store Terraform not validated; S3 Object Lock for audit exports not enforced. Not expand/contract: after 0021 renames the roles, the previous image fails every authenticated request, so rollback past this release means restoring the pre-upgrade backup (the audit database is new), not redeploying the old image; operators must back up first and stop api/worker/web before migrating (docs/guides/deploy/docker-compose.md §4, aws.md §4). |
 | 2026-09-23 | Plugins release (ADR-034). Public npm packages `@winsendotai/ocso-plugin-sdk`, `@winsendotai/ocso-chat`, `@winsendotai/ocso-chat-react` at 0.1.0 (built, not yet published to npm). Plugin loader (`OCSO_PLUGINS`, exact pins, fail closed) with a System page panel. Web chat auth modes anonymous/client/user (secret key, session passes, JWKS/HS256 user tokens), host context, tool-identity passthrough to opted-in MCP connections, CORS and rate limits on the public web chat routes, native-app origin rule (migrations 0032, 0033). Brand: the Route mark, favicon and app icons. Release note: callers of the public web chat API that send no `Origin` header now need client/user mode or "allow native apps". |
 | 2026-09-24 | Ask OCSO copilot (ADR-035, PM/research/12). Capability catalog generated from the API (250 capabilities), two model tools `get_tools`/`execute_tool`, reads through the real API as the user (loopback delegation token), every write a server-built confirmation card, governed changes submitted to a chosen checker (no bootstrap from Ask OCSO), checker review and decisions in the drawer, writes kill switch (`ask_ocso_writes`), rewritten prompt, 83-scenario eval suite; migration 0034. Real-model evaluation pending a provider key in the eval environment. |

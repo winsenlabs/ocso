@@ -3,7 +3,7 @@ import { cacheGenerations, type DbOrTx } from '@ocso/db';
 import { emitEvent } from '../events/outbox.js';
 
 /**
- * Cache invalidation by monotonic generation counters (docs/05 §5). Derived
+ * Cache invalidation by monotonic generation counters (docs/archive/specs/05 §5). Derived
  * caches record the generations they were built from; any bump makes them
  * stale everywhere, and an event lets hot workers drop entries immediately.
  */

@@ -112,7 +112,7 @@ function configured(row: PricingRow | undefined): ConfiguredPrice | null {
 const LIFECYCLE_RANK = { ACTIVE: 0, LEGACY: 1, DEPRECATED: 2 } as const;
 
 /**
- * "Which models can I pick?" for one configured provider (docs/06 §2): the
+ * "Which models can I pick?" for one configured provider (docs/archive/specs/06 §2): the
  * provider's own listing through its adapter, enriched with catalog metadata
  * and prices and the price row that would cost it. Listings are cached per
  * provider configuration for ten minutes; `refresh` (providers.manage)

@@ -1,5 +1,5 @@
 /**
- * AlertDeliveryAdapter contract (docs/11 §7, PM/BUILD-PLAN E8.9). Adapters are
+ * AlertDeliveryAdapter contract (docs/archive/specs/11 §7, PM/BUILD-PLAN E8.9). Adapters are
  * framework-free, take their HTTP/SMTP clients by injection and never throw
  * for delivery failures: they return a `DeliveryResult` the caller maps to
  * retry / give-up. Error strings must never contain secrets (build rule §21).

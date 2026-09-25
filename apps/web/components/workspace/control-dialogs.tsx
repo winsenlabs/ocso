@@ -27,7 +27,7 @@ function Footer({ pending, label, onCancel, disabled }: { pending: boolean; labe
   );
 }
 
-/** Return to AI (docs/09 §4): the agent resumes on the next customer message with this handover summary. */
+/** Return to AI (docs/archive/specs/09 §4): the agent resumes on the next customer message with this handover summary. */
 export function ReturnToAiDialog({ conversationId, agentName, passedNotes, onClose }: DialogProps & { agentName: string; passedNotes: number }) {
   const [summary, setSummary] = useState('');
   const { pending, error, run } = useActionRunner();

@@ -1,7 +1,7 @@
 import type { SqlClient } from './sql.js';
 
 /**
- * QueueAdapter contract (docs/10 §4, ADR-008). Messages are work signals; all
+ * QueueAdapter contract (docs/archive/specs/10 §4, ADR-008). Messages are work signals; all
  * durable state lives in PostgreSQL. Business code depends only on this file.
  */
 

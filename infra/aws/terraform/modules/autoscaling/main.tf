@@ -1,4 +1,4 @@
-# Worker autoscaling (docs/10 §6, ADR-023, research/05 §2). Scale on
+# Worker autoscaling (docs/archive/specs/10 §6, ADR-023, research/05 §2). Scale on
 # conversation demand and queue age, never on CPU alone.
 #
 #  1. Target tracking on metric math "slot demand per live worker" published by

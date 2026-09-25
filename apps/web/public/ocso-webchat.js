@@ -7,7 +7,7 @@
  * /chat/<key>). Page API (calls made before the script loads can be queued:
  *   window.OcsoWebChat = window.OcsoWebChat || []; OcsoWebChat.push(['identify', jwt]);):
  *   OcsoWebChat.open() / close() / toggle()
- *   OcsoWebChat.identify(jwt) -> Promise<{ ok, error? }>   host-signed HS256 JWT (docs/08 §4)
+ *   OcsoWebChat.identify(jwt) -> Promise<{ ok, error? }>   host-signed HS256 JWT (docs/archive/specs/08 §4)
  *   OcsoWebChat.reset()                                  forget the visitor (e.g. on logout)
  *   OcsoWebChat.on(event, fn) / off(event, fn)           'ready' | 'open' | 'close' | 'unread' | 'identified'
  * Security: messages are accepted only from the chat iframe's window AND the

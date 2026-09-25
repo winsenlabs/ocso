@@ -72,7 +72,7 @@ async function rowFor(modelToolCallId: string) {
   return row;
 }
 
-describe('built-in tools go through the tool authorizer and audit (docs/08 §6, §8)', () => {
+describe('built-in tools go through the tool authorizer and audit (docs/archive/specs/08 §6, §8)', () => {
   it('writes a tool_calls row for a built-in search', async () => {
     const id = `call-${++calls}`;
     const outcome = await (await runner()).run({ toolCallId: id, toolName: SEARCH_HISTORY_TOOL, input: { query: 'charged' } }, ctx());

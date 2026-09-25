@@ -45,7 +45,7 @@ const sameGenerations = (a: Record<string, number>, b: Record<string, number>) =
   Object.keys(b).every((k) => a[k] === b[k]) && Object.keys(a).length === Object.keys(b).length;
 
 /**
- * Builds the compile input for a turn using the OCSO turn cache (docs/05 §4):
+ * Builds the compile input for a turn using the OCSO turn cache (docs/archive/specs/05 §4):
  * warm conversations only fetch interactions added since the last turn; any
  * generation/version change invalidates the affected part.
  */

@@ -9,7 +9,7 @@ import { ApiError, describeApiError } from '../api/errors';
 import { getSession } from '../session';
 
 /**
- * Human operations from the CS workspace (design/01, docs/09 §4). The API
+ * Human operations from the CS workspace (design/01, docs/archive/specs/09 §4). The API
  * authorizes every call; these actions validate input, forward it with the
  * session token and refresh the page so the timeline shows the result.
  */
@@ -95,7 +95,7 @@ export async function transferAction(conversationId: string, target: { queueId?:
 
 const NoteInput = z.object({ body: z.string().trim().min(1, 'Write the note first').max(8_000, 'At most 8,000 characters'), passToAgent: z.boolean() });
 
-/** Internal note — staff only, never sent to the customer (docs/09 §5). */
+/** Internal note — staff only, never sent to the customer (docs/archive/specs/09 §5). */
 export async function addNoteAction(conversationId: string, body: string, passToAgent: boolean): Promise<ActionResult> {
   const parsed = NoteInput.safeParse({ body, passToAgent });
   if (!Id.safeParse(conversationId).success) return invalid('Unknown conversation');
@@ -166,7 +166,7 @@ export async function runToolAction(conversationId: string, toolId: string, args
   }
 }
 
-/** "Confirm and run" on a sensitive action the agent proposed (docs/08 §7). */
+/** "Confirm and run" on a sensitive action the agent proposed (docs/archive/specs/08 §7). */
 export async function confirmToolCallAction(toolCallId: string): Promise<ActionResult> {
   if (!Id.safeParse(toolCallId).success) return invalid('Unknown tool call');
   return run(() => api.post(`/v1/tool-calls/${encodeURIComponent(toolCallId)}/confirm`, {}, z.unknown(), { timeoutMs: 40_000 }));

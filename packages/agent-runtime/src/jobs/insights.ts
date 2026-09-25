@@ -83,7 +83,7 @@ export function parseInsightOutput(structured: unknown, text: string): InsightOu
 
 /**
  * Conversation insights on resolution (queue topic `conversation.insights`,
- * docs/11 §3). Explicit classifier output over the customer-visible transcript
+ * docs/archive/specs/11 §3). Explicit classifier output over the customer-visible transcript
  * plus handoff reasons, stored with its method version so every analytics
  * number can be traced to a method. turnsBeforeEscalation is recomputed from
  * the data (agent replies before the first non-HUMAN_REQUEST handoff) rather

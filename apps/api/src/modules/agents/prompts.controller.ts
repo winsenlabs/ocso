@@ -62,7 +62,7 @@ export class PromptsController {
       })),
       dirty: draft.dirty,
       baseVersionId: draft.baseVersionId,
-      // Attribution for the version list (docs/05 §2: author); names only, readable with agents.read.
+      // Attribution for the version list (docs/archive/specs/05 §2: author); names only, readable with agents.read.
       versions: versions.map((v) => ({ ...v, authorName: v.authorId ? (authorName.get(v.authorId) ?? null) : null })),
     };
   }

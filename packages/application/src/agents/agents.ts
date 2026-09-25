@@ -19,7 +19,7 @@ import { createPromptVersion } from './prompt-versions.js';
 export { AgentInput, AgentPatch, type AgentRow, type AgentView } from './inputs.js';
 
 /**
- * Named virtual agents (docs/01 §4). A logical entity — never bound to a worker.
+ * Named virtual agents (docs/archive/specs/01 §4). A logical entity — never bound to a worker.
  * Reads and writes are scoped by owning team (agents/access.ts, ADR-026).
  */
 export class AgentService {

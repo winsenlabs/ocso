@@ -5,7 +5,7 @@ import type { PluginInfo } from '@/lib/api/plugins';
 import { contributionLines, pluginCount } from '@/lib/plugins';
 
 /**
- * Plugins (docs/plugins/installing.md): what this deployment runs. First-party
+ * Plugins (docs/guides/extending/install-a-plugin.md): what this deployment runs. First-party
  * plugins ship with OCSO; installed ones were added by the operator through
  * OCSO_PLUGINS at a pinned version and run in-process with full trust.
  */

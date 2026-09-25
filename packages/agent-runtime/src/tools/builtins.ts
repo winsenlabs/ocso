@@ -117,7 +117,7 @@ export function createToolProviderRegistry(db: DbOrTx, ...sources: ToolProviderS
   return registry;
 }
 
-/** Retrievable older history (docs/05 §6): earlier customer-visible messages of this customer. */
+/** Retrievable older history (docs/archive/specs/05 §6): earlier customer-visible messages of this customer. */
 export async function searchHistory(db: DbOrTx, customerId: string, beforeSeqOfConversation: { conversationId: string; seq: number }, args: unknown): Promise<ToolResultOutput> {
   const parsed = SearchArgs.safeParse(args);
   if (!parsed.success) return { type: 'error', value: 'query must be 2–200 characters' };

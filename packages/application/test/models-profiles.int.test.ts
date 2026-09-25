@@ -73,7 +73,7 @@ afterAll(async () => {
   await t?.drop();
 });
 
-describe('profile policy checks (docs/06 §5)', () => {
+describe('profile policy checks (docs/archive/specs/06 §5)', () => {
   it('saves a compliant profile and warns about fallbacks that will be skipped', async () => {
     const saved = await profiles.create(
       admin,

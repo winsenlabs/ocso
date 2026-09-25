@@ -5,7 +5,7 @@
 # metrics and logs are printed by the debug exporter so the pipeline is
 # visible without extra services — swap in any exporter you run (Prometheus
 # remote write, Loki, a vendor OTLP endpoint, or CloudWatch via sigv4auth on
-# EC2 with an instance role; see docs/operations/compose.md).
+# EC2 with an instance role; see docs/guides/deploy/docker-compose.md).
 receivers:
   otlp:
     protocols:

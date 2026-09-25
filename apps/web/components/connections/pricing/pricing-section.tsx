@@ -40,7 +40,7 @@ function CatalogLine({ catalog, timezone }: { catalog: CatalogStatus; timezone: 
 }
 
 /**
- * Price table behind usage cost metadata (docs/05 §3, ADR-027): per 1M
+ * Price table behind usage cost metadata (docs/archive/specs/05 §3, ADR-027): per 1M
  * tokens, per provider kind and model. Catalog rows were pre-filled from the
  * open-source model catalog (source + date) and follow its refreshes; editing
  * one makes it manual. Models in use without a price are listed below.

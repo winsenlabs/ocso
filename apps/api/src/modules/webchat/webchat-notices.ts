@@ -1,7 +1,7 @@
 import type { ControlState } from '@ocso/domain';
 
 /**
- * Customer-safe projection of control changes (docs/07 §5). Customers learn
+ * Customer-safe projection of control changes (docs/archive/specs/07 §5). Customers learn
  * only that they are waiting for / talking to a colleague (first name), that
  * the assistant is back, or that the conversation was closed — never queues,
  * reasons, commands or internal state names.

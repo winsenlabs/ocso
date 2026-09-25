@@ -62,7 +62,7 @@ async function Pickup({ fractions }: { fractions: Record<string, number> }) {
   );
 }
 
-/** /queues: queue configuration for leads, live pickup work for frontline users (docs/09 §2–3). */
+/** /queues: queue configuration for leads, live pickup work for frontline users (docs/archive/specs/09 §2–3). */
 export async function QueuesBody() {
   const session = await requireSession();
   const canManage = hasPermission(session, Permission.QUEUES_MANAGE);

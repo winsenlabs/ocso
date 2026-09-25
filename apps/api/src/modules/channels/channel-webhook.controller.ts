@@ -10,7 +10,7 @@ import { ChannelIngressService, toRawRequest } from './channel-ingress.service.j
 type RawRequest = Request & OcsoRequest & { rawBody?: Buffer };
 
 /**
- * Provider webhooks for every inbound-webhook channel kind (docs/07 §3):
+ * Provider webhooks for every inbound-webhook channel kind (docs/archive/specs/07 §3):
  * `/channels/<segment>/<publicKey>/webhook`, where the segment comes from the
  * adapter's descriptor (`whatsapp` = Meta Cloud API, `twilio-whatsapp` = Twilio).
  * Public routes: authenticity is the adapter's signature check (Meta HMAC over

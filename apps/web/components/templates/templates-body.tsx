@@ -25,7 +25,7 @@ export const templatesHref = (channelId: string, extra: Record<string, string> =
 const termsOf = (channel: TemplateChannel) => channel.templates ?? { reviewer: 'the provider', placeholderScope: 'template' as const };
 
 /**
- * Message templates page (docs/07 §3, docs/09 §6): the channels with
+ * Message templates page (docs/archive/specs/07 §3, docs/archive/specs/09 §6): the channels with
  * templates that a Lead's teams use (every one for a Tech admin), each
  * channel's templates with review status and rejection reasons, and the
  * builder that submits new ones for the provider's review.

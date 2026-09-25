@@ -29,7 +29,7 @@ export function LiveVersionCard({ live, timeZone }: { live: PromptVersion | null
   );
 }
 
-/** Compiled draft: provider-agnostic token estimate and the cache prefix hash (docs/05 §3). */
+/** Compiled draft: provider-agnostic token estimate and the cache prefix hash (docs/archive/specs/05 §3). */
 export function CompiledCard({ preview, live }: { preview: PromptPreview | null; live: PromptVersion | null }) {
   if (!preview) return null;
   const same = live ? live.promptHash === preview.hashes.promptVersionHash : null;

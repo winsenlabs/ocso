@@ -4,7 +4,7 @@ import { ApprovableButton } from '@/components/approvals/approvable-button';
 import { activateVersionAction } from '@/lib/actions/agents';
 
 /**
- * Activate a newer version, or roll back to an older one (same call; docs/05 §5 invalidates the agent's caches).
+ * Activate a newer version, or roll back to an older one (same call; docs/archive/specs/05 §5 invalidates the agent's caches).
  * A draft agent's prompt activates at once; once the agent is live configuration it is a proposal for a checker.
  */
 export function ActivateButton({ agentId, agentName, versionId, version, liveVersion }: { agentId: string; agentName?: string; versionId: string; version: number; liveVersion: number | null }) {

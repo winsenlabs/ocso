@@ -23,7 +23,7 @@ export interface ResolvedCustomer {
 }
 
 /**
- * Deterministic identity resolution (docs/07 §3, docs/15 §4):
+ * Deterministic identity resolution (docs/archive/specs/07 §3, docs/archive/specs/15 §4):
  * channel identity → CustomerIdentity → Customer. Concurrent first contact for
  * the same identity is serialized with a transaction-scoped advisory lock.
  * Customers are never merged automatically.

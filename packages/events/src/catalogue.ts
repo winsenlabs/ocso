@@ -1,7 +1,7 @@
 import type { ControlState, DeliveryStatus, HandoffMode, HandoffTrigger, Priority } from '@ocso/domain';
 
 /**
- * Versioned internal event catalogue (docs/02 §8, docs/14 §3).
+ * Versioned internal event catalogue (docs/archive/specs/02 §8, docs/archive/specs/14 §3).
  * Payloads carry ids and small facts; subscribers load details through
  * authorized services. Never put secrets or message content here.
  */

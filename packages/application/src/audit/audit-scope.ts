@@ -12,7 +12,7 @@ import { auditEvents } from '@ocso/db';
 export const SHARED_AUDIT_TARGETS: readonly string[] = ['queue', 'sla_policy', 'team', 'router', 'channel', 'message_template'];
 
 /**
- * Which audit events a reader may see (docs/15 §7, ADR-026, ADR-032).
+ * Which audit events a reader may see (docs/archive/specs/15 §7, ADR-026, ADR-032).
  * `audit.read_all` (Tech) sees everything (null). Everyone else sees events
  * they performed, events that concern one of their teams — `team_ids`, the
  * target's teams ∪ the actor's teams at write time (auditTeams): teammates'

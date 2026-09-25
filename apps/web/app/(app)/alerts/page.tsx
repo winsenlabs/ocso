@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: 'Alerts' };
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-/** Alerts addressed to the user's role, their rules and (Tech admin) delivery destinations (docs/11 §6–7). */
+/** Alerts addressed to the user's role, their rules and (Tech admin) delivery destinations (docs/archive/specs/11 §6–7). */
 export default function Page({ searchParams }: { searchParams: SearchParams }) {
   return (
     <>

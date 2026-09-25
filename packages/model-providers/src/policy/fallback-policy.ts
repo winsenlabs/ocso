@@ -2,7 +2,7 @@ import { ErrorCategory, RETRIABLE_CATEGORIES, type DomainError } from '@ocso/dom
 import type { ModelCapabilities, ProviderKind } from '../contract/types.js';
 
 /**
- * Fallback is policy, not magic (docs/06 §5). This module is pure: it decides
+ * Fallback is policy, not magic (docs/archive/specs/06 §5). This module is pure: it decides
  * which targets a request may use, and when a failure may move to the next one.
  */
 

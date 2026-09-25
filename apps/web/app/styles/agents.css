@@ -48,7 +48,7 @@
 .compare{display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin:14px 0 10px}
 .compare .fld{min-width:160px}
 
-/* Definitions: every number is explainable (docs/11 §3) */
+/* Definitions: every number is explainable (docs/archive/specs/11 §3) */
 .def{cursor:help;text-decoration:underline dotted color-mix(in oklab,var(--ink-4) 60%,transparent);text-underline-offset:3px}
 .defs{margin-top:14px;font-size:12px;color:var(--ink-3)}
 .defs summary{cursor:pointer;font-family:var(--font-mono);font-size:10.5px;color:var(--ink-3)}

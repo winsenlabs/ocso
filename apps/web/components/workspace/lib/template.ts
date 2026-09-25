@@ -2,7 +2,7 @@ import { MessageTemplateSchema, TEMPLATE_STATUS_LABELS, isTemplateSendable, rend
 import { z } from 'zod';
 
 /**
- * Workspace helpers for message templates (docs/07 §3): the reply-window
+ * Workspace helpers for message templates (docs/archive/specs/07 §3): the reply-window
  * line, the picker's search and hints, and the variables form. Validation
  * and the preview use the same @ocso/domain functions as the API, so what
  * the exec sees is what the customer receives.

@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import { bigint, boolean, index, integer, jsonb, pgTable, real, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { createdAt, ts } from './columns.js';
 
-/** Registered worker processes and their heartbeats (docs/10). */
+/** Registered worker processes and their heartbeats (docs/archive/specs/10). */
 export const workers = pgTable(
   'workers',
   {
@@ -82,7 +82,7 @@ export const scheduledJobs = pgTable(
   (t) => [index('scheduled_jobs_due_idx').on(t.runAt).where(sql`${t.dispatchedAt} IS NULL`)],
 );
 
-/** Last compiled context per conversation, for warm recovery on another worker (docs/05 §4). */
+/** Last compiled context per conversation, for warm recovery on another worker (docs/archive/specs/05 §4). */
 export const contextSnapshots = pgTable('context_snapshots', {
   conversationId: uuid().primaryKey(),
   hashes: jsonb().$type<Record<string, string | null>>().notNull(),
@@ -91,7 +91,7 @@ export const contextSnapshots = pgTable('context_snapshots', {
   updatedAt: ts('updated_at').notNull().defaultNow(),
 });
 
-/** Monotonic invalidation counters per cache scope (docs/05 §5). */
+/** Monotonic invalidation counters per cache scope (docs/archive/specs/05 §5). */
 export const cacheGenerations = pgTable('cache_generations', {
   scope: text().primaryKey(),
   generation: bigint({ mode: 'number' }).notNull().default(1),

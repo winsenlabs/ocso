@@ -10,7 +10,7 @@ import { EvaluationsController } from './evaluations.controller.js';
 import { ReviewsController } from './reviews.controller.js';
 
 /**
- * Quality loop (docs/09 §7, docs/11 §3): reviews, prompt corrections, CSAT and
+ * Quality loop (docs/archive/specs/09 §7, docs/archive/specs/11 §3): reviews, prompt corrections, CSAT and
  * replay evaluations. WebChatIdentityService needs ChannelRuntime, provided by
  * the global ChannelsModule.
  */

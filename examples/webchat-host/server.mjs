@@ -1,4 +1,4 @@
-// Example host site for the OCSO customer web chat (docs/07 §4, docs/08 §4).
+// Example host site for the OCSO customer web chat (docs/archive/specs/07 §4, docs/archive/specs/08 §4).
 //
 // A stand-in for *your* website: it embeds the widget with one script tag and,
 // for a "signed-in" customer, signs a short-lived HS256 JWT that the page hands

@@ -49,7 +49,7 @@ async function topReasons(db: DbOrTx, w: AnalyticsWindow): Promise<Map<string, s
 }
 
 /**
- * Agent-by-agent KPIs with the same formulas as the single-agent view (docs/11
+ * Agent-by-agent KPIs with the same formulas as the single-agent view (docs/archive/specs/11
  * §3 "agent-by-agent trends"), over the agents the principal can read (a CS
  * Lead's teams' agents, ADR-026).
  */

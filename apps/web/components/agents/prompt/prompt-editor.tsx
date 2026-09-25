@@ -29,7 +29,7 @@ interface Props {
 }
 
 /**
- * Structured prompt editor (design/02 Prompt tab, docs/05): edit components in
+ * Structured prompt editor (design/02 Prompt tab, docs/archive/specs/05): edit components in
  * place, save them to the agent's draft (never the live prompt), then create
  * an immutable version with a reason or replay the draft against history.
  */

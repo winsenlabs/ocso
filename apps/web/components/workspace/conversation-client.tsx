@@ -180,7 +180,7 @@ export function ConversationClient(props: ConversationClientProps) {
  * Locked composer (design/01): why this human cannot write, and the one
  * action that changes that. A resolved conversation on a channel with
  * message templates can also be reopened by sending an approved template
- * (reopen-and-send, docs/09 §4).
+ * (reopen-and-send, docs/archive/specs/09 §4).
  */
 function Locked({
   detail,

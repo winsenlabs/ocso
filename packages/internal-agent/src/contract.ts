@@ -3,7 +3,7 @@ import type { ActorContext, AuditStore } from '@ocso/application';
 import type { Db } from '@ocso/db';
 import type { z } from 'zod';
 
-/** Risk classes for internal-agent actions (docs/12 §4). */
+/** Risk classes for internal-agent actions (docs/archive/specs/12 §4). */
 export type InternalRisk = 'READ' | 'LOW_WRITE' | 'HIGH_WRITE';
 
 /** A link to an OCSO object, rendered as a card in the drawer (design/05 `ccard`). */

@@ -3,7 +3,7 @@ import type { ChannelLimits, CompileInput } from './types.js';
 
 /**
  * Untrusted/dynamic data is wrapped in explicit tags and neutralized so it can
- * never close its own wrapper and masquerade as instructions (docs/05 §7).
+ * never close its own wrapper and masquerade as instructions (docs/archive/specs/05 §7).
  */
 export function neutralize(text: string): string {
   return text

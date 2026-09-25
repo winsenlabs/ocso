@@ -69,7 +69,7 @@ async function applyHostContext(tx: DbOrTx, conversationId: string, context: Non
 }
 
 /**
- * Persist-before-process ingress (docs/04 §3–4, docs/07 §3). Every inbound
+ * Persist-before-process ingress (docs/archive/specs/04 §3–4, docs/archive/specs/07 §3). Every inbound
  * message is committed idempotently before any agent work is scheduled.
  */
 export class IngressService {
@@ -147,7 +147,7 @@ export class IngressService {
     });
 
     if (outcome.status !== 'accepted') return outcome;
-    // After commit: schedule work. If publishing fails, the turn sweeper re-enqueues (docs/10 §9).
+    // After commit: schedule work. If publishing fails, the turn sweeper re-enqueues (docs/archive/specs/10 §9).
     const mediaParts = message.parts.flatMap((p, idx) => ('media' in p && p.media.status === 'PENDING' ? [idx] : []));
     await Promise.allSettled([
       ...mediaParts.map((partIdx) =>

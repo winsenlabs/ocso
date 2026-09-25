@@ -23,7 +23,7 @@ export interface PromptVersionMarker {
 }
 
 /**
- * Containment/escalation per calendar day over the last `days` days (docs/11
+ * Containment/escalation per calendar day over the last `days` days (docs/archive/specs/11
  * §3, design/02 chart). Same formulas as the tiles (definitions.containment /
  * escalation), with the cohort being conversations opened on that day.
  */

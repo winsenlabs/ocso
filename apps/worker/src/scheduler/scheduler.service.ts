@@ -67,7 +67,7 @@ export class SchedulerService {
       { name: 'worker-health-sample', everySeconds: 60, run: ({ db }) => recordWorkerHealthSample(db) },
       { name: 'request-insights', everySeconds: 30, run: ({ db, queue }) => requestResolvedInsights(db, queue) },
       { name: 'retention', everySeconds: 3600, run: ({ db }) => new RetentionService(db, blobs, (msg, err) => logger.warn({ err }, msg), audit.store).run() },
-      // Message templates in review: ask the provider, record + announce status changes (docs/07 §3).
+      // Message templates in review: ask the provider, record + announce status changes (docs/archive/specs/07 §3).
       { name: 'message-template-status', everySeconds: 180, run: ({ db, correlationId }) => pollPendingTemplates(db, templateProviderSource(channels), { correlationId }) },
       { name: 'purge-done-jobs', everySeconds: 3600, run: ({ db }) => db.execute(sql`DELETE FROM jobs WHERE status = 'done' AND completed_at < now() - interval '1 day'`) },
       ...subsystemTasks({ db, env, secrets, queue, alerts, alertDelivery, claims, scaling, approvals, audit, routing, exceptions, providers: providerRegistry.list() }),

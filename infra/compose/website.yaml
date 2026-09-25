@@ -6,7 +6,7 @@
 # The site is a Next.js standalone server on :8080 (Dockerfile target `website`):
 # one landing page and POST /api/demo-request, which stores the request in the
 # Cloudflare D1 database `ocso-site`, then emails the requester and the team's
-# Slack channel. See docs/operations/compose.md, "Public website".
+# Slack channel. See docs/guides/deploy/docker-compose.md, "Optional: the public website overlay".
 #
 # Set in .env: OCSO_WEBSITE_DOMAIN (a DNS A/AAAA record pointing at this host),
 # CLOUDFLARE_ACCOUNT_ID and SLACK_NOTIFY_EMAIL; OCSO_SITE_URL if the site is not

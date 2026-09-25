@@ -16,7 +16,7 @@ export interface RetentionRow {
   minDays: number;
 }
 
-/** Retention per data class (docs/15 §8). Logs and traces are retained by their backends, not here. */
+/** Retention per data class (docs/archive/specs/15 §8). Logs and traces are retained by their backends, not here. */
 export function RetentionForm({ rows, editable }: { rows: RetentionRow[]; editable: boolean }) {
   const [state, action, pending] = useActionState(updateRetentionAction, IDLE);
   const errors = state.fieldErrors ?? {};

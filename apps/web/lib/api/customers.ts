@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { api } from './client';
 
 /**
- * Customers (docs/03 Customer / CustomerIdentity; apps/api customers.controller.ts,
+ * Customers (docs/archive/specs/03 Customer / CustomerIdentity; apps/api customers.controller.ts,
  * packages/application customers/customers.ts). Identities are masked by the API
  * in lists and detail; everyone sees only customers they have a visible
  * conversation with (a lead: their teams' agents and queues, ADR-026).
@@ -36,7 +36,7 @@ export const CustomerDetailSchema = Base.extend({
 });
 export type CustomerDetail = z.infer<typeof CustomerDetailSchema>;
 
-/** PATCH /v1/customers/:id (customers.manage). Attribute changes invalidate turn caches (docs/05 §5). */
+/** PATCH /v1/customers/:id (customers.manage). Attribute changes invalidate turn caches (docs/archive/specs/05 §5). */
 export interface CustomerPatch {
   displayName?: string | null;
   language?: string | null;

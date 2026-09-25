@@ -10,7 +10,7 @@ export interface VisibilityPolicy {
 }
 
 /**
- * Which conversations a principal may see (docs/09 §2, docs/15 §2, ADR-026).
+ * Which conversations a principal may see (docs/archive/specs/09 §2, docs/archive/specs/15 §2, ADR-026).
  * - conversations.read_team (Lead): conversations assigned to them, of
  *   virtual agents their teams own, or routed to queues their teams serve —
  *   in any control state; while a router still decides a conversation it

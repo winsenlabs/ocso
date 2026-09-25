@@ -7,7 +7,7 @@ against real PostgreSQL.
 
 | Capability | Evidence | Caveats |
 |---|---|---|
-| Deploy with Docker Compose | Compose stack built and brought up healthy; web chat → API → worker → reply verified (commit ab1a64a); `docs/operations/compose.md` | Verified on one macOS host with Docker 29 |
+| Deploy with Docker Compose | Compose stack built and brought up healthy; web chat → API → worker → reply verified (commit ab1a64a); `docs/guides/deploy/docker-compose.md` | Verified on one macOS host with Docker 29 |
 | Log in as each user type | `auth-and-roles.spec.ts` (setup, admin, lead, exec, logout); `proxy.spec.ts` | — |
 | Create/configure a named virtual agent | `agents.spec.ts` "a CS Lead creates a virtual agent and takes it live"; settings/tools/routing tabs | Business hours display only |
 | Configure a supported model provider | `connections.spec.ts` "Tech Admin configures providers…"; provider contract tests for all six (`packages/model-providers/test/contract`) | Real provider calls need customer credentials |
@@ -28,4 +28,4 @@ against real PostgreSQL.
 | Receive alerts | `system.spec.ts` "…opens a real technical alert, sees its deliveries, acknowledges and resolves it"; `packages/application/test/alerts-*.int.test.ts`; delivery adapter tests | External destinations tested with fakes |
 | Use the internal OCSO agent | `internal-agent.spec.ts` (streaming, threads, confirm, role re-check) | — |
 | Prompt/cache/token telemetry | Usage events with cache read/write tokens per request (`packages/agent-runtime/src/model/usage-recorder.ts`); telemetry screens in `system.spec.ts`; per-provider cache parameters in provider contract tests | Real cache hit rates need real providers |
-| Deploy the same architecture to ECS Fargate | `infra/aws/terraform` (validate/fmt in CI), ECS deployment adapter unit tests (`packages/deployment/test`), `docs/operations/aws.md` | Not yet applied to a real AWS account |
+| Deploy the same architecture to ECS Fargate | `infra/aws/terraform` (validate/fmt in CI), ECS deployment adapter unit tests (`packages/deployment/test`), `docs/guides/deploy/aws.md` | Not yet applied to a real AWS account |

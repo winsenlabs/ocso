@@ -52,7 +52,7 @@ function queueColumns(zone: string, rubric: RubricView): Column<ConversationSumm
   ];
 }
 
-/** QA: resolved conversations waiting for a review, and reviews with an explicit rubric (docs/11 §3, design/02 "Latest reviewed conversations"). */
+/** QA: resolved conversations waiting for a review, and reviews with an explicit rubric (docs/archive/specs/11 §3, design/02 "Latest reviewed conversations"). */
 export async function ReviewsBody({ searchParams }: { searchParams: SearchParams }) {
   const [session, params] = await Promise.all([requireSession(), searchParams]);
   if (!hasPermission(session, Permission.REVIEWS_MANAGE)) return <NotPermitted role={session.roleLabel} />;

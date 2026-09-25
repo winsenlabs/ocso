@@ -17,5 +17,5 @@
 - [ ] API routes added or changed? Access rule declared and `pnpm capabilities:generate` run
 - [ ] Architectural change (contract, package boundary, data model, new core dependency)? ADR added to `PM/ARCHITECTURE-DECISIONS.md`
 - [ ] No `switch`/`if` on a plugin kind in core code; new kinds go through their contract and registry
-- [ ] Docs updated (`docs/operations/`, `docs/plugins/`, or the "Implementation notes (as built)" of the affected spec)
+- [ ] Docs updated (`docs/concepts/`, `docs/guides/`, `docs/reference/` or `docs/operations/`; see docs/README.md)
 - [ ] No secrets, `.env` files or real customer data in code, tests, fixtures or logs

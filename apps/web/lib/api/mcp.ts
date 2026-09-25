@@ -4,7 +4,7 @@ import { ObjectApprovalStateSchema, ProposedSchema } from '@/components/approval
 import { api } from './client';
 
 /**
- * MCP connection manager (docs/08, ADR-021). Shapes mirror
+ * MCP connection manager (docs/archive/specs/08, ADR-021). Shapes mirror
  * packages/application/src/mcp/views.ts. Secret values never leave the API;
  * server-provided text (names, descriptions, instructions) is untrusted and
  * rendered as plain text only.

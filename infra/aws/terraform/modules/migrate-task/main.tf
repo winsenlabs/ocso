@@ -1,7 +1,7 @@
-# One-off database migration task (docs/13 §5, ADR-004). Terraform only
+# One-off database migration task (docs/archive/specs/13 §5, ADR-004). Terraform only
 # registers the task definition; the deploy pipeline runs it with
 # `aws ecs run-task`, waits for it to stop and checks exit code 0 before any
-# service is updated (docs/operations/aws.md).
+# service is updated (docs/guides/deploy/aws.md).
 resource "aws_cloudwatch_log_group" "this" {
   name              = "/ecs/${var.family}"
   retention_in_days = var.log_retention_days

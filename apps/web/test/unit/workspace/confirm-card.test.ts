@@ -21,7 +21,7 @@ const call = {
 const render = (props: Partial<Parameters<typeof ConfirmCard>[0]> = {}) =>
   renderToStaticMarkup(createElement(ConfirmCard, { call, agentName: 'Maya', now: NOW, canDecide: true, ...props }));
 
-describe('sensitive-tool confirmation card (docs/08 §7, design/01 .confirm)', () => {
+describe('sensitive-tool confirmation card (docs/archive/specs/08 §7, design/01 .confirm)', () => {
   it('shows the tool, who proposed it, the policy reason, risk, sanitized args and expiry', () => {
     const html = render();
     expect(html).toContain('confirm sensitive action');

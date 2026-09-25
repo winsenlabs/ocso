@@ -19,7 +19,7 @@ interface Props {
 }
 
 /**
- * Deterministic escalation rule (docs/01 §6): conditions are evaluated in
+ * Deterministic escalation rule (docs/archive/specs/01 §6): conditions are evaluated in
  * code; the prompt's Escalation component covers judgement calls.
  */
 export function RuleDialog({ agentId, rule, queues, onClose }: Props) {

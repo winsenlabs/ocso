@@ -3,7 +3,7 @@ import type { ChannelKind, ChannelKindDescriptor } from './descriptor.js';
 import type { EmbeddedChat } from './embed.js';
 
 /**
- * ChannelAdapter contract (docs/07 §2). Adapters own transport concerns only:
+ * ChannelAdapter contract (docs/archive/specs/07 §2). Adapters own transport concerns only:
  * verification, identity extraction, normalization, media, rendering, sending,
  * delivery status, idempotency keys and capability declaration.
  * They never run the agent loop and never touch the database.
@@ -272,7 +272,7 @@ export interface ChannelAdapter {
   checkConnection?(config: ChannelRuntimeConfig): Promise<ConnectionCheckResult>;
 
   /*
-   * ── Message templates (docs/07 §3). Optional: a kind supports templates when
+   * ── Message templates (docs/archive/specs/07 §3). Optional: a kind supports templates when
    * its adapter implements these methods (and describes them in `templates`). ──
    */
 

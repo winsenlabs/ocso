@@ -3,7 +3,7 @@ import addFormats from 'ajv-formats';
 import type { SchemaValidator } from './types.js';
 
 /**
- * JSON Schema validation of tool arguments (docs/08 §6 check 6). Compiled
+ * JSON Schema validation of tool arguments (docs/archive/specs/08 §6 check 6). Compiled
  * validators are cached by schema object identity; schemas come from approved
  * tool records, never from the model.
  */

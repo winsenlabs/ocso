@@ -7,7 +7,7 @@ import { ProposedSchema } from '@/components/approvals/lib/schemas';
 import { api } from './client';
 
 /**
- * Internal OCSO agent API (docs/12; apps/api internal-agent controller).
+ * Internal OCSO agent API (docs/archive/specs/12; apps/api internal-agent controller).
  * The chat stream itself is proxied by app/api/internal-agent/chat.
  */
 

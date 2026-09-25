@@ -1,7 +1,7 @@
 import { and, gte, inArray, sql } from 'drizzle-orm';
 import { usageEvents, type DbOrTx } from '@ocso/db';
 
-/** Rolling 24h usage figures for a provider or profile (docs/05 §3, ADR-016 read model). */
+/** Rolling 24h usage figures for a provider or profile (docs/archive/specs/05 §3, ADR-016 read model). */
 export interface ModelUsageStats {
   requests: number;
   errors: number;

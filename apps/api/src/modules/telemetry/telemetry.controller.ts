@@ -4,7 +4,7 @@ import { ChangesQuery, LatencyQuery, SystemOverviewService } from '@ocso/applica
 import { Capability, CurrentPrincipal, RequirePermission } from '../../common/decorators.js';
 
 /**
- * Tech admin control center (design/03, docs/11 §2). Technical
+ * Tech admin control center (design/03, docs/archive/specs/11 §2). Technical
  * telemetry only — ids, counts, timings, tokens; never conversation content.
  */
 @Controller('v1/telemetry')

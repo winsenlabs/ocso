@@ -23,7 +23,7 @@ const StreamQuery = z.object({
 type StreamQuery = z.infer<typeof StreamQuery>;
 
 /**
- * Staff realtime stream (docs/14 §3). Conversation events reach only users who
+ * Staff realtime stream (docs/archive/specs/14 §3). Conversation events reach only users who
  * may access that conversation (the same conversationScope as the inbox — no
  * role bypasses it, ADR-026); alert and config events follow alert audiences
  * and, when they concern an agent, whether the user can read that agent.

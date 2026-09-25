@@ -16,7 +16,7 @@ Write at most 12 short lines: the customer's situation and goal, facts establish
 Never include secrets, full card numbers or credentials. Do not address the customer.`;
 
 /**
- * Context compaction (docs/05 §6): older answered messages are folded into a
+ * Context compaction (docs/archive/specs/05 §6): older answered messages are folded into a
  * versioned rolling summary; the full history stays immutable in PostgreSQL.
  */
 export class SummaryService {

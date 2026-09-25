@@ -13,7 +13,7 @@ import { DestinationDialog } from './destination-dialog';
 import { receivesText } from './destination-form';
 import { TestDestinationButton } from './test-destination-button';
 
-/** Notification destinations (docs/11 §7): pluggable delivery targets, managed by the Tech admin. */
+/** Notification destinations (docs/archive/specs/11 §7): pluggable delivery targets, managed by the Tech admin. */
 export async function DestinationsTab({ session, params }: { session: Session; params: AlertsParams }) {
   if (!hasPermission(session, Permission.NOTIFICATION_DESTINATIONS_MANAGE)) return <NotPermitted role={session.roleLabel} />;
   const [destinations, kinds] = await Promise.all([listDestinations(), listDestinationKinds()]);

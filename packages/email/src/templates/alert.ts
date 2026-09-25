@@ -3,7 +3,7 @@ import { oneLine } from './escape.js';
 import { renderLayout, type EmailBlock } from './layout.js';
 
 /**
- * Alert notification (docs/11 §7). @ocso/alerts renders the channel-neutral
+ * Alert notification (docs/archive/specs/11 §7). @ocso/alerts renders the channel-neutral
  * fields (renderAlert) and hands them here, so SMTP destinations and the
  * deployment sender produce the same email.
  */

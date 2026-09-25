@@ -40,7 +40,7 @@ export interface EvaluatorDefinition<S extends z.ZodType<Record<string, unknown>
   kinds: readonly AlertKind[];
   /** Whether a rule for this condition may be bound to one virtual agent. */
   agentScoped: boolean;
-  /** Plain-language method (docs/11 §3: explicit and auditable, no opaque scores). */
+  /** Plain-language method (docs/archive/specs/11 §3: explicit and auditable, no opaque scores). */
   method: string;
   params: S;
   evaluate(ctx: EvaluationContext<z.output<S>>): Promise<Observation[]>;

@@ -91,7 +91,7 @@ export function MiniTable({ table }: { table: MiniTableData }) {
   );
 }
 
-/** The user's role does not cover what was asked (docs/12 §3): say so, never work around it. */
+/** The user's role does not cover what was asked (docs/archive/specs/12 §3): say so, never work around it. */
 export function DeniedNotice({ message }: { message: string }) {
   return (
     <div className="denied" role="note">

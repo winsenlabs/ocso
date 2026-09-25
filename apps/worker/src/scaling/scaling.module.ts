@@ -8,7 +8,7 @@ import type { Logger } from '@ocso/observability';
 import type { QueueAdapter } from '@ocso/queue';
 import { DB, DRIVERS, ENV, LOGGER, QUEUE } from '../infrastructure/tokens.js';
 
-/** The deployment adapter the registered DEPLOYMENT_DRIVER builds (docs/13 §4). */
+/** The deployment adapter the registered DEPLOYMENT_DRIVER builds (docs/archive/specs/13 §4). */
 export const DEPLOYMENT_ADAPTER = Symbol('DEPLOYMENT_ADAPTER');
 /** Turn-scoped scale-in protection for this process (ADR-023). */
 export const TASK_PROTECTION = Symbol('TASK_PROTECTION');

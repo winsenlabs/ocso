@@ -69,7 +69,7 @@ export function MetricTile({ label, value, delta, definition, note, tone, captio
   );
 }
 
-/** Numbered metric definitions (docs/11 §3: every number is traceable to its formula). */
+/** Numbered metric definitions (docs/archive/specs/11 §3: every number is traceable to its formula). */
 export function Definitions({ notes, title = 'How these numbers are computed' }: { notes: Array<{ n: number; text: string }>; title?: string }) {
   if (notes.length === 0) return null;
   return (

@@ -4,7 +4,7 @@ import { RailCard } from '@/components/ui/rail-card';
 import type { QueueDepth } from '@/lib/api/telemetry';
 import { formatDuration, formatNumber } from '@/lib/format';
 
-/** Queue depth and age (docs/10 §6): the conversation-turn topic drives scale-out; other topics listed when busy. */
+/** Queue depth and age (docs/archive/specs/10 §6): the conversation-turn topic drives scale-out; other topics listed when busy. */
 export function QueueCard({ queue, ageThreshold, depthThreshold }: { queue: QueueDepth; ageThreshold: number | null; depthThreshold: number | null }) {
   const busy = queue.topics.filter((t) => t.topic !== queue.turn.topic && (t.depth > 0 || t.inFlight > 0 || t.dead > 0));
   return (

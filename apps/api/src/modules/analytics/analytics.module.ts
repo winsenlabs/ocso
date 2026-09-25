@@ -7,7 +7,7 @@ import { APPROVAL_REGISTRY } from '../approvals/approvals.tokens.js';
 import { AnalyticsController } from './analytics.controller.js';
 import { HomeController } from './home.controller.js';
 
-/** Lead analytics, queue analytics and the role-aware home (docs/11 §3–4, design/02, design/06). */
+/** Lead analytics, queue analytics and the role-aware home (docs/archive/specs/11 §3–4, design/02, design/06). */
 @Module({
   controllers: [AnalyticsController, HomeController],
   providers: [

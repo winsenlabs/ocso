@@ -13,7 +13,7 @@ import { PersonalConnectionPanel } from './personal-connection-panel';
 type Params = Record<string, string | string[] | undefined>;
 
 /**
- * "My connections" (docs/08 §3 user connections): the signed-in user's own
+ * "My connections" (docs/archive/specs/08 §3 user connections): the signed-in user's own
  * accounts on MCP servers an admin published as user-scoped templates. Only
  * this user can operate them; virtual agents never use them.
  */

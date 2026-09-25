@@ -1,4 +1,4 @@
-# OCSO container images (docs/13, research/04 §8). One Dockerfile, four runtime targets:
+# OCSO container images (docs/archive/specs/13, research/04 §8). One Dockerfile, four runtime targets:
 #
 #   api      NestJS control plane (port 4000)        docker build --target api     -t ocso-api .
 #   worker   NestJS agent worker (health port 4100)  docker build --target worker  -t ocso-worker .
@@ -111,7 +111,7 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=6 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.HEALTH_PORT||4100)+'/health/ready').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
 CMD ["node", "--enable-source-maps", "--import", "./dist/instrumentation.js", "dist/main.js"]
 
-# ─── migrate (explicit deployment step, docs/13 §5) ──────────────────────────
+# ─── migrate (explicit deployment step, docs/archive/specs/13 §5) ──────────────────────────
 FROM server-base AS migrate
 # @ocso/db ships dist/ + migrations/; dist/bin/migrate.js resolves ../../migrations.
 COPY --from=server-build /out/migrate ./

@@ -1,7 +1,7 @@
 import { formatDuration, formatNumber, formatPercent } from '../../../lib/format';
 
 /**
- * Metric presentation for analytics tiles (docs/11 §3). Deltas compare the
+ * Metric presentation for analytics tiles (docs/archive/specs/11 §3). Deltas compare the
  * same formula over the previous same-length window; null means no data and
  * is never shown as zero. Pure, client-safe.
  */

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { InteractionPart } from './parts.js';
 
-/** Who produced an interaction (docs/03 §2). */
+/** Who produced an interaction (docs/archive/specs/03 §2). */
 export const ActorType = z.enum(['CUSTOMER', 'AGENT', 'HUMAN', 'SYSTEM', 'TOOL', 'ROUTER']);
 export type ActorType = z.infer<typeof ActorType>;
 

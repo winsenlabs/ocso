@@ -3,7 +3,7 @@ import { createdAt, id, ts } from './columns.js';
 import { users } from './identity.js';
 
 /**
- * Explicit, auditable classifier output per conversation (docs/11 §3). The
+ * Explicit, auditable classifier output per conversation (docs/archive/specs/11 §3). The
  * method (prompt + profile) is recorded so every number can be explained.
  */
 export const conversationInsights = pgTable(

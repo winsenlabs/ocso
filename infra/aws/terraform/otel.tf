@@ -2,7 +2,7 @@
 # (research/05 §7). The app always exports OTLP/HTTP to 127.0.0.1:4318; the
 # collector signs requests with the task role (SigV4) and forwards:
 #   traces  → CloudWatch/X-Ray OTLP endpoint (requires X-Ray Transaction Search
-#             to be enabled once per account/region — see docs/operations/aws.md)
+#             to be enabled once per account/region — see docs/guides/deploy/aws.md)
 #   metrics → CloudWatch via EMF into /<prefix>/otel-metrics (namespace OCSO/App)
 #   logs    → dropped here; application logs already reach CloudWatch as JSON
 #             on stdout through awslogs, so exporting them twice is waste.

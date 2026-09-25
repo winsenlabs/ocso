@@ -14,7 +14,7 @@ export const CONTROL_STATE_LABELS: Readonly<Record<ControlStateKind, string>> = 
   routing: 'Routing',
 };
 
-/** Domain control state (docs/03 §3) → chip. Escalation requested shows as waiting. */
+/** Domain control state (docs/archive/specs/03 §3) → chip. Escalation requested shows as waiting. */
 export function controlStateKind(state: DomainControlState): ControlStateKind {
   switch (state) {
     case 'AI_ACTIVE':

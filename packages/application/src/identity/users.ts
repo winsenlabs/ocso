@@ -35,7 +35,7 @@ export interface UserServiceOptions extends IdentityGovernance {
 }
 
 /**
- * Users (docs/09, PM/research/11 §3). New users are created PENDING_APPROVAL
+ * Users (docs/archive/specs/09, PM/research/11 §3). New users are created PENDING_APPROVAL
  * (inert, cannot sign in); approval activates them and sends the invite
  * (ADR-025). Preset upgrades, re-enabling and team additions are increases and
  * go through approval; downgrades, disabling and team removals apply at once.

@@ -8,7 +8,7 @@ export interface HumanAvailability {
 }
 
 /**
- * Human availability for a handoff (docs/01 §4, docs/09 §3): the AI answers
+ * Human availability for a handoff (docs/archive/specs/01 §4, docs/archive/specs/09 §3): the AI answers
  * 24×7; the agent's business hours only say when people can be offered work.
  * Hours with no usable day are treated as open rather than blocking humans.
  */

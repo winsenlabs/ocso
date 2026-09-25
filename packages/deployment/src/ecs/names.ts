@@ -1,6 +1,6 @@
 /**
  * Names shared with the Terraform contract (infra/aws/terraform,
- * modules/autoscaling and modules/iam/scaling.tf; docs/operations/aws.md §7).
+ * modules/autoscaling and modules/iam/scaling.tf; docs/operations/worker-scaling.md).
  * Terraform creates these resources and ignores the attributes OCSO owns at
  * runtime; the adapter only ever addresses them by these exact names and
  * never lists, creates under other names, or deletes anything else.

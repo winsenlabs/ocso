@@ -3,7 +3,7 @@ import { crossOriginRejected, isSameOriginRequest } from '@/lib/same-origin';
 import { MAX_CHAT_BODY_BYTES, forwardChat, jsonError } from '../forward';
 
 /**
- * POST /api/internal-agent/chat → POST /v1/internal-agent/chat (docs/12).
+ * POST /api/internal-agent/chat → POST /v1/internal-agent/chat (docs/archive/specs/12).
  * Same-origin endpoint for the Ask OCSO drawer's useChat transport. The API
  * validates the body and authorizes the user; this only attaches the token
  * and streams the answer back.

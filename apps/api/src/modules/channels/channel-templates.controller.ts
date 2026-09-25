@@ -20,7 +20,7 @@ type DraftBody = z.input<typeof DraftBody>;
 type ApprovalBody = z.infer<typeof WithApproval>;
 
 /**
- * Message templates of a channel (docs/07 §3), for kinds whose adapter
+ * Message templates of a channel (docs/archive/specs/07 §3), for kinds whose adapter
  * implements them. Reading is for anyone who replies to customers (the
  * workspace picker) or manages templates; creating (= submitting for the
  * provider's review) and deleting need `message_templates.manage` and a

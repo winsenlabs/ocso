@@ -8,7 +8,7 @@ import type { WebChatMessagesService } from './webchat-messages.service.js';
 import { modeOf } from './webchat-notices.js';
 
 /**
- * One visitor's live stream (docs/07 §4). Server → widget events:
+ * One visitor's live stream (docs/archive/specs/07 §4). Server → widget events:
  * `ready` · `message` (stored customer-visible message) · `delta` (streamed AI
  * text, `turnId`) · `typing` · `idle` (turn finished) · `notice` (customer-safe
  * control change) · `status` (who is driving) · `ping`.
