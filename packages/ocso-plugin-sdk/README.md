@@ -1,7 +1,7 @@
 # @winsendotai/ocso-plugin-sdk
 
 Types, a few small helpers and a conformance checker for building plugins for
-[OCSO](https://github.com/winsenlabs/ocso), the open customer service orchestrator.
+[OCSO](https://github.com/winsenlabs/ocso), One Customer Success Orchestrator.
 
 ```sh
 npm install @winsendotai/ocso-plugin-sdk

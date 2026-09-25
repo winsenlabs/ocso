@@ -11,6 +11,7 @@
 **/coverage
 **/test-results
 **/playwright-report
+apps/website/out
 
 # Secrets and local state — never in an image
 .env

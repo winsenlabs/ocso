@@ -1,0 +1,50 @@
+# The public OCSO website (apps/website), served beside the product by the same
+# Caddy. Use it on top of the TLS overlay:
+#
+#   docker compose -f compose.yaml -f infra/compose/tls.yaml -f infra/compose/website.yaml up -d --build
+#
+# Set in .env: OCSO_WEBSITE_DOMAIN (a DNS A/AAAA record pointing at this host)
+# and, if the site is not served at https://ocso.winsenlabs.dev,
+# OCSO_SITE_URL=https://<OCSO_WEBSITE_DOMAIN> (canonical URLs and the sitemap
+# are baked in at build time). The OCSO_DOMAIN site block is unchanged.
+services:
+  website:
+    image: ${OCSO_IMAGE_PREFIX:-ocso}/website:${OCSO_VERSION:-local}
+    build:
+      context: .
+      target: website
+      args:
+        APP_VERSION: ${OCSO_VERSION:-local}
+        OCSO_SITE_URL: ${OCSO_SITE_URL:-https://ocso.winsenlabs.dev}
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks: [default]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+      start_interval: 1s
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+  caddy:
+    depends_on:
+      website:
+        condition: service_healthy
+    environment:
+      OCSO_WEBSITE_DOMAIN: ${OCSO_WEBSITE_DOMAIN:?set OCSO_WEBSITE_DOMAIN in .env}
+    volumes:
+      # Replaces the tls.yaml mount at the same path; the original Caddyfile is
+      # imported unchanged from Caddyfile.ocso.
+      - ./infra/compose/Caddyfile.with-website:/etc/caddy/Caddyfile:ro
+      - ./infra/compose/Caddyfile:/etc/caddy/Caddyfile.ocso:ro

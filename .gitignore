@@ -14,3 +14,6 @@ coverage/
 
 # Local development state (the dev audit signing key, ADR-032)
 .ocso/
+
+# The public website static export (apps/website)
+/apps/website/out/
