@@ -1,6 +1,6 @@
 -- Hand-written guards that the schema DSL cannot express.
 
--- Audit events are immutable (docs/archive/specs/15 §7): reject UPDATE and DELETE.
+-- Audit events are immutable (docs/15 §7): reject UPDATE and DELETE.
 CREATE OR REPLACE FUNCTION ocso_reject_audit_mutation() RETURNS trigger AS $$
 BEGIN
   RAISE EXCEPTION 'audit_events is append-only' USING ERRCODE = 'insufficient_privilege';
