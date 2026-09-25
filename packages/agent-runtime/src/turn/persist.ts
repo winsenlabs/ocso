@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { DomainError, aiMaySendAutonomously, type ControlState } from '@ocso/domain';
+import { DomainError, aiMaySendAutonomously, type ControlState, type HandoffTrigger } from '@ocso/domain';
 import { contextSnapshots, conversations, turns, type Db } from '@ocso/db';
 import { aiTransferToQueue, appendInteraction, emitEvent, lockConversation, requestHandoff, agentActor } from '@ocso/application';
 import type { QueueTransferRequest } from '@ocso/tools';
@@ -12,6 +12,17 @@ export class TurnSupersededError extends DomainError {
   constructor() {
     super('conflict', 'turn_superseded', 'A human took over the conversation during the turn');
   }
+}
+
+/** A hand-off a turn ends with; `ruleId` routes it by that escalation rule's queue, mode and priority. */
+export interface TurnHandoff {
+  reason: string;
+  summary: string;
+  priority?: 'P1' | 'P2' | 'P3' | 'P4' | undefined;
+  trigger: HandoffTrigger;
+  ruleId?: string | undefined;
+  /** The rule raised the hand-off itself (the agent did not ask for one). */
+  byRule?: boolean | undefined;
 }
 
 export interface TurnIdentity {
@@ -72,7 +83,7 @@ export class TurnWriter {
     t: TurnIdentity,
     ctx: TurnContext,
     outcome: { kind: 'REPLIED' | 'HANDOFF' | 'NO_REPLY' | 'AWAITING_CONFIRMATION' | 'TRANSFERRED'; steps: number; latencyMs: number; ttftMs: number | null; providerId: string | null; model: string | null },
-    handoff: { reason: string; summary: string; priority?: 'P1' | 'P2' | 'P3' | 'P4' | undefined; trigger: 'AGENT_DECISION' | 'CUSTOMER_REQUEST' | 'SENSITIVE_ACTION' | 'TOOL_FAILURE' } | null,
+    handoff: TurnHandoff | null,
     transfer: QueueTransferRequest | null = null,
   ): Promise<void> {
     let transferred = false;
@@ -106,7 +117,8 @@ export class TurnWriter {
             reasonText: handoff.reason,
             agentSummary: handoff.summary,
             priority: handoff.priority,
-            requestedBy: { type: 'AGENT', id: t.agentId },
+            ruleId: handoff.ruleId,
+            requestedBy: handoff.byRule ? { type: 'SYSTEM', id: 'escalation-rule' } : { type: 'AGENT', id: t.agentId },
           },
           new Date(),
         );

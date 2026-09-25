@@ -16,7 +16,7 @@ verified, so back them up together and test a restore.
 | Blobs | Media, attachments and the signed daily audit exports under `audit-exports/` | `blobs` volume, or `s3data` on the `s3` profile | S3 media bucket, versioned; noncurrent versions kept `media.noncurrent_expiry_days` (30) |
 | Secrets master key | `app/master_key`: the SecretStore key-encryption key (ADR-012). Without it no stored credential can be decrypted. | `secrets` volume | Not used: `SECRETS_DRIVER=aws` keeps credentials in Secrets Manager |
 | Audit signing key | Ed25519 private key that signs checkpoints, exports and exception reports | `secrets` volume, `app/audit_signing_key` | Your own Secrets Manager secret (`audit_signing_key_secret_arn`) |
-| Auth secret | `BETTER_AUTH_SECRET`: signs sessions and encrypts authenticator secrets and backup codes | `secrets` volume, `app/better_auth_secret` | Not wired in Terraform yet ([AWS gaps](../guides/deploy/aws.md#2-close-the-known-gaps-first)) |
+| Auth secret | `BETTER_AUTH_SECRET`: signs sessions and encrypts authenticator secrets and backup codes | `secrets` volume, `app/better_auth_secret` | Its own Secrets Manager secret `ocso/<env>/auth-secret`, regenerated only when `auth_secret_version` changes |
 | Other generated secrets | Database and audit role passwords, setup token, blob signing key, Resend or SMTP key files | `secrets` volume | Bootstrap secret `ocso/<env>/bootstrap` (30-day recovery window) |
 | Runtime credentials (AWS) | Provider keys, channel tokens, MCP credentials entered in the UI | In PostgreSQL, encrypted | Secrets Manager under `ocso/<env>/app/*`; PostgreSQL stores only ARNs |
 

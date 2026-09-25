@@ -112,6 +112,7 @@ export function RuleDialog({ agentId, rule, queues, onClose }: Props) {
             <div className="fld">
               <label htmlFor="er-amount">Amount above</label>
               <input id="er-amount" name="amountAbove" type="number" min={0} step="any" defaultValue={c.amountAbove ?? ''} />
+              <span className="hint">an amount with a currency in customer messages · ₹75,000 · Rs 6,000</span>
             </div>
           </div>
           <label className="toggle-row">

@@ -44,7 +44,7 @@ Invalid OCSO configuration:
 |---|---|
 | `<VAR>: … (value hidden)` | The variable is malformed. Secret-looking names (`KEY`, `SECRET`, `TOKEN`, `PASSWORD`, database URLs) never have their value printed. |
 | `<SETTING>=<name> is not available; registered <noun> drivers: …` | A `*_DRIVER` value names a driver no installed plugin registers. Use one of the listed names, or install the plugin (`OCSO_PLUGINS`). |
-| `BETTER_AUTH_SECRET (≥ 32 chars) is required in production` | Compose generates it; on AWS it is not wired yet ([AWS gaps](../guides/deploy/aws.md#2-close-the-known-gaps-first)). |
+| `BETTER_AUTH_SECRET (≥ 32 chars) is required in production` | Compose generates it (`keygen`); the AWS Terraform generates `ocso/<env>/auth-secret`. Another deployment must set it, the same on every api instance. |
 | `AUDIT_SIGNING_KEY_FILE (…) or AUDIT_SIGNING_KEY is required in production` | Provide the Ed25519 key. Compose: `docker compose up keygen`. |
 | `AUDIT_DRIVER=postgres requires AUDIT_DATABASE_URL (or AUDIT_DATABASE_URL_FILE)` | The process has no audit store URL. |
 | `EMAIL_DRIVER is required in production: …` | Configure email ([Email](../guides/email.md)), or set `EMAIL_ALLOW_LOG_IN_PRODUCTION=true` for a trial. |
@@ -53,7 +53,7 @@ Invalid OCSO configuration:
 | `SECRETS_DRIVER=local requires OCSO_SECRETS_MASTER_KEY or OCSO_SECRETS_MASTER_KEY_FILE` | The master key is missing. On Compose, check that the `secrets` volume is mounted. |
 | `QUEUE_DRIVER=sqs requires SQS_QUEUE_URLS and AWS_REGION` | AWS environment incomplete. |
 | `ocso-entrypoint: <VAR>_FILE points to a missing or unreadable file` (exit 66) | Compose: a secret file is missing. Run `docker compose up keygen`; for `RESEND_API_KEY_FILE` or `SMTP_PASSWORD_FILE`, write the file first. |
-| `no SQS queue configured for topic <topic>` | `SQS_QUEUE_URLS` lacks a topic. On the current Terraform, add `conversation.route` to `queue_topics`. |
+| `no SQS queue configured for topic <topic>` | `SQS_QUEUE_URLS` lacks a topic. With the AWS Terraform, check that a custom `queue_topics` lists every topic in `packages/queue/src/contract.ts`. |
 
 ## Migrations
 

@@ -162,7 +162,8 @@ instead of checking which plugin it is (ADR-028):
    example `@ocso/agent-runtime`, which ships the built-in tools) contributes no vocabulary.
 2. **Derives the vocabulary from source, not from a list.** In each plugin package's `src` (tests
    excluded) it collects:
-   - kinds: `kind: 'X'` or `kind = 'X'` where `X` is upper snake case;
+   - kinds: `kind: 'X'` or `kind = 'X'` where `X` is upper snake case, or `kind: SOME_CONST` where the
+     package declares `const SOME_CONST = 'X'` (Teams declares `TEAMS_KIND = 'MS_TEAMS'`);
    - driver names: `driver: 'x'` or `driver = 'x'`, plus `name: 'x'` in any file that mentions
      `DriverDefinition` (plugin packages and the composition root).
 3. **Scans core.** Core is `apps/api/src`, `apps/worker/src`, `apps/web/app`, `apps/web/components`,
@@ -179,16 +180,13 @@ instead of checking which plugin it is (ADR-028):
 5. **Allows a reasoned escape.** `// plugin-boundary: allow <reason>` on the line or the line above
    suppresses it; every escape is printed as `ALLOW`. There are none today.
 
-At the time of writing it reports `25 kinds and 12 driver names from 10 plugin packages; 1178 core
+At the time of writing it reports `26 kinds and 12 driver names from 10 plugin packages; 1179 core
 files scanned` and passes.
 
-> [!WARNING]
-> The lint only sees kinds declared as a literal `kind: 'X'` or `kind = 'X'`. The Teams channel declares
-> its kind through a constant (`TEAMS_KIND = 'MS_TEAMS'` in `packages/channels/src/teams/render.ts`), so
-> `MS_TEAMS` is not in the vocabulary and core naming it would not fail. The `TEAMS` in the vocabulary
-> comes from the alert destination. The vocabulary also picks up non-plugin values that happen to be
-> declared as `kind: 'X'` in plugin packages, such as the audit store's verification finding kinds
-> (`CHAIN_FORK`, `RECORD_MISSING`, …), so core cannot quote those either.
+> [!NOTE]
+> The vocabulary also picks up non-plugin values that happen to be declared as `kind: 'X'` in plugin
+> packages, such as the audit store's verification finding kinds (`CHAIN_FORK`, `RECORD_MISSING`, …), so
+> core cannot quote those either.
 
 ## Processes and deployment shape
 

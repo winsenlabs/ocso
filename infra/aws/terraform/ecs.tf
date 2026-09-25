@@ -108,6 +108,8 @@ module "web" {
     NEXT_TELEMETRY_DISABLED = "1"
     # The ALB appends the client address to X-Forwarded-For (per-address sign-in throttling, audit).
     OCSO_TRUSTED_PROXY_HOPS = "1"
+    # Allowed origin for cookie-bearing requests and the base of absolute links, as in Compose.
+    OCSO_PUBLIC_URL = local.public_url
   }
 
   container_port = 3000

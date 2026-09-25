@@ -132,8 +132,33 @@ These come from the built-in source `ocso-builtin` in [`tools/builtins.ts`](../.
 
 The **Escalation** tab holds rules with a **Rule name**, **Trigger**, **Conditions · any that apply** (**Keywords**, **Consecutive tool failures**, **Amount above**, customer asks for a human), **Handoff mode**, **Target queue** and **Priority**. Platform-wide rules (no agent) are read-only there.
 
-> [!WARNING]
-> The runtime does not evaluate these conditions today, and it does not apply a rule's mode, queue or priority to an AI hand-off. When the agent hands off is decided by the model, from the **Escalation rules** prompt component and the runtime contract. Several other things also hand off: a sensitive tool call waiting for confirmation, hitting the step limit, and a model outage. See [Conversations](conversations.md#what-triggers-it). Write the policy you need into the prompt component until rule evaluation is wired in.
+Only enabled rules count: a new rule is a disabled draft, and turning it on is an approved proposal. The runtime
+reads the agent's own rules first, then platform-wide ones, oldest first, on every turn
+([`turn/escalation-rules.ts`](../../packages/agent-runtime/src/turn/escalation-rules.ts)). The conditions in one
+rule are "any that apply":
+
+| Condition | Matches when | When it is checked |
+|---|---|---|
+| **Keywords** | A keyword appears in the customer's new messages as whole words, in any case. | Before the model runs. |
+| **Amount above** | The customer's new messages contain an amount with a currency (`₹75,000`, `Rs 6,000`, `200 USD`) above the limit. Numbers without a currency, such as card endings and references, never count. | Before the model runs. |
+| **Consecutive tool failures** | That many tool calls in a row failed or were denied in the turn. | After the model's turn. |
+| **Customer asks for a human** | The agent hands off and sets `customerAskedForHuman`. | When the agent hands off. |
+
+What a matching rule does:
+
+- **Keywords and amounts** hand off at once. The model is not asked; the customer gets the hand-off message, and the
+  hand-off records the rule, its trigger and a reason such as `rule “Hardship”: keyword “job loss”`, requested by
+  `SYSTEM`.
+- **Consecutive tool failures** hand off after the agent's reply, which is followed by the hand-off message.
+- **Any hand-off the turn makes** (the agent's own, a sensitive action, the step limit) is routed by the first rule
+  whose conditions match, else by the first rule without conditions whose trigger is the hand-off's trigger. For
+  example, a rule with trigger **Customer request** and no conditions sends every customer request to its queue.
+- The rule's **Target queue**, **Handoff mode** and **Priority** then apply ([Routing the hand-off](conversations.md#routing-the-hand-off)).
+  A priority the agent sets on its hand-off is used instead of the rule's, and a hand-off never lowers the
+  conversation's priority.
+
+Judgement calls stay in the prompt: write them into the **Escalation rules** prompt component. To gate an amount the
+agent is about to act on (a refund above a limit), use a tool argument rule that requires confirmation instead.
 
 ## The staff copilot
 

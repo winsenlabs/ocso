@@ -1,8 +1,7 @@
 # Deploy on AWS (ECS Fargate)
 
 This guide describes the Terraform in [infra/aws/terraform](../../../infra/aws/terraform/) (ADR-022):
-what it creates, the variables you set, the apply order, and the gaps you must close before it produces
-a working deployment. It is for a platform engineer who already runs Terraform on AWS. The images and
+what it creates, the variables you set and the apply order. It is for a platform engineer who already runs Terraform on AWS. The images and
 the application code are the same as in [Docker Compose](docker-compose.md); only the drivers change:
 `QUEUE_DRIVER=sqs`, `BLOB_DRIVER=s3`, `SECRETS_DRIVER=aws` and `DEPLOYMENT_DRIVER=ecs`.
 
@@ -10,12 +9,9 @@ the application code are the same as in [Docker Compose](docker-compose.md); onl
 > **Validated, never applied.** `terraform init -backend=false`, `terraform validate` and
 > `terraform fmt -check -recursive` pass (Terraform 1.16.3; CI runs the same checks on every pull
 > request). No `plan` or `apply` has been run against a real AWS account. Engine availability, quotas,
-> Service Connect behaviour and the scaling metric math are unconfirmed.
->
-> **As shipped it will not start a working deployment.** Three required settings are not wired
-> (see [Close the known gaps first](#2-close-the-known-gaps-first)): the api refuses to start without
-> `BETTER_AUTH_SECRET`, the api and worker refuse to start without an email driver in production, and the
-> `conversation.route` queue is missing.
+> Service Connect behaviour and the scaling metric math are unconfirmed. `terraform test` plans the stack
+> against a mocked AWS provider and checks the environment and secrets each task receives
+> ([tests/wiring.tftest.hcl](../../../infra/aws/terraform/tests/wiring.tftest.hcl)).
 
 ## Topology
 
@@ -88,7 +84,7 @@ Root files: `network.tf`, `ecs.tf`, `data-stores.tf`, `audit.tf`, `iam.tf`, `sca
 | Queues (`modules/sqs`) | One SQS Standard queue and one DLQ per entry in `queue_topics`: SSE, long polling, redrive after 5 receives, 4-day retention (DLQ 14 days), TLS-only policy, and a "DLQ not empty" alarm per queue. |
 | Media (`modules/s3`) | Bucket `<prefix>-media-<account id>`: own KMS key as default encryption with a bucket key, Block Public Access, ACLs disabled, TLS-only and right-key-only policies, versioning, CORS for `OCSO_PUBLIC_URL` (GET/PUT/HEAD), lifecycle rules for TEMP blobs (`tmp/` prefix or tag `ocso-retention=TEMP`), noncurrent versions (30 days) and incomplete uploads. |
 | Secrets (`modules/secrets`) | `ocso/<env>/bootstrap` (own KMS key, 30-day recovery window), written with a write-only attribute; IAM policy documents for the runtime prefix `ocso/<env>/app/*`. |
-| IAM (`modules/iam`, `audit.tf`) | Execution roles `app` and `web`; task roles `api`, `worker`, `web`, `migrate`. The app execution role reads the bootstrap secret and the audit signing key secret; the web execution role reads neither. The api and worker task roles use the queues, the media bucket and its key, and manage runtime secrets under the prefix. Only the worker task role holds scaling permissions. Optional: ECS Exec, Bedrock invoke on `bedrock_model_arns`, the OTel collector's X-Ray and EMF permissions. |
+| IAM (`modules/iam`, `audit.tf`, `auth.tf`, `variables-email.tf`) | Execution roles `app` and `web`; task roles `api`, `worker`, `web`, `migrate`. The app execution role reads the bootstrap secret, the auth secret, the audit signing key secret and the email secret; the web execution role reads none of them. The api and worker task roles use the queues, the media bucket and its key, and manage runtime secrets under the prefix. Only the worker task role holds scaling permissions. Optional: ECS Exec, Bedrock invoke on `bedrock_model_arns`, the OTel collector's X-Ray and EMF permissions. |
 | Autoscaling (`modules/autoscaling`) | Worker scalable target; target tracking on OCSO's `SlotDemand` ÷ `Workers` metrics; step scaling on the `conversation.turn` queue's oldest-message age (+1 task at the threshold, +3 at threshold + 60 s). OCSO owns min/max, the policy values and the alarm threshold at runtime; Terraform ignores changes to them. |
 | Observability (`modules/observability`, `otel.tf`) | SNS alarm topic (KMS-encrypted) with optional email subscriptions; alarms for ALB 5xx, target 5xx and unhealthy targets per service, main RDS CPU, free storage and freeable memory, and `conversation.turn` backlog over 120 s for 5 minutes. Optional OTel collector sidecar on api and worker: traces to X-Ray over OTLP (SigV4), metrics to CloudWatch EMF (`OCSO/App`), OTLP logs dropped. |
 
@@ -96,9 +92,9 @@ Root files: `network.tf`, `ecs.tf`, `data-stores.tf`, `audit.tf`, `iam.tf`, `sca
 
 | Task | Plain environment | Secrets (from Secrets Manager) |
 |---|---|---|
-| api | `NODE_ENV=production`, `DATABASE_SSL=true`, `NODE_EXTRA_CA_CERTS` (RDS CA bundle baked into the image), `QUEUE_DRIVER=sqs`, `SQS_QUEUE_URLS`, `BLOB_DRIVER=s3`, `S3_BUCKET`, `S3_KMS_KEY_ID`, `SECRETS_DRIVER=aws`, `SECRETS_NAME_PREFIX`, `DEPLOYMENT_DRIVER=ecs`, `ECS_CLUSTER`, `ECS_WORKER_SERVICE`, `OCSO_PUBLIC_URL`, `OCSO_ENABLE_DEV_PROVIDERS=false`, `AUDIT_DRIVER=postgres`, `AUDIT_DATABASE_SSL=true`, `AUDIT_TRUSTED_PUBLIC_KEYS`, `PORT=4000`, `TRUST_PROXY=1` | `DATABASE_URL`, `OCSO_SETUP_TOKEN`, `AUDIT_DATABASE_URL` (the reader URL), `AUDIT_SIGNING_KEY` |
-| worker | The same as api, plus `HEALTH_PORT=4100`, `OCSO_METRICS_NAMESPACE` | `DATABASE_URL`, `AUDIT_DATABASE_URL` (the writer URL), `AUDIT_SIGNING_KEY` |
-| web | `NODE_ENV`, `API_URL=http://api:4000`, `HOSTNAME`, `PORT=3000`, `NEXT_TELEMETRY_DISABLED`, `OCSO_TRUSTED_PROXY_HOPS=1` | none |
+| api | `NODE_ENV=production`, `DATABASE_SSL=true`, `NODE_EXTRA_CA_CERTS` (RDS CA bundle baked into the image), `QUEUE_DRIVER=sqs`, `SQS_QUEUE_URLS`, `BLOB_DRIVER=s3`, `S3_BUCKET`, `S3_KMS_KEY_ID`, `SECRETS_DRIVER=aws`, `SECRETS_NAME_PREFIX`, `DEPLOYMENT_DRIVER=ecs`, `ECS_CLUSTER`, `ECS_WORKER_SERVICE`, `OCSO_PUBLIC_URL`, `OCSO_ENABLE_DEV_PROVIDERS=false`, `AUDIT_DRIVER=postgres`, `AUDIT_DATABASE_SSL=true`, `AUDIT_TRUSTED_PUBLIC_KEYS`, `PORT=4000`, `TRUST_PROXY=1` | `DATABASE_URL`, `OCSO_SETUP_TOKEN`, `AUDIT_DATABASE_URL` (the reader URL), `AUDIT_SIGNING_KEY`, `BETTER_AUTH_SECRET`, and `RESEND_API_KEY` or `SMTP_URL` |
+| worker | The same as api, plus `HEALTH_PORT=4100`, `OCSO_METRICS_NAMESPACE` | `DATABASE_URL`, `AUDIT_DATABASE_URL` (the writer URL), `AUDIT_SIGNING_KEY`, and `RESEND_API_KEY` or `SMTP_URL` |
+| web | `NODE_ENV`, `API_URL=http://api:4000`, `HOSTNAME`, `PORT=3000`, `NEXT_TELEMETRY_DISABLED`, `OCSO_TRUSTED_PROXY_HOPS=1`, `OCSO_PUBLIC_URL` | none |
 | migrate | `NODE_ENV=production`, the database and audit settings above, `AUDIT_MIN_RETENTION_DAYS` | `DATABASE_URL`, `AUDIT_DATABASE_URL`, `AUDIT_READER_URL`, `AUDIT_DATABASE_OWNER_URL` |
 
 The bootstrap secret's JSON keys are `DATABASE_URL`, `OCSO_SETUP_TOKEN`, `AUDIT_DATABASE_URL`,
@@ -106,6 +102,12 @@ The bootstrap secret's JSON keys are `DATABASE_URL`, `OCSO_SETUP_TOKEN`, `AUDIT_
 passwords and writes them through write-only attributes (`password_wo`, `secret_string_wo`), so no
 secret value enters the Terraform state. They are sent only when `bootstrap_secret_version` changes, and
 the same run feeds RDS and the secret, so they always agree.
+
+The api and worker also get `EMAIL_DRIVER`, `EMAIL_FROM` and `EMAIL_REPLY_TO` from the `email` variable.
+`BETTER_AUTH_SECRET` is generated into its own secret, `ocso/<env>/auth-secret`, with its own
+`auth_secret_version`: it signs sessions and encrypts authenticator secrets and backup codes, so a database
+password rotation must never change it. Bumping `auth_secret_version` signs everyone out and breaks enrolled
+authenticators.
 
 ## Variables
 
@@ -120,15 +122,16 @@ Copy [terraform.tfvars.example](../../../infra/aws/terraform/terraform.tfvars.ex
 | `acm_certificate_arn` | ACM certificate in the same region covering `public_hostname`. |
 | `image_tag` | Immutable tag pushed to all four repositories. |
 | `audit_signing_key_secret_arn` | Secrets Manager secret holding the Ed25519 audit signing key (you create it, below). |
+| `email` | `driver` (`resend`, `smtp` or `log`), `from`, optional `reply_to`, and `secret_arn`: the secret holding the Resend API key or an `smtps://` URL (you create it, below). `log` delivers nothing: a trial only, and every plan warns. |
 
 Commonly changed (defaults in brackets): `route53_zone_id` [none], `alb_ingress_cidrs` [`0.0.0.0/0`],
 `az_count` [2], `single_nat_gateway` [false], `cpu_architecture` [`X86_64`], `deploy_services` [true],
 `api`, `web`, `worker`, `migrate` (sizing), `worker_scaling` (initial min 2, max 10, 10 conversations
 per worker, 0.75 target), `db` (instance, storage, backups, windows), `audit_store`
-(`separate_instance`, size, `min_retention_days` ≥ 365), `bootstrap_secret_version` [1], `queue_topics`,
+(`separate_instance`, size, `min_retention_days` ≥ 365), `bootstrap_secret_version` [1], `auth_secret_version` [1], `queue_topics`,
 `media`, `otel_collector`, `alarm_email_addresses`, `bedrock_model_arns`, `enable_execute_command`
 [false], `log_retention_days` [30], `database_pool_size` [10]. Every variable is documented in
-`variables.tf`, `variables-operations.tf` and `variables-audit.tf`.
+`variables.tf`, `variables-operations.tf`, `variables-audit.tf` and `variables-email.tf`.
 
 ## Prerequisites
 
@@ -158,39 +161,31 @@ aws secretsmanager create-secret --name ocso/prod/audit-signing-key \
 Put the ARN in `audit_signing_key_secret_arn` (and `audit_signing_key_kms_key_arn` if you encrypt it
 with your own KMS key). Keep a copy of the PEM with your backups.
 
-## 2. Close the known gaps first
+## 2. Create the email secret
 
-These are real gaps in the Terraform today, found by reading it against `packages/config/src/env.ts`
-and `packages/queue/src/contract.ts`. Without them the deployment does not come up.
+OCSO sends invites, password resets, sign-in codes and approval notices by email, and in production the api
+and worker refuse to start without a choice. Put the provider credential in its own secret:
 
-1. **`conversation.route` queue is missing.** `queue_topics` lists 12 topics; the code has 13. Every
-   channel conversation starts in routing, the worker subscribes to `conversation.route`, and the SQS
-   driver throws `no SQS queue configured for topic conversation.route` for a topic without a URL. Fix it
-   in `terraform.tfvars` by listing all 13 topics:
+```bash
+# Resend: the API key
+aws secretsmanager create-secret --name ocso/prod/email --secret-string "re_..."
+# SMTP: a URL with the user and password
+aws secretsmanager create-secret --name ocso/prod/email \
+  --secret-string "smtps://user:password@smtp.example.com:465"
+```
 
-   ```hcl
-   queue_topics = [
-     "conversation.turn", "channel.deliver", "media.fetch", "conversation.summarize",
-     "conversation.insights", "copilot.suggest", "tool.execute_confirmed", "alert.deliver",
-     "webhook.deliver", "evaluation.run", "approval.notify", "approval.activate",
-     "conversation.route",
-   ]
-   ```
+Then set the variable (a sender on a domain verified with your provider):
 
-2. **`BETTER_AUTH_SECRET` is not wired.** The api refuses to start in production without it
-   (`BETTER_AUTH_SECRET (≥ 32 chars) is required in production`). Create a secret with at least 32
-   random characters, identical for every api task, and add it to `local.api_secrets` in `locals.tf`
-   (the app execution role must be allowed to read it, as `audit.tf` does for the signing key).
+```hcl
+email = {
+  driver     = "resend"
+  from       = "Meridian OCSO <ocso@meridian.example>"
+  secret_arn = "arn:aws:secretsmanager:ap-south-1:123456789012:secret:ocso/prod/email-AbCdEf"
+}
+```
 
-3. **Email is not wired.** In production the api and worker refuse to start without `EMAIL_DRIVER`
-   (`EMAIL_DRIVER is required in production`). Add `EMAIL_DRIVER=resend` (or `smtp`), `EMAIL_FROM` and
-   optionally `EMAIL_REPLY_TO` to `local.app_env`, and inject `RESEND_API_KEY` (or `SMTP_PASSWORD`) as a
-   secret. For a trial only, `EMAIL_ALLOW_LOG_IN_PRODUCTION=true` lets them start with no email at all.
-   See [Email](../email.md).
-
-4. **Recommended: `OCSO_PUBLIC_URL` on the web task.** Compose sets it; the web task does not. The web
-   app uses it as an allowed origin for cookie-bearing requests and for absolute links in page metadata.
-   Add it to the web service's `environment` in `ecs.tf`.
+Add `kms_key_arn` if the secret uses your own KMS key. For a trial, `email = { driver = "log" }` starts
+without email: nobody receives invites or resets. See [Email](../email.md).
 
 ## 3. First deployment
 
@@ -304,8 +299,8 @@ region, or the OTLP traces endpoint rejects spans.
 
 | Symptom | Likely cause |
 |---|---|
-| api tasks stop at once with `Invalid OCSO configuration:` | One of the gaps in section 2 (`BETTER_AUTH_SECRET`, `EMAIL_DRIVER`), or a variable the log names. |
-| Worker tasks stop with `no SQS queue configured for topic conversation.route` | Gap 1: add the topic to `queue_topics` and apply. |
+| api tasks stop at once with `Invalid OCSO configuration:` | A variable the log names. `EMAIL_DRIVER=… requires EMAIL_FROM`: set `email.from`. |
+| Worker tasks stop with `no SQS queue configured for topic …` | A custom `queue_topics` misses a topic: list every topic in `packages/queue/src/contract.ts` and apply. |
 | Tasks cannot reach RDS: certificate errors | The image must contain `/etc/ssl/certs/rds-global-bundle.pem` (the Dockerfile adds it) and `NODE_EXTRA_CA_CERTS` must point at it. |
 | Migrate exits non-zero | `aws logs tail <migrate_log_group>`. See [Troubleshooting](../../operations/troubleshooting.md#migrations). |
 | Scaling status `FAILED: No Application Auto Scaling target is registered` | `deploy_services` was false or the target was deleted. Apply again. |
@@ -313,7 +308,7 @@ region, or the OTLP traces endpoint rejects spans.
 
 ## Limits and known gaps
 
-- Never applied to a real AWS account (see the warning at the top), and the gaps in section 2.
+- Never applied to a real AWS account (see the warning at the top).
 - The target-tracking metric math (`IF(workers > 0, demand / workers, demand)`) has not been checked with
   `aws cloudwatch get-metric-data` against real data.
 - CloudWatch alarms cover the main RDS instance only, not the audit instance.
@@ -324,8 +319,7 @@ region, or the OTLP traces endpoint rejects spans.
 - There is no ready-made task for the offline `audit-verify` bin; run it from a host in the VPC.
 - Single region, no cross-region backups.
 - `bootstrap_secret_version` rotates the database password, the setup token and the audit role passwords
-  together. (Its description in `variables-operations.tf` still mentions an "internal signing key"; there
-  is none in the bootstrap secret.)
+  together.
 - `audit_store.separate_instance = false` means the api and worker hold credentials that can alter the
   audit database. Use a separate instance for a regulated deployment.
 

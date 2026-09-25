@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq, sql } from 'drizzle-orm';
-import { conversations, handoffs, toolCalls, turns, usageEvents } from '@ocso/db';
+import { conversations, escalationRules, handoffs, queues, toolCalls, turns, usageEvents, uuidv7 } from '@ocso/db';
 import { HumanControlService, PromptService, sendHumanReply } from '@ocso/application';
 import { LeaseLostError } from '../src/index.js';
 import { createRuntimeHarness, turnMessage, type RuntimeHarness } from './harness.js';
@@ -225,5 +225,88 @@ describe('human handoff lifecycle', () => {
     expect(tools).toContain('ocso_request_handoff');
     const { rows } = await h.t.db.execute(sql`SELECT count(*)::int AS n FROM outbox_events WHERE type = 'tool.confirmation_requested'`);
     expect((rows[0] as { n: number }).n).toBe(1);
+  });
+});
+
+describe('escalation rules', () => {
+  let hardshipQueueId: string;
+  beforeAll(async () => {
+    hardshipQueueId = uuidv7();
+    await h.t.db.insert(queues).values({ id: hardshipQueueId, name: 'Hardship desk' });
+  });
+  beforeEach(async () => {
+    await h.t.db.delete(escalationRules);
+  });
+  const rule = (values: Partial<typeof escalationRules.$inferInsert> & { name: string; trigger: string }) =>
+    h.t.db.insert(escalationRules).values({ id: uuidv7(), agentId: h.agentId, targetQueueId: hardshipQueueId, enabled: true, ...values }).returning().then((r) => r[0]!);
+  const handoffOf = async (conversationId: string) => (await h.t.db.select().from(handoffs).where(eq(handoffs.conversationId, conversationId)))[0];
+
+  it('hands off on a keyword before the model runs, routed by the rule', async () => {
+    await rule({ name: 'Disabled', trigger: 'POLICY', condition: { keywords: ['job'] }, enabled: false, targetQueueId: h.queueId });
+    const hardship = await rule({ name: 'Hardship', trigger: 'RISK', condition: { keywords: ['job loss', 'bereavement'] }, priority: 'P2', mode: 'OPEN_PICKUP' });
+    h.adapter.script = [{ text: 'the model should not be asked' }];
+    const conversationId = await h.say('After my JOB   LOSS I cannot pay this EMI');
+    await h.processor('rule-kw').processor.handle(turnMessage(conversationId));
+    expect(h.adapter.requests).toHaveLength(0);
+    const [conv] = await h.t.db.select().from(conversations).where(eq(conversations.id, conversationId));
+    expect(conv).toMatchObject({ controlState: 'WAITING_FOR_HUMAN', queueId: hardshipQueueId, priority: 'P2' });
+    expect(await handoffOf(conversationId)).toMatchObject({
+      ruleId: hardship.id,
+      trigger: 'RISK',
+      requestedByType: 'SYSTEM',
+      reasonText: 'rule “Hardship”: keyword “job loss”',
+      agentSummary: expect.stringContaining('After my JOB LOSS'),
+    });
+    expect((await agentMessages(conversationId)).map((m) => m.text)).toEqual([expect.stringContaining('colleague')]);
+    const [turn] = await h.t.db.select().from(turns).where(eq(turns.conversationId, conversationId));
+    expect(turn).toMatchObject({ status: 'COMPLETED', outcome: 'HANDOFF', steps: 0 });
+  });
+
+  it('matches amounts only where a currency marks them', async () => {
+    await rule({ name: 'Large dispute', trigger: 'BUSINESS_RULE', condition: { amountAbove: 50_000 } });
+    h.adapter.script = [{ text: 'Let me look.' }];
+    const quiet = await h.say('Card ending 482199, reference 99887766, debited 12,480 on 14 March');
+    await h.processor('rule-amt').processor.handle(turnMessage(quiet));
+    expect(await handoffOf(quiet)).toBeUndefined();
+    expect((await agentMessages(quiet)).map((m) => m.text)).toEqual(['Let me look.']);
+
+    const loud = await h.say('Someone took ₹75,000 from my account');
+    await h.processor('rule-amt-2').processor.handle(turnMessage(loud));
+    expect(await handoffOf(loud)).toMatchObject({ trigger: 'BUSINESS_RULE', reasonText: 'rule “Large dispute”: amount 75,000 above 50,000' });
+  });
+
+  it("routes the agent's own hand-off by a matching rule", async () => {
+    const humans = await rule({ name: 'People desk', trigger: 'CUSTOMER_REQUEST', condition: { customerRequestsHuman: true }, priority: 'P2' });
+    h.adapter.script = [
+      { toolCalls: [{ toolName: 'ocso_request_handoff', input: { reason: 'customer asked for a person', summary: 'wants a human', customerAskedForHuman: true } }] },
+      { text: 'A colleague will continue here shortly.' },
+    ];
+    const conversationId = await h.say('Can I speak to a human please?');
+    await h.processor('rule-human').processor.handle(turnMessage(conversationId));
+    expect(await handoffOf(conversationId)).toMatchObject({ ruleId: humans.id, trigger: 'CUSTOMER_REQUEST', requestedByType: 'AGENT', queueId: hardshipQueueId, priority: 'P2' });
+    expect((await agentMessages(conversationId)).map((m) => m.text)).toEqual(['A colleague will continue here shortly.']);
+  });
+
+  it('a rule without conditions routes every hand-off with its trigger', async () => {
+    const decisions = await rule({ name: 'All agent decisions', trigger: 'AGENT_DECISION', condition: {} });
+    h.adapter.script = [
+      { toolCalls: [{ toolName: 'ocso_request_handoff', input: { reason: 'refund above authority', summary: 'needs approval' } }] },
+      { text: 'A colleague will confirm here shortly.' },
+    ];
+    const conversationId = await h.say('please refund me');
+    await h.processor('rule-general').processor.handle(turnMessage(conversationId));
+    expect(await handoffOf(conversationId)).toMatchObject({ ruleId: decisions.id, queueId: hardshipQueueId });
+  });
+
+  it('hands off after consecutive tool failures, after the agent reply', async () => {
+    await rule({ name: 'Tools down', trigger: 'TOOL_FAILURE', condition: { consecutiveToolFailures: 2 }, targetQueueId: h.queueId });
+    h.adapter.script = [
+      { toolCalls: [{ toolName: 'missing__one', input: {} }, { toolName: 'missing__two', input: {} }] },
+      { text: 'Sorry, I cannot reach our systems right now.' },
+    ];
+    const conversationId = await h.say('what is my balance?');
+    await h.processor('rule-tools').processor.handle(turnMessage(conversationId));
+    expect(await handoffOf(conversationId)).toMatchObject({ trigger: 'TOOL_FAILURE', reasonText: 'rule “Tools down”: 2 consecutive tool failures', queueId: h.queueId });
+    expect((await agentMessages(conversationId)).map((m) => m.text)).toEqual(['Sorry, I cannot reach our systems right now.', expect.stringContaining('colleague')]);
   });
 });

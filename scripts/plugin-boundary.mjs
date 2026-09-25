@@ -10,7 +10,8 @@
  * plugin is covered as soon as it is listed there:
  *   - plugin kinds: `kind: 'X'` / `kind = 'X'` (UPPER_SNAKE) declared in a
  *     plugin package's src — channel adapters/descriptors, provider
- *     definitions, alert adapters;
+ *     definitions, alert adapters — or `kind: TEAMS_KIND` where the package
+ *     declares `const TEAMS_KIND = 'MS_TEAMS'`;
  *   - driver names: `driver: 'x'` / `driver = 'x'` in a plugin package's src
  *     and `name: 'x'` in any file defining *DriverDefinition objects (plugin
  *     packages and the composition root). Driver names are everyday words
@@ -53,6 +54,9 @@ const SKIP_DIRS = new Set(['node_modules', 'dist', '.next', '.turbo', 'coverage'
 const TEST_FILE = /\.(?:test|spec)\.(?:ts|tsx|mts|cts)$/;
 const PLUGIN_ENTRY = /\bname\s*:\s*['"](@[^'"\s]+)['"]/g;
 const KIND_DECL = /\bkind\s*[:=]\s*['"]([A-Z][A-Z0-9_]{1,39})['"]/g;
+/** `kind: SOME_CONST` — resolved through the package's `const SOME_CONST = 'X'` declarations. */
+const KIND_REF = /\bkind\s*[:=]\s*([A-Za-z_$][\w$]*)\b(?!\s*[.([])/g;
+const CONST_DECL = /\bconst\s+([A-Za-z_$][\w$]*)\s*=\s*['"]([A-Z][A-Z0-9_]{1,39})['"]/g;
 const DRIVER_DECL = /\bdriver\s*[:=]\s*['"]([a-z][a-z0-9-]{0,39})['"]/g;
 const DRIVER_NAME_DECL = /\bname\s*:\s*['"]([a-z][a-z0-9-]{0,39})['"]/g;
 const STRING_LITERAL = /(['"])((?:\\.|(?!\1)[^\\\n])*)\1/g;
@@ -98,14 +102,23 @@ export function derivePluginVocabulary(root, workspaces, stripNonCode) {
   const compositionWs = workspaces.find((ws) => rootFile.startsWith(ws.dir + sep));
   const scan = [...plugins.map((ws) => ({ ws, plugin: true })), ...(compositionWs ? [{ ws: compositionWs, plugin: false }] : [])];
   for (const { ws, plugin } of scan) {
+    const consts = new Map();
+    const refs = new Map();
     for (const file of walk(join(ws.dir, 'src'), [])) {
       if (TEST_FILE.test(file)) continue;
       const code = stripNonCode(readFileSync(file, 'utf8'));
       if (plugin) {
         harvest(KIND_DECL, code, kinds, ws.name);
         harvest(DRIVER_DECL, code, drivers, ws.name);
+        CONST_DECL.lastIndex = 0;
+        for (let c; (c = CONST_DECL.exec(code)); ) consts.set(c[1], c[2]);
+        harvest(KIND_REF, code, refs, ws.name);
       }
       if (code.includes('DriverDefinition')) harvest(DRIVER_NAME_DECL, code, drivers, ws.name);
+    }
+    for (const ref of refs.keys()) {
+      const value = consts.get(ref);
+      if (value && !kinds.has(value)) kinds.set(value, ws.name);
     }
   }
   return { plugins: plugins.map((ws) => ws.name).sort(), kinds, drivers };

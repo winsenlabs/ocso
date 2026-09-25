@@ -12,9 +12,10 @@ import type { ModelGateway } from '../model/gateway.js';
 import type { AgentToolCatalog } from '../tools/catalog.js';
 import type { ToolRunner } from '../tools/runner.js';
 import type { MediaMaterializer } from '../delivery/media.js';
-import { runAgentLoop, type LoopResult } from './agent-loop.js';
+import { emptyLoopResult, runAgentLoop, type LoopResult } from './agent-loop.js';
 import { handoffMessage } from './handoff-message.js';
-import { TurnSupersededError, TurnWriter, type TurnIdentity } from './persist.js';
+import { turnEscalation, withRule, type TurnEscalation } from './turn-escalation.js';
+import { TurnSupersededError, TurnWriter, type TurnHandoff, type TurnIdentity } from './persist.js';
 
 export interface TurnProcessorDeps {
   db: Db;
@@ -132,6 +133,7 @@ export class TurnProcessor {
       .orderBy(desc(turns.startedAt))
       .limit(1);
     const transferred = lastTurn?.outcome === 'TRANSFERRED' && lastTurn.agentId !== agent.id;
+    const escalation = await turnEscalation(db, agent.id, pending.map((p) => p.id));
     const turnId = uuidv7();
     const ident: TurnIdentity = { conversationId, turnId, agentId: agent.id, agentName: agent.name, channelId: conv.channelId, leaseVersion, correlationId };
     await db.insert(turns).values({
@@ -156,6 +158,8 @@ export class TurnProcessor {
         const [capabilities] = await Promise.all([this.deps.capabilitiesFor(agent.modelProfileId!)]);
         const ctx = await this.deps.context.build(conv, agent, channel ?? null, capabilities, resuming ? 'HUMAN' : transferred ? 'AGENT' : null);
         span.setAttribute('ocso.cache_layer', ctx.cacheLayer);
+        // A rule on what the customer wrote (keywords, amounts) hands off before the model runs.
+        if (escalation.early) return this.finish(writer, ident, ctx, emptyLoopResult(), started, turn, hours, escalation);
         const result = await runAgentLoop(
           this.deps.gateway,
           this.deps.toolRunner(ctx.catalog),
@@ -184,7 +188,7 @@ export class TurnProcessor {
             onStatus: (status) => void publishEphemeral(db, correlationId, 'agent.status', { turnId, status }, { conversationId }).catch(() => {}),
           },
         );
-        await this.finish(writer, ident, ctx, result, started, turn, hours);
+        await this.finish(writer, ident, ctx, result, started, turn, hours, escalation);
       });
       await this.maybeSummarize(conversationId);
       return 'processed';
@@ -224,17 +228,20 @@ export class TurnProcessor {
     started: number,
     turn: { committed: boolean },
     hours: BusinessHoursLike,
+    escalation: TurnEscalation,
   ): Promise<void> {
-    const handoff = this.handoffIntent(result);
+    const handoff = withRule(this.handoffIntent(result), result, escalation);
     // A human handoff wins over a queue transfer asked for in the same turn.
     const transfer = handoff ? null : result.transfer;
-    // Outside human business hours the handoff reply says when the team is next available.
-    const text = handoff ? handoffMessage(result.finalText, hours, new Date()) : result.finalText;
-    if (text) {
+    // Outside human business hours the handoff reply says when the team is next available. A hand-off a rule
+    // raised follows the agent's own reply, if any, with the hand-off message.
+    const replies = handoff?.byRule ? [result.finalText, handoffMessage(null, hours, new Date())] : [handoff ? handoffMessage(result.finalText, hours, new Date()) : result.finalText];
+    const text = replies.filter((r): r is string => Boolean(r));
+    for (const reply of text) {
       turn.committed = true;
-      await writer.agentMessage(ident, text);
+      await writer.agentMessage(ident, reply);
     }
-    const kind = result.awaitingConfirmation ? 'AWAITING_CONFIRMATION' : handoff ? 'HANDOFF' : transfer ? 'TRANSFERRED' : text ? 'REPLIED' : 'NO_REPLY';
+    const kind = result.awaitingConfirmation ? 'AWAITING_CONFIRMATION' : handoff ? 'HANDOFF' : transfer ? 'TRANSFERRED' : text.length ? 'REPLIED' : 'NO_REPLY';
     await writer.complete(
       ident,
       ctx,
@@ -251,7 +258,7 @@ export class TurnProcessor {
     );
   }
 
-  private handoffIntent(result: LoopResult) {
+  private handoffIntent(result: LoopResult): TurnHandoff | null {
     if (result.handoff) {
       return {
         reason: result.handoff.reason,

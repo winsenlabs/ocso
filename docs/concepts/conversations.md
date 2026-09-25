@@ -107,11 +107,13 @@ A hand-off always goes through `requestHandoff` ([`handoffs/request.ts`](../../p
 | The agent hit its tool-step limit without finishing | `TOOL_FAILURE` |
 | The model stayed unavailable after retries and fallbacks | `POLICY`, reason `ai_unavailable`, priority `P2` |
 | A router placed the conversation on a queue whose agent cannot answer (paused, draft, or no model profile) | a hand-off opens on that queue immediately |
+| An enabled escalation rule matches (keywords, an amount, consecutive tool failures) | the rule's trigger, requested by `SYSTEM` |
 
 **Escalation rules** are configured per agent (or platform-wide) on the agent's **Escalation** tab: a trigger, conditions (**Keywords**, **Consecutive tool failures**, **Amount above**, customer asks for a human), a **Handoff mode**, a **Target queue** and a **Priority**. They go through maker–checker like other agent configuration. See [Agents](virtual-agents.md#escalation-rules).
 
-> [!WARNING]
-> Known gap: the runtime does not evaluate escalation-rule conditions yet. No code path passes a rule id into `requestHandoff`, so a rule's mode, target queue and priority are only applied if something supplies that id. Today the agent decides when to escalate from its prompt: the **Escalation rules** prompt component, plus the runtime contract that tells it to call `ocso_request_handoff`. Treat escalation rules as documented policy until this is wired in.
+Enabled rules are checked on every turn: keywords and amounts in the customer's messages hand off before the model
+runs, consecutive tool failures hand off after the turn, and any hand-off is routed by a matching rule's queue, mode
+and priority. See [Agents](virtual-agents.md#escalation-rules).
 
 ### Routing the hand-off
 
