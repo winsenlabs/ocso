@@ -1,6 +1,12 @@
 # OCSO Documentation Index
 
-This directory is the canonical product and engineering specification for OCSO.
+This directory is the canonical product and engineering specification for OCSO (Open Customer Success
+Orchestration). New here? Start with the [README](../README.md), run the demo, then read
+[CONTRIBUTING.md](../CONTRIBUTING.md) before your first pull request.
+
+The numbered documents are the original specification. Where the code refined them, an ADR in
+[PM/ARCHITECTURE-DECISIONS.md](../PM/ARCHITECTURE-DECISIONS.md) records the change, and an
+"Implementation notes (as built)" section says what was built.
 
 OCSO is a **single-tenant, multi-user** application. One deployment belongs to one organization. Do not introduce SaaS-style tenant isolation, tenant switching, tenant IDs, or cross-tenant abstractions into the core product.
 
@@ -29,6 +35,9 @@ OCSO is a **single-tenant, multi-user** application. One deployment belongs to o
 - [plugins/README.md](plugins/README.md) — what "plugin" means in OCSO, every extension point, and where the boundary leaks
 - [plugins/channels.md](plugins/channels.md) — channel adapters
 - [plugins/add-a-channel.md](plugins/add-a-channel.md) — worked example: add a channel in seven steps
+- [plugins/slack.md](plugins/slack.md) — the Slack channel
+- [plugins/ms-teams.md](plugins/ms-teams.md) — the Microsoft Teams channel
+- [plugins/installing.md](plugins/installing.md) — installing third-party plugins (`OCSO_PLUGINS`) and the plugin SDK
 - [plugins/model-providers.md](plugins/model-providers.md) — model provider definitions and adapters
 - [plugins/tools-and-mcp.md](plugins/tools-and-mcp.md) — MCP tool servers and tool authorization
 - [plugins/alerts.md](plugins/alerts.md) — alert delivery destinations and rule conditions
@@ -44,7 +53,16 @@ OCSO is a **single-tenant, multi-user** application. One deployment belongs to o
 - [operations/setup-guide.md](operations/setup-guide.md) — from an empty deployment to a live virtual agent
 - [operations/worker-scaling.md](operations/worker-scaling.md) — worker scaling on Compose and ECS
 - [operations/resilience-testing.md](operations/resilience-testing.md) — chaos and load scripts
+- [operations/ask-ocso-in-chat.md](operations/ask-ocso-in-chat.md) — Ask OCSO from Slack and Microsoft Teams (account linking)
 - [operations/aws.md](operations/aws.md) — ECS Fargate with Terraform (not yet applied to a real account)
+
+## Planning and decisions
+
+- [../PM/ARCHITECTURE-DECISIONS.md](../PM/ARCHITECTURE-DECISIONS.md) — architecture decision records (ADRs)
+- [../PM/BUILD-PLAN.md](../PM/BUILD-PLAN.md) — the build plan, status per epic and the change log
+- [../PM/DEFINITION-OF-COMPLETE.md](../PM/DEFINITION-OF-COMPLETE.md) — each operator capability from the build brief, with the test that demonstrates it
+- [../PM/research/](../PM/research/) — the technical research behind the decisions (SDKs, providers, WhatsApp, MCP, auth, governance)
+- [../ROADMAP.md](../ROADMAP.md) — what is planned next and the known gaps
 
 ## Product definition
 

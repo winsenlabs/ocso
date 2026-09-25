@@ -28,11 +28,22 @@ export const WEBCHAT_DESCRIPTOR: ChannelKindDescriptor = {
     },
   ],
   identitySetting: { label: 'host jwt', keys: ['hostJwtIssuer'] },
-  setupSteps: [
-    'Add the embed tag to every page that should show the chat launcher.',
-    'List every site that uses the widget under Allowed origins; with the list empty, any site may embed it.',
-    'To recognise signed-in customers, verify their tokens with your identity provider’s JWKS URL, or have your site sign an HS256 token with the host identity secret and pass it to identify().',
-    'For apps and authorised clients, set the auth mode to client or user and have your backend mint a session pass with the secret key (see the Server tab).',
+  setupGuide: [
+    {
+      title: 'Save the channel',
+      body: 'Choose the auth mode and branding below and save. OCSO generates the visitor token secret (and the secret key, shown once) when you leave them empty.',
+      form: true,
+    },
+    { title: 'Add the embed tag', body: 'Add the embed tag to every page that should show the chat launcher.' },
+    { title: 'Restrict the sites', body: 'List every site that uses the widget under Allowed origins; with the list empty, any site may embed it.' },
+    {
+      title: 'Recognise signed-in customers (optional)',
+      body: 'Verify their tokens with your identity provider’s JWKS URL, or have your site sign an HS256 token with the host identity secret and pass it to identify().',
+    },
+    {
+      title: 'Apps and authorised clients (optional)',
+      body: 'Set the auth mode to client or user and have your backend mint a session pass with the secret key (see the Server tab).',
+    },
   ],
   inboundWebhook: false,
   embeddable: true,

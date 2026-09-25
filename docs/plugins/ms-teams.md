@@ -6,27 +6,68 @@ the channel's webhook, signed with Microsoft's keys. The AI agent's replies go b
 Connector REST API, into the same chat or channel thread. The code is in
 `packages/channels/src/teams/`.
 
+## Before you start
+
+- **Azure rights.** You need to create an Azure Bot resource in a subscription and resource group,
+  and an app registration in Microsoft Entra ID (the bot creates one for you if you may register apps).
+- **Teams rights.** Your organization must allow custom app upload for you, or a Teams admin approves
+  the app in the Teams admin center.
+- **A public https origin.** Azure Bot Service only calls public https endpoints. `OCSO_PUBLIC_URL`
+  must be the https origin Microsoft can reach; the webhook URL OCSO shows is built from it.
+- **OCSO rights.** Adding the channel needs `channels.manage` (a Tech admin). Activating it needs a
+  second person who can approve channels.
+- **A reminder for the client secret's expiry.** The bot stops answering when it lapses.
+
 ## Set it up
 
-1. **Azure portal → Create a resource → Azure Bot.** Choose **Single Tenant** unless people from
-   other Microsoft 365 organizations must reach the bot. Copy the **Microsoft App ID** and, for a
-   single-tenant bot, the **App Tenant ID** (Configuration page).
-2. **Connections → Channels → Add channel → Microsoft Teams.** Fill in the App ID, the tenant ID and
-   the app type. Under the bot's Configuration choose **Manage Password**, create a client secret and
-   paste its **Value** (not the Secret ID) into **Client secret**. Secrets are write-only: OCSO never
-   shows them again. Save: the channel is a draft until an approver activates it.
-3. Set the bot's **Messaging endpoint** (Configuration) to the channel's webhook URL
-   (`/channels/ms-teams/<publicKey>/webhook`) and save. Azure Bot Service only calls public
-   **https** endpoints, so `OCSO_PUBLIC_URL` must be the https origin Microsoft can reach.
-4. **Channels → Microsoft Teams**: add the Teams channel and accept the terms.
-5. The channel's setup steps show a **Teams app manifest** with the App ID filled in (as the app id and
-   the bot id). Save it as `manifest.json`, replace the developer name and URLs with your
-   organization's, and zip it with two icons: `color.png` (192×192) and `outline.png` (32×32,
-   transparent). Upload the zip in Teams (**Apps → Manage your apps → Upload an app**) or publish it for
-   your organization in the Teams admin center.
-6. **Test connection** requests a Bot Connector token with the app credentials (Microsoft Entra names
-   the problem, e.g. `AADSTS7000215` for a wrong secret), fetches Microsoft's signing keys and checks
-   that the messaging endpoint is https. It never posts a message.
+OCSO walks you through these steps in the channel dialog (**Integrations → Channels → Add channel →
+Microsoft Teams**). The dialog first saves a **draft** with just the name, so the webhook URL exists
+before you configure Azure. A draft is inert until its activation is approved, and may stay
+incomplete until then; any value you do enter is still checked. Come back to it with **Edit**.
+
+1. **Create an Azure Bot** (Azure portal → Create a resource → Azure Bot): any bot handle, type
+   **Single Tenant** (recommended: only your tenant can reach it; Multi Tenant only if other
+   organizations must), creation type **Create new Microsoft App ID**.
+2. **Record the Microsoft App ID and Tenant ID**: Configuration → Manage Password opens the app
+   registration; its Overview shows the Application (client) ID and the Directory (tenant) ID.
+3. **Create a client secret** (Certificates & secrets → New client secret). Copy the **Value**, not
+   the Secret ID. Note the expiry and rotate before it lapses.
+4. **Set the messaging endpoint** (Azure Bot → Configuration) to the channel's webhook URL
+   (`/channels/ms-teams/<publicKey>/webhook`, shown with a Copy button).
+5. **Add the Microsoft Teams channel** (Azure Bot → Channels) and accept the terms.
+6. **Paste the values into OCSO and save**: App ID, app type, tenant ID and the client secret (the
+   form sits in this step of the guide). Secrets are write-only.
+7. **Download the Teams app package and upload it** in Teams: **Apps → Manage your apps → Upload an
+   app → Upload a custom app**. If custom apps are blocked, choose **Submit an app to your org** and a
+   Teams admin approves it in the Teams admin center.
+8. **Test.** **Test connection** requests a Bot Connector token (and names the likely cause when
+   Microsoft Entra refuses: wrong secret, expired secret, app not in the tenant, single/multi-tenant
+   mismatch), fetches Microsoft's signing keys and checks that the endpoint is https. It never posts a
+   message. Then activate the channel (a second person approves), open the app in Teams and send it a
+   message.
+
+### The app package
+
+OCSO builds the zip on the server from the saved channel
+(`GET /v1/channels/:id/setup-files/teams-app-package`, `channels.read`). It is ready once the App ID is
+saved (before that the download answers `400 setup_file_incomplete`) and never contains the client
+secret. It holds:
+
+- `manifest.json`, schema **1.30**: the app `id` and the bot's `botId` are the Microsoft App ID; bot
+  scopes `personal`, `team` and `groupChat`; `validDomains` and the developer links use the OCSO host.
+- `color.png`, 192×192: the Route mark on its dark tile.
+- `outline.png`, 32×32: the mark in white on transparent, as Teams requires.
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| 401s, or no token in Test connection | Check the App ID (Application (client) ID), the Tenant ID (Directory (tenant) ID) and that **App type** matches how the Azure Bot was created. |
+| `AADSTS7000215` invalid client secret | Paste the secret's Value, not its Secret ID, or create a new secret. |
+| `AADSTS7000222` expired secret | Create a new client secret and paste it. On a live channel the change needs approval, so rotate early. |
+| No "Upload a custom app" in Teams | Custom apps are blocked by policy: submit the app to your org, or ask a Teams admin to allow custom apps. |
+| No reply in a channel or group chat | The bot only receives messages that @mention it there. In a team channel the app must be added to the team. |
+| Endpoint not https | Set `OCSO_PUBLIC_URL` to a public https origin, restart, and use the new webhook URL. |
 
 ## Settings
 

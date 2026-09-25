@@ -64,24 +64,76 @@ export interface ChannelTemplateTerms {
 }
 
 /**
- * A ready-made file the admin pastes or uploads into the provider's console after saving (a Slack app
- * manifest, a Teams app manifest). The web app fills the placeholders from the saved channel and offers copy
- * and download. Only `{{webhookUrl}}` and `{{settings.<key>}}` exist: secrets are never interpolated.
+ * A ready-made file the admin pastes or uploads into the provider's console (a Slack app manifest, a Teams app
+ * package). OCSO fills the placeholders from the channel and offers copy and download. Only `{{webhookUrl}}`,
+ * `{{webhookHost}}` (the webhook URL's host) and `{{settings.<key>}}` exist: secrets are never interpolated.
  * Values are inserted as plain text: JSON-string-escaped for `application/json` (put placeholders inside
  * string literals), and for YAML and plain text any value with quotes, backslashes, `#`, control characters
  * or line breaks is left out (the placeholder stays and the admin is told to fill it in).
+ *
+ * A text file carries a `template`. An `application/zip` file (an app package) carries `entries` instead: text
+ * entries are templates filled the same way, binary entries (`image/png` icons) are base64 and copied as they
+ * are. OCSO builds the zip on the server (`GET /v1/channels/:id/setup-files/:key`).
  */
 export interface ChannelSetupFile {
   /** Stable id within the kind (`a-z0-9-`). */
   key: string;
-  /** Heading shown above the file ("Teams app manifest"). */
+  /** Heading shown above the file ("Teams app package"). */
   label: string;
   /** What to do with it, one sentence. */
   description?: string | undefined;
   /** Download name, e.g. `manifest.json`. */
   filename: string;
-  contentType: 'application/json' | 'text/yaml' | 'text/plain';
-  template: string;
+  contentType: ChannelSetupFileType;
+  /** Text files: the content with placeholders. */
+  template?: string | undefined;
+  /** `application/zip` only: the files inside the package. */
+  entries?: readonly ChannelSetupFileEntry[] | undefined;
+}
+
+export type ChannelSetupFileType = 'application/json' | 'text/yaml' | 'text/plain' | 'application/zip';
+
+/** One file inside an `application/zip` setup file. */
+export interface ChannelSetupFileEntry {
+  /** Path inside the zip (`manifest.json`, `color.png`); no folders above the root. */
+  path: string;
+  contentType: 'application/json' | 'text/yaml' | 'text/plain' | 'image/png';
+  /** Text entries: the content with placeholders. */
+  template?: string | undefined;
+  /** `image/png` entries: the bytes, base64. */
+  base64?: string | undefined;
+}
+
+/**
+ * One step of the setup guide the channel dialog shows as a numbered checklist (in order). Plain text only: the
+ * web app renders no markup from a descriptor. `values` are shown with a Copy button and may use the setup-file
+ * placeholders (`{{webhookUrl}}`, …); `files` names setup files (by key) to offer inside this step; `form` marks
+ * the step where the admin fills OCSO's own form (settings and secrets), which the dialog shows there.
+ */
+export interface ChannelSetupStep {
+  title: string;
+  body: string;
+  /** Bullet points under the body. */
+  items?: readonly string[] | undefined;
+  /** A small two-column table (e.g. each scope and why it is needed). */
+  table?: { head: readonly [string, string]; rows: ReadonlyArray<readonly [string, string]> } | undefined;
+  /** Values to copy into the provider's console (the webhook URL, a scope list). */
+  values?: ReadonlyArray<{ label: string; value: string }> | undefined;
+  /** Provider consoles and documentation (https only). */
+  links?: ReadonlyArray<{ label: string; href: string }> | undefined;
+  /** Keys of this kind's `setupFiles` to offer in this step. */
+  files?: readonly string[] | undefined;
+  /** The admin fills OCSO's settings and secrets in this step (at most one step). */
+  form?: boolean | undefined;
+  /** How to tell the step worked. */
+  check?: string | undefined;
+}
+
+/** A known problem and its fix. `id` lets a connection check point to it (`ConnectionCheck.help`). */
+export interface ChannelTroubleshooting {
+  id: string;
+  problem: string;
+  fix: string;
 }
 
 /** What the "Add channel" form, the channel list and the workspace need to know about a kind. */
@@ -96,9 +148,16 @@ export interface ChannelKindDescriptor {
   secrets: ChannelSecretField[];
   /** Shown on the channel card; omit when no setting identifies an instance. */
   identitySetting?: ChannelIdentitySetting | undefined;
-  /** What the admin does in the provider's console after saving (plain sentences, in order). */
-  setupSteps: readonly string[];
-  /** Files to paste or upload in the provider's console (app manifests), shown with the setup steps. */
+  /**
+   * Deprecated: plain sentences, in order. Use `setupGuide`; a kind that only has `setupSteps` gets a guide with
+   * one step per sentence (`GET /v1/channels/kinds` always serves `setupGuide`).
+   */
+  setupSteps?: readonly string[] | undefined;
+  /** The step-by-step guide the channel dialog shows as a checklist: provider console, OCSO's form, first test. */
+  setupGuide?: readonly ChannelSetupStep[] | undefined;
+  /** Known problems and their fixes, shown under the guide; connection checks link to them by `id`. */
+  troubleshooting?: readonly ChannelTroubleshooting[] | undefined;
+  /** Files to paste or upload in the provider's console (app manifests, app packages), offered in the guide. */
   setupFiles?: readonly ChannelSetupFile[] | undefined;
   /** Provider calls OCSO at `/channels/<webhookSegment>/<publicKey>/webhook`. */
   inboundWebhook: boolean;
@@ -137,40 +196,11 @@ export const DESTINATION_SETTING = 'destination';
 
 /** A descriptor plus what the registry derives from the adapter (served by `GET /v1/channels/kinds`). */
 export interface ChannelKindInfo extends ChannelKindDescriptor {
+  /** Always present (derived from `setupSteps` for kinds that only have those). */
+  setupGuide: readonly ChannelSetupStep[];
+  troubleshooting: readonly ChannelTroubleshooting[];
   /** The adapter offers a read-only credential check (`POST /v1/channels/:id/test`). */
   connectionCheck: boolean;
   /** Customers may be reached with provider-approved message templates. */
   messageTemplates: boolean;
-}
-
-/** `{{webhookUrl}}` or `{{settings.<key>}}`: the only placeholders a setup file may use. */
-export const SETUP_FILE_PLACEHOLDER = /\{\{\s*(webhookUrl|settings\.[A-Za-z][A-Za-z0-9_]{0,63})\s*\}\}/g;
-const ANY_PLACEHOLDER = /\{\{([^}]*)\}\}/g;
-const SETUP_FILE_KEY = /^[a-z][a-z0-9-]{0,39}$/;
-const SETUP_FILE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
-const SETUP_FILE_TYPES: ReadonlySet<string> = new Set(['application/json', 'text/yaml', 'text/plain']);
-const MAX_SETUP_FILE_BYTES = 64 * 1024;
-
-/** Problems with a kind's setup files (registration refuses the kind when there are any). */
-export function setupFileProblems(files: readonly ChannelSetupFile[] | undefined): string[] {
-  if (files === undefined) return [];
-  if (!Array.isArray(files)) return ['setupFiles must be an array'];
-  const problems: string[] = [];
-  const keys = new Set<string>();
-  files.forEach((file, i) => {
-    const at = `setupFiles[${i}]`;
-    if (typeof file?.key !== 'string' || !SETUP_FILE_KEY.test(file.key)) problems.push(`${at}: invalid key "${String(file?.key)}"`);
-    else if (keys.has(file.key)) problems.push(`${at}: duplicate key "${file.key}"`);
-    else keys.add(file.key);
-    if (typeof file?.label !== 'string' || !file.label.trim()) problems.push(`${at}: label is required`);
-    if (typeof file?.filename !== 'string' || !SETUP_FILE_NAME.test(file.filename)) problems.push(`${at}: invalid filename "${String(file?.filename)}"`);
-    if (!SETUP_FILE_TYPES.has(file?.contentType)) problems.push(`${at}: contentType must be application/json, text/yaml or text/plain`);
-    if (typeof file?.template !== 'string' || !file.template.length) return void problems.push(`${at}: template is required`);
-    if (new TextEncoder().encode(file.template).byteLength > MAX_SETUP_FILE_BYTES) problems.push(`${at}: template exceeds 64 KiB`);
-    for (const match of file.template.matchAll(ANY_PLACEHOLDER)) {
-      const token = match[0];
-      if (!new RegExp(`^${SETUP_FILE_PLACEHOLDER.source}$`).test(token)) problems.push(`${at}: unknown placeholder ${token} (only {{webhookUrl}} and {{settings.<key>}}; secrets are never interpolated)`);
-    }
-  });
-  return problems;
 }

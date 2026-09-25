@@ -140,7 +140,7 @@ function NewAgentDialog({ profiles, queues, channels, ownerTeams, onClose }: Pro
                 </option>
               ))}
             </select>
-            <span className="hint">{profiles?.length ? 'required before the agent goes live' : 'no model profiles yet — a Tech admin adds them under Connections'}</span>
+            <span className="hint">{profiles?.length ? 'required before the agent goes live' : 'no model profiles yet — an agent runs on a model profile; a Tech admin creates them under Integrations → Models'}</span>
           </div>
           <div className="fld">
             <label htmlFor="na-queue">Default queue</label>

@@ -51,6 +51,34 @@ export const TemplateTermsSchema = z.object({
 });
 export type TemplateTerms = z.infer<typeof TemplateTermsSchema>;
 
+/** A setup file (descriptor `setupFiles`): a text template, or an `application/zip` package built by the API. */
+export const SetupFileSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  description: z.string().optional(),
+  filename: z.string(),
+  contentType: z.enum(['application/json', 'text/yaml', 'text/plain', 'application/zip']),
+  template: z.string().optional(),
+  entries: z
+    .array(z.object({ path: z.string(), contentType: z.string(), template: z.string().optional(), base64: z.string().optional() }))
+    .optional(),
+});
+
+/** One step of a kind's setup guide (descriptor `setupGuide`; plain text only). */
+export const SetupStepSchema = z.object({
+  title: z.string(),
+  body: z.string().default(''),
+  items: z.array(z.string()).optional(),
+  table: z.object({ head: z.tuple([z.string(), z.string()]), rows: z.array(z.tuple([z.string(), z.string()])) }).optional().catch(undefined),
+  values: z.array(z.object({ label: z.string(), value: z.string() })).optional(),
+  /** https only (the registry refuses others; the web app checks again before rendering). */
+  links: z.array(z.object({ label: z.string(), href: z.string() })).optional(),
+  files: z.array(z.string()).optional(),
+  form: z.boolean().optional(),
+  check: z.string().optional(),
+});
+export type SetupStep = z.infer<typeof SetupStepSchema>;
+
 /**
  * GET /v1/channels/kinds: everything the web app knows about a channel kind
  * comes from its adapter's descriptor (form, labels, mark, setup steps,
@@ -65,22 +93,14 @@ export const ChannelKindSchema = z.object({
   secrets: z.array(ChannelSecretFieldSchema).default([]),
   /** The non-secret setting the channel card shows (first key with a value). */
   identitySetting: z.object({ label: z.string(), keys: z.array(z.string()) }).nullable().catch(null).default(null),
-  /** Provider-console steps after saving. */
+  /** Deprecated plain-sentence steps (the API also serves them as `setupGuide`). */
   setupSteps: z.array(z.string()).catch([]).default([]),
-  /** Files to paste or upload in the provider's console (app manifests), placeholders filled from the channel. */
-  setupFiles: z
-    .array(
-      z.object({
-        key: z.string(),
-        label: z.string(),
-        description: z.string().optional(),
-        filename: z.string(),
-        contentType: z.enum(['application/json', 'text/yaml', 'text/plain']),
-        template: z.string(),
-      }),
-    )
-    .catch([])
-    .default([]),
+  /** The step-by-step guide the dialog shows as a checklist (descriptor `setupGuide`). */
+  setupGuide: z.array(SetupStepSchema).catch([]).default([]),
+  /** Known problems and fixes; connection checks link to them by id. */
+  troubleshooting: z.array(z.object({ id: z.string(), problem: z.string(), fix: z.string() })).catch([]).default([]),
+  /** Files to paste or upload in the provider's console (app manifests, app packages), placeholders filled from the channel. */
+  setupFiles: z.array(SetupFileSchema).catch([]).default([]),
   inboundWebhook: z.boolean().default(false),
   /** What the provider posts to the webhook, for the Webhooks list. */
   webhookEvents: z.string().optional(),
@@ -96,7 +116,8 @@ export type ChannelKind = z.infer<typeof ChannelKindSchema>;
 /** POST /v1/channels/:id/test: read-only provider check; never includes secret values. */
 export const ChannelTestSchema = z.object({
   ok: z.boolean(),
-  checks: z.array(z.object({ name: z.string(), ok: z.boolean(), detail: z.string() })),
+  /** `help`: id of the kind's troubleshooting entry that explains the fix. */
+  checks: z.array(z.object({ name: z.string(), ok: z.boolean(), detail: z.string(), help: z.string().optional() })),
 });
 export type ChannelTestResult = z.infer<typeof ChannelTestSchema>;
 

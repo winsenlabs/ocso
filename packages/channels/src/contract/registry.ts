@@ -2,12 +2,12 @@ import {
   CHANNEL_DESTINATIONS,
   CHANNEL_KIND_PATTERN,
   DESTINATION_SETTING,
-  setupFileProblems,
   type ChannelDestination,
   type ChannelKind,
   type ChannelKindDescriptor,
   type ChannelKindInfo,
 } from './descriptor.js';
+import { setupFileProblems, setupGuideOf, setupGuideProblems } from './setup-files.js';
 import type { EmbeddedChat } from './embed.js';
 import type { ChannelAdapter } from './types.js';
 
@@ -46,6 +46,8 @@ export class ChannelRegistry {
     }
     const fileProblems = setupFileProblems(descriptor.setupFiles);
     if (fileProblems.length) throw new Error(`channel adapter ${kind}: ${fileProblems.join('; ')}`);
+    const guideProblems = setupGuideProblems(descriptor);
+    if (guideProblems.length) throw new Error(`channel adapter ${kind}: ${guideProblems.join('; ')}`);
     if (descriptor.staffDestination !== undefined && typeof descriptor.staffDestination !== 'boolean') throw new Error(`channel adapter ${kind}: staffDestination must be a boolean`);
     if (descriptor.staffSurface !== undefined && (typeof descriptor.staffSurface !== 'string' || !STAFF_SURFACE.test(descriptor.staffSurface))) {
       throw new Error(`channel adapter ${kind}: staffSurface must be lower-case a-z0-9_ (up to 32 characters)`);
@@ -86,7 +88,12 @@ export class ChannelRegistry {
     const adapter = this.get(kind);
     const descriptor = adapter.describe();
     const settingsSchema = descriptor.staffDestination ? withDestinationSetting(descriptor.settingsSchema) : descriptor.settingsSchema;
-    return { ...descriptor, settingsSchema, connectionCheck: typeof adapter.checkConnection === 'function', messageTemplates: supportsTemplates(adapter) };
+    return {
+      ...descriptor,
+      settingsSchema,
+      setupGuide: setupGuideOf(descriptor),
+      troubleshooting: descriptor.troubleshooting ?? [],
+      connectionCheck: typeof adapter.checkConnection === 'function', messageTemplates: supportsTemplates(adapter) };
   }
 
   /**

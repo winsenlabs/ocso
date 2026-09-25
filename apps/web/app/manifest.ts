@@ -3,7 +3,7 @@ import type { MetadataRoute } from 'next';
 /** Installable app metadata (Add to Home Screen); icons are rendered from brand/ocso-mark.svg. */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'OCSO — One Customer Success Orchestrator',
+    name: 'OCSO — Open Customer Success Orchestration',
     short_name: 'OCSO',
     start_url: '/',
     display: 'standalone',

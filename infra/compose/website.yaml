@@ -3,10 +3,20 @@
 #
 #   docker compose -f compose.yaml -f infra/compose/tls.yaml -f infra/compose/website.yaml up -d --build
 #
-# Set in .env: OCSO_WEBSITE_DOMAIN (a DNS A/AAAA record pointing at this host)
-# and, if the site is not served at https://ocso.winsenlabs.dev,
-# OCSO_SITE_URL=https://<OCSO_WEBSITE_DOMAIN> (canonical URLs and the sitemap
-# are baked in at build time). The OCSO_DOMAIN site block is unchanged.
+# The site is a Next.js standalone server on :8080 (Dockerfile target `website`):
+# one landing page and POST /api/demo-request, which stores the request in the
+# Cloudflare D1 database `ocso-site`, then emails the requester and the team's
+# Slack channel. See docs/operations/compose.md, "Public website".
+#
+# Set in .env: OCSO_WEBSITE_DOMAIN (a DNS A/AAAA record pointing at this host),
+# CLOUDFLARE_ACCOUNT_ID and SLACK_NOTIFY_EMAIL; OCSO_SITE_URL if the site is not
+# served at https://ocso.winsenlabs.dev (baked in at build time).
+# Secrets are files in the `website` sub-directory of the secrets volume; only
+# that sub-directory is mounted (at /run/secrets/ocso-website):
+#   cloudflare_api_token   Cloudflare API token: Account > D1 > Edit and
+#                          Account > Email Sending > Edit
+#   resend_api_key         only with EMAIL_PROVIDER=resend
+# The OCSO_DOMAIN site block is unchanged.
 services:
   website:
     image: ${OCSO_IMAGE_PREFIX:-ocso}/website:${OCSO_VERSION:-local}
@@ -20,17 +30,39 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+      # Next's runtime cache; the rest of the filesystem is read-only.
+      - /app/apps/website/.next/cache:uid=1000,gid=1000,mode=0700
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # Outbound HTTPS to api.cloudflare.com (D1 and Email Sending) or api.resend.com.
     networks: [default]
+    environment:
+      CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID:-}
+      CLOUDFLARE_API_TOKEN_FILE: /run/secrets/ocso-website/cloudflare_api_token
+      SITE_D1_DATABASE_ID: ${SITE_D1_DATABASE_ID:-92f036f3-a106-40ab-9955-d9ea2ec9c2d4}
+      # cloudflare (Cloudflare Email Service, from winsenlabs.dev) | resend | log
+      EMAIL_PROVIDER: ${WEBSITE_EMAIL_PROVIDER:-cloudflare}
+      EMAIL_FROM: ${WEBSITE_EMAIL_FROM:-OCSO <ocso@winsenlabs.dev>}
+      EMAIL_REPLY_TO: ${WEBSITE_EMAIL_REPLY_TO:-hello@winsenlabs.com}
+      RESEND_API_KEY_FILE: /run/secrets/ocso-website/resend_api_key
+      # The Slack channel's email address. A value here wins; otherwise the file.
+      SLACK_NOTIFY_EMAIL: ${SLACK_NOTIFY_EMAIL:-}
+      SLACK_NOTIFY_EMAIL_FILE: /run/secrets/ocso-website/slack_notify_email
+    volumes:
+      - type: volume
+        source: secrets
+        target: /run/secrets/ocso-website
+        read_only: true
+        volume:
+          subpath: website
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/api/healthz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
       interval: 30s
       timeout: 3s
       retries: 3
-      start_period: 5s
+      start_period: 10s
       start_interval: 1s
     restart: unless-stopped
     logging:

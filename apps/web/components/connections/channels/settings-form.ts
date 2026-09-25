@@ -205,36 +205,43 @@ export function embedSnippet(origin: string, publicKey: string): string {
   return `<script src="${origin.replace(/\/+$/, '')}/ocso-webchat.js" data-key="${publicKey}" async></script>`;
 }
 
-/** A descriptor setup file (`setupFiles`: an app manifest to paste or upload in the provider's console). */
+/** A descriptor setup file (`setupFiles`): a text template, or an `application/zip` package the API builds. */
 export interface SetupFileDef {
   key: string;
   label: string;
   description?: string | undefined;
   filename: string;
-  contentType: 'application/json' | 'text/yaml' | 'text/plain';
-  template: string;
+  contentType: 'application/json' | 'text/yaml' | 'text/plain' | 'application/zip';
+  template?: string | undefined;
+  entries?: ReadonlyArray<{ path: string; contentType: string; template?: string | undefined; base64?: string | undefined }> | undefined;
 }
 
-const SETUP_PLACEHOLDER = /\{\{\s*(webhookUrl|settings\.[A-Za-z][A-Za-z0-9_]{0,63})\s*\}\}/g;
+export interface SetupContext {
+  webhookUrl: string | null;
+  settings: Record<string, unknown>;
+}
+
+const SETUP_PLACEHOLDER = /\{\{\s*(webhookUrl|webhookHost|settings\.[A-Za-z][A-Za-z0-9_]{0,63})\s*\}\}/g;
 /** YAML / plain text: values that are one plain scalar whatever surrounds them (no quotes, comments, flow or block syntax). */
 const PLAIN_SAFE = /^[A-Za-z0-9][A-Za-z0-9 ._~:/?=&%+@,()-]*$/;
 
 /**
- * Fill a setup file's placeholders from the saved channel. Only `{{webhookUrl}}` and `{{settings.<key>}}`
- * exist (the descriptor contract never interpolates secrets). Values go in as plain text: JSON-string-escaped
- * for JSON; for YAML and plain text a value that could change the file's structure is left out. A missing or
- * left-out value keeps its placeholder and is listed in `missing`, so the admin knows what to fill in.
+ * Fill a template's placeholders from the saved channel. Only `{{webhookUrl}}`, `{{webhookHost}}` and
+ * `{{settings.<key>}}` exist (the descriptor contract never interpolates secrets). Values go in as plain text:
+ * JSON-string-escaped for JSON; for YAML and plain text a value that could change the file's structure is left
+ * out. A missing or left-out value keeps its placeholder and is listed in `missing`.
  */
-export function renderSetupFile(file: SetupFileDef, ctx: { webhookUrl: string | null; settings: Record<string, unknown> }): { content: string; missing: string[] } {
+export function fillTemplate(template: string, contentType: string, ctx: SetupContext): { content: string; missing: string[] } {
   const missing = new Set<string>();
-  const content = file.template.replace(SETUP_PLACEHOLDER, (token, name: string) => {
-    const raw = name === 'webhookUrl' ? ctx.webhookUrl : ctx.settings[name.slice('settings.'.length)];
+  const host = ctx.webhookUrl && URL.canParse(ctx.webhookUrl) ? new URL(ctx.webhookUrl).host : null;
+  const content = template.replace(SETUP_PLACEHOLDER, (token, name: string) => {
+    const raw = name === 'webhookUrl' ? ctx.webhookUrl : name === 'webhookHost' ? host : ctx.settings[name.slice('settings.'.length)];
     const value = typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean' ? String(raw) : '';
     if (!value) {
       missing.add(name);
       return token;
     }
-    if (file.contentType === 'application/json') return JSON.stringify(value).slice(1, -1);
+    if (contentType === 'application/json') return JSON.stringify(value).slice(1, -1);
     if (!PLAIN_SAFE.test(value) || value.includes(': ') || value.includes(' #')) {
       missing.add(name);
       return token;
@@ -242,4 +249,45 @@ export function renderSetupFile(file: SetupFileDef, ctx: { webhookUrl: string | 
     return value;
   });
   return { content, missing: [...missing] };
+}
+
+/**
+ * A setup file filled from the saved channel: a text file's content, or for a zip package the first text entry
+ * (its manifest, as a preview; the API builds the zip). `missing` covers every entry.
+ */
+export function renderSetupFile(file: SetupFileDef, ctx: SetupContext): { content: string; missing: string[]; preview: string | null } {
+  if (file.contentType !== 'application/zip') {
+    const out = fillTemplate(file.template ?? '', file.contentType, ctx);
+    return { ...out, preview: file.filename };
+  }
+  const missing = new Set<string>();
+  let content = '';
+  let preview: string | null = null;
+  for (const entry of file.entries ?? []) {
+    if (typeof entry.template !== 'string') continue;
+    const out = fillTemplate(entry.template, entry.contentType, ctx);
+    out.missing.forEach((m) => missing.add(m));
+    if (preview === null) {
+      preview = entry.path;
+      content = out.content;
+    }
+  }
+  return { content, missing: [...missing], preview };
+}
+
+/** Where the browser downloads a setup file the API renders (the BFF proxies it with the session). */
+export function setupFileDownloadHref(channelId: string, key: string): string {
+  return `/api/channels/${encodeURIComponent(channelId)}/setup-files/${encodeURIComponent(key)}`;
+}
+
+/** A guide link is rendered only when it is https (the registry refuses others; checked again here). */
+export function safeHttpsHref(href: string): string | null {
+  if (!URL.canParse(href)) return null;
+  const url = new URL(href);
+  return url.protocol === 'https:' && !url.username && !url.password ? url.toString() : null;
+}
+
+/** The secrets a kind requires that the channel does not hold yet (a draft saved before the provider's values existed). */
+export function missingRequiredSecrets(fields: ReadonlyArray<{ key: string; label: string; required: boolean; generate?: string | undefined }>, stored: ReadonlySet<string>): string[] {
+  return fields.filter((f) => f.required && f.generate !== 'server' && !stored.has(f.key)).map((f) => f.label);
 }

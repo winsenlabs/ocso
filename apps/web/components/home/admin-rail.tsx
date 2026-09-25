@@ -25,7 +25,7 @@ export function CapacityCard({ capacity }: { capacity: AdminHomeData['capacity']
       ) : null}
       <div className="rowsplit" style={{ marginTop: 10 }}>
         <Link className="btn tiny" href="/system/workers">
-          Worker config
+          Workers
         </Link>
       </div>
     </RailCard>
@@ -66,8 +66,8 @@ export function ConnectionsCard({ connections }: { connections: AdminHomeData['c
         ]}
       />
       <div className="rowsplit" style={{ marginTop: 10 }}>
-        <Link className="btn tiny ghost" href="/connections">
-          Manage
+        <Link className="btn tiny ghost" href="/connections?tab=providers">
+          Integrations
         </Link>
       </div>
     </RailCard>

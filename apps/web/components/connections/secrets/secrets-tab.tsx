@@ -25,7 +25,7 @@ export async function SecretsTab({ session }: { session: Session }) {
         Values live in the configured secret store and are resolved inside trusted execution code. They are never placed in prompts, telemetry or
         tool arguments, and no API returns them.
       </AlertBanner>
-      <SecHead title="Secrets & credentials" count={secrets.length} desc="created by the forms that need them — provider, MCP, channel and webhook credentials" />
+      <SecHead title="Stored credentials" count={secrets.length} desc="created by the forms that need them — provider, MCP, channel and webhook credentials" />
       <DataTable
         label="Secrets"
         template="minmax(0,1fr) 120px minmax(0,1fr) 110px 110px 84px"

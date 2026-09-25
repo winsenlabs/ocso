@@ -53,7 +53,10 @@ export function validateTelegramConfig(settings: unknown, secrets: Readonly<Reco
 ## 3. Descriptor and capabilities
 
 The descriptor is everything OCSO shows about the kind: the "Add channel" form, the channel card, the
-badge in the inbox and analytics, the steps after saving, the webhook URL and the Webhooks list.
+badge in the inbox and analytics, the setup guide, the webhook URL and the Webhooks list. Write the
+guide for someone who has never used the provider's console: one step per screen, the values to copy,
+where OCSO's own form comes in (`form: true`), how to tell each step worked, and `troubleshooting` for
+the failures you know. `setupSteps` (plain sentences) still works but is deprecated.
 Setting `inboundWebhook: true` with `webhookSegment: 'telegram'` makes the registry route
 `/channels/telegram/<publicKey>/webhook` to this adapter.
 
@@ -70,9 +73,18 @@ export const TELEGRAM_DESCRIPTOR: ChannelKindDescriptor = {
     { key: 'webhookSecret', label: 'Webhook secret', required: true, generate: 'client',
       hint: 'Pass the same value as secret_token when you call setWebhook.' },
   ],
-  setupSteps: [
-    'Call setWebhook on the Bot API with url = the webhook URL above and secret_token = the webhook secret you saved.',
-    'Send your bot a message; the channel card shows the last inbound time.',
+  setupGuide: [
+    { title: 'Create the bot', body: 'Talk to @BotFather, send /newbot and copy the bot token.', links: [{ label: 'BotFather', href: 'https://t.me/BotFather' }] },
+    { title: 'Paste the token into OCSO and save', body: 'Enter the bot token and generate a webhook secret below.', form: true },
+    {
+      title: 'Point Telegram at OCSO',
+      body: 'Call setWebhook on the Bot API with url = the webhook URL and secret_token = the webhook secret you saved.',
+      values: [{ label: 'Webhook URL', value: '{{webhookUrl}}' }],
+    },
+    { title: 'Test', body: 'Activate the channel, then send your bot a message.', check: 'The channel card shows the last inbound time.' },
+  ],
+  troubleshooting: [
+    { id: 'no-updates', problem: 'Messages never arrive', fix: 'Call getWebhookInfo: the URL must be the webhook URL shown here and last_error_message names the problem.' },
   ],
   inboundWebhook: true,
   webhookSegment: 'telegram',
@@ -216,7 +228,7 @@ export * from './telegram/index.js';
 `adapter.ts` is the class and factory from the skeleton in [channels.md](channels.md#skeleton),
 calling the functions above; the factory takes `{ fetch, now }` and falls back to `NO_NETWORK`, never to
 the global `fetch`. The api, the worker and the seed pick the adapter up from the one composition root.
-After a rebuild, **Connections & models → Channels → Add channel** lists "Telegram bot", renders its
+After a rebuild, **Integrations → Channels → Add channel** lists "Telegram bot", renders its
 settings and secret fields, and after saving shows the webhook URL and your setup steps; conversations
 carry the `TG` badge.
 

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { clientIpFromForwardedFor } from './lib/client-ip-core';
+import { legacyRedirect } from './lib/legacy-urls';
 import { sessionCookieValue } from './lib/session-cookie';
 import { isWebChatPage, webChatPageResponse } from './lib/webchat/frame-policy';
 
@@ -17,6 +18,9 @@ export function proxy(request: NextRequest): NextResponse | Promise<NextResponse
   if (pathname === AUTH_PATH || pathname.startsWith(`${AUTH_PATH}/`)) return authPassThrough(request);
   // Customer web chat widget: public, framed by customer sites (lib/webchat/frame-policy.ts).
   if (isWebChatPage(pathname)) return webChatPageResponse(request);
+  // Pages that moved (lib/legacy-urls.ts): old links answer with a real 308.
+  const moved = legacyRedirect(pathname, request.nextUrl.searchParams);
+  if (moved) return NextResponse.redirect(new URL(moved, request.url), 308);
   if (sessionCookieValue((name) => request.cookies.get(name)?.value)) return NextResponse.next();
 
   if (pathname.startsWith('/api/')) {

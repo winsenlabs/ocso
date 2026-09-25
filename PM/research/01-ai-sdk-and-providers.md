@@ -1,6 +1,6 @@
 # 01: Vercel AI SDK v7 and the six model providers
 
-Researched 2026-09-22. **Method:** I installed these packages into `/private/tmp/claude-501/research-ai`:
+Researched 2026-09-22. **Method:** I installed these packages into a scratch directory:
 
 - `ai@7.0.109`, `@ai-sdk/provider@4.0.17`, `@ai-sdk/provider-utils@5.0.45`
 - `@ai-sdk/{anthropic@4.0.59, amazon-bedrock@5.0.90, google-vertex@5.0.89, azure@4.0.76, openai@4.0.72, openai-compatible@3.0.53, react@4.0.112}`

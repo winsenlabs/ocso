@@ -125,12 +125,21 @@ describe('Slack connection check', () => {
   });
 
   it('names missing scopes, a rejected token and a non-https Request URL', async () => {
-    expect((await setup(() => authOk('chat:write')).adapter.checkConnection(slConfig())).checks[1]).toMatchObject({ ok: false, detail: expect.stringContaining('app_mentions:read, im:history, users:read, users:read.email') });
+    const scopes = (await setup(() => authOk('chat:write,users:read')).adapter.checkConnection(slConfig())).checks[1];
+    // Each missing required scope is named with what breaks, and the check points at the troubleshooting entry.
+    expect(scopes).toMatchObject({ ok: false, help: 'missing-scope' });
+    expect(scopes?.detail).toContain('im:history (without it direct messages to the app never reach OCSO)');
+    expect(scopes?.detail).toContain('app_mentions:read (without it @mentions in channels never reach OCSO)');
+    expect(scopes?.detail).toContain('reinstall the app');
+    expect(scopes?.detail).not.toContain('users:read.email');
+    // Optional scopes (not called yet) are noted, never a failure.
+    const optional = (await setup(() => authOk('app_mentions:read,chat:write,im:history')).adapter.checkConnection(slConfig())).checks[1];
+    expect(optional).toMatchObject({ ok: true, detail: expect.stringContaining('optional users:read, users:read.email not granted') });
     const rejected = await setup(() => slackError('invalid_auth')).adapter.checkConnection(slConfig());
-    expect(rejected).toMatchObject({ ok: false, checks: [{ name: 'Bot token', ok: false, detail: 'Slack rejected the bot token (invalid_auth)' }, { name: 'Request URL', ok: true }] });
+    expect(rejected).toMatchObject({ ok: false, checks: [{ name: 'Bot token', ok: false, detail: 'Slack rejected the bot token (invalid_auth)', help: 'bot-token-invalid' }, { name: 'Request URL', ok: true }] });
     const http = await setup(() => authOk()).adapter.checkConnection(slConfig({}, {}, 'http://localhost:4000/channels/slack/k/webhook'));
     expect(http.ok).toBe(false);
-    expect(http.checks[2]).toMatchObject({ name: 'Request URL', ok: false });
+    expect(http.checks[2]).toMatchObject({ name: 'Request URL', ok: false, help: 'request-url-not-https' });
   });
 
   it('reports an invalid configuration without calling Slack', async () => {

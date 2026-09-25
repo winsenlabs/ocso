@@ -74,29 +74,66 @@ so set it before creating channels. With your own reverse proxy instead, apply t
 
 ### Public website
 
-`infra/compose/website.yaml` adds the public OCSO website (`apps/website`, a static export) to the
-same Compose project. The `website` service is the Dockerfile's `website` target: a small Caddy file
-server on port 8080 inside the network, non-root, read-only, with no published port. The overlay
-also makes the TLS overlay's Caddy serve a second site, `OCSO_WEBSITE_DOMAIN`, by proxying to
-`website:8080` with the same security headers (`infra/compose/Caddyfile.with-website`, which imports the
-unchanged `infra/compose/Caddyfile`). Without the overlay nothing changes.
+`infra/compose/website.yaml` adds the public OCSO website (`apps/website`) to the same Compose project:
+one landing page and a request-a-demo form. The `website` service is the Dockerfile's `website` target,
+a Next.js standalone server on port 8080 inside the network: non-root, read-only root filesystem, no
+published port, healthcheck on `/api/healthz`. The overlay also makes the TLS overlay's Caddy serve a
+second site, `OCSO_WEBSITE_DOMAIN`, by proxying to `website:8080` with the same security headers
+(`infra/compose/Caddyfile.with-website`, which imports the unchanged `infra/compose/Caddyfile`). Without
+the overlay nothing changes.
+
+A demo request is stored first, then emailed: the row goes to the Cloudflare D1 database `ocso-site`
+(table `site_demo_requests`, `apps/website/migrations/`) over the Cloudflare REST API, then the requester
+gets a confirmation and the team's Slack channel gets every field with a "Reply to <name>" button. The
+row records `ack_sent_at` and `slack_sent_at`, so a failed email never loses a request. Email goes through
+Cloudflare Email Service from `ocso@winsenlabs.dev` (the `winsenlabs.dev` zone is onboarded to Email
+Sending); set `WEBSITE_EMAIL_PROVIDER=resend` to send through Resend instead. The form has a honeypot and
+a per-IP limit of 5 submissions per 10 minutes. The site sets no cookies and runs no analytics.
 
 1. Point a DNS `A` (and `AAAA`, if the host has IPv6) record for the website domain at the same host.
-2. Set in `.env`:
+2. Put the website's secrets in the `website` sub-directory of the secrets volume. Only that
+   sub-directory is mounted, at `/run/secrets/ocso-website`, read-only:
+
+   | File | Used for |
+   |---|---|
+   | `cloudflare_api_token` | Cloudflare API token with **Account › D1 › Edit** and **Account › Email Sending › Edit** (`CLOUDFLARE_API_TOKEN_FILE`) |
+   | `slack_notify_email` | Optional: the Slack channel's email address, if you'd rather not keep it in `.env` (`SLACK_NOTIFY_EMAIL_FILE`) |
+   | `resend_api_key` | Only with `WEBSITE_EMAIL_PROVIDER=resend` (`RESEND_API_KEY_FILE`); copy it from the `app` sub-directory |
+
+   ```bash
+   docker run --rm -i -v ocso_secrets:/s alpine sh -c \
+     'mkdir -p /s/website && cat > /s/website/cloudflare_api_token && chown -R 1000:1000 /s/website && chmod 0400 /s/website/*' < token.txt
+   ```
+
+3. Set in `.env`:
 
    ```dotenv
    OCSO_WEBSITE_DOMAIN=ocso.example.com
-   # Canonical URLs, robots.txt and the sitemap are built in; default https://ocso.winsenlabs.dev
+   # Canonical URLs, robots.txt, the sitemap and llms.txt are built in; default https://ocso.winsenlabs.dev
    OCSO_SITE_URL=https://ocso.example.com
+   CLOUDFLARE_ACCOUNT_ID=<account id>
+   # The Slack channel's email address (Channel details → Integrations → Send emails to this channel)
+   SLACK_NOTIFY_EMAIL=<channel address>@<workspace>.slack.com
+   # Optional; the defaults are shown. WEBSITE_* so they don't collide with the product's EMAIL_* settings.
+   SITE_D1_DATABASE_ID=92f036f3-a106-40ab-9955-d9ea2ec9c2d4
+   WEBSITE_EMAIL_PROVIDER=cloudflare
+   WEBSITE_EMAIL_FROM=OCSO <ocso@winsenlabs.dev>
+   WEBSITE_EMAIL_REPLY_TO=hello@winsenlabs.com
    ```
 
-3. Add the overlay after the TLS one, here and in every later command (or append it to `COMPOSE_FILE`):
+   In the container these become `EMAIL_PROVIDER`, `EMAIL_FROM` and `EMAIL_REPLY_TO`
+   (`apps/website/.env.example` describes every variable).
+
+4. Add the overlay after the TLS one, here and in every later command (or append it to `COMPOSE_FILE`):
 
    ```bash
    docker compose -f compose.yaml -f infra/compose/tls.yaml -f infra/compose/website.yaml up -d --build
    ```
 
-Caddy obtains the website's certificate the same way as the product's.
+Caddy obtains the website's certificate the same way as the product's. The container needs outbound
+HTTPS to `api.cloudflare.com` (or `api.resend.com`). A failed store or email is logged by the `website`
+service (`docker compose logs website`); requests are read from D1, for example
+`npx wrangler d1 execute ocso-site --remote --command "SELECT * FROM site_demo_requests ORDER BY created_at DESC LIMIT 20"`.
 
 **Configure email before inviting anyone.** Invites, password resets and sign-in codes go out by email
 (section 9). A first `docker compose up` starts without it so you can try OCSO: messages then only reach

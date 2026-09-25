@@ -1,29 +1,39 @@
-import { AskOcso } from '@/components/ask-ocso';
-import { Build } from '@/components/build';
-import { Channels } from '@/components/channels';
-import { FinalCta } from '@/components/final-cta';
-import { Footer } from '@/components/footer';
-import { Governance } from '@/components/governance';
-import { Header } from '@/components/header';
-import { Hero } from '@/components/hero';
-import { HowItWorks } from '@/components/how-it-works';
-import { SelfHost } from '@/components/self-host';
+import { Hero } from '@/components/HeroSection';
+import { BuildWithYou } from '@/components/sections/BuildWithYou';
+import { DemoRequest } from '@/components/sections/DemoRequest';
+import { Governance } from '@/components/sections/Governance';
+import { OcsoWay } from '@/components/sections/OcsoWay';
+import { OpenSource } from '@/components/sections/OpenSource';
+import { Problem } from '@/components/sections/Problem';
+import { NAME } from '@/content/links';
 
-export default function HomePage() {
+export default function Home() {
   return (
     <>
-      <Header />
-      <main id="main">
-        <Hero />
-        <Channels />
-        <HowItWorks />
-        <Governance />
-        <AskOcso />
-        <Build />
-        <SelfHost />
-        <FinalCta />
-      </main>
-      <Footer />
+      <Hero
+        eyebrow={NAME}
+        title={
+          <>
+            Customer success,{' '}
+            <span className="underline decoration-accent decoration-[3px] underline-offset-[10px] md:decoration-4 md:underline-offset-[14px]">rethought</span>
+            <br className="hidden md:block" /> for the AI age.
+          </>
+        }
+        stats={[
+          ['Channels', 'WhatsApp · web chat · Slack · Teams'],
+          ['Governed', 'maker–checker on every change'],
+          ['Open source', 'Apache-2.0, self-hosted'],
+        ]}
+      >
+        Today customer success is scattered across channels, tools and teams, with AI bolted on at the edges. OCSO is one open
+        layer where AI agents and your people serve every customer, under controls you can audit.
+      </Hero>
+      <BuildWithYou />
+      <Problem />
+      <OcsoWay />
+      <Governance />
+      <OpenSource />
+      <DemoRequest />
     </>
   );
 }

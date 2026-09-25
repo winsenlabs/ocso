@@ -3,3 +3,9 @@ contact_links:
   - name: Report a security vulnerability
     url: https://github.com/winsenlabs/ocso/blob/main/SECURITY.md
     about: Please do not open a public issue. Email security@winsenlabs.dev as described in SECURITY.md.
+  - name: Documentation
+    url: https://github.com/winsenlabs/ocso/blob/main/docs/00-INDEX.md
+    about: The reading order for the specification, operations runbooks and plugin guides.
+  - name: Request a demo
+    url: https://ocso.winsenlabs.dev
+    about: See OCSO running, or talk to us about running it with your team.

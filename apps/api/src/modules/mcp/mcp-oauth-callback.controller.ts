@@ -11,7 +11,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /**
  * Public OAuth 2.1 redirect target for MCP connections (ADR-020 `/oauth/*`).
  * The only proof of the caller is the single-use `state`, validated by the
- * service. Always answers with a 302 back to the Connections page carrying
+ * service. Always answers with a 302 back to the MCP connections page carrying
  * only a connection id and an outcome code — never tokens, codes or
  * authorization-server text.
  */

@@ -5,27 +5,78 @@ The `SLACK` channel kind connects OCSO to a Slack app. People send the app a dir
 AI agent's replies go back with the bot token: in the DM, or in a thread under the mention. The code
 is in `packages/channels/src/slack/`.
 
+## Before you start
+
+- **Slack rights.** You need permission to create and install apps in the workspace. If the workspace
+  restricts installs, a workspace admin approves the request. On Enterprise Grid, an org admin may
+  also need to approve the app and add it to the workspace.
+- **A public https origin.** Slack only calls public https URLs. `OCSO_PUBLIC_URL` must be the https
+  origin Slack can reach; the webhook URL OCSO shows is built from it.
+- **OCSO rights.** Adding the channel needs `channels.manage` (a Tech admin). Activating it needs a
+  second person who can approve channels.
+- **Somewhere safe for two secrets.** The bot token and the signing secret go only into OCSO's form,
+  never into chat or tickets.
+
 ## Set it up
 
-1. **Connections → Channels → Add channel → Slack.** Pick the settings (below). Leave the secrets for
-   now if you don't have the app yet. Save: the channel is a draft until an approver activates it.
-2. The channel's setup steps show a **Slack app manifest** with this channel's webhook URL already
-   filled in. The same URL is used for Event Subscriptions and Interactivity. At
-   [api.slack.com/apps](https://api.slack.com/apps), choose **Create New App → From a manifest**, pick
-   your workspace and paste it. Rename the app and bot user if you want.
-3. **Install to Workspace.** Copy the **Bot User OAuth Token** (`xoxb-…`) from OAuth & Permissions and
-   the **Signing Secret** from Basic Information into the channel's secrets. Secrets are write-only:
-   OCSO never shows them again. Changing them later is a governed change, like any channel setting.
-4. Once the channel is active, Slack checks the Request URL. If Event Subscriptions shows the URL as
-   unverified, choose **Retry**. Slack only calls public **https** URLs, so `OCSO_PUBLIC_URL` must be
-   the https origin Slack can reach.
-5. `/invite @your-app` in each channel where it should answer @mentions. DMs work as soon as the app is
-   installed.
-6. **Test connection** calls `auth.test`. It reports the workspace and bot user, any missing bot scopes,
-   and whether the Request URL is https. It never posts a message.
+OCSO walks you through these steps in the channel dialog (**Integrations → Channels → Add channel →
+Slack**). The dialog first saves a **draft** with just the name, so the webhook URL exists before the
+Slack app does. A draft is inert: it takes in no messages until its activation is approved, and it may
+stay incomplete until then. Close the dialog at any time and come back with **Edit**.
 
-The manifest requests the bot scopes `chat:write`, `im:history`, `app_mentions:read`, `users:read` and
-`users:read.email`, and the bot events `message.im` and `app_mention`.
+1. **Create the Slack app from the manifest.** The dialog offers the manifest as YAML and JSON (copy
+   or download), with this channel's webhook URL already filled in for Event Subscriptions and
+   Interactivity. At [api.slack.com/apps](https://api.slack.com/apps) choose **Create New App → From
+   an app manifest**, pick the workspace and paste it. Rename the app and bot if you like. Slack may
+   say the Request URL is not verified yet: that is expected until step 6.
+2. **Review the bot token scopes** under OAuth & Permissions (table below).
+3. **Install to Workspace.** If installs are restricted, a workspace admin approves the request.
+4. **Copy the Bot User OAuth Token** (`xoxb-…`, OAuth & Permissions) and the **Signing Secret**
+   (Basic Information → App Credentials).
+5. **Paste them into OCSO and save.** The form sits in this step of the guide. Secrets are write-only:
+   OCSO never shows them again. Changing them later on a live channel is a governed change.
+6. **Event Subscriptions: the Request URL shows Verified.** Once the signing secret is saved, OCSO
+   answers Slack's signed challenge, even while the channel is a draft. If it shows as unverified,
+   choose **Retry**.
+7. **Interactivity** is on, with the same Request URL (button taps arrive there).
+8. **App Home**: Messages Tab on, and "Allow users to send Slash commands and messages from the
+   messages tab" checked. Without it people cannot DM the app.
+9. **Invite the bot** to each channel where it should answer @mentions: `/invite @ocso-assistant`
+   (or your bot's name). DMs need no invite.
+10. **Test.** **Test connection** calls `auth.test`: it reports the workspace and bot user, names each
+    missing scope and what breaks without it, and checks that the Request URL is https. It never posts
+    a message. Then activate the channel (a second person approves) and DM the app.
+
+### The manifest
+
+`display_information` (name `OCSO Assistant`), a bot user `ocso-assistant` (Slack allows only
+`a-z`, `0-9`, `-`, `_` and `.` in the bot's display name), `app_home` with the Messages tab on and
+`messages_tab_read_only_enabled: false`, the bot scopes below, the bot events `message.im` and
+`app_mention` and interactivity, both on the channel's webhook URL, and `socket_mode_enabled`,
+`token_rotation_enabled` and `org_deploy_enabled` all false. The download is also available from
+`GET /v1/channels/:id/setup-files/slack-app-manifest-yaml` (or `slack-app-manifest` for JSON).
+
+| Scope | Why OCSO needs it |
+|---|---|
+| `chat:write` | Post replies (`chat.postMessage`) in DMs and in threads under @mentions. Required. |
+| `im:history` | Receive DMs to the app (`message.im`). Required. |
+| `app_mentions:read` | Receive @mentions in channels (`app_mention`). Required. |
+| `users:read` | Optional. Read the writer's profile. OCSO does not call it yet; requested so profile lookups work without a reinstall. |
+| `users:read.email` | Optional. Read the writer's email, to match Slack users to OCSO users. Not called yet either. |
+
+**Test connection** fails when a required scope is missing and only notes a missing optional one.
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| Request URL not verified | Save the channel with the signing secret first, then **Retry** in Slack. The URL must be exactly the webhook URL shown, on an https `OCSO_PUBLIC_URL`. |
+| `not_in_channel` on a reply to an @mention | `/invite @your-bot` in that channel. |
+| `missing_scope`, or Test connection lists a missing scope | Add the scope (or re-paste the manifest), then **reinstall** the app: scope changes apply only after reinstalling. Paste the new bot token if it changed. |
+| DMs never arrive | Turn on the Messages Tab and "Allow users to send … messages", check `im:history` and `message.im` (reinstall after changes), and that **Respond to** includes DMs. |
+| Everything refused after the signing secret was regenerated | Paste the new secret and save. On a live channel the change needs approval, so rotate when a checker is available. |
+| Slack rejected the bot token | The app was uninstalled or the token revoked: reinstall and paste the new `xoxb-…` token. |
+| Enterprise Grid: a workspace cannot use the app | An org admin adds the app to each workspace. The manifest keeps org-wide deployment off. |
 
 ## Settings
 
@@ -74,5 +125,5 @@ The manifest requests the bot scopes `chat:write`, `im:history`, `app_mentions:r
 - **Files.** Files people share are not imported: only the text of the message is read. OCSO does not
   send files either, because that would need `files:write` and Slack's two-step upload.
 - **Delivery receipts.** Slack has none. Messages stay `SENT`.
-- **Display names.** Names are not looked up with `users.info`. The inbox shows the profile name when
+- **Display names.** Names are not looked up with `users.info` (the optional `users:read` scope is requested for this later). The inbox shows the profile name when
   the event carries one, and otherwise the user id.

@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
+import { useMemo, useState, useTransition, type ReactNode } from 'react';
 import { AlertBanner } from '@/components/ui/alert-banner';
 import { Modal } from '@/components/ui/modal';
 import { useApprovalRequest } from '@/components/approvals/use-approval-request';
@@ -9,11 +10,14 @@ import type { Channel, ChannelKind } from '@/lib/api/channels';
 import type { AgentLite } from '@/lib/api/mcp';
 import { Input } from '../profiles/profile-fields';
 import { useCloseTo } from '../routed-modal';
-import { ChannelNextSteps } from './next-steps';
+import { connectionsHref } from '../url';
+import { ChannelNextSteps, type KindGuideInfo } from './next-steps';
 import { RevealedSecrets } from './provider-steps';
 import { SecretFields } from './secret-fields';
 import { SettingsFields } from './settings-fields';
 import { buildSettings, initialSettingsValues, settingsGroups, splitProblems } from './settings-form';
+import { ChannelSetupView, DialogBanners } from './channel-setup-view';
+import { SetupPlan } from './setup-guide';
 
 interface Props {
   kinds: ChannelKind[];
@@ -26,9 +30,21 @@ interface Props {
 
 const kindLabel = (k: ChannelKind | undefined) => k?.label ?? k?.kind ?? 'Channel';
 
-/** Add / edit a channel (POST, PATCH /v1/channels) from the adapter's descriptor; then shows how to connect it. */
+/**
+ * Add / edit a channel (POST, PATCH /v1/channels) from the adapter's descriptor, and show how to connect it.
+ *
+ * Kinds whose provider calls a webhook are set up in two phases, because the provider's console needs the
+ * webhook URL (it holds the channel's public key) before it hands out the credentials: "Add channel" first
+ * creates a draft with only a type and a name. A draft is inert (ingress refuses it; activation is approved by a
+ * second person and checks the whole configuration), so it may be incomplete and changes freely. The dialog then
+ * becomes the setup guide for that draft: the real webhook URL, the files to download (a Slack app manifest, the
+ * Teams app package), each step in the provider's console, and OCSO's settings and secrets form inside the guide
+ * step where they are pasted.
+ */
 export function ChannelDialog({ kinds, channel, initialKind, agents, publicOrigin, closeHref }: Props) {
   const close = useCloseTo(closeHref);
+  const router = useRouter();
+  const [notice, setNotice] = useState<string | null>(null);
   const [kind, setKind] = useState(channel?.kind ?? initialKind ?? kinds[0]?.kind ?? '');
   const def = kinds.find((k) => k.kind === kind);
   const group = useMemo(() => settingsGroups(def?.settingsSchema ?? {}), [def]);
@@ -43,6 +59,10 @@ export function ChannelDialog({ kinds, channel, initialKind, agents, publicOrigi
   const [pending, start] = useTransition();
   const approval = useApprovalRequest();
   const stored = useMemo(() => (channel ? new Set(Object.keys(channel.secretRefs)) : null), [channel]);
+  /** Phase one: a webhook kind is created as a bare draft first (the provider needs its webhook URL). */
+  const twoPhase = !channel && def?.inboundWebhook === true;
+  /** Phase two: an existing webhook channel is edited inside its kind's setup guide. */
+  const guided = !!channel && def?.inboundWebhook === true && (def?.setupGuide.length ?? 0) > 0;
 
   function chooseKind(next: string) {
     const nextDef = kinds.find((k) => k.kind === next);
@@ -54,14 +74,30 @@ export function ChannelDialog({ kinds, channel, initialKind, agents, publicOrigi
     setErrors({ settings: {}, secrets: {}, fields: {} });
   }
 
+  /** Phase one of a webhook kind: a draft with only a type and a name, so the provider's console can get its webhook URL. */
+  function createDraft() {
+    if (!def) return;
+    if (!name.trim()) return setErrors({ settings: {}, secrets: {}, fields: { name: 'Enter a name' } });
+    setMessage(null);
+    start(async () => {
+      const r = await createChannelAction({ kind, name: name.trim(), settings: {}, secrets: {} });
+      if (r.ok && r.data) {
+        router.replace(connectionsHref({ tab: 'channels', dialog: 'channel-edit', id: r.data.id }), { scroll: false });
+        return;
+      }
+      if (!r.ok) setMessage(r.message);
+    });
+  }
+
   function save() {
     if (!def) return;
+    setNotice(null);
     const built = buildSettings(group, values);
     const typed = Object.fromEntries(Object.entries(secrets).filter(([, v]) => v.trim() !== ''));
     const secretErrors: Record<string, string> = {};
     // The configuration is checked on every save (and again when activation is approved).
     for (const f of def.secrets) {
-      const missing = f.required && !typed[f.key] && !stored?.has(f.key) && !(f.generate === 'server' && !channel);
+      const missing = f.required && !typed[f.key] && !stored?.has(f.key) && !(f.generate === 'server' && !channel) && !(channel?.status === 'DRAFT' && guided);
       if (missing) secretErrors[f.key] = 'Required';
     }
     const fieldErrors: Record<string, string> = name.trim() ? {} : { name: 'Enter a name' };
@@ -72,6 +108,11 @@ export function ChannelDialog({ kinds, channel, initialKind, agents, publicOrigi
     const done = (r: Awaited<ReturnType<typeof createChannelAction>>) => {
       if (r.ok) {
         setSecrets({});
+        // Setting up a draft: stay on the guide (the steps after saving happen in the provider's console).
+        if (r.data && guided && channel?.status === 'DRAFT') {
+          setNotice(`Saved ${r.data.name}. Secrets were stored by reference; the form no longer holds them. Continue with the next step of the guide.`);
+          return;
+        }
         if (r.data) setSaved(r.data);
         return;
       }
@@ -102,13 +143,21 @@ export function ChannelDialog({ kinds, channel, initialKind, agents, publicOrigi
   const revealed = saved?.revealedSecrets
     ? (def?.secrets ?? []).filter((f) => saved.revealedSecrets?.[f.key]).map((f) => ({ key: f.key, label: f.label, value: saved.revealedSecrets![f.key]! }))
     : [];
-  const kindInfo = { inboundWebhook: def?.inboundWebhook ?? false, embeddable: def?.embeddable ?? false, label: kindLabel(def), connectionCheck: def?.connectionCheck ?? false, setupSteps: def?.setupSteps ?? [], setupFiles: def?.setupFiles ?? [] };
+  const kindInfo: KindGuideInfo = {
+    inboundWebhook: def?.inboundWebhook ?? false,
+    embeddable: def?.embeddable ?? false,
+    label: kindLabel(def),
+    connectionCheck: def?.connectionCheck ?? false,
+    setupGuide: def?.setupGuide ?? [],
+    troubleshooting: def?.troubleshooting ?? [],
+    setupFiles: def?.setupFiles ?? [],
+  };
   // Client-generated secrets are for pasting elsewhere (e.g. the provider's console): shown once more with the next steps.
   const generatedSecrets = (def?.secrets ?? []).filter((f) => generated[f.key]).map((f) => ({ label: f.label, value: generated[f.key]! }));
 
   if (saved) {
     return (
-      <Modal title={`${saved.name} saved`} sub="changes are audited" onClose={close} maxWidth={660} footer={<><span className="sp" /><button type="button" className="btn accent" onClick={close}>Done</button></>}>
+      <Modal title={`${saved.name} saved`} sub="changes are audited" onClose={close} maxWidth={720} footer={<><span className="sp" /><button type="button" className="btn accent" onClick={close}>Done</button></>}>
         <AlertBanner style={{ margin: 0 }} title={channel ? 'Channel updated.' : 'Channel created.'}>
           Secrets were stored by reference; the form no longer holds them.
         </AlertBanner>
@@ -118,81 +167,119 @@ export function ChannelDialog({ kinds, channel, initialKind, agents, publicOrigi
     );
   }
 
+  const banners = <DialogBanners error={message ?? approval.error} info={[approval.notice, notice]} modal={approval.modal} />;
+
+  const kindPicker = channel ? null : (
+    <div className="fld">
+      <label htmlFor="ch-kind">Channel type</label>
+      <select id="ch-kind" value={kind} onChange={(e) => chooseKind(e.target.value)}>
+        {kinds.map((k) => (
+          <option key={k.kind} value={k.kind}>
+            {kindLabel(k)}
+          </option>
+        ))}
+      </select>
+      {def?.description ? <span className="hint">{def.description}</span> : null}
+    </div>
+  );
+  const nameField = <Input id="ch-name" label="Name" value={name} onChange={setName} error={errors.fields['name']} />;
+
+  // Phase one of a webhook kind: type and name only, and what happens next.
+  if (twoPhase && def) {
+    return (
+      <Modal
+        title="Add channel"
+        sub="step 1 of 2 · create a draft"
+        onClose={close}
+        maxWidth={720}
+        footer={
+          <>
+            <span className="mono-sm">a draft receives nothing: no approval is needed until you activate it</span>
+            <span className="sp" />
+            <button type="button" className="btn" onClick={close}>
+              Cancel
+            </button>
+            <button type="submit" form="channel-form" className="btn accent" disabled={pending}>
+              {pending ? 'Creating…' : 'Create draft and continue'}
+            </button>
+          </>
+        }
+      >
+        <form id="channel-form" noValidate style={{ display: 'grid', gap: 14 }} onSubmit={(e) => (e.preventDefault(), createDraft())}>
+          {banners}
+          {kindPicker}
+          {nameField}
+          <SetupPlan kind={def} label={kindLabel(def)} />
+        </form>
+      </Modal>
+    );
+  }
+
+  const fields: ReactNode = (
+    <>
+      {nameField}
+      <div className="fld">
+        <label htmlFor="ch-agent">Default virtual agent</label>
+        <select id="ch-agent" value={agentId} onChange={(e) => setAgentId(e.target.value)}>
+          <option value="">No default agent</option>
+          {agents.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.name}
+            </option>
+          ))}
+        </select>
+        <span className="hint">answers new conversations on this channel{agents.length ? '' : ' · no agents exist yet'}</span>
+      </div>
+      <fieldset className="conn-fieldset">
+        <legend>Settings</legend>
+        <SettingsFields group={group} values={values} errors={errors.settings} onChange={(path, v) => setValues((prev) => ({ ...prev, [path]: v }))} />
+      </fieldset>
+      <fieldset className="conn-fieldset">
+        <legend>Secrets · write-only</legend>
+        <SecretFields
+          fields={def?.secrets ?? []}
+          values={secrets}
+          generated={generated}
+          errors={errors.secrets}
+          stored={stored}
+          onChange={(key, value, isGenerated) => {
+            setSecrets((prev) => ({ ...prev, [key]: value }));
+            if (isGenerated) setGenerated((prev) => ({ ...prev, [key]: value }));
+          }}
+        />
+      </fieldset>
+    </>
+  );
+
+  const saveLabel = pending || approval.pending ? 'Saving…' : channel ? (channel.approval?.updateNeedsApproval ? 'Submit change' : 'Save channel') : 'Add channel';
+  const footer = (
+    <>
+      <span className="mono-sm">{!channel || channel.status === 'DRAFT' ? 'a draft receives nothing until its activation is approved' : 'changes to a live channel are approved by a second person'}</span>
+      <span className="sp" />
+      <button type="button" className="btn" onClick={close}>
+        {guided && channel?.status === 'DRAFT' ? 'Close' : 'Cancel'}
+      </button>
+      <button type="submit" form="channel-form" className="btn accent" disabled={pending || approval.pending || !def}>
+        {saveLabel}
+      </button>
+    </>
+  );
+
+  // Phase two: the channel exists; its kind's guide holds the form (a draft) or sits under it (a live channel).
+  if (guided && channel && def) {
+    return (
+      <ChannelSetupView channel={channel} kind={def} label={kindLabel(def)} publicOrigin={publicOrigin} stored={stored ?? new Set()} footer={footer} generated={generatedSecrets} onClose={close} onSubmit={save}>
+        {{ banners, fields, pendingKeys: def.secrets.filter((f) => secrets[f.key] && secrets[f.key] === generated[f.key]).map((f) => f.label) }}
+      </ChannelSetupView>
+    );
+  }
+
   return (
-    <Modal
-      title={channel ? `Edit ${channel.name}` : 'Add channel'}
-      sub="secrets are write-only"
-      onClose={close}
-      maxWidth={720}
-      footer={
-        <>
-          <span className="mono-sm">{!channel || channel.status === 'DRAFT' ? 'a draft receives nothing until its activation is approved' : 'changes to a live channel are approved by a second person'}</span>
-          <span className="sp" />
-          <button type="button" className="btn" onClick={close}>
-            Cancel
-          </button>
-          <button type="submit" form="channel-form" className="btn accent" disabled={pending || approval.pending || !def}>
-            {pending || approval.pending ? 'Saving…' : channel ? (channel.approval?.updateNeedsApproval ? 'Submit change' : 'Save channel') : 'Add channel'}
-          </button>
-        </>
-      }
-    >
+    <Modal title={channel ? `Edit ${channel.name}` : 'Add channel'} sub="secrets are write-only" onClose={close} maxWidth={720} footer={footer}>
       <form id="channel-form" noValidate style={{ display: 'grid', gap: 14 }} onSubmit={(e) => (e.preventDefault(), save())}>
-        {message || approval.error ? (
-          <AlertBanner tone="error" style={{ margin: 0 }}>
-            {message ?? approval.error}
-          </AlertBanner>
-        ) : null}
-        {approval.notice ? (
-          <AlertBanner tone="info" style={{ margin: 0 }}>
-            {approval.notice}
-          </AlertBanner>
-        ) : null}
-        {approval.modal}
-        {channel ? null : (
-          <div className="fld">
-            <label htmlFor="ch-kind">Channel type</label>
-            <select id="ch-kind" value={kind} onChange={(e) => chooseKind(e.target.value)}>
-              {kinds.map((k) => (
-                <option key={k.kind} value={k.kind}>
-                  {kindLabel(k)}
-                </option>
-              ))}
-            </select>
-            {def?.description ? <span className="hint">{def.description}</span> : null}
-          </div>
-        )}
-        <Input id="ch-name" label="Name" value={name} onChange={setName} error={errors.fields['name']} />
-        <div className="fld">
-          <label htmlFor="ch-agent">Default virtual agent</label>
-          <select id="ch-agent" value={agentId} onChange={(e) => setAgentId(e.target.value)}>
-            <option value="">No default agent</option>
-            {agents.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-          <span className="hint">answers new conversations on this channel{agents.length ? '' : ' · no agents exist yet'}</span>
-        </div>
-        <fieldset className="conn-fieldset">
-          <legend>Settings</legend>
-          <SettingsFields group={group} values={values} errors={errors.settings} onChange={(path, v) => setValues((prev) => ({ ...prev, [path]: v }))} />
-        </fieldset>
-        <fieldset className="conn-fieldset">
-          <legend>Secrets · write-only</legend>
-          <SecretFields
-            fields={def?.secrets ?? []}
-            values={secrets}
-            generated={generated}
-            errors={errors.secrets}
-            stored={stored}
-            onChange={(key, value, isGenerated) => {
-              setSecrets((prev) => ({ ...prev, [key]: value }));
-              if (isGenerated) setGenerated((prev) => ({ ...prev, [key]: value }));
-            }}
-          />
-        </fieldset>
+        {banners}
+        {kindPicker}
+        {fields}
         {channel ? <ChannelNextSteps channel={channel} kind={kindInfo} publicOrigin={publicOrigin} allowedOrigins={origins} authMode={authMode} /> : null}
       </form>
     </Modal>

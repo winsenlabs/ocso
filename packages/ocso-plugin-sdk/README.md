@@ -1,11 +1,15 @@
 # @winsendotai/ocso-plugin-sdk
 
 Types, a few small helpers and a conformance checker for building plugins for
-[OCSO](https://github.com/winsenlabs/ocso), One Customer Success Orchestrator.
+[OCSO](https://github.com/winsenlabs/ocso), Open Customer Success Orchestration.
 
 ```sh
 npm install @winsendotai/ocso-plugin-sdk
 ```
+
+> **Not on npm yet.** OCSO is pre-1.0 and this package has not been published. Until it is, build it
+> from the [OCSO repository](https://github.com/winsenlabs/ocso) with `pnpm --filter @winsendotai/ocso-plugin-sdk build`
+> and install the tarball from `pnpm --filter @winsendotai/ocso-plugin-sdk pack`.
 
 The package has no runtime dependencies. It is ESM only and needs Node 20 or later. `require()` of it works
 without a flag on Node 22.12+ (and 20.19+); on older Node 20 releases use `import`. OCSO loads a plugin the way Node's
@@ -66,7 +70,10 @@ function createEchoAdapter(deps: ChannelAdapterDeps): ChannelAdapter {
       mark: { code: 'EC', name: 'Echo' },
       settingsSchema: { type: 'object', properties: { replyUrl: { type: 'string', title: 'Reply URL' } }, required: ['replyUrl'] },
       secrets: [{ key: 'token', label: 'Token', required: true, hint: 'Sent as x-echo-token both ways.', generate: 'client' }],
-      setupSteps: ['Point your system at the webhook URL below and send the token as x-echo-token.'],
+      setupGuide: [
+        { title: 'Save the channel', body: 'Enter the reply URL and generate a token below.', form: true },
+        { title: 'Point your system at OCSO', body: 'Send messages to the webhook URL with the token as x-echo-token.', values: [{ label: 'Webhook URL', value: '{{webhookUrl}}' }] },
+      ],
       inboundWebhook: true, // POST /channels/echo/<publicKey>/webhook
       embeddable: false,
     }),

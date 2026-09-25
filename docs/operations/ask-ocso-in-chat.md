@@ -5,7 +5,7 @@ approvals and audit as the drawer.
 
 ## Set it up
 
-1. Add a Slack or Microsoft Teams channel under Connections → Channels (see the channel's own setup page).
+1. Add a Slack or Microsoft Teams channel under Integrations → Channels (see the channel's own setup page).
 2. Set its **Destination** to `ask_ocso`. The setting exists on every channel kind whose descriptor sets
    `staffDestination` (Slack and Teams today); `router` (the default) keeps the channel for customers. Like every
    channel setting, the change goes through the channel approval.

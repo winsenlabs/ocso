@@ -30,8 +30,11 @@ export function defaultWebhookSegment(kind: string): string {
 /** Path prefix of OCSO's widget page for embeddable channel kinds (`/chat/<publicKey>`). */
 export const EMBED_PAGE_PREFIX = '/chat';
 
-/** Setup-file placeholders: `{{webhookUrl}}` and `{{settings.<key>}}` only (secrets are never interpolated). */
-export const SETUP_FILE_PLACEHOLDER_PATTERN = /^\{\{\s*(webhookUrl|settings\.[A-Za-z][A-Za-z0-9_]{0,63})\s*\}\}$/;
+/** Setup-file placeholders: `{{webhookUrl}}`, `{{webhookHost}}` and `{{settings.<key>}}` only (secrets are never interpolated). */
+export const SETUP_FILE_PLACEHOLDER_PATTERN = /^\{\{\s*(webhookUrl|webhookHost|settings\.[A-Za-z][A-Za-z0-9_]{0,63})\s*\}\}$/;
+
+/** Troubleshooting entry ids: lower case a-z0-9-, 1–40 characters. */
+export const TROUBLESHOOTING_ID_PATTERN = /^[a-z][a-z0-9-]{0,39}$/;
 
 /** Setup-file keys: lower case a-z0-9-, 1–40 characters. */
 export const SETUP_FILE_KEY_PATTERN = /^[a-z][a-z0-9-]{0,39}$/;

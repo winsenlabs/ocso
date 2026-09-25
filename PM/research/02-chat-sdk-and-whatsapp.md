@@ -1,6 +1,6 @@
 # 02: Vercel Chat SDK and the WhatsApp Cloud API
 
-Researched 2026-09-22. **Method:** I installed `chat@4.41.0`, `@chat-adapter/{whatsapp,web,state-pg,state-memory,shared}@4.41.0` and `ai@7.0.109` into a scratch directory. I then read the READMEs, the `.d.ts` files, the bundled `chat/docs/*.mdx` and the compiled `dist/*.js`. I also ran the WhatsApp adapter against signed test webhooks and a mock Graph server (scripts: `/private/tmp/claude-501/research-chat/exp/{test,react}.mjs`). Meta facts come from developers.facebook.com, fetched today. "VERIFIED(run)" means an experiment confirmed it. "VERIFIED(code)" means I read it in the shipped source. Anything else is marked UNVERIFIED.
+Researched 2026-09-22. **Method:** I installed `chat@4.41.0`, `@chat-adapter/{whatsapp,web,state-pg,state-memory,shared}@4.41.0` and `ai@7.0.109` into a scratch directory. I then read the READMEs, the `.d.ts` files, the bundled `chat/docs/*.mdx` and the compiled `dist/*.js`. I also ran the WhatsApp adapter against signed test webhooks and a mock Graph server (the scripts are in a scratch directory). Meta facts come from developers.facebook.com, fetched today. "VERIFIED(run)" means an experiment confirmed it. "VERIFIED(code)" means I read it in the shipped source. Anything else is marked UNVERIFIED.
 
 ## TL;DR
 

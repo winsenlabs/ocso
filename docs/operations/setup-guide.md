@@ -92,7 +92,7 @@ their sessions; each token value works once and the use is audited. Remove the v
 
 ## 2. Model providers and profiles (Tech)
 
-**Connections & models → Model providers.** Add one or more providers. Credentials are write-only and
+**Integrations → Models.** Add one or more providers. Credentials are write-only and
 stored in the secret store; the model never sees them. **Test** makes a real call. A provider is created
 disabled; enabling it is a proposal. A replacement credential is staged, and the checker sees only "new
 value (proposed)".
@@ -151,7 +151,7 @@ read, cache write, plus long-context tiers).
 
 ## 3. Channels (Tech; a Head approves)
 
-**Connections & models → Channels → Add channel.**
+**Integrations → Channels → Add channel.**
 
 WhatsApp comes in two flavours; pick the one your number is registered with. **WhatsApp — Twilio** is the
 usual path; **WhatsApp — Meta Cloud API** is for numbers registered directly with Meta. Both store the customer

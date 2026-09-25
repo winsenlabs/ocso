@@ -2,7 +2,7 @@
 
 Researched 2026-09-22 on Node 26.8.1 and pnpm 11.1.2. Versions come from the npm registry today.
 
-**Method:** I built a throwaway monorepo at `/private/tmp/claude-501/research-stack/mono`: `packages/{domain,db}`, `apps/api` (Nest 12 HTTP app plus a worker context) and `apps/web` (Next 16.3). Against it I ran TS 7 builds, Vitest 5 unit and Testcontainers (Postgres 17) e2e tests, an OTel collector (`otelcol-contrib` 0.161.0, debug exporter), api and web Docker images run together, and Playwright against the standalone web server. Side probes cover `nest new`, `nest build`/`nest g` on TS 7, Kysely and Drizzle 1.0-rc.
+**Method:** I built a throwaway monorepo in a scratch directory: `packages/{domain,db}`, `apps/api` (Nest 12 HTTP app plus a worker context) and `apps/web` (Next 16.3). Against it I ran TS 7 builds, Vitest 5 unit and Testcontainers (Postgres 17) e2e tests, an OTel collector (`otelcol-contrib` 0.161.0, debug exporter), api and web Docker images run together, and Playwright against the standalone web server. Side probes cover `nest new`, `nest build`/`nest g` on TS 7, Kysely and Drizzle 1.0-rc.
 
 Tags: **VERIFIED(run)** = I executed it. **VERIFIED(docs)** = docs or release notes fetched today. **UNVERIFIED** = inference.
 

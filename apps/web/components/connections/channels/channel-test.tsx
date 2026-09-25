@@ -7,7 +7,7 @@ import { testChannelAction } from '@/lib/actions/channels';
 import type { ChannelTestResult } from '@/lib/api/channels';
 
 /** "Test connection": the adapter's read-only credential check (e.g. Twilio fetches the account); never sends a message. */
-export function ChannelTest({ channelId }: { channelId: string }) {
+export function ChannelTest({ channelId, onHelp, helpIds = [] }: { channelId: string; onHelp?: ((id: string) => void) | undefined; helpIds?: readonly string[] }) {
   const [pending, start] = useTransition();
   const [result, setResult] = useState<ChannelTestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -45,6 +45,20 @@ export function ChannelTest({ channelId }: { channelId: string }) {
             {result.checks.map((c) => (
               <li key={c.name}>
                 <StatusChip tone={c.ok ? 'good' : 'danger'}>{c.ok ? 'ok' : 'failed'}</StatusChip> {c.name}: {c.detail}
+                {c.help && onHelp && helpIds.includes(c.help) ? (
+                  <>
+                    {' '}
+                    <a
+                      href={`#ts-${c.help}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        onHelp(c.help!);
+                      }}
+                    >
+                      How to fix
+                    </a>
+                  </>
+                ) : null}
               </li>
             ))}
           </ul>

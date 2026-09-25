@@ -199,6 +199,8 @@ export interface ConnectionCheck {
   name: string;
   ok: boolean;
   detail: string;
+  /** Id of the kind's `troubleshooting` entry that explains the fix (the dialog links to it). */
+  help?: string | undefined;
 }
 
 export interface ConnectionCheckResult {

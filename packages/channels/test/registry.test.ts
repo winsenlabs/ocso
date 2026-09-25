@@ -74,7 +74,7 @@ describe('ChannelRegistry: kinds are open, validated at registration', () => {
     for (const k of kinds) {
       expect(k.label).not.toBe('');
       expect(k.mark.name).not.toBe('');
-      if (k.inboundWebhook) expect(k.setupSteps.length).toBeGreaterThan(0);
+      if (k.inboundWebhook) expect(k.setupGuide.length).toBeGreaterThan(0);
     }
     expect(kinds.find((k) => k.kind === 'TWILIO_WHATSAPP')).toMatchObject({ identitySetting: { label: 'sender', keys: ['from', 'messagingServiceSid'] }, webhookEvents: 'messages, delivery statuses', templates: { reviewer: 'WhatsApp', placeholderScope: 'template' } });
   });

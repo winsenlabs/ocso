@@ -3,7 +3,8 @@ import type { AddressInfo } from 'node:net';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ChannelRuntime, DeliveryService } from '@ocso/agent-runtime';
-import { appendInteraction } from '@ocso/application';
+import { appendInteraction, readZip } from '@ocso/application';
+import { TEAMS_MANIFEST_VERSION } from '@ocso/channels';
 import type { BlobStore } from '@ocso/blob';
 import { eq } from 'drizzle-orm';
 import { deploymentSettings, modelProfiles, modelProviders, turns, uuidv7 } from '@ocso/db';
@@ -198,15 +199,61 @@ afterAll(async () => {
   await new Promise((resolve) => stub?.close(resolve));
 });
 
+/** superagent: collect a binary body as a Buffer. */
+function binary(res: NodeJS.ReadableStream & { setEncoding(e: string): void }, done: (err: Error | null, body: Buffer) => void): void {
+  const chunks: Buffer[] = [];
+  res.on('data', (c: Buffer) => chunks.push(Buffer.from(c)));
+  res.on('end', () => done(null, Buffer.concat(chunks)));
+}
+
 describe('Microsoft Teams channel kind', () => {
   it('is served to the admin form with its settings, write-only client secret and Teams app manifest', async () => {
     const kinds = await h.http().get('/v1/channels/kinds').set(auth(admin)).expect(200);
     const teams = kinds.body.find((k: { kind: string }) => k.kind === 'MS_TEAMS');
     expect(teams).toMatchObject({ label: 'Microsoft Teams', mark: { code: 'MT' }, inboundWebhook: true, webhookSegment: 'ms-teams', connectionCheck: true, messageTemplates: false });
     expect(teams.secrets.map((s: { key: string }) => s.key)).toEqual(['appPassword']);
-    expect(teams.setupFiles[0]).toMatchObject({ key: 'teams-app-manifest', filename: 'manifest.json', contentType: 'application/json' });
-    expect(teams.setupFiles[0].template).toContain('"botId": "{{settings.appId}}"');
+    expect(teams.setupFiles[0]).toMatchObject({ key: 'teams-app-package', filename: 'ocso-teams-app.zip', contentType: 'application/zip' });
+    expect(teams.setupFiles[0].entries[0].template).toContain('"botId": "{{settings.appId}}"');
+    expect(teams.setupGuide.length).toBeGreaterThan(5);
+    expect(teams.troubleshooting.map((t: { id: string }) => t.id)).toContain('unauthorized');
     expect(channel.webhookPath).toBe(`/channels/ms-teams/${channel.publicKey}/webhook`);
+  });
+
+  it('builds the Teams app package on the server from the saved App ID, for readers of channels only, never with the secret', async () => {
+    const res = await h.http().get(`/v1/channels/${channel.id}/setup-files/teams-app-package`).set(auth(admin)).buffer(true).parse(binary as never).expect(200);
+    expect(res.headers['content-type']).toBe('application/zip');
+    expect(res.headers['content-disposition']).toBe('attachment; filename="ocso-teams-app.zip"');
+    const files = readZip(res.body as Buffer);
+    expect([...files.keys()].sort()).toEqual(['color.png', 'manifest.json', 'outline.png']);
+    const manifest = JSON.parse(files.get('manifest.json')!.toString('utf8')) as { id: string; manifestVersion: string; bots: Array<{ botId: string }>; validDomains: string[] };
+    expect(manifest).toMatchObject({ id: APP_ID, manifestVersion: TEAMS_MANIFEST_VERSION, bots: [{ botId: APP_ID }] });
+    // The OCSO host (the harness's default public URL) is the only valid domain.
+    expect(manifest.validDomains).toEqual(['localhost:3000']);
+    expect(files.get('color.png')!.readUInt32BE(16)).toBe(192);
+    expect(files.get('outline.png')!.readUInt32BE(16)).toBe(32);
+    expect((res.body as Buffer).toString('latin1')).not.toContain(APP_PASSWORD);
+    // A Head reads channels (read-only), so may download it; frontline staff may not.
+    await h.http().get(`/v1/channels/${channel.id}/setup-files/teams-app-package`).set(auth(lead)).expect(200);
+    await h.http().post('/v1/users').set(auth(admin)).send({ email: 'pkg-exec@ocso.test', name: 'exec', role: 'SERVICE', password: 'a password 12345' }).expect(201);
+    const exec = await h.loginAs('pkg-exec@ocso.test', 'a password 12345');
+    await h.http().get(`/v1/channels/${channel.id}/setup-files/teams-app-package`).set(auth(exec)).expect(403);
+    await h.http().get(`/v1/channels/${channel.id}/setup-files/teams-app-package`).expect(401);
+    await h.http().get(`/v1/channels/${channel.id}/setup-files/no-such-file`).set(auth(admin)).expect(404);
+  });
+
+  it('saves a draft before the Azure values exist, so its webhook URL is known; the package waits for the App ID and activation for everything', async () => {
+    const draft = await h.http().post('/v1/channels').set(auth(admin)).send({ kind: 'MS_TEAMS', name: 'Teams draft', settings: {}, secrets: {} }).expect(201);
+    expect(draft.body).toMatchObject({ status: 'DRAFT', webhookPath: `/channels/ms-teams/${draft.body.publicKey}/webhook` });
+    const early = await h.http().get(`/v1/channels/${draft.body.id}/setup-files/teams-app-package`).set(auth(admin)).expect(400);
+    expect(early.body.error).toMatchObject({ code: 'setup_file_incomplete', message: expect.stringContaining('appId') });
+    // A value that is given is still checked on a draft.
+    await h.http().patch(`/v1/channels/${draft.body.id}`).set(auth(admin)).send({ settings: { appId: 'not-a-guid' } }).expect(400);
+    await h.http().patch(`/v1/channels/${draft.body.id}`).set(auth(admin)).send({ settings: { appId: APP_ID, appType: 'MultiTenant' } }).expect(200);
+    await h.http().get(`/v1/channels/${draft.body.id}/setup-files/teams-app-package`).set(auth(admin)).expect(200);
+    // Activation checks the whole configuration: the client secret is still missing.
+    const activate = await h.http().patch(`/v1/channels/${draft.body.id}`).set(auth(admin)).send({ status: 'ACTIVE', approval: { checkerId: leadId, reason: 'try' } });
+    expect(activate.status).toBe(400);
+    expect(JSON.stringify(activate.body)).toContain('appPassword');
   });
 
   it('refuses an invalid configuration without echoing the secret', async () => {

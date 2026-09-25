@@ -167,12 +167,16 @@ export function isSafePathValue(value: unknown): boolean {
 
 /**
  * Fill an API path or page pattern with arguments: `/v1/agents/:id` + `{ id }` → `/v1/agents/<id>`.
- * Values are URI-encoded; a missing or unsafe parameter (`.`, `..`, a slash) returns null, and so does a filled path
+ * A fixed query on the pattern is kept as is. Values are URI-encoded; a missing or unsafe parameter (`.`, `..`, a slash) returns null, and so does a filled path
  * that URL normalisation would change: the path sent is always the route the card or read names.
  */
 export function fillPath(pattern: string, params: Record<string, unknown>): string | null {
+  // A page pattern may carry a fixed query (`/connections?tab=mcp`): only the path is filled and normalised.
+  const q = pattern.indexOf('?');
+  const path = q === -1 ? pattern : pattern.slice(0, q);
+  const query = q === -1 ? '' : pattern.slice(q);
   let missing = false;
-  const filled = pattern.replace(/:(\w+)/g, (_, key: string) => {
+  const filled = path.replace(/:(\w+)/g, (_, key: string) => {
     const value = params[key];
     if (!isSafePathValue(value)) {
       missing = true;
@@ -181,7 +185,7 @@ export function fillPath(pattern: string, params: Record<string, unknown>): stri
     return encodeURIComponent(String(value));
   });
   if (missing) return null;
-  return new URL(filled, 'http://ocso.invalid').pathname === filled ? filled : null;
+  return new URL(filled, 'http://ocso.invalid').pathname === filled ? `${filled}${query}` : null;
 }
 
 /** Whether `href` (a path, no origin) is one of the app's pages: `ui.open_page` refuses anything else. */

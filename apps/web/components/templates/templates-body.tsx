@@ -38,7 +38,7 @@ export async function TemplatesBody({ searchParams }: { searchParams: Promise<Pa
     return (
       <EmptyState title="No channel with message templates to manage">
         {hasPermission(session, Permission.CHANNELS_MANAGE)
-          ? 'Add a channel whose provider reviews templates (e.g. WhatsApp) under Connections → Channels; its templates appear here.'
+          ? 'Add a channel whose provider reviews templates (e.g. WhatsApp) under Integrations → Channels; its templates appear here.'
           : 'Templates belong to channels used by your teams’ virtual agents whose provider reviews templates (e.g. WhatsApp). None is attached yet — a Tech admin adds channels and a Lead attaches them to an agent.'}
       </EmptyState>
     );

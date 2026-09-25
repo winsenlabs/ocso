@@ -55,7 +55,7 @@ describe('template picker helpers', () => {
     expect(templateHint(approved)).toBeNull();
     expect(templateHint(pending)).toBe('in review — only approved templates can be sent');
     expect(templateHint(rejected)).toBe('rejected: INVALID_FORMAT');
-    expect(listProblemText({ code: 'templates_not_configured', message: 'Add the WhatsApp Business Account id' })).toMatch(/Tech admin adds it under Connections → Channels/);
+    expect(listProblemText({ code: 'templates_not_configured', message: 'Add the WhatsApp Business Account id' })).toMatch(/Tech admin adds it under Integrations → Channels/);
   });
 
   it('validates every variable like the API and previews the exact text', () => {

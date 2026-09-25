@@ -19,7 +19,7 @@ const SAMPLE_BADGES: Record<string, SidebarItem['badge']> = {
 const VARIANTS: Array<{ role: Role; active: string; name: string; askSub: string }> = [
   { role: 'SERVICE', active: 'top:home', name: 'Nikhil Menon', askSub: 'context: home' },
   { role: 'HEAD', active: 'operations:agents', name: 'Anjali Rao', askSub: 'context: virtual agents' },
-  { role: 'TECH', active: 'platform:system', name: 'Tejas Shetty', askSub: 'context: system control center' },
+  { role: 'TECH', active: 'platform:system', name: 'Tarun Shetty', askSub: 'context: system control center' },
 ];
 
 function groupsFor(role: Role, active: string): SidebarGroup[] {

@@ -26,8 +26,8 @@ export function generateMetadata(): Metadata {
     ...(publicUrl ? { metadataBase: new URL(publicUrl) } : {}),
     title: { default: 'OCSO', template: '%s — OCSO' },
     applicationName: 'OCSO',
-    description: 'One Customer Success Orchestrator',
-    openGraph: { title: 'OCSO', description: 'One Customer Success Orchestrator', siteName: 'OCSO', type: 'website' },
+    description: 'Open Customer Success Orchestration',
+    openGraph: { title: 'OCSO', description: 'Open Customer Success Orchestration', siteName: 'OCSO', type: 'website' },
     robots: { index: false, follow: false },
   };
 }

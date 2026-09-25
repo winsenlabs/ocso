@@ -31,7 +31,7 @@ variable "tags" {
 # Public entry point
 # ---------------------------------------------------------------------------
 variable "public_hostname" {
-  description = "Public host name customers, providers and staff reach (e.g. support.meridianbank.in). Becomes OCSO_PUBLIC_URL=https://<host>."
+  description = "Public host name customers, providers and staff reach (e.g. support.example.com). Becomes OCSO_PUBLIC_URL=https://<host>."
   type        = string
 }
 

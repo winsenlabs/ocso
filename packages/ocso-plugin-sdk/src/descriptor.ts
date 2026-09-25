@@ -48,23 +48,76 @@ export interface ChannelTemplateTerms {
 }
 
 /**
- * A ready-made file the admin pastes or uploads into the provider's console after saving (an app manifest).
- * OCSO fills the placeholders from the saved channel and offers copy and download. Only `{{webhookUrl}}` and
- * `{{settings.<key>}}` exist: secrets are never interpolated. Values are inserted as plain text:
- * JSON-string-escaped for `application/json` (put placeholders inside string literals); for YAML and plain
- * text a value with quotes, backslashes, `#`, control characters or line breaks is left out.
+ * A ready-made file the admin pastes or uploads into the provider's console (a Slack app manifest, a Teams app
+ * package). OCSO fills the placeholders from the channel and offers copy and download. Only `{{webhookUrl}}`,
+ * `{{webhookHost}}` (the webhook URL's host) and `{{settings.<key>}}` exist: secrets are never interpolated.
+ * Values are inserted as plain text: JSON-string-escaped for `application/json` (put placeholders inside
+ * string literals), and for YAML and plain text any value with quotes, backslashes, `#`, control characters
+ * or line breaks is left out (the placeholder stays and the admin is told to fill it in).
+ *
+ * A text file carries a `template`. An `application/zip` file (an app package) carries `entries` instead: text
+ * entries are templates filled the same way, binary entries (`image/png` icons) are base64 and copied as they
+ * are. OCSO builds the zip on the server.
  */
 export interface ChannelSetupFile {
   /** Stable id within the kind (`a-z0-9-`). */
   key: string;
-  /** Heading shown above the file ("Teams app manifest"). */
+  /** Heading shown above the file ("Teams app package"). */
   label: string;
   /** What to do with it, one sentence. */
   description?: string | undefined;
   /** Download name, e.g. `manifest.json`. */
   filename: string;
-  contentType: 'application/json' | 'text/yaml' | 'text/plain';
-  template: string;
+  contentType: ChannelSetupFileType;
+  /** Text files: the content with placeholders. */
+  template?: string | undefined;
+  /** `application/zip` only: the files inside the package. */
+  entries?: readonly ChannelSetupFileEntry[] | undefined;
+}
+
+export type ChannelSetupFileType = 'application/json' | 'text/yaml' | 'text/plain' | 'application/zip';
+
+/** One file inside an `application/zip` setup file. */
+export interface ChannelSetupFileEntry {
+  /** Path inside the zip (`manifest.json`, `color.png`); no folders above the root. */
+  path: string;
+  contentType: 'application/json' | 'text/yaml' | 'text/plain' | 'image/png';
+  /** Text entries: the content with placeholders. */
+  template?: string | undefined;
+  /** `image/png` entries: the bytes, base64. */
+  base64?: string | undefined;
+}
+
+/**
+ * One step of the setup guide the channel dialog shows as a numbered checklist (in order). Plain text only: the
+ * web app renders no markup from a descriptor. `values` are shown with a Copy button and may use the setup-file
+ * placeholders (`{{webhookUrl}}`, …); `files` names setup files (by key) to offer inside this step; `form` marks
+ * the step where the admin fills OCSO's own form (settings and secrets), which the dialog shows there.
+ */
+export interface ChannelSetupStep {
+  title: string;
+  body: string;
+  /** Bullet points under the body. */
+  items?: readonly string[] | undefined;
+  /** A small two-column table (e.g. each scope and why it is needed). */
+  table?: { head: readonly [string, string]; rows: ReadonlyArray<readonly [string, string]> } | undefined;
+  /** Values to copy into the provider's console (the webhook URL, a scope list). */
+  values?: ReadonlyArray<{ label: string; value: string }> | undefined;
+  /** Provider consoles and documentation (https only). */
+  links?: ReadonlyArray<{ label: string; href: string }> | undefined;
+  /** Keys of this kind's `setupFiles` to offer in this step. */
+  files?: readonly string[] | undefined;
+  /** The admin fills OCSO's settings and secrets in this step (at most one step). */
+  form?: boolean | undefined;
+  /** How to tell the step worked. */
+  check?: string | undefined;
+}
+
+/** A known problem and its fix. `id` lets a connection check point to it (`ConnectionCheck.help`). */
+export interface ChannelTroubleshooting {
+  id: string;
+  problem: string;
+  fix: string;
 }
 
 /** What the "Add channel" form, the channel list and the workspace need to know about a kind. */
@@ -78,9 +131,16 @@ export interface ChannelKindDescriptor {
   settingsSchema: Record<string, unknown>;
   secrets: ChannelSecretField[];
   identitySetting?: ChannelIdentitySetting | undefined;
-  /** What the admin does in the provider's console after saving (plain sentences, in order). */
-  setupSteps: readonly string[];
-  /** Files to paste or upload in the provider's console (app manifests), shown with the setup steps. */
+  /** Deprecated: plain sentences, in order. Use `setupGuide`; OCSO turns these into one guide step each. */
+  setupSteps?: readonly string[] | undefined;
+  /**
+   * The step-by-step guide the channel dialog shows as a checklist (provider console, OCSO's form, first test).
+   * Plain text; https links only; values may use the setup-file placeholders; at most one `form` step.
+   */
+  setupGuide?: readonly ChannelSetupStep[] | undefined;
+  /** Known problems and their fixes; a connection check points to one with `ConnectionCheck.help`. */
+  troubleshooting?: readonly ChannelTroubleshooting[] | undefined;
+  /** Files to paste or upload in the provider's console (app manifests, app packages), offered in the guide. */
   setupFiles?: readonly ChannelSetupFile[] | undefined;
   /** Provider calls OCSO at `/channels/<webhookSegment>/<publicKey>/webhook`. */
   inboundWebhook: boolean;

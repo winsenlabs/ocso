@@ -96,18 +96,13 @@ export async function WebhooksTab({ session, params }: { session: Session; param
         title="Webhooks"
         count={rows.length}
         desc="inbound channel callbacks and outbound event delivery"
-        actions={
-          <Link className="btn tiny" href={connectionsHref({ tab: 'webhooks', dialog: 'webhook-new' })} scroll={false}>
-            Add endpoint
-          </Link>
-        }
       />
       <DataTable
         label="Webhooks"
         template="minmax(0,1.2fr) minmax(0,1fr) 88px 84px 84px minmax(180px,1.1fr)"
         rows={rows}
         rowKey={(r) => r.key}
-        empty={<EmptyState title="No webhook endpoints yet">Add an outbound endpoint to receive signed OCSO events; channel callbacks appear once a channel exists.</EmptyState>}
+        empty={<EmptyState title="No webhook endpoints yet">Use “Add endpoint” above to have OCSO post signed events (conversation, escalation, approval…) to your systems. Channel callbacks appear here once a channel exists.</EmptyState>}
         columns={[
           {
             key: 'endpoint',

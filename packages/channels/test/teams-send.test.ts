@@ -314,6 +314,19 @@ describe('Teams connection check', () => {
       ['Messaging endpoint', false],
     ]);
     expect(JSON.stringify(result)).not.toContain(APP_PASSWORD);
+    // The likely cause is named and linked to the troubleshooting entry.
+    expect(result.checks[0]).toMatchObject({ help: 'secret-invalid', detail: expect.stringContaining('Likely cause: the client secret is wrong') });
+    expect(result.checks[2]).toMatchObject({ help: 'endpoint-not-https' });
+  });
+
+  it('explains an app missing from the tenant, an expired secret and other refusals', async () => {
+    const refuse = (code: string) => setup({ token: () => json({ error: 'unauthorized_client', error_description: `AADSTS${code}: refused` }, 400) }).adapter;
+    const single = (await refuse('700016').checkConnection(mtConfig())).checks[0];
+    expect(single).toMatchObject({ ok: false, help: 'unauthorized', detail: expect.stringContaining(`no app ${APP_ID} in tenant ${TENANT}`) });
+    const multi = (await refuse('700016').checkConnection(mtConfig({ appType: 'MultiTenant', tenantId: undefined }))).checks[0];
+    expect(multi?.detail).toContain('if the Azure Bot is Single Tenant, set App type to SingleTenant');
+    expect((await refuse('7000222').checkConnection(mtConfig())).checks[0]).toMatchObject({ help: 'secret-expired' });
+    expect((await refuse('50000').checkConnection(mtConfig())).checks[0]).toMatchObject({ help: 'unauthorized', detail: expect.stringContaining('App type (SingleTenant)') });
   });
 
   it('reports an invalid configuration as one failed check', async () => {

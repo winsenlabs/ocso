@@ -15,6 +15,10 @@ For React and React Native components see
 npm install @winsendotai/ocso-chat
 ```
 
+> **Not on npm yet.** OCSO is pre-1.0 and this package has not been published. Until it is, build it
+> from the [OCSO repository](https://github.com/winsenlabs/ocso) with `pnpm --filter @winsendotai/ocso-chat build`
+> and install the tarball from `pnpm --filter @winsendotai/ocso-chat pack`.
+
 ## Quick start
 
 ```ts

@@ -62,19 +62,12 @@ export async function ChannelsTab({ session, params }: { session: Session; param
         title="Channels"
         count={channels.length}
         desc={`adapters normalise transport into OCSO interactions · available here: ${kinds.map((k) => kindLabel(k.kind)).join(', ') || 'none'}`}
-        actions={
-          canManage && kinds.length ? (
-            <Link className="btn tiny" href={connectionsHref({ tab: 'channels', dialog: 'channel-new' })} scroll={false}>
-              Add channel
-            </Link>
-          ) : null
-        }
       />
       {channels.length === 0 ? (
         <EmptyState title="No channels configured yet">
           {canManage
-            ? `Add a channel: ${kinds.map((k) => k.label ?? k.kind).join(', ') || 'no channel kinds are installed'}. Each asks for exactly what its provider needs.`
-            : 'A Tech admin adds channels; each appears here with its status, inbound path, credentials (by name) and default agent.'}
+            ? `A channel is where customers reach your virtual agents. Use “Add channel” above: ${kinds.map((k) => k.label ?? k.kind).join(', ') || 'no channel kinds are installed'}. Each asks for exactly what its provider needs.`
+            : 'A channel is where customers reach your virtual agents. A Tech admin adds them; each appears here with its status, inbound path, credentials (by name) and default agent.'}
         </EmptyState>
       ) : (
         <div className="g g3 conn-grid" role="list" aria-label="Channels">

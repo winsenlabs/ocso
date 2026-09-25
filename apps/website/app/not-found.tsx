@@ -1,24 +1,16 @@
 import type { Metadata } from 'next';
-import { Footer } from '@/components/footer';
-import { Header } from '@/components/header';
 
 export const metadata: Metadata = { title: 'Page not found — OCSO', robots: { index: false } };
 
 export default function NotFound() {
   return (
-    <>
-      <Header />
-      <main id="main" className="notfound wrap">
-        <p className="eyebrow">404</p>
-        <h1>This route has no queue.</h1>
-        <p className="lede">The page you asked for does not exist. The rest of OCSO is one page away.</p>
-        <p>
-          <a className="btn btn-primary" href="/">
-            Back to the home page
-          </a>
-        </p>
-      </main>
-      <Footer />
-    </>
+    <section className="mx-auto max-w-3xl px-6 py-32 text-center">
+      <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">404</p>
+      <h1 className="mt-4 text-5xl font-medium tracking-[-0.03em] text-fg">This route has no queue.</h1>
+      <p className="mt-4 text-lg text-fg/60">The page you asked for does not exist. Everything about OCSO is on one page.</p>
+      <a href="/" className="mt-10 inline-block rounded-full bg-fg px-6 py-3 font-medium text-bg hover:bg-fg/90">
+        Back to the home page
+      </a>
+    </section>
   );
 }

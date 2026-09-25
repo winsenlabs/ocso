@@ -142,7 +142,7 @@ function ProfileDialogBody({ providers, profile, fallbackCategories, canTest, ca
   }
   return (
     <Modal
-      title={profile ? `Edit ${profile.name}` : 'New logical model profile'}
+      title={profile ? `Edit ${profile.name}` : 'New model profile'}
       sub="agents reference this name, not the model id"
       onClose={close}
       maxWidth={760}

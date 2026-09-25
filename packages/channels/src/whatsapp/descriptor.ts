@@ -36,13 +36,50 @@ export const WHATSAPP_DESCRIPTOR: ChannelKindDescriptor = {
     },
   ],
   identitySetting: { label: 'number id', keys: ['phoneNumberId'] },
-  setupSteps: [
-    'In the Meta app dashboard open WhatsApp → Configuration → Webhook and choose Edit.',
-    'Paste the webhook URL above as the Callback URL.',
-    'Enter the same webhook verify token you saved on this channel, then Verify and save — OCSO answers Meta’s challenge.',
-    'Subscribe the webhook to the messages field (it carries delivery statuses too) and to message_template_status_update (template review results).',
-    'For message templates (the only way to reach a customer 24 hours after their last message) set the WhatsApp Business Account id on this channel; the access token needs whatsapp_business_management.',
-    'Send a test message to the business number; the channel card shows the last inbound time.',
+  setupGuide: [
+    {
+      title: 'Save the channel in OCSO',
+      body: 'Enter the phone number id, the access token, the app secret and a webhook verify token below (Generate makes a random one), and save. The webhook URL above answers Meta only for this channel.',
+      items: [
+        'Phone number id: WhatsApp → API Setup in the Meta app dashboard.',
+        'Access token: a system-user token (Business Settings → System users) with whatsapp_business_messaging, and whatsapp_business_management for message templates.',
+        'App secret: App settings → Basic → App secret.',
+      ],
+      form: true,
+    },
+    {
+      title: 'Point Meta’s webhook at OCSO',
+      body: 'In the Meta app dashboard open WhatsApp → Configuration → Webhook and choose Edit. Paste the webhook URL as the Callback URL and the same verify token you saved here, then Verify and save. OCSO answers Meta’s challenge.',
+      values: [{ label: 'Callback URL', value: '{{webhookUrl}}' }],
+      links: [{ label: 'Meta for Developers: your apps', href: 'https://developers.facebook.com/apps' }],
+      check: 'Meta accepts the Callback URL without an error.',
+    },
+    {
+      title: 'Subscribe to the webhook fields',
+      body: 'Under Webhook fields subscribe to:',
+      items: ['messages (incoming messages and delivery statuses)', 'message_template_status_update (template review results)'],
+    },
+    {
+      title: 'Set up message templates (optional)',
+      body: 'Templates are the only way to reach a customer 24 hours after their last message. Set the WhatsApp Business Account id on this channel; the access token needs whatsapp_business_management.',
+    },
+    {
+      title: 'Test',
+      body: 'Activate the channel (a second person approves it), then send a message to the business number.',
+      check: 'The channel card shows the last inbound time.',
+    },
+  ],
+  troubleshooting: [
+    {
+      id: 'verify-failed',
+      problem: 'Meta says the callback URL or verify token could not be validated',
+      fix: 'Save the channel first, then paste exactly the same verify token in Meta. The Callback URL must be the https webhook URL shown here (OCSO_PUBLIC_URL must be an https origin Meta can reach).',
+    },
+    {
+      id: 'signature-rejected',
+      problem: 'Messages never arrive although the webhook verified',
+      fix: 'OCSO checks every delivery with the app secret. Paste the App secret of the same Meta app whose webhook you configured, and check that the messages field is subscribed.',
+    },
   ],
   inboundWebhook: true,
   webhookSegment: 'whatsapp',

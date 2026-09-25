@@ -20,7 +20,7 @@ body:
       label: Steps to reproduce
       description: The smallest set of steps. Say whether the demo seed (`OCSO_DEMO_SEED=true`) reproduces it.
       placeholder: |
-        1. Sign in as a CS Lead
+        1. Sign in as a Head
         2. Open ...
         3. ...
     validations:
@@ -32,13 +32,15 @@ body:
       options:
         - Conversations, handoff or CS workspace
         - Virtual agents or prompts
-        - Channels (WhatsApp, web chat)
+        - Channels (WhatsApp, web chat, Slack, Microsoft Teams)
         - Model providers or profiles
         - MCP tools
         - Sign-in, users, teams or roles
+        - Approvals (maker–checker) or audit
         - Alerts, telemetry or analytics
         - Ask OCSO (internal agent)
-        - Workers, queues or scaling
+        - Routing, queues or SLA
+        - Workers or scaling
         - Deployment (Docker Compose, TLS overlay, Terraform)
         - Documentation
         - Other
@@ -69,10 +71,11 @@ body:
       label: Role of the signed-in user, if relevant
       options:
         - Not relevant
-        - Platform Tech Admin
-        - CS Lead
-        - CS Exec
-        - Customer (web chat or WhatsApp)
+        - Tech
+        - Head
+        - Lead
+        - Service
+        - Customer (web chat, WhatsApp, Slack or Teams)
   - type: textarea
     id: logs
     attributes:

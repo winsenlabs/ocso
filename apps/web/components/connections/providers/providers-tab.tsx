@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { Permission } from '@ocso/auth';
 import { ErrorCategory, RETRIABLE_CATEGORIES } from '@ocso/domain';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -38,7 +37,7 @@ function formModel(p: Provider): ProviderFormModel {
   };
 }
 
-/** Model providers tab: provider cards, logical model profiles, pricing, and their URL-driven dialogs. */
+/** Models (Integrations): provider cards, model profiles, pricing, and their URL-driven dialogs. "Add provider" is the page header action. */
 export async function ProvidersTab({ session, params }: { session: Session; params: Params }) {
   const canProviders = hasPermission(session, Permission.PROVIDERS_MANAGE);
   const canProfiles = hasPermission(session, Permission.MODEL_PROFILES_MANAGE);
@@ -73,14 +72,7 @@ export async function ProvidersTab({ session, params }: { session: Session; para
       <SecHead
         title="Model providers"
         count={`${providers.length} configured · ${kinds.length} kinds available`}
-        desc="credentials are write-only and stored by reference"
-        actions={
-          canProviders ? (
-            <Link className="btn tiny accent" href={connectionsHref({ tab: 'providers', dialog: 'provider-new' })} scroll={false}>
-              Add provider
-            </Link>
-          ) : null
-        }
+        desc={canProviders ? 'the services OCSO calls models through · Configure a kind below or use “Add provider”' : 'the services OCSO calls models through · a Tech admin configures them'}
       />
       <ProviderGrid providers={providers} kinds={kinds} canManage={canProviders} />
       <ProfilesSection profiles={profiles} canManage={canProfiles} hasProviders={providers.length > 0} />
@@ -108,8 +100,8 @@ export async function ProvidersTab({ session, params }: { session: Session; para
             closeHref={closeHref}
           />
         ) : (
-          <RoutedModal title="New logical model profile" closeHref={closeHref} maxWidth={520}>
-            <EmptyState title="Configure a model provider first">A profile points at a provider’s model or deployment. Add a provider, then create the profile.</EmptyState>
+          <RoutedModal title="New model profile" closeHref={closeHref} maxWidth={520}>
+            <EmptyState title="Add a model provider first">A model profile points at one of a provider’s models. Add a provider on this page, then create the profile your agents will run on.</EmptyState>
           </RoutedModal>
         )
       ) : null}
