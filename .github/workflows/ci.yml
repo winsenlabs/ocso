@@ -155,6 +155,14 @@ jobs:
         run: pnpm turbo run build --filter=@ocso/api... --filter=@ocso/worker...
       - name: Install Chromium for Playwright
         run: pnpm --filter @ocso/web exec playwright install --with-deps chromium
+      # Specs dump the database with pg_dump, which refuses a newer server: match the postgres:18 service.
+      - name: Install the PostgreSQL 18 client
+        run: |
+          sudo apt-get install -y --no-install-recommends postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y --no-install-recommends postgresql-client-18
+          echo /usr/lib/postgresql/18/bin >> "$GITHUB_PATH"
+          /usr/lib/postgresql/18/bin/pg_dump --version
       # Each spec is one serial story from a fresh deployment (first-run setup onward), so each
       # gets its own database; the web build from the first spec is reused by the rest.
       - name: Playwright (one fresh database per spec)
