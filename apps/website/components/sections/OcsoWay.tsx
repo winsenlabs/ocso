@@ -30,9 +30,9 @@ export function OcsoWay() {
         lede="Every customer takes the same readable path, whichever channel they write on. AI agents and your people work the same conversations, and hand them to each other in both directions."
       />
 
-      <ol className="mt-14 grid gap-3 md:grid-cols-4">
+      <ol className="mt-14 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {STAGES.map((s, i) => (
-          <li key={s.title} className="relative rounded-2xl border border-fg/10 bg-fg/[0.02] p-5">
+          <li key={s.title} className="relative min-w-0 rounded-2xl border border-fg/10 bg-fg/[0.02] p-5">
             <p className="font-mono text-xs uppercase tracking-[0.18em] text-accent">
               {String(i + 1).padStart(2, '0')} · {s.title}
             </p>
@@ -45,7 +45,7 @@ export function OcsoWay() {
             </ul>
             <p className="mt-4 text-sm text-fg/65">{s.body}</p>
             {i < STAGES.length - 1 && (
-              <span aria-hidden className="absolute -right-3 top-1/2 z-10 hidden size-6 -translate-y-1/2 place-items-center rounded-full border border-fg/15 bg-bg text-xs text-fg/60 md:grid">
+              <span aria-hidden className="absolute -right-3 top-1/2 z-10 hidden size-6 -translate-y-1/2 place-items-center rounded-full border border-fg/15 bg-bg text-xs text-fg/60 lg:grid">
                 →
               </span>
             )}

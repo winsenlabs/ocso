@@ -16,7 +16,9 @@ export default function Home() {
           <>
             <span className="whitespace-nowrap">Customer success,</span>
             <br />
-            <span className="underline decoration-accent decoration-[3px] underline-offset-[10px] md:decoration-4 md:underline-offset-[14px]">rethought</span> for the AI age.
+            <span className="whitespace-nowrap">
+              <span className="underline decoration-accent decoration-[3px] underline-offset-[10px] md:decoration-4 md:underline-offset-[14px]">rethought</span> for the AI age.
+            </span>
           </>
         }
         stats={[
