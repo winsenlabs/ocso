@@ -24,7 +24,7 @@ export function MobileMenu() {
   const close = () => setOpen(false);
   const item = 'border-b border-fg/10 py-4 text-2xl font-medium text-fg';
   return (
-    <div className="md:hidden">
+    <div className="lg:hidden">
       <button
         type="button"
         aria-expanded={open}
@@ -39,7 +39,7 @@ export function MobileMenu() {
       </button>
       {open &&
         createPortal(
-          <div id="mobile-menu" role="dialog" aria-modal="true" aria-label="Menu" className="fixed inset-0 z-[100] flex flex-col overflow-y-auto bg-bg px-5 pb-10 pt-5 text-left md:hidden">
+          <div id="mobile-menu" role="dialog" aria-modal="true" aria-label="Menu" className="fixed inset-0 z-[100] flex flex-col overflow-y-auto bg-bg px-5 pb-10 pt-5 text-left lg:hidden">
             <div className="flex items-center justify-between">
               <a href="#top" onClick={close} className="flex items-center gap-2 font-semibold text-fg">
                 <ThemedMark className="size-8" />

@@ -61,7 +61,7 @@ export function Governance() {
             Security and governance, in detail →
           </a>
         </div>
-        <pre className="on-dark overflow-x-auto rounded-2xl bg-[#0b1024] p-5 font-mono text-[13px] leading-relaxed text-fg/85" aria-label="Command: verify the audit chain">
+        <pre className="on-dark overflow-x-auto max-sm:whitespace-pre-wrap max-sm:break-all rounded-2xl bg-[#0b1024] p-5 font-mono text-[13px] leading-relaxed text-fg/85" aria-label="Command: verify the audit chain">
           <code>
             <span className="text-fg/40">$ </span>
             {VERIFY}

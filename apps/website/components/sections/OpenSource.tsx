@@ -55,21 +55,21 @@ export function OpenSource() {
         ))}
       </div>
 
-      <div id="self-host" className="mt-4 scroll-mt-24 grid gap-4 lg:grid-cols-[1.3fr_1fr]">
-        <div className="rounded-3xl border border-fg/10 p-7">
+      <div id="self-host" className="mt-4 scroll-mt-24 grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+        <div className="min-w-0 rounded-3xl border border-fg/10 p-7">
           <p className="text-lg font-medium text-fg">Docker Compose, on your own server</p>
           <p className="mt-2 text-[15px] text-fg/60">
             The supported deployment: one host with four vCPU and 8 GB of RAM for a pilot, and a Caddy overlay for HTTPS. Single-tenant: one
             deployment belongs to one organization.
           </p>
-          <pre className="on-dark mt-5 overflow-x-auto rounded-2xl bg-[#0b1024] p-5 font-mono text-[13px] leading-relaxed text-fg/85" aria-label="Commands: start OCSO with Docker Compose">
+          <pre className="on-dark mt-5 overflow-x-auto max-sm:whitespace-pre-wrap max-sm:break-all rounded-2xl bg-[#0b1024] p-5 font-mono text-[13px] leading-relaxed text-fg/85" aria-label="Commands: start OCSO with Docker Compose">
             <code>{COMPOSE}</code>
           </pre>
           <a href={repo('docs/guides/deploy/docker-compose.md')} className="mt-5 inline-block text-sm text-accent hover:underline">
             Compose operations guide →
           </a>
         </div>
-        <div className="flex flex-col gap-4">
+        <div className="flex min-w-0 flex-col gap-4">
           <div className="rounded-3xl border border-fg/10 p-7">
             <p className="text-lg font-medium text-fg">AWS</p>
             <p className="mt-2 text-[15px] text-fg/60">Terraform for ECS Fargate with S3, SQS and Secrets Manager drivers. Validated, not yet applied to a real account: a starting point.</p>

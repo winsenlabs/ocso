@@ -10,7 +10,7 @@ export function Nav() {
         <Mark tone="on-dark" />
         <span>OCSO</span>
       </a>
-      <div className="hidden items-center gap-7 text-sm text-fg/80 md:flex">
+      <div className="hidden items-center gap-7 whitespace-nowrap text-sm text-fg/80 lg:flex">
         {SECTIONS.map((s) => (
           <a key={s.id} href={`#${s.id}`} className="hover:text-fg">
             {s.label}

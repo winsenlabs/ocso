@@ -8,7 +8,7 @@ const link = 'mt-2.5 block text-left text-fg/65 transition hover:text-fg';
 export function Footer() {
   return (
     <footer className="border-t border-fg/10">
-      <div className="mx-auto grid max-w-6xl gap-10 px-6 py-14 sm:grid-cols-2 md:grid-cols-5">
+      <div className="mx-auto grid max-w-6xl gap-10 px-6 py-14 sm:grid-cols-2 lg:grid-cols-5">
         <div className="sm:col-span-2">
           <a href="#top" className="flex items-center gap-2.5 font-semibold tracking-[-0.02em] text-fg">
             <ThemedMark className="size-8" />

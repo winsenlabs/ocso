@@ -19,7 +19,7 @@ export function Hero({ eyebrow, title, children, stats }: { eyebrow: string; tit
               <span className="whitespace-nowrap text-[10.5px] font-semibold uppercase tracking-[0.12em] text-white sm:text-xs sm:tracking-[0.2em] md:text-sm">{eyebrow}</span>
             </span>
           </p>
-          <h1 className="max-w-5xl text-balance text-[2.4rem] font-medium leading-[1.04] tracking-[-0.035em] text-fg min-[400px]:text-[2.6rem] sm:text-5xl md:text-7xl">{title}</h1>
+          <h1 className="max-w-5xl text-balance text-[clamp(1.5rem,7.8vw,2.6rem)] font-medium leading-[1.04] tracking-[-0.035em] text-fg sm:text-5xl md:text-6xl lg:text-7xl">{title}</h1>
           {children && <div className="mt-7 max-w-3xl font-mono text-[14px] leading-relaxed text-fg/75 md:text-[15px] lg:max-w-[62rem] lg:text-[14.5px]">{children}</div>}
           <div className="mt-12">
             <CtaPair />
