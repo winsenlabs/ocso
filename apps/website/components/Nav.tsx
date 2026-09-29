@@ -1,31 +1,27 @@
-import { REPO_URL, SECTIONS } from '@/content/links';
+import { REPO_URL } from '@/content/links';
 import { GitHubIcon } from './Ctas';
 import { Mark } from './Mark';
-import { MobileMenu } from './MobileMenu';
 
+/** The top bar: the logo, the thesis, the repository and the demo call to action. Nothing else. */
 export function Nav() {
   return (
-    <nav aria-label="Main" className="relative z-50 mx-auto flex w-full max-w-5xl items-center justify-between rounded-full border border-fg/10 bg-black/40 py-2.5 pl-3 pr-2.5 backdrop-blur-xl md:px-5 md:py-3">
+    <nav aria-label="Main" className="relative z-50 mx-auto flex w-full max-w-5xl items-center justify-between gap-3 rounded-full border border-fg/10 bg-black/40 py-2.5 pl-3 pr-2.5 backdrop-blur-xl md:px-5 md:py-3">
       <a href="#top" className="flex shrink-0 items-center gap-2 whitespace-nowrap font-semibold tracking-[-0.02em] text-fg">
         <Mark tone="on-dark" />
-        <span>OCSO</span>
+        <span className="max-[359px]:sr-only">OCSO</span>
       </a>
-      <div className="hidden items-center gap-7 whitespace-nowrap text-sm text-fg/80 lg:flex">
-        {SECTIONS.map((s) => (
-          <a key={s.id} href={`#${s.id}`} className="hover:text-fg">
-            {s.label}
-          </a>
-        ))}
-        <a href={REPO_URL} className="inline-flex items-center gap-1.5 hover:text-fg">
-          <GitHubIcon className="size-3.5" />
-          GitHub
+      <div className="flex items-center gap-3 whitespace-nowrap text-sm text-fg/80 min-[380px]:gap-4 sm:gap-6">
+        <a href="#thesis" className="hover:text-fg">
+          Our thesis
         </a>
-      </div>
-      <div className="flex items-center gap-2">
-        <a href="#demo" className="whitespace-nowrap rounded-full bg-fg px-3.5 py-2 text-sm font-medium text-bg hover:bg-fg/90 md:px-4">
-          Request a demo
+        <a href={REPO_URL} aria-label="GitHub" className="inline-flex items-center gap-1.5 hover:text-fg">
+          <GitHubIcon className="size-4 sm:size-3.5" />
+          <span className="hidden sm:inline">GitHub</span>
         </a>
-        <MobileMenu />
+        <a href="#demo" className="rounded-full bg-fg px-3.5 py-2 text-sm font-medium text-bg hover:bg-fg/90 md:px-4">
+          <span className="sm:hidden">Demo</span>
+          <span className="hidden sm:inline">Request a demo</span>
+        </a>
       </div>
     </nav>
   );
