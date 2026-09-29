@@ -36,22 +36,24 @@ export function BuildWithYou() {
                 </li>
               ))}
             </ol>
-            <div className="on-dark mt-12 flex flex-col items-start gap-4 rounded-2xl bg-[#0b1024] p-6 sm:flex-row sm:items-center sm:justify-between">
-              <p className="max-w-xs text-sm text-fg/70">Tell us about your customer success team, and we’ll set up a walkthrough.</p>
-              <div className="flex flex-col items-start gap-3">
-                <RequestDemo />
-                <a href={WINSEN_URL} className="text-sm text-fg/70 hover:text-fg">
-                  About Winsen Labs <span aria-hidden>→</span>
-                </a>
+          </div>
+          <div className="w-full">
+            <figure>
+              <div className="overflow-hidden rounded-2xl border border-fg/10 bg-white shadow-[0_30px_80px_-30px_rgba(61,93,207,0.55)]">
+                <img src={SHOTS.workspace.src} alt={SHOTS.workspace.alt} width={SHOTS.workspace.width} height={SHOTS.workspace.height} loading="lazy" decoding="async" className="block h-auto w-full" />
               </div>
+              <figcaption className="mt-3 text-center text-xs text-fg/50">
+                Your team&rsquo;s view: the AI hands over, a named colleague picks up the same conversation with the AI&rsquo;s summary. Demo data.
+              </figcaption>
+            </figure>
+            <div className="on-dark mt-6 flex flex-col items-start gap-4 rounded-2xl bg-[#0b1024] p-6">
+              <p className="text-sm text-fg/70">Tell us about your customer success team, and we’ll set up a walkthrough.</p>
+              <RequestDemo />
+              <a href={WINSEN_URL} className="text-sm text-fg/70 hover:text-fg">
+                About Winsen Labs <span aria-hidden>→</span>
+              </a>
             </div>
           </div>
-          <figure className="w-full">
-            <div className="overflow-hidden rounded-2xl border border-fg/10 bg-white shadow-[0_30px_80px_-30px_rgba(61,93,207,0.55)]">
-              <img src={SHOTS.workspace.src} alt={SHOTS.workspace.alt} width={SHOTS.workspace.width} height={SHOTS.workspace.height} loading="lazy" decoding="async" className="block h-auto w-full" />
-            </div>
-            <figcaption className="mt-3 text-center text-xs text-fg/50">Your team&rsquo;s view: the AI hands over, a named colleague picks up the same conversation with the AI&rsquo;s summary. Demo data.</figcaption>
-          </figure>
         </div>
       </div>
     </section>

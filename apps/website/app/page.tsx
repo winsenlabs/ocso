@@ -5,6 +5,7 @@ import { Governance } from '@/components/sections/Governance';
 import { OcsoWay } from '@/components/sections/OcsoWay';
 import { OpenSource } from '@/components/sections/OpenSource';
 import { Problem } from '@/components/sections/Problem';
+import { Thesis } from '@/components/sections/Thesis';
 import { NAME } from '@/content/links';
 
 export default function Home() {
@@ -33,6 +34,7 @@ export default function Home() {
       </Hero>
       <BuildWithYou />
       <Problem />
+      <Thesis />
       <OcsoWay />
       <Governance />
       <OpenSource />
