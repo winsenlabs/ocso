@@ -385,6 +385,9 @@ services:
         API_URL: http://api:4000
         # Absolute URL for the Open Graph card on pre-rendered pages (link previews); optional.
         OCSO_PUBLIC_URL: ${OCSO_PUBLIC_URL:-}
+        # Optional hosted-demo analytics (PostHog); empty = off. See .env.example.
+        NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: ${NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN:-}
+        NEXT_PUBLIC_POSTHOG_HOST: ${NEXT_PUBLIC_POSTHOG_HOST:-}
     environment:
       NODE_ENV: production
       API_URL: http://api:4000

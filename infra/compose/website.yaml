@@ -26,6 +26,9 @@ services:
       args:
         APP_VERSION: ${OCSO_VERSION:-local}
         OCSO_SITE_URL: ${OCSO_SITE_URL:-https://ocso.winsenlabs.dev}
+        # Optional analytics, shown behind a cookie banner; empty = off.
+        NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: ${NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN:-}
+        NEXT_PUBLIC_POSTHOG_HOST: ${NEXT_PUBLIC_POSTHOG_HOST:-}
     init: true
     read_only: true
     tmpfs:
