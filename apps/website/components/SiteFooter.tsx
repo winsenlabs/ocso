@@ -65,7 +65,7 @@ export function Footer() {
         <p>
           © {new Date().getFullYear()} Winsen Labs. OCSO is pre-1.0: APIs, the schema and plugin contracts can still change.
           <br />
-          This site sets no cookies and runs no analytics. Geist is used under the SIL Open Font License 1.1.
+          This site sets no cookies and runs no analytics; the film loads from YouTube only when you press play. Geist is used under the SIL Open Font License 1.1.
         </p>
         <ThemeSwitch />
       </div>

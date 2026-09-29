@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { CtaPair } from './Ctas';
+import { Film } from './Film';
 import { FluidBackground } from './FluidBackground';
 import { Nav } from './Nav';
 
@@ -24,6 +25,7 @@ export function Hero({ eyebrow, title, children, stats }: { eyebrow: string; tit
           <div className="mt-12">
             <CtaPair />
           </div>
+          <Film className="mt-12 md:mt-16" />
         </div>
         {stats && (
           <dl className="relative z-10 mx-auto mt-12 w-fit space-y-2 text-center font-mono text-xs md:mr-6 md:ml-auto md:mt-6 md:text-right md:text-sm">
