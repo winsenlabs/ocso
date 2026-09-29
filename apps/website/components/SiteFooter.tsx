@@ -10,7 +10,7 @@ export function Footer() {
     <footer className="border-t border-fg/10">
       <div className="mx-auto grid max-w-6xl gap-10 px-6 py-14 sm:grid-cols-2 lg:grid-cols-5">
         <div className="sm:col-span-2">
-          <a href="#top" className="flex items-center gap-2.5 font-semibold tracking-[-0.02em] text-fg">
+          <a href="/" className="flex items-center gap-2.5 font-semibold tracking-[-0.02em] text-fg">
             <ThemedMark className="size-8" />
             OCSO
           </a>
@@ -22,11 +22,14 @@ export function Footer() {
         <div className="text-sm">
           <p className="text-fg/40">On this page</p>
           {SECTIONS.map((s) => (
-            <a key={s.id} href={`#${s.id}`} className={link}>
+            <a key={s.id} href={`/#${s.id}`} className={link}>
               {s.label}
             </a>
           ))}
-          <a href="#demo" className={link}>
+          <a href="/thesis" className={link}>
+            Our thesis
+          </a>
+          <a href="/#demo" className={link}>
             Request a demo
           </a>
         </div>

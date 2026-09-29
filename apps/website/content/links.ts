@@ -22,7 +22,6 @@ export const SITE_DESCRIPTION =
 /** In-page sections, in order (navigation and anchors). */
 export const SECTIONS = [
   { id: 'problem', label: 'The problem' },
-  { id: 'thesis', label: 'Our thesis' },
   { id: 'the-ocso-way', label: 'The OCSO way' },
   { id: 'governance', label: 'Governance' },
   { id: 'open-source', label: 'Open source' },

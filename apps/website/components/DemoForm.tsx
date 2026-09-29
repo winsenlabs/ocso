@@ -44,7 +44,7 @@ function DemoSheet() {
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
-      const link = e.target instanceof Element ? e.target.closest('a[href="#demo"]') : null;
+      const link = e.target instanceof Element ? e.target.closest('a[href="#demo"], a[href="/#demo"]') : null;
       if (!link || e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey) return;
       e.preventDefault();
       show();

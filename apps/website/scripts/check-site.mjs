@@ -22,7 +22,7 @@ need((text.match(/<h1[\s>]/g) ?? []).length === 1, 'the page must have exactly o
 need(text.includes('Open Customer Service Orchestration'), 'the name "Open Customer Service Orchestration" must appear');
 need(!/One Customer Success Orchestrator/.test(html), 'the old name "One Customer Success Orchestrator" must not appear');
 need(!/customer success/i.test(text), 'the site says "customer service", never "customer success"');
-need(/<a[^>]*href="#demo"[^>]*>(?:(?!<\/a>)[\s\S])*Request a demo/.test(text), 'call to action "Request a demo" → #demo is missing');
+need(/<a[^>]*href="\/?#demo"[^>]*>(?:(?!<\/a>)[\s\S])*Request a demo/.test(text), 'call to action "Request a demo" → #demo is missing');
 need(/<a[^>]*href="https:\/\/github\.com\/winsenlabs\/ocso"[^>]*>(?:(?!<\/a>)[\s\S])*View on GitHub/.test(text), 'call to action "View on GitHub" is missing');
 need(/href="https:\/\/winsenlabs\.com"/.test(text), 'the link to https://winsenlabs.com is missing');
 need(!/demo\.ocso\.winsenlabs\.dev/.test(html), 'there is no self-serve demo: no link to demo.ocso.winsenlabs.dev');
