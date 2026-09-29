@@ -26,3 +26,26 @@ export const SECTIONS = [
   { id: 'governance', label: 'Governance' },
   { id: 'open-source', label: 'Open source' },
 ] as const;
+
+/** The 60-second film, on YouTube. The site shows its own poster and only loads YouTube when someone presses play. */
+export const FILM = {
+  id: 'ZP__hoKtt68',
+  title: 'OCSO in 60 seconds',
+  url: 'https://youtu.be/ZP__hoKtt68',
+  embed: 'https://www.youtube-nocookie.com/embed/ZP__hoKtt68',
+  poster: '/video/ocso-film-poster.webp',
+} as const;
+
+/**
+ * What link previews get: the film as og:video (Facebook, LinkedIn, Slack, Discord and Telegram can play or unfurl
+ * it) and an X player card. WhatsApp and iMessage show the share image only; it carries a play button.
+ */
+export const FILM_SHARE = {
+  openGraph: {
+    images: [{ url: '/opengraph-image.jpg', width: 1200, height: 630, alt: 'OCSO in 60 seconds: a play button over the plugin core' }],
+    videos: [{ url: `https://www.youtube.com/embed/${FILM.id}`, secureUrl: `https://www.youtube.com/embed/${FILM.id}`, type: 'text/html', width: 1280, height: 720 }],
+  },
+  twitter: { card: 'player' as const, images: ['/opengraph-image.jpg'] },
+  // Written by hand: Next's player descriptor insists on a raw stream URL, and YouTube has none to give.
+  other: { 'twitter:player': `https://www.youtube.com/embed/${FILM.id}`, 'twitter:player:width': '1280', 'twitter:player:height': '720' },
+};

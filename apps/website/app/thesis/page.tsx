@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Hero } from '@/components/HeroSection';
 import { ThesisBody } from '@/components/sections/Thesis';
 import { RequestDemo } from '@/components/Ctas';
+import { FILM_SHARE } from '@/content/links';
 
 const TITLE = 'Our thesis — OCSO';
 const DESCRIPTION =
@@ -11,7 +12,9 @@ export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: '/thesis' },
-  openGraph: { title: TITLE, description: DESCRIPTION, type: 'article', url: '/thesis' },
+  openGraph: { title: TITLE, description: DESCRIPTION, type: 'article', url: '/thesis', ...FILM_SHARE.openGraph },
+  twitter: { title: TITLE, description: DESCRIPTION, ...FILM_SHARE.twitter },
+  other: FILM_SHARE.other,
 };
 
 export default function ThesisPage() {

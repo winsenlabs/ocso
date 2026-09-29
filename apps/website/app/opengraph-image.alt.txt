@@ -1,0 +1,1 @@
+OCSO in 60 seconds: a play button over the plugin core, where channels, AI models, agent tools, alerts, email and infrastructure plug into a small core.

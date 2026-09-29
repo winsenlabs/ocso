@@ -3,7 +3,7 @@ import localFont from 'next/font/local';
 import type { ReactNode } from 'react';
 import { Footer } from '@/components/SiteFooter';
 import { themeScript } from '@/components/ThemeSwitch';
-import { NAME, SITE_DESCRIPTION, SITE_TITLE, siteUrl } from '@/content/links';
+import { FILM_SHARE, NAME, SITE_DESCRIPTION, SITE_TITLE, siteUrl } from '@/content/links';
 import './globals.css';
 
 // Geist, self-hosted (SIL OFL 1.1, © Vercel, via @fontsource-variable): builds need no network and the site makes
@@ -28,8 +28,9 @@ export const metadata: Metadata = {
   description: SITE_DESCRIPTION,
   applicationName: 'OCSO',
   alternates: { canonical: '/' },
-  openGraph: { title: SITE_TITLE, description: SITE_DESCRIPTION, siteName: `OCSO, ${NAME}`, type: 'website', url: '/' },
-  twitter: { card: 'summary_large_image', title: SITE_TITLE, description: SITE_DESCRIPTION },
+  openGraph: { title: SITE_TITLE, description: SITE_DESCRIPTION, siteName: `OCSO, ${NAME}`, type: 'website', url: '/', ...FILM_SHARE.openGraph },
+  twitter: { title: SITE_TITLE, description: SITE_DESCRIPTION, ...FILM_SHARE.twitter },
+  other: FILM_SHARE.other,
 };
 
 export const viewport: Viewport = { width: 'device-width', initialScale: 1 };
