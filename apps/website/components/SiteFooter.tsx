@@ -1,4 +1,5 @@
 import { NAME, REPO_URL, SECTIONS, WINSEN_URL, helloEmail, repo } from '@/content/links';
+import { CookieSettings } from './Analytics';
 import { AskAi } from './AskAi';
 import { ThemedMark } from './Mark';
 import { ThemeSwitch } from './ThemeSwitch';
@@ -65,8 +66,9 @@ export function Footer() {
         <p>
           © {new Date().getFullYear()} Winsen Labs. OCSO is pre-1.0: APIs, the schema and plugin contracts can still change.
           <br />
-          This site sets no cookies and runs no analytics; the film loads from YouTube only when you press play. Geist is used under the SIL Open Font License 1.1.
+          Analytics (PostHog) and its cookies run only if you accept them; the film loads from YouTube only when you press play. Geist is used under the SIL Open Font License 1.1.
         </p>
+        <CookieSettings className="shrink-0 underline decoration-fg/30 underline-offset-4 hover:text-fg" />
         <ThemeSwitch />
       </div>
     </footer>

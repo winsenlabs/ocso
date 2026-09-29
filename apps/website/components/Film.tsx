@@ -4,8 +4,8 @@ import { useState } from 'react';
 import { FILM } from '@/content/links';
 
 /**
- * The 60-second film. Until someone presses play this is only our own poster, so the page still sets no cookies
- * and makes no third-party requests; pressing play loads YouTube's privacy-enhanced player.
+ * The 60-second film. Until someone presses play this is only our own poster, so it makes no third-party
+ * requests; pressing play loads YouTube's privacy-enhanced player.
  */
 export function Film({ className = '' }: { className?: string }) {
   const [playing, setPlaying] = useState(false);

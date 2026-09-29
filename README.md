@@ -30,6 +30,11 @@
 </p>
 
 <p align="center">
+  <a href="https://youtu.be/ZP__hoKtt68"><img src="docs/assets/ocso-film.jpg" alt="Watch OCSO in 60 seconds (opens YouTube)" width="900"></a><br/>
+  <sub>▶ <a href="https://youtu.be/ZP__hoKtt68">Watch OCSO in 60 seconds</a></sub>
+</p>
+
+<p align="center">
   <img src="docs/assets/screens/home-head.webp" alt="The OCSO home for a Head: what needs attention, live metrics, and the service flow from channel to router to queue to agent" width="900">
 </p>
 

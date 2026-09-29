@@ -12,7 +12,9 @@
         "!.next/cache/**"
       ],
       "env": [
-        "API_URL"
+        "API_URL",
+        "NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN",
+        "NEXT_PUBLIC_POSTHOG_HOST"
       ]
     },
     "typecheck": {

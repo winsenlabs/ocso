@@ -139,7 +139,7 @@ export function Form({ stepped, onDone }: { stepped: boolean; onDone?: () => voi
   }
 
   const visible = stepped ? [def.steps[step]!] : def.steps;
-  const note = 'Your answers are kept on this device until you send them. We use these details only to reply to you. No cookies, no analytics.';
+  const note = 'Your answers are kept on this device until you send them. We use these details only to reply to you.';
   return (
     <form onSubmit={submit} noValidate aria-label={def.title} className="relative flex flex-col">
       {stepped && (

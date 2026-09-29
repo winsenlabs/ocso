@@ -144,6 +144,11 @@ ENV API_URL=${API_URL}
 # Optional: the public origin, so pre-rendered pages link the Open Graph card absolutely.
 ARG OCSO_PUBLIC_URL=
 ENV OCSO_PUBLIC_URL=${OCSO_PUBLIC_URL}
+# Optional analytics for a hosted demo or site: off unless both are given (self-hosted builds send nothing).
+ARG NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN=
+ARG NEXT_PUBLIC_POSTHOG_HOST=
+ENV NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN=${NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN} \
+    NEXT_PUBLIC_POSTHOG_HOST=${NEXT_PUBLIC_POSTHOG_HOST}
 # apps/web has public/ (web manifest icons); create it so the runtime COPY is stable.
 # --env-mode=loose: turbo 2 runs tasks in strict env mode and would strip
 # API_URL (not declared in turbo.json), silently baking the localhost fallback
@@ -192,6 +197,11 @@ RUN cp -r /prune/json/. ./ && pnpm install --frozen-lockfile \
 # Canonical URLs, robots.txt, the sitemap and llms.txt are absolute: build for the domain it is served on.
 ARG OCSO_SITE_URL=https://ocso.winsenlabs.dev
 ENV OCSO_SITE_URL=${OCSO_SITE_URL}
+# Optional analytics for a hosted demo or site: off unless both are given (self-hosted builds send nothing).
+ARG NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN=
+ARG NEXT_PUBLIC_POSTHOG_HOST=
+ENV NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN=${NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN} \
+    NEXT_PUBLIC_POSTHOG_HOST=${NEXT_PUBLIC_POSTHOG_HOST}
 RUN turbo run build --filter=@ocso/website --env-mode=loose \
  && test -f apps/website/.next/standalone/apps/website/server.js
 

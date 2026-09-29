@@ -54,3 +54,4 @@ allowBuilds:
   protobufjs: false
   ssh2: false
   cpu-features: false
+  core-js: false

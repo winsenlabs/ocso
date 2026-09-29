@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import localFont from 'next/font/local';
 import type { ReactNode } from 'react';
+import { ProductAnalytics } from '@/components/ProductAnalytics';
 // Design system, in the order the mockups load it (design/*.dc.html), then app additions.
 import './styles/base.css';
 import './styles/one.css';
@@ -51,7 +52,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <ProductAnalytics />
+      </body>
     </html>
   );
 }

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import localFont from 'next/font/local';
 import type { ReactNode } from 'react';
+import { Analytics } from '@/components/Analytics';
 import { Footer } from '@/components/SiteFooter';
 import { themeScript } from '@/components/ThemeSwitch';
 import { FILM_SHARE, NAME, SITE_DESCRIPTION, SITE_TITLE, siteUrl } from '@/content/links';
@@ -49,6 +50,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           {children}
         </main>
         <Footer />
+        <Analytics />
       </body>
     </html>
   );
