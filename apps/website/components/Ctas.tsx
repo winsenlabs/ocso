@@ -21,7 +21,7 @@ export function GitHubIcon({ className = 'size-4' }: { className?: string }) {
 export function RequestDemo({ label = 'Request a demo' }: { label?: string }) {
   return (
     <a
-      href="#demo"
+      href="/#demo"
       className="group inline-flex items-center gap-2.5 rounded-full bg-white py-3.5 pl-6 pr-5 font-medium text-[#05070d] shadow-[0_0_0_1px_rgba(255,255,255,0.4),0_8px_30px_-6px_rgba(61,93,207,0.7)] transition duration-300 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.6),0_10px_40px_-4px_rgba(61,93,207,0.95)]"
     >
       {label}

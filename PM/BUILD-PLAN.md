@@ -1,6 +1,6 @@
 # OCSO Build Plan
 
-Living implementation plan for OCSO — Open Customer Success Orchestration.
+Living implementation plan for OCSO — Open Customer Service Orchestration.
 
 - **Spec sources:** `README.md`, `docs/README.md` … `docs/contributing/engineering-rules.md`, `design/*.dc.html` + `design/shared/*.css`.
 - **Architecture decisions:** `PM/ARCHITECTURE-DECISIONS.md` (ADR-NNN references below).

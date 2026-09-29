@@ -19,7 +19,7 @@ export function BuildWithYou() {
             <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Built with Winsen Labs</p>
             <h2 className="mt-4 max-w-2xl text-4xl font-medium tracking-[-0.03em] text-fg md:text-5xl">We’ll build this with you.</h2>
             <p className="mt-5 max-w-2xl text-lg text-fg/60">
-              OCSO is open source, and you can run it yourself. If you would rather rethink customer success with the people who build it,{' '}
+              OCSO is open source, and you can run it yourself. If you would rather rethink customer service with the people who build it,{' '}
               <a href={WINSEN_URL} className="text-fg underline decoration-accent decoration-2 underline-offset-4 hover:decoration-fg">
                 Winsen Labs
               </a>{' '}
@@ -47,7 +47,7 @@ export function BuildWithYou() {
               </figcaption>
             </figure>
             <div className="on-dark mt-6 flex flex-col items-start gap-4 rounded-2xl bg-[#0b1024] p-6">
-              <p className="text-sm text-fg/70">Tell us about your customer success team, and we’ll set up a walkthrough.</p>
+              <p className="text-sm text-fg/70">Tell us about your customer service team, and we’ll set up a walkthrough.</p>
               <RequestDemo />
               <a href={WINSEN_URL} className="text-sm text-fg/70 hover:text-fg">
                 About Winsen Labs <span aria-hidden>→</span>

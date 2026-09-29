@@ -5,7 +5,7 @@
 
 ## 1. Product
 
-**Name:** OCSO — Open Customer Success Orchestration
+**Name:** OCSO — Open Customer Service Orchestration
 
 **Purpose:** Let an organization deploy and operate named external-facing AI employees for customer service, sales and adjacent customer conversations, while preserving seamless human intervention, enterprise tool access and production observability.
 

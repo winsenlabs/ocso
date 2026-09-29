@@ -7,7 +7,7 @@ export function DemoRequest() {
     <section id="demo" className="mx-auto max-w-6xl scroll-mt-24 px-6 pb-24 pt-24">
       <Heading
         eyebrow="Request a demo"
-        title="See OCSO on your customer success."
+        title="See OCSO on your customer service."
         lede="Tell us who you are and how your team serves customers. We’ll reply to set up a walkthrough shaped around your channels and volumes."
       />
       <div className="mt-12 rounded-3xl border border-fg/10 bg-fg/[0.02] p-6 md:p-9">

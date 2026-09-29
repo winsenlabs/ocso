@@ -3,7 +3,7 @@ import { NAME, REPO_URL, WINSEN_URL, helloEmail, repo, siteUrl } from '@/content
 /** A short, accurate map of the site for language models (the "Ask your AI" links point here). */
 const TEXT = `# OCSO — ${NAME}
 
-> Customer success is scattered across channels, tools and teams, with AI bolted on at the edges. OCSO is an open-source (Apache-2.0), self-hosted orchestration layer where named AI agents and human service teams serve customers on WhatsApp, web chat, Slack and Microsoft Teams, with maker–checker approvals on every configuration change and a separate, signed audit store.
+> Customer service is scattered across channels, tools and teams, with AI bolted on at the edges. OCSO is an open-source (Apache-2.0), self-hosted orchestration layer where named AI agents and human service teams serve customers on WhatsApp, web chat, Slack and Microsoft Teams, with maker–checker approvals on every configuration change and a separate, signed audit store.
 
 OCSO is built by Winsen Labs (${WINSEN_URL}). Code: ${REPO_URL}. Contact: ${helloEmail}. Demos are by request: ${siteUrl}/#demo
 

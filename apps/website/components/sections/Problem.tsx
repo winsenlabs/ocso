@@ -33,9 +33,9 @@ export function Problem() {
     <section id="problem" className="mx-auto max-w-6xl scroll-mt-24 px-6 pt-24">
       <Heading
         eyebrow="The problem"
-        title="Customer success is scattered."
+        title="Customer service is scattered."
         wide
-        lede="Every channel, tool and team handles its own slice of the customer, and nobody sees the whole. AI bolted onto the edges only adds another silo. Customer success needs rethinking for the AI age: one layer that orchestrates every channel, agent and person."
+        lede="Every channel, tool and team handles its own slice of the customer, and nobody sees the whole. AI bolted onto the edges only adds another silo. Customer service needs rethinking for the AI age: one layer that orchestrates every channel, agent and person."
       />
       <div className="mt-14 overflow-hidden rounded-3xl border border-fg/10">
         <div className="hidden grid-cols-[10rem_1fr_1fr] border-b border-fg/10 bg-fg/[0.03] font-mono text-xs uppercase tracking-[0.18em] md:grid">
