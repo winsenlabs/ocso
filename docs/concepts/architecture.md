@@ -12,9 +12,9 @@ provider, read [plugins.md](plugins.md) next.
 
 ![The Head home page: the core serves one organization's conversations, agents and approvals](../assets/screens/home-head.webp)
 
-## The thesis: every aspect of customer success is a plugin
+## The thesis: every aspect of customer service is a plugin
 
-A customer-success platform has two kinds of code. One kind is the same everywhere: a conversation
+A customer-service platform has two kinds of code. One kind is the same everywhere: a conversation
 has one owner at a time, a handover to a human must not lose context, a configuration change needs a
 second pair of eyes, and every action is recorded. The other kind is different in every
 organization: which messaging networks your customers use, which model vendor your security team

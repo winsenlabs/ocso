@@ -3,13 +3,13 @@ import { REPO_URL, siteUrl } from '@/content/links';
 import { ThemedMark } from './Mark';
 
 /** The question we hand each assistant: specific, and pointed at our llms.txt so the answer is grounded. */
-const PROMPT = `I'm looking into OCSO, Open Customer Success Orchestration (${siteUrl}), an open-source, self-hosted platform from Winsen Labs where AI agents and human teams serve customers across channels.
+const PROMPT = `I'm looking into OCSO, Open Customer Service Orchestration (${siteUrl}), an open-source, self-hosted platform from Winsen Labs where AI agents and human teams serve customers across channels.
 
 Please read ${siteUrl}/llms.txt and the repository at ${REPO_URL}, and explain in plain language:
 1. What OCSO does and how a conversation moves from a channel to an AI agent or a person
 2. How it governs changes and keeps an audit trail
 3. What it takes to self-host it and extend it
-4. How a customer success team like mine could get started
+4. How a customer service team like mine could get started
 
 Cite the pages you use.`;
 

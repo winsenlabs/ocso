@@ -76,7 +76,7 @@ function DemoSheet() {
         </div>
       ) : (
         <div className="flex flex-col gap-5">
-          <p className="text-fg/65">Three short steps: about you, your company and your customer success.{draft && ' Your answers so far are saved on this device.'}</p>
+          <p className="text-fg/65">Three short steps: about you, your company and your customer service.{draft && ' Your answers so far are saved on this device.'}</p>
           <button type="button" onClick={show} aria-haspopup="dialog" className="rounded-2xl bg-fg px-6 py-4 font-medium text-bg transition hover:bg-fg/90">
             {draft ? 'Continue your request' : def.title}
           </button>

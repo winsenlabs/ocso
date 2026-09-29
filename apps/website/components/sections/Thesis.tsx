@@ -106,7 +106,7 @@ export function Thesis() {
 
       <div className="mt-16 rounded-3xl border border-fg/10 bg-fg/[0.02] p-6 md:p-9">
         <div className="max-w-3xl">
-          <h3 className="text-2xl font-medium tracking-[-0.02em] text-fg md:text-3xl">Customer success, built from plugins.</h3>
+          <h3 className="text-2xl font-medium tracking-[-0.02em] text-fg md:text-3xl">Customer service, built from plugins.</h3>
           <p className="mt-3 text-[15px] leading-relaxed text-fg/60 md:text-base">
             OCSO is a small core that owns what must never vary: the conversation, routing, the hand-off between AI and people, approvals and the
             audit trail. Everything that touches an outside system plugs in through a published contract, and a lint rule fails the build if core code

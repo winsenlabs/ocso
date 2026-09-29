@@ -15,7 +15,7 @@ const STAGES = [
 const STATES = ['AI active', 'Escalation requested', 'Waiting for a human', 'Human active', 'AI resuming', 'Resolved'];
 
 const TEAMS = [
-  { role: 'Head', title: 'For customer success leaders', body: 'Full authority inside your teams: agents, queues, SLAs and quality. You check your colleagues’ changes and sign the exception report.' },
+  { role: 'Head', title: 'For customer service leaders', body: 'Full authority inside your teams: agents, queues, SLAs and quality. You check your colleagues’ changes and sign the exception report.' },
   { role: 'Lead', title: 'For team leads', body: 'Run your teams’ agents, prompts, queues and routers. Propose changes, replay a draft prompt on past conversations, and roll back.' },
   { role: 'Service', title: 'For service teams', body: 'Handle the conversations in your queues. Take over from the AI with the context in front of you, then hand back.' },
   { role: 'Tech', title: 'For platform teams', body: 'Run the platform: model providers, channels, MCP, sign-in and audit verification, without reading conversation content.' },
@@ -26,7 +26,7 @@ export function OcsoWay() {
     <section id="the-ocso-way" className="mx-auto max-w-6xl scroll-mt-24 px-6 pt-24">
       <Heading
         eyebrow="The OCSO way"
-        title="One orchestration layer for customer success."
+        title="One orchestration layer for customer service."
         lede="Every customer takes the same readable path, whichever channel they write on. AI agents and your people work the same conversations, and hand them to each other in both directions."
       />
 
@@ -71,7 +71,7 @@ export function OcsoWay() {
       </div>
 
       <div className="mt-24">
-        <Heading title="Built for everyone in customer success." lede="Four role presets, checked in code, with per-user grants on top. Each team sees what it owns." />
+        <Heading title="Built for everyone in customer service." lede="Four role presets, checked in code, with per-user grants on top. Each team sees what it owns." />
         <div className="mt-12">
           <ViewShowcase />
         </div>

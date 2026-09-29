@@ -1,11 +1,11 @@
 # OCSO documentation
 
-OCSO (Open Customer Success Orchestration) is a self-hosted platform where named AI agents and your
+OCSO (Open Customer Service Orchestration) is a self-hosted platform where named AI agents and your
 human teams serve customers on WhatsApp, web chat, Slack and Microsoft Teams, on one governed path.
 One deployment belongs to one organization, which can have many users. Every configuration change is
 approved by a second person, and every privileged action lands in a tamper-evident audit store.
 
-The idea behind OCSO is that **every aspect of customer success is a plugin**. A small core owns the
+The idea behind OCSO is that **every aspect of customer service is a plugin**. A small core owns the
 things that must be the same everywhere: conversations, hand-off, routing, permissions, approvals and
 audit. Everything that touches the outside world plugs in behind a contract and is looked up by kind.
 That covers channels, model providers, tools, alert destinations, email, storage, secrets, queues,

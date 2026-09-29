@@ -41,7 +41,7 @@ export const demoForm: FormDef = {
       fields: [
         { name: 'name', label: 'Full name', type: 'text', required: true, max: 120, autoComplete: 'name' },
         { name: 'email', label: 'Work email', type: 'email', required: true, max: 200, autoComplete: 'email' },
-        { name: 'role', label: 'Role or title', type: 'text', required: true, max: 120, placeholder: 'e.g. Head of Customer Success', autoComplete: 'organization-title' },
+        { name: 'role', label: 'Role or title', type: 'text', required: true, max: 120, placeholder: 'e.g. Head of Customer Service', autoComplete: 'organization-title' },
         { name: 'company', label: 'Company', type: 'text', required: true, max: 160, autoComplete: 'organization' },
         { name: 'website', label: 'Company website', type: 'url', required: false, max: 200, placeholder: 'https://', autoComplete: 'url' },
       ],
@@ -63,9 +63,9 @@ export const demoForm: FormDef = {
       ],
     },
     {
-      title: 'Your customer success',
+      title: 'Your customer service',
       fields: [
-        { name: 'team_size', label: 'Customer success team size', type: 'choice', required: true, max: 20, options: ['1–10', '11–50', '51–200', '201–1000', '1000+'] },
+        { name: 'team_size', label: 'Customer service team size', type: 'choice', required: true, max: 20, options: ['1–10', '11–50', '51–200', '201–1000', '1000+'] },
         { name: 'customers', label: 'Customers or accounts served', type: 'choice', required: true, max: 20, options: ['Under 1k', '1k–10k', '10k–100k', '100k–1M', '1M+'] },
         { name: 'conversations', label: 'Customer conversations a month', type: 'choice', required: true, max: 20, options: ['Under 5k', '5k–50k', '50k–500k', '500k+'] },
         {

@@ -5,11 +5,11 @@
   </picture>
 </p>
 
-<h1 align="center">OCSO: Open Customer Success Orchestration</h1>
+<h1 align="center">OCSO: Open Customer Service Orchestration</h1>
 
 <p align="center">
   <b>Self-hosted AI agents and human teams on every customer channel, on one governed path.</b><br/>
-  Every part of customer success that touches the outside world is a plugin.
+  Every part of customer service that touches the outside world is a plugin.
 </p>
 
 <p align="center">
@@ -33,9 +33,9 @@
   <img src="docs/assets/screens/home-head.webp" alt="The OCSO home for a Head: what needs attention, live metrics, and the service flow from channel to router to queue to agent" width="900">
 </p>
 
-## The idea: customer success as plugins
+## The idea: customer service as plugins
 
-A customer-success operation has two kinds of problems. Some are the same in every organization: a
+A customer-service operation has two kinds of problems. Some are the same in every organization: a
 conversation has one owner at a time, a hand-over to a person must not lose context, a change to live
 configuration needs a second pair of eyes, and every privileged action must be on record. The others
 are different everywhere: which messaging networks your customers use, which model vendor your
@@ -83,7 +83,7 @@ Read [Architecture](docs/concepts/architecture.md) for the full picture and
 
 ## Why OCSO
 
-Customer success is scattered. The WhatsApp number sits with one vendor, the web chat with another,
+Customer service is scattered. The WhatsApp number sits with one vendor, the web chat with another,
 the help desk with a third. The chatbot is a black box, the escalation happens in someone's DMs, and
 the audit trail is a spreadsheet. Adding AI to that usually means one more silo.
 

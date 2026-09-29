@@ -19,8 +19,9 @@ const html = existsSync(page) ? readFileSync(page, 'utf8') : '';
 const text = html.replace(/<script[\s\S]*?<\/script>/g, '');
 
 need((text.match(/<h1[\s>]/g) ?? []).length === 1, 'the page must have exactly one <h1>');
-need(text.includes('Open Customer Success Orchestration'), 'the name "Open Customer Success Orchestration" must appear');
+need(text.includes('Open Customer Service Orchestration'), 'the name "Open Customer Service Orchestration" must appear');
 need(!/One Customer Success Orchestrator/.test(html), 'the old name "One Customer Success Orchestrator" must not appear');
+need(!/customer success/i.test(text), 'the site says "customer service", never "customer success"');
 need(/<a[^>]*href="#demo"[^>]*>(?:(?!<\/a>)[\s\S])*Request a demo/.test(text), 'call to action "Request a demo" → #demo is missing');
 need(/<a[^>]*href="https:\/\/github\.com\/winsenlabs\/ocso"[^>]*>(?:(?!<\/a>)[\s\S])*View on GitHub/.test(text), 'call to action "View on GitHub" is missing');
 need(/href="https:\/\/winsenlabs\.com"/.test(text), 'the link to https://winsenlabs.com is missing');
@@ -34,7 +35,7 @@ need(html.includes('Coming to npm'), 'the SDK cards must say "Coming to npm"');
 need(!existsSync(join(root, 'public/shots/ask-ocso.webp')), 'ask-ocso.webp (an edited capture) must not ship');
 need(!existsSync(join(root, 'public/shots/webchat.webp')), 'webchat.webp (scripted-model tool output in a reply) must not ship');
 need(text.includes('Screens from OCSO running with demo data.'), 'the showcase note "Screens from OCSO running with demo data." is missing');
-need(/Today customer success is scattered across channels, tools and teams, with AI bolted on at the edges\./.test(text), 'the hero lede\'s first sentence changed');
+need(/Today customer service is scattered across channels, tools and teams, with AI bolted on at the edges\./.test(text), 'the hero lede\'s first sentence changed');
 
 // Product screenshots: every file in public/shots is used, every <img> of one has real alt text, sizes, and
 // lazy loading (they are all below the fold).
