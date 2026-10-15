@@ -69,6 +69,9 @@ export async function describeDefinition(tx: DbOrTx, def: RouterDefinition): Pro
   });
   return {
     kind: def.steps.length ? 'steps' : 'pass-through',
+    // Who the router is to customers, and what it says first: reviewed like the rest.
+    persona: def.persona ? `${def.persona.name}${def.persona.voice ? ` — ${def.persona.voice}` : ''}` : null,
+    greeting: def.greeting ? `“${def.greeting.text}”` : null,
     steps,
     rules: def.rules.map((r, i) => `${i + 1}. ${describeRule(r)} → ${names.get(r.queueId)}`),
     fallbackQueue: names.get(def.fallbackQueueId) ?? null,

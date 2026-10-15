@@ -83,7 +83,7 @@ export async function RouterDetailBody({ id }: { id: string }) {
               routerName={router.name}
               initial={draft}
               queues={choices}
-              profiles={(profiles ?? []).map((p) => ({ value: p.id, label: p.name }))}
+              profiles={(profiles ?? []).map((p) => ({ value: p.id, label: `${p.name} · ${p.model}`, detail: profileDetail(p) }))}
               channels={templateTargets}
               canEdit={canManage}
               problems={router.draft?.problems ?? []}
@@ -118,4 +118,11 @@ export async function RouterDetailBody({ id }: { id: string }) {
       </div>
     </>
   );
+}
+
+/** "gpt-5.6-luna on OpenAI (Luna) · temperature 0.2 · reasoning low": which LLM a model profile really calls. */
+function profileDetail(p: { name: string; model: string; providerName: string | null; providerKind: string | null; temperature: number | null; reasoning: string | null }): string {
+  const provider = p.providerName ? `${p.providerName}${p.providerKind ? ` (${p.providerKind.toLowerCase()})` : ''}` : (p.providerKind?.toLowerCase() ?? 'its provider');
+  const settings = [p.temperature !== null ? `temperature ${p.temperature}` : null, p.reasoning && p.reasoning !== 'none' ? `reasoning ${p.reasoning}` : null].filter(Boolean);
+  return `${p.model} on ${provider}, profile “${p.name}”${settings.length ? ` · ${settings.join(' · ')}` : ''}`;
 }

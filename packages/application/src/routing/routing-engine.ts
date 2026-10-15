@@ -1,5 +1,5 @@
 import { and, asc, count, eq, lt, sql } from 'drizzle-orm';
-import { advanceSession, type Classification, type ClassifyStep, type RoutingEvent, type RoutingSession } from '@ocso/domain';
+import { advanceSession, type Classification, type ClassifyStep, type RouterPersona, type RoutingEvent, type RoutingSession } from '@ocso/domain';
 import { conversationRouting, conversations, interactions, routerVersions, type Db, type DbOrTx } from '@ocso/db';
 import type { QueueAdapter } from '@ocso/queue';
 import { lockConversation, type ConversationRow } from '../conversations/control.js';
@@ -8,12 +8,15 @@ import type { SessionWindowHours } from '../conversations/session-window.js';
 import { loadRouter, loadRouterAtVersion, type ActiveRouter } from './router-load.js';
 import { writeRouterMessage } from './router-messages.js';
 import { completeRoute, continueRoute, startNewConversation } from './routing-apply.js';
+import { rerouteStranded, resolveIdle } from './routing-lifecycle.js';
 import { customerMessagesAfter, knownContext, replyOf, sessionColumns, sessionOf, transcript, type RoutingRow } from './routing-state.js';
 
 /** What a CLASSIFY step asks the model (the worker binds this to the model gateway). */
 export interface ClassifyRequest {
   conversationId: string;
   step: ClassifyStep;
+  /** Who the router is to the customer (its name and voice), when the router has one. */
+  persona: RouterPersona | null;
   /** The customer's messages (and the router's follow-up questions) since routing started, oldest first. */
   transcript: ReadonlyArray<{ from: 'customer' | 'router'; text: string }>;
   correlationId: string;
@@ -102,7 +105,7 @@ export class RoutingEngine {
    * message, an unanswered customer message, or a decision still waiting for
    * a queue with an agent.
    */
-  async sweep(correlationId: string): Promise<{ expired: number; resignalled: number; overdue: number }> {
+  async sweep(correlationId: string): Promise<{ expired: number; resignalled: number; overdue: number; rerouted: number; handedOff: number; idleResolved: number }> {
     const now = this.now();
     const due = sql`${conversationRouting.phase} <> 'DONE' AND ${conversationRouting.awaitingSince} IS NOT NULL AND ${conversations.controlState} = 'ROUTING'
       AND ${conversationRouting.awaitingSince} < ${now.toISOString()}::timestamptz - make_interval(mins => COALESCE((${routerVersions.definition} ->> 'timeoutMinutes')::int, 10))`;
@@ -148,8 +151,19 @@ export class RoutingEngine {
       )
       .limit(SWEEP_BATCH);
     const minute = Math.floor(now.getTime() / 60_000);
-    await Promise.allSettled(stalled.map((r) => this.deps.queue.publish('conversation.route', { conversationId: r.conversationId }, { groupKey: r.conversationId, dedupeKey: `route:${r.conversationId}:sweep:${minute}` })));
-    return { expired, resignalled: stalled.length, overdue };
+    // Customers waiting on an agent that stopped answering go back through the router (or to a person).
+    const stranded = await rerouteStranded(this.deps.db, now, correlationId).catch((err) => {
+      this.deps.onError?.(err, { task: 'routing-stranded' });
+      return { routing: [] as string[], handedOff: 0 };
+    });
+    const signal = [...new Set([...stalled.map((r) => r.conversationId), ...stranded.routing])];
+    await Promise.allSettled(signal.map((id) => this.deps.queue.publish('conversation.route', { conversationId: id }, { groupKey: id, dedupeKey: `route:${id}:sweep:${minute}` })));
+    // Quiet AI conversations end, so the next message is routed afresh.
+    const idle = await resolveIdle(this.deps.db, now, correlationId).catch((err) => {
+      this.deps.onError?.(err, { task: 'routing-idle' });
+      return 0;
+    });
+    return { expired, resignalled: stalled.length, overdue, rerouted: stranded.routing.length, handedOff: stranded.handedOff, idleResolved: idle };
   }
 
   private async classify(request: ClassifyRequest): Promise<Classification> {
@@ -190,9 +204,17 @@ export class RoutingEngine {
     }
     const def = active.definition;
     let session = sessionOf(row);
+    // A new conversation (not one routed again) is greeted once, before anything else; a router message already
+    // in the conversation means it was.
+    const greet =
+      Boolean(def.greeting) &&
+      row.previousState === null &&
+      session.phase === 'STEPS' &&
+      session.stepIndex === 0 &&
+      !(await tx.select({ id: interactions.id }).from(interactions).where(and(eq(interactions.conversationId, conversationId), eq(interactions.actorType, 'ROUTER'))).limit(1)).length;
     // Every step is behind the router: only the decision is left (it found no queue with an agent last time,
     // or a row from before this was retried stayed DONE while ROUTING). Decide again.
-    const deciding = session.phase === 'DONE' || (session.phase === 'STEPS' && session.stepIndex >= def.steps.length);
+    const deciding = !greet && (session.phase === 'DONE' || (session.phase === 'STEPS' && session.stepIndex >= def.steps.length));
     if (deciding) session = { ...session, phase: 'STEPS', stepIndex: def.steps.length, awaiting: false };
 
     const pending = await customerMessagesAfter(tx, conversationId, conv.lastProcessedSeq);
@@ -217,7 +239,7 @@ export class RoutingEngine {
     } else if (session.awaiting) events.push(...replies());
     // Another job's classification is in flight: leave the messages pending for it to fold in.
     else if (inFlight) return { kind: 'idle' };
-    else events.push({ event: { type: 'START' }, seq: null });
+    else events.push({ event: { type: 'START', greet }, seq: null });
     if (!events.length) return { kind: 'idle' };
 
     const ctx = await knownContext(tx, conv.customerId);
@@ -262,7 +284,7 @@ export class RoutingEngine {
     if (classify) session = { ...session, attempts: Math.max(1, session.attempts) };
     const saved = await this.persist(tx, conv, row, session, pending, now, asked);
     if (!classify) return { kind: 'idle' };
-    return { kind: 'classify', expected: saved, request: { conversationId, step: classify, transcript: await transcript(tx, conversationId, row.seqFrom), correlationId } };
+    return { kind: 'classify', expected: saved, request: { conversationId, step: classify, persona: def.persona ?? null, transcript: await transcript(tx, conversationId, row.seqFrom), correlationId } };
   }
 
   /**

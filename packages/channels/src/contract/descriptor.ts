@@ -193,6 +193,8 @@ export type ChannelDestination = 'router' | 'ask_ocso';
 export const CHANNEL_DESTINATIONS: readonly ChannelDestination[] = ['router', 'ask_ocso'];
 /** The settings key core owns on staff-destination kinds. */
 export const DESTINATION_SETTING = 'destination';
+/** The quiet-period setting core owns on every kind (defined with the conversation lifecycle in @ocso/domain). */
+export { AI_IDLE_DEFAULT_HOURS, AI_IDLE_MAX_HOURS, AI_IDLE_SETTING } from '@ocso/domain';
 
 /** A descriptor plus what the registry derives from the adapter (served by `GET /v1/channels/kinds`). */
 export interface ChannelKindInfo extends ChannelKindDescriptor {

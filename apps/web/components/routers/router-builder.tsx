@@ -96,6 +96,52 @@ export function RouterBuilder({
         </AlertBanner>
       ) : null}
 
+      <h3 className="rt-h">Persona and greeting</h3>
+      <label className="rowsplit" style={{ gap: 8 }}>
+        <input
+          type="checkbox"
+          checked={Boolean(def.persona)}
+          disabled={!canEdit}
+          onChange={(e) => edit({ ...def, persona: e.target.checked ? { name: routerName || 'Assistant', voice: 'Warm, brief and plain-spoken. Reply in the customer’s language.' } : null })}
+        />
+        Give this router a persona
+      </label>
+      <span className="hint">The name and voice the model writes in: its clarifying questions sound like this person. Your menu questions and greeting are sent as you write them.</span>
+      {def.persona ? (
+        <div className="fld-row">
+          <div className="fld">
+            <label htmlFor="rt-persona-name">Name</label>
+            <input id="rt-persona-name" value={def.persona.name} maxLength={60} disabled={!canEdit} onChange={(e) => edit({ ...def, persona: { ...def.persona!, name: e.target.value } })} />
+          </div>
+          <div className="fld" style={{ flex: 3 }}>
+            <label htmlFor="rt-persona-voice">Tone and voice</label>
+            <textarea id="rt-persona-voice" rows={2} maxLength={1000} value={def.persona.voice} disabled={!canEdit} onChange={(e) => edit({ ...def, persona: { ...def.persona!, voice: e.target.value } })} />
+          </div>
+        </div>
+      ) : null}
+      <label className="rowsplit" style={{ gap: 8 }}>
+        <input type="checkbox" checked={Boolean(def.greeting)} disabled={!canEdit} onChange={(e) => edit({ ...def, greeting: e.target.checked ? { text: def.persona ? `Hi, I’m ${def.persona.name}. Let me get you to the right team.` : 'Hi! Let me get you to the right team.' } : null })} />
+        Greet new conversations
+      </label>
+      <span className="hint">Sent once, when a new conversation starts routing; not when a conversation is routed again.</span>
+      {def.greeting ? (
+        <MessageEditor
+          id="rt-greeting"
+          label="Greeting"
+          spec={def.greeting}
+          onChange={(greeting) => edit({ ...def, greeting })}
+          channels={channels}
+          routerName={routerName}
+          stepId="greeting"
+          canEdit={canEdit}
+          onMapped={(greeting) => {
+            const next = { ...def, greeting };
+            setDef(next);
+            return save(next);
+          }}
+        />
+      ) : null}
+
       <h3 className="rt-h">Steps</h3>
       {def.steps.length === 0 ? <p className="mono-sm">No steps: a pass-through router — every customer goes straight to the fallback queue.</p> : null}
       {def.steps.map((step, i) => (
@@ -112,6 +158,7 @@ export function RouterBuilder({
           onMove={(d) => moveStep(i, d)}
           onRemove={() => edit({ ...def, steps: def.steps.filter((_, j) => j !== i) })}
           persist={persistStep(i)}
+          persona={def.persona ?? null}
         />
       ))}
       {canEdit && def.steps.length < 10 ? (

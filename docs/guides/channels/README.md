@@ -34,6 +34,11 @@ Other properties, from each kind's `capabilities.ts`:
 | `SLACK` | `slack` | no | no | basic, converted to Slack mrkdwn | yes |
 | `MS_TEAMS` | `ms-teams` | no | no | basic, sent as Teams markdown | yes |
 
+Every channel also has one setting OCSO owns, whatever its kind: **Resolve quiet AI conversations after (hours)**
+(`aiIdleResolveHours`, default 24, 0 = never). An AI-held conversation with no new messages for that long is resolved,
+so the customer's next message goes through the channel's router again. See
+[Routing](../../concepts/routing.md#later-messages-and-when-a-conversation-is-routed-again).
+
 A choice question is the router's "ask the customer" step. It goes out as one structured part with a numbered
 text fallback, so a channel that cannot draw buttons still sends something the customer can answer ("2" or
 "Loans"). See [Routing](../../concepts/routing.md).

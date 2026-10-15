@@ -1,12 +1,14 @@
 'use client';
 
-import type { AskStep, ClassifyStep, KnownStep, MessageSpec, RouterStep } from '@ocso/domain';
+import { classifierInstructions, classifierTranscript, type AskStep, type ClassifyStep, type KnownStep, type MessageSpec, type RouterPersona, type RouterStep } from '@ocso/domain';
 import { MessageEditor, type TemplateChannel } from './message-editor';
 import { slug } from './lib/definition';
 
 export interface Option {
   value: string;
   label: string;
+  /** What it really is, for a model profile: the LLM, its provider and settings. */
+  detail?: string | undefined;
 }
 
 interface Common {
@@ -27,8 +29,9 @@ export function StepEditor({
   channels,
   routerName,
   persist,
+  persona,
   ...c
-}: Common & { step: RouterStep; profiles: Option[]; channels: readonly TemplateChannel[]; routerName: string; persist: (step: RouterStep) => Promise<boolean> }) {
+}: Common & { step: RouterStep; profiles: Option[]; channels: readonly TemplateChannel[]; routerName: string; persist: (step: RouterStep) => Promise<boolean>; persona: RouterPersona | null }) {
   const pid = `rt-step-${c.index}`;
   return (
     <section className="rt-step" aria-label={`Step ${c.index + 1}: ${KIND_TITLE[step.kind]}`}>
@@ -65,7 +68,7 @@ export function StepEditor({
         ) : null}
       </div>
       {step.kind === 'ASK' ? <AskFields step={step} pid={pid} channels={channels} routerName={routerName} persist={persist} {...c} /> : null}
-      {step.kind === 'CLASSIFY' ? <ClassifyFields step={step} pid={pid} profiles={profiles} {...c} /> : null}
+      {step.kind === 'CLASSIFY' ? <ClassifyFields step={step} pid={pid} profiles={profiles} persona={persona} {...c} /> : null}
       {step.kind === 'KNOWN' ? <KnownFields step={step} pid={pid} {...c} /> : null}
     </section>
   );
@@ -123,7 +126,8 @@ function AskFields({ step, pid, channels, routerName, persist, canEdit, onChange
   );
 }
 
-function ClassifyFields({ step, pid, profiles, canEdit, onChange }: Common & { step: ClassifyStep; pid: string; profiles: Option[] }) {
+function ClassifyFields({ step, pid, profiles, persona, canEdit, onChange }: Common & { step: ClassifyStep; pid: string; profiles: Option[]; persona: RouterPersona | null }) {
+  const profile = profiles.find((p) => p.value === step.modelProfileId);
   const setLabel = (i: number, patch: Partial<ClassifyStep['labels'][number]>) => onChange({ ...step, labels: step.labels.map((l, j) => (j === i ? { ...l, ...patch } : l)) });
   return (
     <>
@@ -148,6 +152,9 @@ function ClassifyFields({ step, pid, profiles, canEdit, onChange }: Common & { s
           <input id={`${pid}-follow`} type="number" min={0} max={3} value={step.maxFollowUps} disabled={!canEdit} onChange={(e) => onChange({ ...step, maxFollowUps: Number(e.target.value) })} />
         </div>
       </div>
+      <p className="hint" style={{ margin: 0 }}>
+        {profile ? <>This step is an LLM call: {profile.detail ?? profile.label}.</> : 'Choose the model profile this step calls (an LLM).'}
+      </p>
       <div className="fld">
         <label htmlFor={`${pid}-instr`}>Instructions</label>
         <textarea id={`${pid}-instr`} rows={2} value={step.instructions} disabled={!canEdit} onChange={(e) => onChange({ ...step, instructions: e.target.value })} />
@@ -171,6 +178,19 @@ function ClassifyFields({ step, pid, profiles, canEdit, onChange }: Common & { s
           </button>
         ) : null}
       </div>
+      <details className="rt-prompt">
+        <summary>What the model receives</summary>
+        <p className="hint">Exactly what OCSO sends {profile ? (profile.detail ?? profile.label) : 'the model'} for this step, built by the same code the worker runs.</p>
+        <span className="rt-lbl">Instructions (system)</span>
+        <pre className="mono-sm" style={{ whiteSpace: 'pre-wrap' }}>{classifierInstructions(step, persona)}</pre>
+        <span className="rt-lbl">Then the conversation so far, for example</span>
+        <pre className="mono-sm" style={{ whiteSpace: 'pre-wrap' }}>{classifierTranscript([{ from: 'customer', text: 'Hi, I need help with my tax refund' }])}</pre>
+        <span className="rt-lbl">It must answer</span>
+        <pre className="mono-sm" style={{ whiteSpace: 'pre-wrap' }}>{`{ "label": ${step.labels.map((l) => JSON.stringify(l.value)).join(' | ')} | null, "confidence": 0–1, "followUp": "a question" | null }`}</pre>
+        <p className="hint">
+          Below {step.minConfidence} confidence it asks its follow-up (at most {step.maxFollowUps}); then the label goes to your rules, or the fallback queue.
+        </p>
+      </details>
     </>
   );
 }

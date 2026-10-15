@@ -5,13 +5,9 @@ import type { ChannelLimits, CompileInput } from './types.js';
  * Untrusted/dynamic data is wrapped in explicit tags and neutralized so it can
  * never close its own wrapper and masquerade as instructions (docs/archive/specs/05 §7).
  */
-export function neutralize(text: string): string {
-  return text
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
-    .replace(/<\/?(ocso_[a-z_]+|customer_context|conversation_summary|handover|conversation)>/gi, (m) =>
-      m.replace('<', '‹').replace('>', '›'),
-    );
-}
+// One implementation, shared with the router builder's prompt preview (@ocso/domain is browser-safe).
+import { neutralize } from '@ocso/domain';
+export { neutralize };
 
 export function wrap(tag: string, body: string): string {
   return `<${tag}>\n${body.trim()}\n</${tag}>`;

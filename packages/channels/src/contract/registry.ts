@@ -1,6 +1,10 @@
+import { aiIdleHoursOf, isAiIdleHours } from '@ocso/domain';
 import {
   CHANNEL_DESTINATIONS,
   CHANNEL_KIND_PATTERN,
+  AI_IDLE_DEFAULT_HOURS,
+  AI_IDLE_MAX_HOURS,
+  AI_IDLE_SETTING,
   DESTINATION_SETTING,
   type ChannelDestination,
   type ChannelKind,
@@ -52,6 +56,9 @@ export class ChannelRegistry {
     if (descriptor.staffSurface !== undefined && (typeof descriptor.staffSurface !== 'string' || !STAFF_SURFACE.test(descriptor.staffSurface))) {
       throw new Error(`channel adapter ${kind}: staffSurface must be lower-case a-z0-9_ (up to 32 characters)`);
     }
+    if (schemaProperties(descriptor.settingsSchema)?.[AI_IDLE_SETTING] !== undefined) {
+      throw new Error(`channel adapter ${kind}: the "${AI_IDLE_SETTING}" setting belongs to OCSO; remove it from the settings schema`);
+    }
     if (descriptor.staffDestination && schemaProperties(descriptor.settingsSchema)?.[DESTINATION_SETTING] !== undefined) {
       throw new Error(`channel adapter ${kind}: the "${DESTINATION_SETTING}" setting belongs to OCSO on staff-destination kinds; remove it from the settings schema`);
     }
@@ -87,7 +94,7 @@ export class ChannelRegistry {
   describe(kind: ChannelKind): ChannelKindInfo {
     const adapter = this.get(kind);
     const descriptor = adapter.describe();
-    const settingsSchema = descriptor.staffDestination ? withDestinationSetting(descriptor.settingsSchema) : descriptor.settingsSchema;
+    const settingsSchema = withIdleSetting(descriptor.staffDestination ? withDestinationSetting(descriptor.settingsSchema) : descriptor.settingsSchema);
     return {
       ...descriptor,
       settingsSchema,
@@ -112,8 +119,16 @@ export class ChannelRegistry {
   }
 
   /**
-   * A channel configuration's problems: OCSO's `destination` setting (staff-destination kinds only), then the
-   * adapter's own validation of the rest.
+   * Hours an AI-handled conversation on this channel may stay quiet before it is resolved (0 = never): the
+   * channel's `aiIdleResolveHours` when it is a whole number in range, else the default.
+   */
+  aiIdleHours(settings: Readonly<Record<string, unknown>> | null | undefined): number {
+    return aiIdleHoursOf(settings);
+  }
+
+  /**
+   * A channel configuration's problems: OCSO's own settings (`aiIdleResolveHours` on every kind, `destination` on
+   * staff-destination kinds), then the adapter's own validation of the rest.
    */
   validateConfig(kind: string, settings: unknown, secrets: Readonly<Record<string, string>>): string[] {
     if (!this.has(kind)) return [`channel kind ${kind} is not available`];
@@ -122,8 +137,16 @@ export class ChannelRegistry {
     const record = settings && typeof settings === 'object' && !Array.isArray(settings) ? (settings as Record<string, unknown>) : null;
     const problems: string[] = [];
     let own = settings;
-    if (staff && record && DESTINATION_SETTING in record) {
-      const { [DESTINATION_SETTING]: destination, ...rest } = record;
+    if (record && AI_IDLE_SETTING in record) {
+      const { [AI_IDLE_SETTING]: hours, ...rest } = record;
+      if (hours !== undefined && !isAiIdleHours(hours)) {
+        problems.push(`settings.${AI_IDLE_SETTING}: a whole number of hours from 0 (never) to ${AI_IDLE_MAX_HOURS}`);
+      }
+      own = rest;
+    }
+    const ownRecord = own && typeof own === 'object' && !Array.isArray(own) ? (own as Record<string, unknown>) : null;
+    if (staff && ownRecord && DESTINATION_SETTING in ownRecord) {
+      const { [DESTINATION_SETTING]: destination, ...rest } = ownRecord;
       if (destination !== undefined && !CHANNEL_DESTINATIONS.includes(destination as ChannelDestination)) {
         problems.push(`settings.${DESTINATION_SETTING}: must be one of ${CHANNEL_DESTINATIONS.join(', ')}`);
       }
@@ -207,6 +230,21 @@ const DESTINATION_SCHEMA = {
   description:
     'router: people who message this channel are customers, routed like any channel. ask_ocso: your staff talk to Ask OCSO here, as themselves, after linking their chat account to their OCSO user once.',
 };
+
+/** The quiet-period setting OCSO adds to every kind (JSON Schema, input shape). */
+const IDLE_SCHEMA = {
+  type: 'integer',
+  minimum: 0,
+  maximum: AI_IDLE_MAX_HOURS,
+  default: AI_IDLE_DEFAULT_HOURS,
+  title: 'Resolve quiet AI conversations after (hours)',
+  description:
+    "An AI-handled conversation with no new messages for this long is resolved, so the customer's next message goes through this channel's router again. 0 = never. Conversations a person holds are never resolved this way.",
+};
+
+function withIdleSetting(schema: Record<string, unknown>): Record<string, unknown> {
+  return { ...schema, properties: { ...(schemaProperties(schema) ?? {}), [AI_IDLE_SETTING]: IDLE_SCHEMA } };
+}
 
 function withDestinationSetting(schema: Record<string, unknown>): Record<string, unknown> {
   return { ...schema, properties: { [DESTINATION_SETTING]: DESTINATION_SCHEMA, ...(schemaProperties(schema) ?? {}) } };

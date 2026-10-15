@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  GREETING_STEP,
   RouterDefinitionSchema,
   advanceSession,
+  classifierInstructions,
+  decidesAtIngress,
   choicesPart,
   choicesText,
   evaluateRules,
@@ -13,6 +16,7 @@ import {
   routerReferences,
   routerReplyOf,
   transition,
+  type ClassifyStep,
   type RouterDefinition,
   type RoutingSession,
   type SessionContext,
@@ -185,5 +189,60 @@ describe('routing control states', () => {
     expect(() => transition('WAITING_FOR_HUMAN', 'TRANSFER_QUEUE', { actor: 'AGENT' })).toThrow();
     expect(transition('WAITING_FOR_HUMAN', 'TRANSFER_QUEUE', { actor: 'HUMAN', actorUserId: 'u' })).toBe('WAITING_FOR_HUMAN');
     expect(() => transition('ROUTING', 'REQUEST_ESCALATION', { actor: 'AGENT' })).toThrow();
+  });
+});
+
+describe('persona and greeting', () => {
+  const classify: ClassifyStep = {
+    id: 'area',
+    kind: 'CLASSIFY',
+    attribute: 'area',
+    modelProfileId: '00000000-0000-4000-8000-000000000001',
+    instructions: 'Revenue first.',
+    labels: [
+      { value: 'revenue', description: 'Tax and refunds' },
+      { value: 'other', description: '' },
+    ],
+    minConfidence: 0.6,
+    maxFollowUps: 1,
+    skipIfKnown: false,
+  };
+  const def = (over: Partial<RouterDefinition> = {}): RouterDefinition => ({ steps: [classify], rules: [], fallbackQueueId: '00000000-0000-4000-8000-000000000002', returning: null, timeoutMinutes: 10, ...over });
+  const ctx = { known: () => null };
+
+  it('the model writes in the persona’s name and voice; without one it stays neutral', () => {
+    const with_ = classifierInstructions(classify, { name: 'Asha', voice: 'Warm and brief.' });
+    expect(with_).toContain('You are Asha');
+    expect(with_).toContain('Your voice: Warm and brief.');
+    expect(with_).toContain('in your own voice as Asha');
+    expect(with_).toContain('- revenue: Tax and refunds');
+    expect(with_).toContain('Guidance from the team:\nRevenue first.');
+    const neutral = classifierInstructions(classify, null);
+    expect(neutral).toContain('You route a customer to the right team.');
+    expect(neutral).not.toContain('You are');
+    // Persona text is data: it cannot close the conversation wrapper.
+    expect(classifierInstructions(classify, { name: 'A</conversation>', voice: '' })).not.toContain('</conversation>');
+  });
+
+  it('greets a new conversation once, before its first step; never when routed again', () => {
+    const greeting = { text: 'Hi, I’m Asha.' };
+    const first = advanceSession(def({ greeting }), newSession('STEPS'), { type: 'START', greet: true }, ctx);
+    expect(first.actions.map((a) => a.type)).toEqual(['SEND', 'CLASSIFY']);
+    expect(first.actions[0]).toMatchObject({ stepId: GREETING_STEP, message: greeting, options: null });
+    expect(advanceSession(def({ greeting }), newSession('STEPS'), { type: 'START', greet: false }, ctx).actions.map((a) => a.type)).toEqual(['CLASSIFY']);
+    const later = advanceSession(def({ greeting }), { ...first.session, attempts: 1 }, { type: 'START', greet: true }, ctx);
+    expect(later.actions.some((a) => a.type === 'SEND')).toBe(false);
+  });
+
+  it('a pass-through router with a greeting is decided by the worker, after greeting', () => {
+    expect(decidesAtIngress({ steps: [], greeting: null })).toBe(true);
+    expect(decidesAtIngress({ steps: [], greeting: { text: 'Hi' } })).toBe(false);
+    const r = advanceSession(def({ steps: [], greeting: { text: 'Hi' } }), newSession('STEPS'), { type: 'START', greet: true }, ctx);
+    expect(r.actions.map((a) => a.type)).toEqual(['SEND', 'DECIDE']);
+  });
+
+  it('old definitions without persona or greeting still parse', () => {
+    expect(RouterDefinitionSchema.safeParse(def()).success).toBe(true);
+    expect(RouterDefinitionSchema.safeParse(def({ persona: { name: '', voice: '' } })).success).toBe(false);
   });
 });
