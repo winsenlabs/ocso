@@ -71,6 +71,7 @@ export * from './routing/router-seed.js';
 export * from './routing/router-simulate.js';
 export * from './routing/routing-engine.js';
 export * from './routing/routing-admit.js';
+export * from './routing/routing-lifecycle.js';
 export * from './routing/reach.js';
 export * from './handoffs/queue-transfer.js';
 export * from './audit/index.js';

@@ -1,12 +1,12 @@
 import { and, asc, desc, eq, gt, isNotNull, ne } from 'drizzle-orm';
-import { advanceSession, isPassThrough, newSession, returningDue, type ControlState } from '@ocso/domain';
-import { conversationRouting, conversations, queues, uuidv7, type DbOrTx } from '@ocso/db';
+import { IDLE_DISPOSITION, advanceSession, decidesAtIngress, newSession, returningDue, type ControlState } from '@ocso/domain';
+import { conversationRouting, conversations, queues, uuidv7, virtualAgents, type DbOrTx } from '@ocso/db';
 import { applyControl, type ConversationRow } from '../conversations/control.js';
 import { emitEvent } from '../events/outbox.js';
 import { loadQueue, resolutionDueFor } from '../handoffs/routing.js';
 import { systemActor } from '../shared/context.js';
 import { loadActiveRouter, type ActiveRouter } from './router-load.js';
-import { decidedQueue, handOffUnanswered, provisionalType } from './routing-apply.js';
+import { agentAnswers, decidedQueue, handOffUnanswered, provisionalType, servingQueue } from './routing-apply.js';
 import { knownContext, startRoutingRow } from './routing-state.js';
 
 export interface AdmitInput {
@@ -44,7 +44,11 @@ const actorFor = (active: ActiveRouter, correlationId: string) => systemActor(`r
  * Conversations already under way never depend on the channel's router: a
  * disabled or detached router stops new conversations only (`no_router`),
  * while customers mid-conversation (with the AI, a person, or a menu running
- * on its pinned version) keep reaching it.
+ * on its pinned version) keep reaching it. Two exceptions, both for
+ * conversations the AI holds (a person's are never moved): when its agent no
+ * longer answers (paused, no model), and when the channel now routes through
+ * a different router than the one that placed it, the customer's next message
+ * takes the conversation back through the channel's active router.
  * Runs in the ingress transaction, before the message is appended.
  */
 export async function admitConversation(tx: DbOrTx, input: AdmitInput): Promise<AdmitResult> {
@@ -62,15 +66,24 @@ export async function admitConversation(tx: DbOrTx, input: AdmitInput): Promise<
         .where(and(scope, eq(conversations.controlState, 'RESOLVED'), gt(conversations.resolvedAt, windowStart), isNotNull(conversations.agentId)))
         .orderBy(desc(conversations.resolvedAt))
         .limit(1);
-  const existing = open ?? recent;
   const active = await loadActiveRouter(tx, input.channel.id);
+  if (open?.controlState === 'AI_ACTIVE') {
+    const outcome = await rerouteIfStale(tx, open, active, input.now, input.correlationId);
+    if (outcome === 'ROUTE') return admitted(open, false, true);
+    if (outcome === 'HUMAN') return admitted(open, false, false);
+  }
+  // A resolved conversation only reopens to an agent that still answers, under the router that placed it, and
+  // never once it was resolved for being quiet (that is what makes the next message go through the router).
+  const reopenable = recent && recent.disposition !== IDLE_DISPOSITION && !(await staleReason(tx, recent, active)) ? recent : undefined;
+  const existing = open ?? reopenable;
   const returning = active?.definition.returning ?? null;
   if (existing && active && returning && (existing.controlState === 'AI_ACTIVE' || existing.controlState === 'RESOLVED') && returningDue(returning.askAfter, existing.lastCustomerMessageAt, input.now)) {
     await startReturning(tx, existing, active, input);
     return admitted(existing, false, true);
   }
   if (open) return admitted(open, false, false);
-  if (recent) {
+  if (reopenable) {
+    const recent = reopenable;
     // Conversations from before routing may have no queue: they reopen into a queue their agent serves.
     const queueId = recent.queueId ?? (await agentQueue(tx, recent.agentId!));
     await applyControl(tx, recent.id, {
@@ -113,11 +126,52 @@ async function startReturning(tx: DbOrTx, conv: ConversationRow, active: ActiveR
   await startRoutingRow(tx, { conversationId: conv.id, active, phase: 'RETURNING', previousState: conv.controlState as ControlState, seqFrom: Math.min(conv.lastProcessedSeq, conv.lastSeq), now: input.now });
 }
 
+/**
+ * Why an AI-held conversation should be routed again, or null: its agent no longer answers, or the channel's active
+ * router is not the one that placed it (conversations from before routing count as placed by none).
+ */
+async function staleReason(tx: DbOrTx, conv: ConversationRow, active: ActiveRouter | null): Promise<string | null> {
+  const [agent] = conv.agentId ? await tx.select().from(virtualAgents).where(eq(virtualAgents.id, conv.agentId)) : [];
+  if (agent && !agentAnswers(agent)) return `${agent.name} is not answering (${agent.status.toLowerCase()})`;
+  if (!agent) return 'its agent is gone';
+  if (!active) return null;
+  const [placed] = await tx.select({ routerId: conversationRouting.routerId }).from(conversationRouting).where(eq(conversationRouting.conversationId, conv.id));
+  if ((placed?.routerId ?? null) !== active.router.id) return `the channel now routes through ${active.router.name}`;
+  return null;
+}
+
+/**
+ * An AI-held conversation whose agent stopped answering, or whose channel switched routers, goes back through the
+ * channel's active router ('ROUTE'). With no active router and no answering agent, a person on its queue takes it
+ * ('HUMAN') instead of leaving the customer unanswered. Null: nothing to do. The caller holds the conversation row.
+ */
+export async function rerouteIfStale(tx: DbOrTx, conv: ConversationRow, active: ActiveRouter | null, now: Date, correlationId: string): Promise<'ROUTE' | 'HUMAN' | null> {
+  if (conv.controlState !== 'AI_ACTIVE') return null;
+  const reason = await staleReason(tx, conv, active);
+  if (!reason) return null;
+  if (active) {
+    await applyControl(tx, conv.id, {
+      command: 'ROUTE_START',
+      actor: actorFor(active, correlationId),
+      transitionActor: 'SYSTEM',
+      description: `routing again · ${reason}`,
+      now,
+    });
+    // Everything the customer wrote since the agent last answered goes to whichever agent the router picks.
+    await startRoutingRow(tx, { conversationId: conv.id, active, phase: 'STEPS', previousState: 'AI_ACTIVE', seqFrom: conv.lastProcessedSeq, now });
+    return 'ROUTE';
+  }
+  const target = conv.queueId ? await servingQueue(tx, conv.queueId) : null;
+  if (!target || target.live) return null;
+  await handOffUnanswered(tx, systemActor('ingress', correlationId), conv.id, target, now);
+  return 'HUMAN';
+}
+
 async function openNew(tx: DbOrTx, active: ActiveRouter, input: AdmitInput): Promise<AdmitResult> {
   const id = uuidv7();
   const actor = actorFor(active, input.correlationId);
   const base = { id, customerId: input.customerId, channelId: input.channel.id, openedAt: input.now, lastInteractionAt: input.now };
-  if (!isPassThrough(active.definition)) {
+  if (!decidesAtIngress(active.definition)) {
     await tx.insert(conversations).values({ ...base, agentId: null, type: await provisionalType(tx, active), controlState: 'ROUTING', queueId: null });
     await startRoutingRow(tx, { conversationId: id, active, phase: 'STEPS', previousState: null, seqFrom: 0, now: input.now });
     await emitEvent(tx, actor, 'conversation.created', { customerId: input.customerId, channelId: input.channel.id, queueId: null }, { conversationId: id });

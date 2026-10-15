@@ -44,9 +44,25 @@ describe('staff destination', () => {
   it('adds the destination setting to a staff kind’s schema (first, default router) and to no other', () => {
     const registry = new ChannelRegistry().register(plugin('WORKCHAT', { staffDestination: true })).register(plugin('SMS'));
     const staff = registry.describe('WORKCHAT').settingsSchema as { properties: Record<string, { enum?: string[]; default?: string }> };
-    expect(Object.keys(staff.properties)).toEqual(['destination', 'region']);
+    expect(Object.keys(staff.properties)).toEqual(['destination', 'region', 'aiIdleResolveHours']);
     expect(staff.properties['destination']).toMatchObject({ enum: ['router', 'ask_ocso'], default: 'router' });
     expect((registry.describe('SMS').settingsSchema as { properties: Record<string, unknown> }).properties['destination']).toBeUndefined();
+  });
+
+  it('adds the quiet-period setting to every kind, last, defaulting to 24 hours; validates it and keeps it from the adapter', () => {
+    const registry = new ChannelRegistry().register(plugin('WORKCHAT', { staffDestination: true })).register(plugin('SMS'));
+    for (const kind of ['WORKCHAT', 'SMS']) {
+      const props = (registry.describe(kind).settingsSchema as { properties: Record<string, { default?: number; maximum?: number }> }).properties;
+      expect(Object.keys(props).at(-1)).toBe('aiIdleResolveHours');
+      expect(props['aiIdleResolveHours']).toMatchObject({ default: 24, maximum: 720 });
+    }
+    expect(registry.aiIdleHours({ aiIdleResolveHours: 2 })).toBe(2);
+    expect(registry.aiIdleHours({ aiIdleResolveHours: 0 })).toBe(0);
+    expect(registry.aiIdleHours({ aiIdleResolveHours: 1.5 })).toBe(24);
+    expect(registry.aiIdleHours({})).toBe(24);
+    expect(registry.validateConfig('SMS', { region: 'in', aiIdleResolveHours: 48 }, {})).toEqual([]);
+    expect(registry.validateConfig('SMS', { region: 'in', aiIdleResolveHours: -1 }, {})).toEqual([expect.stringContaining('settings.aiIdleResolveHours')]);
+    expect(registry.validateConfig('SMS', { region: 'in', aiIdleResolveHours: 'soon' }, {})).toEqual([expect.stringContaining('settings.aiIdleResolveHours')]);
   });
 
   it('reads the destination only for staff kinds, defaulting to router', () => {

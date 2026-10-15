@@ -54,7 +54,7 @@ export async function simulateRouter(db: DbOrTx, def: RouterDefinition, input: R
   trace.push({ kind: 'customer', text: opening });
   transcript.push({ from: 'customer', text: opening });
   let session = newSession(input.returning && def.returning ? 'RETURNING' : 'STEPS');
-  let event: RoutingEvent | null = { type: 'START' };
+  let event: RoutingEvent | null = { type: 'START', greet: !(input.returning && def.returning) };
   let decision: SimulationResult['decision'] = null;
   for (let guard = 0; event && guard < 60; guard++) {
     const result = advanceSession(def, session, event, ctx);
@@ -73,7 +73,7 @@ export async function simulateRouter(db: DbOrTx, def: RouterDefinition, input: R
           source = 'answer';
         } else if (classifier) {
           try {
-            classification = await classifier({ conversationId: 'simulation', step: action.step, transcript, correlationId: 'simulation' });
+            classification = await classifier({ conversationId: 'simulation', step: action.step, persona: def.persona ?? null, transcript, correlationId: 'simulation' });
             source = 'model';
           } catch (err) {
             // An outage is not low confidence: say so (the live engine records the same code on the session).
@@ -90,7 +90,7 @@ export async function simulateRouter(db: DbOrTx, def: RouterDefinition, input: R
       } else if (action.type === 'CONTINUE') trace.push({ kind: 'continued', outcome: action.outcome });
       else if (action.type === 'NEW') {
         trace.push({ kind: 'new_conversation' });
-        event = { type: 'START' };
+        event = { type: 'START', greet: true };
       }
     }
     if (event || session.phase === 'DONE') continue;

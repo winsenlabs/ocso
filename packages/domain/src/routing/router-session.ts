@@ -35,7 +35,8 @@ export interface Classification {
 }
 
 export type RoutingEvent =
-  | { type: 'START' }
+  /** `greet`: a new conversation's first start (sends the router's greeting, if any). */
+  | { type: 'START'; greet?: boolean }
   | { type: 'REPLY'; reply: RouterReply }
   | { type: 'CLASSIFIED'; stepId: string; result: Classification }
   | { type: 'TIMEOUT' };
@@ -54,6 +55,8 @@ export interface SessionContext {
 
 /** Returning prompts before the router gives up and continues the old conversation. */
 export const RETURNING_MAX_PROMPTS = 2;
+/** The step id router greetings are sent under. */
+export const GREETING_STEP = '_greeting';
 
 export function newSession(phase: 'RETURNING' | 'STEPS'): RoutingSession {
   return { phase, stepIndex: 0, attributes: {}, answers: {}, classifications: {}, followUps: 0, attempts: 0, awaiting: false };
@@ -137,6 +140,8 @@ export function advanceSession(def: RouterDefinition, input: RoutingSession, eve
     returningStep(def, s, event, actions);
     return { session: s, actions };
   }
+  const fresh = s.stepIndex === 0 && s.attempts === 0 && !s.awaiting && !Object.keys(s.answers).length && !Object.keys(s.classifications).length;
+  if (event.type === 'START' && event.greet && def.greeting && fresh) actions.push({ type: 'SEND', stepId: GREETING_STEP, message: def.greeting, options: null });
 
   let pending: RoutingEvent | null = event;
   while (s.stepIndex < def.steps.length) {

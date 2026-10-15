@@ -79,8 +79,21 @@ export const ReturningSchema = z.object({
 });
 export type ReturningConfig = z.infer<typeof ReturningSchema>;
 
+/**
+ * Who the router is to the customer: the name and voice the model writes in (its clarifying questions). Optional:
+ * without it the router speaks neutrally.
+ */
+export const RouterPersonaSchema = z.object({
+  name: z.string().trim().min(1).max(60),
+  voice: z.string().trim().max(1_000),
+});
+export type RouterPersona = z.infer<typeof RouterPersonaSchema>;
+
 export const RouterDefinitionSchema = z
   .object({
+    persona: RouterPersonaSchema.nullable().optional(),
+    /** Sent once when a new conversation starts routing, before the first step (not when one is routed again). */
+    greeting: MessageSpecSchema.nullable().optional(),
     steps: z.array(RouterStepSchema).max(10),
     rules: z.array(RouterRuleSchema).max(100),
     fallbackQueueId: Uuid,
@@ -128,11 +141,16 @@ export function isPassThrough(def: Pick<RouterDefinition, 'steps'>): boolean {
   return def.steps.length === 0;
 }
 
+/** Decided at ingress, without the routing worker: no steps and nothing to say first. */
+export function decidesAtIngress(def: Pick<RouterDefinition, 'steps' | 'greeting'>): boolean {
+  return isPassThrough(def) && !def.greeting;
+}
+
 /** Everything a definition points at, for activation checks and dependency hashes. */
 export function routerReferences(def: RouterDefinition): { queueIds: string[]; modelProfileIds: string[]; templates: Array<{ channelId: string; templateId: string }> } {
   const queueIds = new Set<string>([def.fallbackQueueId, ...def.rules.map((r) => r.queueId)]);
   const modelProfileIds = new Set<string>(def.steps.flatMap((s) => (s.kind === 'CLASSIFY' ? [s.modelProfileId] : [])));
-  const specs: MessageSpec[] = [...def.steps.flatMap((s) => (s.kind === 'ASK' ? [s.prompt] : [])), ...(def.returning ? [def.returning.prompt] : [])];
+  const specs: MessageSpec[] = [...(def.greeting ? [def.greeting] : []), ...def.steps.flatMap((s) => (s.kind === 'ASK' ? [s.prompt] : [])), ...(def.returning ? [def.returning.prompt] : [])];
   const templates = specs.flatMap((spec) => Object.entries(spec.templates ?? {}).map(([channelId, templateId]) => ({ channelId, templateId })));
   return { queueIds: [...queueIds], modelProfileIds: [...modelProfileIds], templates };
 }

@@ -40,6 +40,8 @@ The definition is validated by `RouterDefinitionSchema` in [`router-definition.t
 
 | Field | Meaning | Limits |
 |---|---|---|
+| `persona` | Optional `{ name, voice }`: who the router is to customers. The model writes its clarifying questions in this name and voice. Without it, the router speaks neutrally. | name 1–60, voice ≤ 1000 |
+| `greeting` | Optional message sent once when a new conversation starts routing, before the first step. It is not sent when a conversation is routed again. A pass-through router with a greeting is decided by the routing worker, after the greeting. | text ≤ 1000, optional per-channel templates |
 | `steps` | Up to 10 steps, run in order. `[]` makes it a pass-through router. | ≤ 10 |
 | `rules` | `{ when: { attribute: value \| [values] }, queueId }`. Checked in order and the first match wins. Every key must match, an array matches any of its values, values compare case-insensitively, and an empty `when` matches everyone. | ≤ 100 |
 | `fallbackQueueId` | Where anyone goes when no rule matches, when the router times out, or when a pass-through router has no unconditional rule. | required |
@@ -58,7 +60,7 @@ Attribute keys are lower snake case: `a-z`, `0-9` and `_`, at most 40 characters
 
 **How replies are matched to options.** A tapped button id wins first. Then the router tries the option number (`2`), then the value, label or a synonym (case-insensitive, punctuation trimmed), and finally a reply that mentions exactly one option's label, value or synonym. An unclear reply is asked again until **Ask at most** runs out, and then the step moves on with the attribute unset. See [`router-match.ts`](../../packages/domain/src/routing/router-match.ts).
 
-**How classification works.** The classifier gets the step's labels and instructions and returns `{label, confidence, followUp}`. The attribute is set only when the label is one of the step's labels and `confidence ≥ minConfidence`. Otherwise the router sends the model's follow-up question, if follow-ups remain, or moves on unset. A model failure is recorded as an error on the session, which keeps it distinct from low confidence, and routing moves on. An outage never strands the customer. Model usage is recorded as `CLASSIFIER`. See [`classifier.ts`](../../packages/agent-runtime/src/routing/classifier.ts).
+**How classification works.** A `CLASSIFY` step is an LLM call through the step's model profile; the builder shows which model, on which provider, with its temperature and reasoning settings. The classifier gets the step's labels and instructions, in the router's persona when it has one, and returns `{label, confidence, followUp}`. **What the model receives** on each model step in the builder shows the exact instructions, an example of the conversation it is given, and the answer it must return. It is built by the same function the worker calls ([`router-prompt.ts`](../../packages/domain/src/routing/router-prompt.ts)), so what you review is what the model gets. The attribute is set only when the label is one of the step's labels and `confidence ≥ minConfidence`. Otherwise the router sends the model's follow-up question, if follow-ups remain, or moves on unset. A model failure is recorded as an error on the session, which keeps it distinct from low confidence, and routing moves on. An outage never strands the customer. Model usage is recorded as `CLASSIFIER`. See [`classifier.ts`](../../packages/agent-runtime/src/routing/classifier.ts).
 
 ### Outcomes
 
@@ -117,7 +119,17 @@ sequenceDiagram
     Ch->>Cu: agent reply
 ```
 
-A pass-through router (no steps) skips steps 4–12. Ingress decides synchronously and the conversation is created directly in `AI_ACTIVE`.
+A pass-through router (no steps, no greeting) skips steps 4–12. Ingress decides synchronously and the conversation is created directly in `AI_ACTIVE`.
+
+## Later messages, and when a conversation is routed again
+
+Once a conversation is routed, the customer's later messages go straight to its agent: the router does not run again. A conversation the AI holds goes back through the channel's active router in three cases:
+
+- **Its agent stops answering** (paused, or no model): the customer's next message routes it again, and anyone already waiting on that agent is routed again by the routing sweep within a minute. Everything the customer wrote since the agent last answered goes to whichever agent the router picks. If the channel has no active router, a person on the conversation's queue takes it (`agent_unavailable`) instead of leaving the customer unanswered.
+- **The channel now routes through a different router** than the one that placed it: the next message goes through the new router. (Conversations from before routing count as placed by none.)
+- **It went quiet**: an AI-held conversation with no new messages for the channel's **Resolve quiet AI conversations after (hours)** (`aiIdleResolveHours`, default 24, 0 = never) is resolved with disposition `AI_IDLE`, and the customer's next message starts a new conversation through the router. A conversation resolved this way is never reopened.
+
+A conversation a person holds or is waiting for is never moved by any of these. The timeline records why a conversation was routed again (`routing again · Maya is not answering (paused)`).
 
 ## Returning customers
 
@@ -190,7 +202,7 @@ Before an activation is approved, OCSO checks that every queue the version route
 - The WhatsApp list button text is fixed ("Choose").
 - The returning question is skipped for conversations a human holds or is waiting for.
 - A queue's **Languages** field is not used in assignment.
-- The reopen window for resolved conversations is fixed at 72 hours in code.
+- The reopen window for resolved conversations is fixed at 72 hours in code. It applies only when the conversation's agent still answers, the channel still uses the router that placed it, and the conversation was not resolved for being quiet.
 
 ## Related
 
