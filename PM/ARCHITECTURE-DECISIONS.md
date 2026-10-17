@@ -1183,7 +1183,7 @@ columns, `approval_decisions.via`, `ask_ocso_writes`).
 
 ## ADR-036 — The event catalogue lives in `domain`
 
-**Status:** Accepted, 2026-10-17.
+**Status:** PROPOSED, 2026-10-17.
 
 **Context.** `@ocso/events` was a 131-line package (the event catalogue and envelope) whose only dependency was
 `@ocso/domain` and whose contents are domain types — event names, payloads and the envelope shape. Its own package
