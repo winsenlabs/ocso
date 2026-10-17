@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { outboxEvents, type DbOrTx } from '@ocso/db';
-import { EPHEMERAL_EVENT_TYPES, createEvent, type OcsoEvent, type OcsoEventPayloads, type OcsoEventType } from '@ocso/events';
+import { EPHEMERAL_EVENT_TYPES, createEvent, type OcsoEvent, type OcsoEventPayloads, type OcsoEventType } from '@ocso/domain';
 import type { ActorContext } from '../shared/context.js';
 
 /** Postgres NOTIFY channel carrying realtime events to every API instance (ADR-009). */

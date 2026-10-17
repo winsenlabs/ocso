@@ -1,7 +1,7 @@
 import { Permission, can, type Principal } from '@ocso/auth';
 import { assertAgentReadable, assertConversationAccess, type SettingsService } from '@ocso/application';
 import type { Db } from '@ocso/db';
-import type { OcsoEvent } from '@ocso/events';
+import type { OcsoEvent } from '@ocso/domain';
 
 const ALERT_TYPES = new Set(['alert.opened', 'alert.updated', 'alert.resolved']);
 const APPROVAL_TYPES = new Set(['approval.requested', 'approval.decided', 'approval.checker_invalid']);

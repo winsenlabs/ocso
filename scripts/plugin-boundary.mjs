@@ -38,7 +38,6 @@ export const CORE_ROOTS = [
   'packages/domain/src',
   'packages/db/src/schema',
   'packages/auth/src',
-  'packages/events/src',
   'packages/prompt-compiler/src',
 ];
 /** Core paths where naming a kind is expected: seeds and test material (incl. `src/testing/` doubles). */

@@ -27,7 +27,6 @@
     "@ocso/domain": "workspace:*",
     "@ocso/auth": "workspace:*",
     "@ocso/db": "workspace:*",
-    "@ocso/events": "workspace:*",
     "@ocso/tools": "workspace:*",
     "drizzle-orm": "catalog:",
     "zod": "catalog:",

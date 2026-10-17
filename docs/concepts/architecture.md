@@ -397,11 +397,10 @@ editing one of those lists.
 | Package | Role |
 |---|---|
 | `@ocso/bootstrap` | Composition root shared by api and worker: the OCSO plugin list, registries built from it, and driver selection by configuration. Also the plugin loader. |
-| `@ocso/domain` | Core domain model: domain errors, conversation control states and transitions, interaction parts, message templates. |
+| `@ocso/domain` | Core domain model: domain errors, conversation control states and transitions, interaction parts, message templates, the event catalogue and envelope for domain events. |
 | `@ocso/db` | Drizzle schema, database client, ids and migrations for the main database. |
 | `@ocso/config` | Environment parsing and validation for api and worker (including first-party driver settings). |
 | `@ocso/auth` | Permissions, role presets (Tech, Head, Lead, Service), rights and the request principal. |
-| `@ocso/events` | The event catalogue and envelope for domain events. |
 | `@ocso/application` | Use-case services: ingress, routing engine, handoffs, approvals (maker–checker), audit and outbox, alerts engine, analytics, settings, identity (Better Auth), retention. |
 | `@ocso/agent-runtime` | The conversation runtime: turn processor, leases, model gateway, tool runner and built-in tools, delivery, routing classifier, copilot, summaries and insights. |
 | `@ocso/prompt-compiler` | Compiles prompt components into the model request and hashes them for caching. |

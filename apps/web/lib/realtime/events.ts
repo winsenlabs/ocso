@@ -1,7 +1,7 @@
 /**
  * Staff realtime events as the browser receives them from /api/realtime
  * (proxy of GET /v1/realtime/stream). Mirrors the envelope and the payloads
- * of packages/events/src/catalogue.ts that UI screens react to; payloads carry
+ * of packages/domain/src/events/catalogue.ts that UI screens react to; payloads carry
  * ids and small facts only — screens refetch details through the API.
  */
 

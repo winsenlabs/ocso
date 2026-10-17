@@ -219,7 +219,7 @@ processes is visible.
 ## Where the boundary still leaks
 
 Each of these was listed as a known limit in ADR-028 or ADR-034 and checked against the code on
-2026-09-25.
+2026-10-17.
 
 - **Driver settings are declared centrally.** `packages/config/src/env.ts` declares the first-party
   drivers' settings (`S3_BUCKET`, `SQS_QUEUE_URLS`, `ECS_CLUSTER`, `SMTP_HOST`, `RESEND_API_KEY`,
@@ -230,9 +230,9 @@ Each of these was listed as a known limit in ADR-028 or ADR-034 and checked agai
   deployment and audit-store drivers are refused from installed plugins (`INTERNAL_CONTRIBUTIONS` in
   `packages/bootstrap/src/plugins/validate.ts`) because their contracts need `@ocso/db` or
   `@ocso/config`.
-- **Three extension points are not plugins at all.** Alert conditions and Ask OCSO tools have
-  registries; scheduled tasks are two arrays in the worker with fixed intervals. None is an
-  `OcsoPlugin` contribution. (ADR-028 says scheduled tasks "have registries"; in code they do not.)
+- **Three extension points are not plugins at all.** Alert conditions, Ask OCSO tools and scheduled
+  tasks all have registries (`EvaluatorRegistry`, `INSIGHT_TOOLS`,
+  `apps/worker/src/scheduler/tasks.registry.ts`), but none is an `OcsoPlugin` contribution.
 - **Message templates follow WhatsApp.** Templates are a channel capability, but the draft rules in
   `packages/domain/src/templates/draft.ts` (categories, limits, button types, fixed authentication
   text) are the common subset of Twilio's and Meta's WhatsApp rules. A non-WhatsApp template channel
@@ -248,10 +248,6 @@ Each of these was listed as a known limit in ADR-028 or ADR-034 and checked agai
   type-level test (`packages/bootstrap/test/sdk-conformance.types.ts`) fails CI when an internal
   contract drifts from its public copy, and an agreement test runs `checkPlugin` and the registries
   side by side. Breaking the public contract means plugin API version 2.
-- **The lint misses kinds declared through constants.** The boundary lint only learns kinds written as
-  `kind: 'X'` or `kind = 'X'`. `MS_TEAMS` is declared as `TEAMS_KIND = 'MS_TEAMS'`, so core code
-  naming it would not fail the build (none does today). See
-  [the plugin boundary lint](architecture.md#the-plugin-boundary-lint).
 - **Seeds and tests name kinds on purpose.** The demo seed creates a web chat channel and uses the
   scripted provider; seeds, tests and fixtures are exempt from the lint.
 

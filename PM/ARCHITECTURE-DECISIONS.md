@@ -1180,3 +1180,18 @@ UI. Twelve hand-written tools did not scale to ~280 API routes, and one tool sch
 **Consequences.** New API routes become Ask OCSO capabilities automatically. The quality bar is an 83-scenario evaluation
 suite (scripted replay in CI; a real-model run on demand) with 100% safety as a release gate. Migration 0034 (card
 columns, `approval_decisions.via`, `ask_ocso_writes`).
+
+## ADR-036 — The event catalogue lives in `domain`
+
+**Status:** PROPOSED, 2026-10-17.
+
+**Context.** `@ocso/events` was a 131-line package (the event catalogue and envelope) whose only dependency was
+`@ocso/domain` and whose contents are domain types — event names, payloads and the envelope shape. Its own package
+boundary, tsconfig pair and four dependency edges bought no second implementation and no isolation.
+
+**Decision.** The catalogue and envelope move to `packages/domain/src/events/` and are re-exported from
+`@ocso/domain`. `@ocso/events` is deleted; consumers import the same symbols from `@ocso/domain`.
+
+**Consequences.** One package boundary less in the workspace graph. `scripts/plugin-boundary.mjs` drops
+`packages/events/src` from `CORE_ROOTS` (domain is already a core root). Plugin kinds and the registry boundary are
+unchanged.

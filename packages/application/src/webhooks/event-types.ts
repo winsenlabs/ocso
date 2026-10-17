@@ -1,4 +1,4 @@
-import type { OcsoEventType } from '@ocso/events';
+import type { OcsoEventType } from '@ocso/domain';
 
 /**
  * Events external systems may subscribe to (design/04 Webhooks tab). Payloads
