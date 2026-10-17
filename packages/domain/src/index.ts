@@ -1,4 +1,6 @@
 export * from './errors/domain-error.js';
+export * from './events/catalogue.js';
+export * from './events/envelope.js';
 export * from './common/neutralize.js';
 export * from './conversation/control-state.js';
 export * from './conversation/transitions.js';

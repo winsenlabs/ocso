@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ExceptionService, SettingsService, readZip, sampleStorage, verifyExportBundle, type AuditPublicKey, type AuditStore } from '@ocso/application';
 import type { Principal } from '@ocso/auth';
-import { createEvent } from '@ocso/events';
+import { createEvent } from '@ocso/domain';
 import { userPermissionGrants, uuidv7 } from '@ocso/db';
 import { AUDIT_STORE } from '../../src/infrastructure/tokens.js';
 import { RealtimeAccess } from '../../src/modules/realtime/realtime-access.js';

@@ -197,9 +197,6 @@ importers:
       '@ocso/email':
         specifier: workspace:*
         version: link:../../packages/email
-      '@ocso/events':
-        specifier: workspace:*
-        version: link:../../packages/events
       '@ocso/internal-agent':
         specifier: workspace:*
         version: link:../../packages/internal-agent
@@ -467,9 +464,6 @@ importers:
       '@ocso/email':
         specifier: workspace:*
         version: link:../../packages/email
-      '@ocso/events':
-        specifier: workspace:*
-        version: link:../../packages/events
       '@ocso/mcp':
         specifier: workspace:*
         version: link:../../packages/mcp
@@ -611,9 +605,6 @@ importers:
       '@ocso/domain':
         specifier: workspace:*
         version: link:../domain
-      '@ocso/events':
-        specifier: workspace:*
-        version: link:../events
       '@ocso/model-providers':
         specifier: workspace:*
         version: link:../model-providers
@@ -683,9 +674,6 @@ importers:
       '@ocso/email':
         specifier: workspace:*
         version: link:../email
-      '@ocso/events':
-        specifier: workspace:*
-        version: link:../events
       '@ocso/mcp':
         specifier: workspace:*
         version: link:../mcp
@@ -883,12 +871,6 @@ importers:
       '@types/nodemailer':
         specifier: 8.0.2
         version: 8.0.2
-
-  packages/events:
-    dependencies:
-      '@ocso/domain':
-        specifier: workspace:*
-        version: link:../domain
 
   packages/internal-agent:
     dependencies:

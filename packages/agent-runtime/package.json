@@ -35,7 +35,6 @@
     "@ocso/queue": "workspace:*",
     "@ocso/observability": "workspace:*",
     "@ocso/secrets": "workspace:*",
-    "@ocso/events": "workspace:*",
     "@ocso/auth": "workspace:*",
     "drizzle-orm": "catalog:",
     "zod": "catalog:"

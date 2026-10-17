@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { alerts, conversations, customers, uuidv7 } from '@ocso/db';
 import type { Principal } from '@ocso/auth';
 import { SettingsService } from '@ocso/application';
-import { createEvent } from '@ocso/events';
+import { createEvent } from '@ocso/domain';
 import { RealtimeAccess } from '../../src/modules/realtime/realtime-access.js';
 import { completeSetup, startApi, type ApiHarness } from './harness.js';
 import { createTeam, setTeams } from './teams.js';

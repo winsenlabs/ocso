@@ -3,7 +3,7 @@ import { Observable, Subject, filter } from 'rxjs';
 import { EVENTS_CHANNEL } from '@ocso/application';
 import { PgListener } from '@ocso/bootstrap';
 import type { ApiEnv } from '@ocso/config';
-import type { OcsoEvent } from '@ocso/events';
+import type { OcsoEvent } from '@ocso/domain';
 import { PinoLogger } from 'nestjs-pino';
 import { ENV } from '../../infrastructure/tokens.js';
 
